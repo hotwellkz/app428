@@ -6,15 +6,17 @@ import {
   createConversation,
   saveMessage,
   incrementUnreadCount,
+  updateMessageStatus,
   normalizePhone,
   findCrmClientByPhone,
   createCrmClient,
   updateCrmClientLastMessageAt,
   findDealByClientPhone,
-  createDeal
+  createDeal,
+  type MessageAttachmentRow
 } from './lib/firebaseAdmin';
 
-/** Формат входящего сообщения Wazzup (упрощённо) */
+/** Формат входящего сообщения Wazzup (по документации) */
 interface WazzupMessage {
   messageId?: string;
   channelId?: string;
@@ -26,6 +28,7 @@ interface WazzupMessage {
   text?: string;
   contentUri?: string;
   isEcho?: boolean;
+  error?: { error?: string; description?: string };
   contact?: {
     name?: string;
     phone?: string;
@@ -33,9 +36,29 @@ interface WazzupMessage {
   };
 }
 
+/** Элемент webhook statuses — обновление статуса исходящего сообщения */
+interface WazzupStatusItem {
+  messageId?: string;
+  timestamp?: string;
+  status?: string;
+  error?: { error?: string; description?: string };
+}
+
 interface WazzupWebhookBody {
   test?: boolean;
   messages?: WazzupMessage[];
+  statuses?: WazzupStatusItem[];
+}
+
+function buildAttachmentsFromWazzup(type: string | undefined, contentUri: string | undefined): MessageAttachmentRow[] {
+  if (!contentUri?.trim()) return [];
+  const t = (type ?? 'file').toLowerCase();
+  let attachmentType: MessageAttachmentRow['type'] = 'file';
+  if (t === 'image') attachmentType = 'image';
+  else if (t === 'video') attachmentType = 'video';
+  else if (t === 'audio') attachmentType = 'audio';
+  else if (t === 'document') attachmentType = 'file';
+  return [{ type: attachmentType, url: contentUri.trim() }];
 }
 
 const LOG_PREFIX = '[wazzup-webhook]';
@@ -102,7 +125,10 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     }
 
     const normalizedPhone = normalizePhone(phone);
-    const text = (msg.text ?? '').trim() || (msg.contentUri ? `[media: ${msg.contentUri}]` : '[no text]');
+    const attachments = buildAttachmentsFromWazzup(msg.type, msg.contentUri);
+    const hasMedia = attachments.length > 0;
+    const textContent = (msg.text ?? '').trim();
+    const text = textContent || (hasMedia ? '' : '[no text]');
     const authorName = msg.contact?.name ?? '';
 
     try {
@@ -148,17 +174,52 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         }
       }
 
-      const messageId = await saveMessage(conversation.id, text, 'incoming');
+      const savedId = await saveMessage(conversation.id, text, 'incoming', {
+        providerMessageId: msg.messageId ?? undefined,
+        attachments: attachments.length > 0 ? attachments : undefined
+      });
       await incrementUnreadCount(conversation.id);
       processed++;
       if (debugPayload) {
-        log('Saved message:', messageId, 'conversationId=', conversation.id);
+        log('Saved message:', savedId, 'conversationId=', conversation.id, hasMedia ? 'with attachment' : '');
       }
     } catch (err) {
       log('Error processing message:', msg.messageId, err);
       errors++;
       // Не возвращаем 500 — обрабатываем остальные сообщения
     }
+  }
+
+  // Обработка statuses — обновление статусов исходящих сообщений (sent → delivered → read / error)
+  const statuses = Array.isArray(body.statuses) ? body.statuses : [];
+  let statusUpdates = 0;
+  for (const st of statuses) {
+    const providerId = st.messageId;
+    if (!providerId) continue;
+    const status = (st.status ?? '').toLowerCase();
+    const isError = status === 'error';
+    const mapped =
+      status === 'sent'
+        ? 'sent'
+        : status === 'delivered'
+          ? 'delivered'
+          : status === 'read'
+            ? 'read'
+            : isError
+              ? 'failed'
+              : null;
+    if (!mapped) continue;
+    try {
+      const errorMsg = isError && st.error ? (st.error.description ?? st.error.error) ?? null : null;
+      const updated = await updateMessageStatus(providerId, mapped, errorMsg);
+      if (updated) statusUpdates++;
+      if (debugPayload && updated) log('Status updated:', providerId, mapped);
+    } catch (e) {
+      log('Error updating status:', providerId, e);
+    }
+  }
+  if (statusUpdates > 0 || (debugPayload && statuses.length > 0)) {
+    log('Statuses processed:', statusUpdates, 'of', statuses.length);
   }
 
   if (errors > 0 || (debugPayload && (processed > 0 || skipped > 0))) {

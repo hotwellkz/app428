@@ -13,7 +13,12 @@ import {
   type Unsubscribe
 } from 'firebase/firestore';
 import { db } from './config';
-import type { WhatsAppClient, WhatsAppConversation, WhatsAppMessage } from '../../types/whatsappDb';
+import type {
+  WhatsAppClient,
+  WhatsAppConversation,
+  WhatsAppMessage,
+  MessageAttachment
+} from '../../types/whatsappDb';
 
 export const COLLECTIONS = {
   CLIENTS: 'whatsappClients',
@@ -54,14 +59,55 @@ function docToConversation(docId: string, data: Record<string, unknown>): WhatsA
   };
 }
 
+function parseLegacyMediaAttachments(text: string): MessageAttachment[] {
+  const m = text.match(/^\[media:\s*(https?:\/\/[^\s\]]+)\]\s*$/i);
+  if (!m) return [];
+  const url = m[1];
+  const lower = url.toLowerCase();
+  let type: MessageAttachment['type'] = 'file';
+  if (/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lower)) type = 'image';
+  else if (/\.(mp4|webm|mov)(\?|$)/i.test(lower)) type = 'video';
+  else if (/\.(mp3|ogg|m4a|wav)(\?|$)/i.test(lower)) type = 'audio';
+  return [{ type, url }];
+}
+
+function dataToAttachments(arr: unknown): MessageAttachment[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.map((item) => {
+    const o = item as Record<string, unknown>;
+    const type = (o.type as string) ?? 'file';
+    const url = (o.url as string) ?? '';
+    return {
+      type: (['image', 'video', 'audio', 'file'].includes(type) ? type : 'file') as MessageAttachment['type'],
+      url,
+      mimeType: o.mimeType as string | undefined,
+      fileName: o.fileName as string | undefined,
+      size: o.size as number | undefined,
+      thumbnailUrl: (o.thumbnailUrl as string | null) ?? undefined
+    };
+  });
+}
+
 function docToMessage(docId: string, data: Record<string, unknown>): WhatsAppMessage {
+  const rawText = (data.text as string) ?? '';
+  let attachments = dataToAttachments(data.attachments);
+  let text = rawText;
+  if (attachments.length === 0 && /^\[media:\s*https?:\/\//i.test(rawText.trim())) {
+    attachments = parseLegacyMediaAttachments(rawText.trim());
+    if (attachments.length > 0) text = '';
+  }
   return {
     id: docId,
     conversationId: (data.conversationId as string) ?? '',
-    text: (data.text as string) ?? '',
+    text,
     direction: (data.direction as WhatsAppMessage['direction']) ?? 'incoming',
     createdAt: data.createdAt as WhatsAppMessage['createdAt'],
-    channel: (data.channel as WhatsAppMessage['channel']) ?? 'whatsapp'
+    channel: (data.channel as WhatsAppMessage['channel']) ?? 'whatsapp',
+    status: data.status as WhatsAppMessage['status'],
+    statusUpdatedAt: data.statusUpdatedAt as WhatsAppMessage['statusUpdatedAt'],
+    providerMessageId: (data.providerMessageId as string) ?? undefined,
+    errorMessage: (data.errorMessage as string) ?? undefined,
+    attachments: attachments.length > 0 ? attachments : undefined
   };
 }
 

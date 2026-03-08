@@ -1,4 +1,18 @@
-import type { WhatsAppMessage } from '../../types/whatsappDb';
+import type { WhatsAppMessage, MessageStatus } from '../../types/whatsappDb';
+
+/** Маппинг статуса от Wazzup (sent|delivered|read|error) в UI. */
+export function mapProviderStatusToUiStatus(
+  rawStatus: string | undefined,
+  _payload?: unknown
+): MessageStatus {
+  if (!rawStatus) return 'pending';
+  const s = String(rawStatus).toLowerCase();
+  if (s === 'sent') return 'sent';
+  if (s === 'delivered') return 'delivered';
+  if (s === 'read') return 'read';
+  if (s === 'error' || s === 'failed') return 'failed';
+  return 'pending';
+}
 
 export function formatMessageTime(createdAt: WhatsAppMessage['createdAt']): string {
   if (!createdAt) return '';

@@ -88,7 +88,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
     let conversation = await findConversationByClientId(client.id);
     if (!conversation) {
-      const newConvId = await createConversation(client.id);
+      const newConvId = await createConversation(client.id, normalizedPhone);
       log('Created conversation:', newConvId);
       conversation = await findConversationByClientId(client.id);
       if (!conversation) throw new Error('Failed to load created conversation');
@@ -139,13 +139,18 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       });
     }
 
-    await saveMessage(conversationId, text, 'outgoing');
-    log('Message sent and saved, conversationId:', conversationId);
+    const providerMessageId =
+      (resData as { messageId?: string }).messageId ?? (resData as { id?: string }).id ?? null;
+    await saveMessage(conversationId, text, 'outgoing', {
+      status: 'sent',
+      providerMessageId: providerMessageId ?? undefined
+    });
+    log('Message sent and saved, conversationId:', conversationId, providerMessageId ? 'providerId=' + providerMessageId : '');
 
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ok: true, conversationId, response: resData })
+      body: JSON.stringify({ ok: true, conversationId, messageId: providerMessageId, response: resData })
     });
   } catch (err) {
     log('Request or save error:', err);

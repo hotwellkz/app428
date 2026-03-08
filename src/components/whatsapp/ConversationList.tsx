@@ -42,9 +42,11 @@ const ConversationList: React.FC<ConversationListProps> = ({ items, selectedId, 
             {item.lastMessage && (
               <div className="flex justify-between items-center gap-2 mt-0.5">
                 <span className={`truncate flex-1 text-xs md:text-sm ${hasUnread ? 'text-gray-700 font-medium' : 'text-gray-500'}`}>
-                  {item.lastMessage.text.startsWith('[media') || item.lastMessage.text === '[no text]'
+                  {item.lastMessage.attachments?.length
                     ? '[медиа]'
-                    : item.lastMessage.text}
+                    : item.lastMessage.text.startsWith('[media') || item.lastMessage.text === '[no text]'
+                      ? '[медиа]'
+                      : item.lastMessage.text || '[медиа]'}
                 </span>
                 <span className="text-xs text-gray-400 flex-shrink-0">
                   {formatLastMessageTime(item.lastMessage.createdAt)}

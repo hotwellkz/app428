@@ -133,24 +133,71 @@ export async function incrementUnreadCount(conversationId: string): Promise<void
   await ref.update({ unreadCount: FieldValue.increment(1) });
 }
 
+export interface MessageAttachmentRow {
+  type: 'image' | 'video' | 'audio' | 'file';
+  url: string;
+  mimeType?: string;
+  fileName?: string;
+  size?: number;
+  thumbnailUrl?: string | null;
+}
+
+export interface SaveMessageOptions {
+  status?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
+  providerMessageId?: string | null;
+  attachments?: MessageAttachmentRow[];
+  errorMessage?: string | null;
+}
+
 export async function saveMessage(
   conversationId: string,
   text: string,
-  direction: 'incoming' | 'outgoing'
+  direction: 'incoming' | 'outgoing',
+  options: SaveMessageOptions = {}
 ): Promise<string> {
   const db = getDb();
   const now = Timestamp.now();
-  const ref = await db.collection(COLLECTIONS.MESSAGES).add({
+  const data: Record<string, unknown> = {
     conversationId,
     text,
     direction,
     createdAt: now,
     channel: 'whatsapp',
     companyId: DEFAULT_COMPANY_ID
-  });
+  };
+  if (options.status != null) data.status = options.status;
+  if (options.providerMessageId != null) data.providerMessageId = options.providerMessageId;
+  if (options.attachments != null && options.attachments.length > 0) {
+    data.attachments = options.attachments;
+  }
+  if (options.errorMessage != null) data.errorMessage = options.errorMessage;
+  const ref = await db.collection(COLLECTIONS.MESSAGES).add(data);
   const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
   await convRef.update({ lastMessageAt: now });
   return ref.id;
+}
+
+/** Обновить статус сообщения по providerMessageId (из webhook statuses). */
+export async function updateMessageStatus(
+  providerMessageId: string,
+  status: 'sent' | 'delivered' | 'read' | 'failed',
+  errorMessage?: string | null
+): Promise<boolean> {
+  const db = getDb();
+  const snap = await db
+    .collection(COLLECTIONS.MESSAGES)
+    .where('providerMessageId', '==', providerMessageId)
+    .limit(1)
+    .get();
+  if (snap.empty) return false;
+  const ref = snap.docs[0].ref;
+  const update: Record<string, unknown> = {
+    status,
+    statusUpdatedAt: Timestamp.now()
+  };
+  if (status === 'failed' && errorMessage != null) update.errorMessage = errorMessage;
+  await ref.update(update);
+  return true;
 }
 
 // --- CRM: clients (по phone) и deals (по clientPhone) ---
