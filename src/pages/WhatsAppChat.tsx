@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useCompanyId } from '../contexts/CompanyContext';
 import {
   subscribeConversationsList,
   subscribeMessages,
@@ -11,8 +12,27 @@ import type { WhatsAppMessage } from '../types/whatsappDb';
 import ConversationList from '../components/whatsapp/ConversationList';
 import ChatWindow from '../components/whatsapp/ChatWindow';
 import ClientInfoPanel from '../components/whatsapp/ClientInfoPanel';
+import { supabase, CLIENTS_BUCKET } from '../lib/supabase/config';
+import { MAX_ATTACHMENT_MB } from '../components/whatsapp/ChatInput';
 
 const NEW_MESSAGE_SOUND_PATH = '/sounds/new-message.mp3';
+
+const WHATSAPP_MEDIA_PREFIX = 'whatsapp/media';
+const MAX_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
+
+function getAttachmentType(file: File): 'image' | 'file' | 'audio' | 'voice' {
+  const name = file.name.toLowerCase();
+  if (name.startsWith('voice.') || file.type === 'audio/webm' || file.type === 'audio/ogg') return 'voice';
+  const t = file.type.toLowerCase();
+  if (t.startsWith('image/')) return 'image';
+  if (t.startsWith('audio/')) return 'audio';
+  if (t.startsWith('video/')) return 'file';
+  return 'file';
+}
+
+function sanitizeFileName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 100);
+}
 
 function playNewMessageSound() {
   try {
@@ -37,12 +57,19 @@ const MOBILE_BREAKPOINT = 768;
 
 const WhatsAppChat: React.FC = () => {
   const isMobile = useIsMobile(MOBILE_BREAKPOINT);
+  const companyId = useCompanyId();
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<WhatsAppMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [sending, setSending] = useState(false);
   const [indexBuilding, setIndexBuilding] = useState(false);
+  const [pendingAttachment, setPendingAttachment] = useState<{ file: File; preview?: string } | null>(null);
+  const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'sending'>('idle');
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   const prevConversationsRef = useRef<ConversationListItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
@@ -105,22 +132,126 @@ const WhatsAppChat: React.FC = () => {
     return unsub;
   }, [selectedId]);
 
+  const handleFileSelect = useCallback((file: File) => {
+    setSendError(null);
+    if (file.size > MAX_BYTES) {
+      setSendError(`Файл слишком большой. Максимум ${MAX_ATTACHMENT_MB} МБ.`);
+      return;
+    }
+    const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
+    setPendingAttachment({ file, preview });
+  }, []);
+
+  const handleClearAttachment = useCallback(() => {
+    setSendError(null);
+    setPendingAttachment((prev) => {
+      if (prev?.preview) URL.revokeObjectURL(prev.preview);
+      return null;
+    });
+  }, []);
+
+  const startVoiceRecording = useCallback(async () => {
+    setSendError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      const chunks: BlobPart[] = [];
+      recorder.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
+      recorder.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(chunks, { type: mime });
+        const file = new File([blob], 'voice.webm', { type: blob.type });
+        handleFileSelect(file);
+      };
+      recorder.start(200);
+      setIsRecordingVoice(true);
+    } catch (err) {
+      console.error('Voice recording error:', err);
+      setSendError('Нет доступа к микрофону.');
+    }
+  }, [handleFileSelect]);
+
+  const stopVoiceRecording = useCallback(() => {
+    const rec = mediaRecorderRef.current;
+    if (rec && rec.state !== 'inactive') rec.stop();
+    mediaRecorderRef.current = null;
+    setIsRecordingVoice(false);
+  }, []);
+
+  useEffect(() => () => {
+    if (pendingAttachment?.preview) URL.revokeObjectURL(pendingAttachment.preview);
+  }, [pendingAttachment]);
+
   const handleSend = async () => {
-    const text = inputText.trim();
     const phone = selectedItem?.phone ?? selectedItem?.client?.phone;
-    if (!text || !phone || phone === '…' || sending) return;
+    if (!phone || phone === '…' || sending || uploadState !== 'idle') return;
+
+    const caption = inputText.trim();
+    const hasAttachment = !!pendingAttachment;
+
+    if (hasAttachment && companyId && selectedId) {
+      setUploadState('uploading');
+      try {
+        const path = `${companyId}/${WHATSAPP_MEDIA_PREFIX}/${selectedId}/${Date.now()}_${sanitizeFileName(pendingAttachment!.file.name)}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(CLIENTS_BUCKET)
+          .upload(path, pendingAttachment!.file, { upsert: false });
+
+        if (uploadError) {
+          setSendError('Ошибка загрузки файла. Попробуйте ещё раз.');
+          setUploadState('idle');
+          return;
+        }
+        const { data: urlData } = supabase.storage.from(CLIENTS_BUCKET).getPublicUrl(uploadData.path);
+        const contentUri = urlData.publicUrl;
+
+        setUploadState('sending');
+        const res = await fetch(SEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId: phone,
+            contentUri,
+            attachmentType: getAttachmentType(pendingAttachment!.file),
+            fileName: pendingAttachment!.file.name,
+            text: caption || undefined
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setInputText('');
+          setSendError(null);
+          setPendingAttachment((p) => {
+            if (p?.preview) URL.revokeObjectURL(p.preview);
+            return null;
+          });
+        } else {
+          setSendError((data as { error?: string })?.error || 'Ошибка отправки. Попробуйте ещё раз.');
+        }
+      } finally {
+        setUploadState('idle');
+      }
+      return;
+    }
+
+    if (!caption) return;
     setSending(true);
     setInputText('');
     try {
       const res = await fetch(SEND_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: phone, text })
+        body: JSON.stringify({ chatId: phone, text: caption })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setInputText(text);
-        console.error('Send error:', data);
+        setInputText(caption);
+        setSendError((data as { error?: string })?.error || 'Ошибка отправки.');
+      } else {
+        setSendError(null);
       }
     } finally {
       setSending(false);
@@ -210,6 +341,15 @@ const WhatsAppChat: React.FC = () => {
               sending={sending}
               onBack={isMobile ? () => setSelectedId(null) : undefined}
               isMobile={isMobile}
+              pendingAttachment={pendingAttachment}
+              onFileSelect={handleFileSelect}
+              onClearAttachment={handleClearAttachment}
+              uploadState={uploadState}
+              sendError={sendError}
+              onDismissError={() => setSendError(null)}
+              onStartVoice={startVoiceRecording}
+              onStopVoice={stopVoiceRecording}
+              isRecordingVoice={isRecordingVoice}
             />
           )}
         </section>

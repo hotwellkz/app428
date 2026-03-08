@@ -29,7 +29,14 @@ function log(...args: unknown[]) {
 
 interface SendMessageBody {
   chatId: string;
-  text: string;
+  /** Текст (обязателен, если нет contentUri). При contentUri не передаётся в Wazzup, только сохраняется в БД как caption. */
+  text?: string;
+  /** Публичный URL файла для отправки как медиа. Взаимоисключающе с отправкой text в Wazzup. */
+  contentUri?: string;
+  /** Тип вложения для сохранения в БД: image | file | audio | voice */
+  attachmentType?: 'image' | 'file' | 'audio' | 'voice';
+  /** Имя файла для отображения */
+  fileName?: string;
 }
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
@@ -64,17 +71,27 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
 
-  const { chatId, text } = body;
-  if (!chatId || typeof text !== 'string') {
+  const { chatId, text, contentUri, attachmentType, fileName } = body;
+  const hasMedia = typeof contentUri === 'string' && contentUri.trim().length > 0;
+  const hasText = typeof text === 'string' && text.trim().length > 0;
+  if (!chatId) {
     return withCors({
       statusCode: 400,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'chatId and text are required' })
+      body: JSON.stringify({ error: 'chatId is required' })
+    });
+  }
+  if (!hasMedia && !hasText) {
+    return withCors({
+      statusCode: 400,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'text or contentUri is required' })
     });
   }
 
   const normalizedPhone = normalizePhone(chatId);
-  log('Send to', normalizedPhone, 'text length:', text.length);
+  const caption = hasText ? (text ?? '').trim() : '';
+  log('Send to', normalizedPhone, hasMedia ? 'contentUri' : 'text', hasMedia ? contentUri?.slice(0, 60) + '...' : caption.length);
 
   let conversationId: string;
   try {
@@ -104,18 +121,24 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   try {
+    const wazzupBody: Record<string, string> = {
+      channelId,
+      chatType: 'whatsapp',
+      chatId: normalizedPhone.replace(/^\+/, '')
+    };
+    if (hasMedia) {
+      wazzupBody.contentUri = (contentUri as string).trim();
+    } else {
+      wazzupBody.text = caption;
+    }
+
     const res = await fetch(WAZZUP_MESSAGE_URL, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        channelId,
-        chatType: 'whatsapp',
-        chatId: normalizedPhone.replace(/^\+/, ''),
-        text
-      })
+      body: JSON.stringify(wazzupBody)
     });
 
     const resText = await res.text();
@@ -141,9 +164,20 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
     const providerMessageId =
       (resData as { messageId?: string }).messageId ?? (resData as { id?: string }).id ?? null;
-    await saveMessage(conversationId, text, 'outgoing', {
+    const msgText = hasMedia ? caption : (text ?? '').trim();
+    const attachments = hasMedia
+      ? [
+          {
+            type: (attachmentType === 'voice' ? 'audio' : attachmentType) || 'file' as 'image' | 'video' | 'audio' | 'file',
+            url: (contentUri as string).trim(),
+            fileName: typeof fileName === 'string' ? fileName : undefined
+          }
+        ]
+      : undefined;
+    await saveMessage(conversationId, msgText, 'outgoing', {
       status: 'sent',
-      providerMessageId: providerMessageId ?? undefined
+      providerMessageId: providerMessageId ?? undefined,
+      attachments
     });
     log('Message sent and saved, conversationId:', conversationId, providerMessageId ? 'providerId=' + providerMessageId : '');
 

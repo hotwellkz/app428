@@ -1,9 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Clock, Check, CheckCheck, AlertCircle, Image, Video, Music, FileText } from 'lucide-react';
+import { ArrowLeft, Clock, Check, CheckCheck, AlertCircle, Image, Video, Music, FileText, X } from 'lucide-react';
 import { formatMessageTime, mapProviderStatusToUiStatus } from './whatsappUtils';
 import ChatInput from './ChatInput';
 import type { WhatsAppMessage, MessageAttachment } from '../../types/whatsappDb';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
+
+interface PendingAttachment {
+  file: File;
+  preview?: string;
+}
 
 interface ChatWindowProps {
   selectedItem: ConversationListItem;
@@ -15,6 +20,17 @@ interface ChatWindowProps {
   onBack?: () => void;
   /** На мобильных — фиксированный инпут и скролл по calc(100vh - header - input) */
   isMobile?: boolean;
+  /** Выбранный файл перед отправкой */
+  pendingAttachment?: PendingAttachment | null;
+  onFileSelect?: (file: File) => void;
+  onClearAttachment?: () => void;
+  /** 'uploading' | 'sending' — блокировать кнопку отправки */
+  uploadState?: 'idle' | 'uploading' | 'sending';
+  sendError?: string | null;
+  onDismissError?: () => void;
+  onStartVoice?: () => void;
+  onStopVoice?: () => void;
+  isRecordingVoice?: boolean;
 }
 
 const CHAT_HEADER_HEIGHT = 56;
@@ -152,6 +168,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   sending,
   onBack,
   isMobile = false,
+  pendingAttachment = null,
+  onFileSelect,
+  onClearAttachment,
+  uploadState = 'idle',
+  sendError = null,
+  onDismissError,
+  onStartVoice,
+  onStopVoice,
+  isRecordingVoice = false,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -224,13 +249,62 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
+      {sendError && (
+        <div className="flex-none px-2 py-1.5 bg-red-50 border-t border-red-200 flex items-center justify-between gap-2">
+          <p className="text-sm text-red-700 flex-1">{sendError}</p>
+          {onDismissError && (
+            <button
+              type="button"
+              onClick={onDismissError}
+              className="text-red-600 hover:text-red-800 text-sm font-medium"
+              aria-label="Закрыть"
+            >
+              ×
+            </button>
+          )}
+        </div>
+      )}
+      {pendingAttachment && (
+        <div className="flex-none flex items-center gap-2 px-2 py-1.5 bg-white border-t border-gray-200 rounded-t-lg">
+          {pendingAttachment.preview ? (
+            <img
+              src={pendingAttachment.preview}
+              alt=""
+              className="w-10 h-10 object-cover rounded border border-gray-200"
+            />
+          ) : (
+            <FileText className="w-8 h-8 text-gray-500 flex-shrink-0" />
+          )}
+          <span className="flex-1 truncate text-sm text-gray-700" title={pendingAttachment.file.name}>
+            {pendingAttachment.file.name}
+          </span>
+          <span className="text-xs text-gray-500 flex-shrink-0">
+            {(pendingAttachment.file.size / 1024).toFixed(1)} KB
+          </span>
+          {onClearAttachment && (
+            <button
+              type="button"
+              onClick={onClearAttachment}
+              className="p-1 rounded hover:bg-gray-200 text-gray-600"
+              aria-label="Убрать файл"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+      )}
       <ChatInput
         value={inputText}
         onChange={onInputChange}
         onSend={onSend}
         disabled={!selectedItem?.phone || selectedItem.phone === '…'}
-        sending={sending}
+        sending={sending || uploadState !== 'idle'}
         fixedBottom={isMobile}
+        hasAttachment={!!pendingAttachment}
+        onFileSelect={onFileSelect}
+        onStartVoice={onStartVoice}
+        onStopVoice={onStopVoice}
+        isRecordingVoice={isRecordingVoice}
       />
     </>
   );
