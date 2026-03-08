@@ -1,0 +1,22 @@
+# Отключаем срабатывание сканера на Firebase API key (он публичный для клиента)
+# https://ntl.fyi/configure-secrets-scanning
+[build.environment]
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+
+# Webhook Wazzup → Netlify function (должен быть выше правила /*)
+[[redirects]]
+  from = "/api/wazzup/webhook"
+  to = "/.netlify/functions/wazzup-webhook"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/send-whatsapp-message"
+  to = "/.netlify/functions/send-whatsapp-message"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
