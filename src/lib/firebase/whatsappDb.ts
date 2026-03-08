@@ -25,8 +25,11 @@ export const COLLECTIONS = {
 export interface ConversationListItem {
   id: string;
   clientId: string;
+  /** Номер для отображения и отправки (из conversation.phone или client.phone) */
+  phone: string;
   client: WhatsAppClient | null;
   lastMessage: WhatsAppMessage | null;
+  lastMessageAt?: Date | Timestamp;
   unreadCount: number;
 }
 
@@ -43,8 +46,10 @@ function docToConversation(docId: string, data: Record<string, unknown>): WhatsA
   return {
     id: docId,
     clientId: (data.clientId as string) ?? '',
+    phone: data.phone as string | undefined,
     status: (data.status as WhatsAppConversation['status']) ?? 'active',
     createdAt: data.createdAt as WhatsAppConversation['createdAt'],
+    lastMessageAt: data.lastMessageAt as WhatsAppConversation['lastMessageAt'],
     unreadCount: (data.unreadCount as number) ?? 0
   };
 }
@@ -188,13 +193,39 @@ export function subscribeConversationsList(
       const cur = lastByConv.get(m.conversationId);
       if (!cur || mTime > getMessageTime(cur)) lastByConv.set(m.conversationId, m);
     }
-    const items: ConversationListItem[] = conversations.map((c) => ({
-      id: c.id,
-      clientId: c.clientId,
-      client: clientsById.get(c.clientId) ?? null,
-      lastMessage: lastByConv.get(c.id) ?? null,
-      unreadCount: c.unreadCount ?? 0
-    }));
+    const items: ConversationListItem[] = conversations.map((c) => {
+      const client = clientsById.get(c.clientId) ?? null;
+      const lastMessage = lastByConv.get(c.id) ?? null;
+      const phone = client?.phone ?? c.phone ?? c.clientId;
+      return {
+        id: c.id,
+        clientId: c.clientId,
+        phone,
+        client,
+        lastMessage,
+        lastMessageAt: c.lastMessageAt,
+        unreadCount: c.unreadCount ?? 0
+      };
+    });
+    const getItemSortTime = (item: ConversationListItem): number => {
+      if (item.lastMessage) return getMessageTime(item.lastMessage);
+      const t = item.lastMessageAt;
+      if (!t) return 0;
+      if (typeof (t as { toMillis?: () => number }).toMillis === 'function') {
+        return (t as { toMillis: () => number }).toMillis();
+      }
+      if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) {
+        return ((t as { seconds: number }).seconds ?? 0) * 1000;
+      }
+      return new Date(t as string).getTime();
+    };
+    // Сначала непрочитанные, потом по lastMessageAt desc
+    items.sort((a, b) => {
+      const unreadA = (a.unreadCount ?? 0) > 0 ? 1 : 0;
+      const unreadB = (b.unreadCount ?? 0) > 0 ? 1 : 0;
+      if (unreadB !== unreadA) return unreadB - unreadA;
+      return getItemSortTime(b) - getItemSortTime(a);
+    });
     callback(items);
   }
 

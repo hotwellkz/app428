@@ -36,7 +36,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const phone = selectedItem.client?.phone ?? selectedItem.clientId ?? '—';
+  const phone = selectedItem.phone ?? selectedItem.client?.phone ?? selectedItem.clientId ?? '—';
 
   const messagesHeight = isMobile
     ? `calc(100vh - ${CHAT_HEADER_HEIGHT}px - ${CHAT_INPUT_HEIGHT}px)`
@@ -65,9 +65,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         </p>
       </div>
 
-      {/* Сообщения: incoming слева, outgoing справа; на мобильных — уменьшенный padding и max-width 80% */}
+      {/* Сообщения: правый отступ чтобы не перекрывались плавающими кнопками (StickyNavigation) */}
       <div
-        className={`flex-1 overflow-y-auto bg-[#e5ddd5] space-y-2 p-2 pb-4 md:p-4 ${isMobile ? 'pb-[72px]' : ''}`}
+        className={`flex-1 overflow-y-auto bg-[#e5ddd5] space-y-2 p-2 pb-4 md:p-4 ${isMobile ? 'pb-[72px] pr-[72px] md:pr-[88px]' : 'pr-[88px]'}`}
         style={messagesHeight ? { height: messagesHeight, flex: 'none' } : undefined}
       >
         {messages.map((msg) => (
@@ -96,7 +96,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         value={inputText}
         onChange={onInputChange}
         onSend={onSend}
-        disabled={!selectedItem?.client?.phone}
+        disabled={!selectedItem?.phone || selectedItem.phone === '…'}
         sending={sending}
         fixedBottom={isMobile}
       />

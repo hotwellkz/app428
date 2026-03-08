@@ -74,6 +74,7 @@ POST http://localhost:8888/api/wazzup/webhook
 В настройках сайта Netlify → Environment variables добавьте:
 
 - **`FIREBASE_SERVICE_ACCOUNT_JSON`** — строка JSON с ключом сервисного аккаунта Firebase (для доступа к Firestore из функции). Получить: Firebase Console → Project settings → Service accounts → Generate new private key.
+- **`WAZZUP_WEBHOOK_DEBUG=1`** — (опционально) включить подробный лог входящего payload и обработки сообщений (логи в Netlify Functions → wazzup-webhook).
 
 ---
 

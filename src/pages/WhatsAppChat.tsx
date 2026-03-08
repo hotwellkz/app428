@@ -107,14 +107,15 @@ const WhatsAppChat: React.FC = () => {
 
   const handleSend = async () => {
     const text = inputText.trim();
-    if (!text || !selectedItem?.client?.phone || sending) return;
+    const phone = selectedItem?.phone ?? selectedItem?.client?.phone;
+    if (!text || !phone || phone === '…' || sending) return;
     setSending(true);
     setInputText('');
     try {
       const res = await fetch(SEND_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: selectedItem.client.phone, text })
+        body: JSON.stringify({ chatId: phone, text })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -128,6 +129,19 @@ const WhatsAppChat: React.FC = () => {
 
   const showListOnly = isMobile && !selectedId;
   const showChatOnly = isMobile && selectedId && selectedItem;
+  // Открытие чата по conversation id: если в списке ещё нет item, показываем чат с placeholder (история подгрузится)
+  const displayItem: ConversationListItem | null =
+    selectedItem ??
+    (selectedId
+      ? ({
+          id: selectedId,
+          clientId: '',
+          phone: '…',
+          client: null,
+          lastMessage: null,
+          unreadCount: 0
+        } as ConversationListItem)
+      : null);
 
   return (
     <div className="flex flex-col h-full bg-gray-50">
@@ -182,13 +196,13 @@ const WhatsAppChat: React.FC = () => {
             ${showListOnly ? 'hidden' : ''}
           `}
         >
-          {!selectedItem ? (
+          {!displayItem ? (
             <div className="flex-1 flex items-center justify-center text-gray-500 p-4">
               Выберите диалог
             </div>
           ) : (
             <ChatWindow
-              selectedItem={selectedItem}
+              selectedItem={displayItem}
               messages={messages}
               inputText={inputText}
               onInputChange={setInputText}
@@ -202,7 +216,7 @@ const WhatsAppChat: React.FC = () => {
 
         {/* Правая колонка: карточка клиента (только desktop, 320px) */}
         {!isMobile && (
-          <ClientInfoPanel phone={selectedItem?.client?.phone ?? selectedItem?.clientId ?? null} />
+          <ClientInfoPanel phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null} />
         )}
       </div>
     </div>

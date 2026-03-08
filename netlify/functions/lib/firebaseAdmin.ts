@@ -52,9 +52,12 @@ export interface WhatsAppClientRow {
 export interface WhatsAppConversationRow {
   id: string;
   clientId: string;
+  /** Номер для отображения/отправки, если клиент не загружен */
+  phone?: string;
   status: string;
   createdAt: Timestamp;
   unreadCount?: number;
+  lastMessageAt?: Timestamp;
 }
 
 export async function findClientByPhone(phone: string): Promise<WhatsAppClientRow | null> {
@@ -72,13 +75,16 @@ export async function findClientByPhone(phone: string): Promise<WhatsAppClientRo
   };
 }
 
+const DEFAULT_COMPANY_ID = 'hotwell';
+
 export async function createClient(phone: string, name: string = ''): Promise<string> {
   const db = getDb();
   const normalized = normalizePhone(phone);
   const ref = await db.collection(COLLECTIONS.CLIENTS).add({
     name: name || normalized,
     phone: normalized,
-    createdAt: Timestamp.now()
+    createdAt: Timestamp.now(),
+    companyId: DEFAULT_COMPANY_ID
   });
   return ref.id;
 }
@@ -97,19 +103,25 @@ export async function findConversationByClientId(clientId: string): Promise<What
   return {
     id: d.id,
     clientId: data.clientId as string,
+    phone: data.phone as string | undefined,
     status: data.status as string,
     createdAt: data.createdAt as Timestamp,
-    unreadCount: (data.unreadCount as number) ?? 0
+    unreadCount: (data.unreadCount as number) ?? 0,
+    lastMessageAt: data.lastMessageAt as Timestamp | undefined
   };
 }
 
-export async function createConversation(clientId: string): Promise<string> {
+export async function createConversation(clientId: string, phone: string): Promise<string> {
   const db = getDb();
+  const now = Timestamp.now();
   const ref = await db.collection(COLLECTIONS.CONVERSATIONS).add({
     clientId,
+    phone: normalizePhone(phone),
     status: 'active',
-    createdAt: Timestamp.now(),
-    unreadCount: 0
+    createdAt: now,
+    lastMessageAt: now,
+    unreadCount: 0,
+    companyId: DEFAULT_COMPANY_ID
   });
   return ref.id;
 }
@@ -127,19 +139,21 @@ export async function saveMessage(
   direction: 'incoming' | 'outgoing'
 ): Promise<string> {
   const db = getDb();
+  const now = Timestamp.now();
   const ref = await db.collection(COLLECTIONS.MESSAGES).add({
     conversationId,
     text,
     direction,
-    createdAt: Timestamp.now(),
-    channel: 'whatsapp'
+    createdAt: now,
+    channel: 'whatsapp',
+    companyId: DEFAULT_COMPANY_ID
   });
+  const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
+  await convRef.update({ lastMessageAt: now });
   return ref.id;
 }
 
 // --- CRM: clients (по phone) и deals (по clientPhone) ---
-
-const DEFAULT_COMPANY_ID = 'hotwell';
 
 export interface CrmClientRow {
   id: string;

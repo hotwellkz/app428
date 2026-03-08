@@ -68,22 +68,36 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   const messages = Array.isArray(body.messages) ? body.messages : [];
-  log('Received messages count:', messages.length);
-  if (messages.length > 0) {
-    log('First message sample:', JSON.stringify(messages[0], null, 2));
+  const debugPayload = process.env.WAZZUP_WEBHOOK_DEBUG === '1' || process.env.NODE_ENV !== 'production';
+  if (debugPayload) {
+    log('Raw webhook keys:', Object.keys(body));
+    log('Received messages count:', messages.length);
+    if (messages.length > 0) {
+      log('First message sample:', JSON.stringify(messages[0], null, 2));
+    }
+  } else {
+    log('Received messages count:', messages.length);
   }
+
+  let processed = 0;
+  let skipped = 0;
+  let errors = 0;
 
   for (const msg of messages) {
     const chatType = msg.chatType ?? '';
     const isIncoming = msg.isEcho === false || msg.status === 'inbound';
     if (chatType !== 'whatsapp' || !isIncoming) {
-      log('Skip non-WA or outgoing message:', msg.messageId, 'chatType=', chatType, 'isEcho=', msg.isEcho, 'status=', msg.status);
+      if (debugPayload) {
+        log('Skip non-WA or outgoing:', msg.messageId, 'chatType=', chatType, 'isEcho=', msg.isEcho, 'status=', msg.status);
+      }
+      skipped++;
       continue;
     }
 
     const phone = msg.chatId ?? msg.contact?.phone ?? '';
     if (!phone) {
       log('Skip message without chatId:', msg.messageId);
+      skipped++;
       continue;
     }
 
@@ -92,7 +106,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const authorName = msg.contact?.name ?? '';
 
     try {
-      log('Process incoming:', { normalizedPhone, text: text.slice(0, 50), authorName });
+      if (debugPayload) {
+        log('Process incoming:', { normalizedPhone, text: text.slice(0, 50), authorName });
+      }
 
       // CRM: клиент и сделка при первом сообщении
       let crmClient = await findCrmClientByPhone(normalizedPhone);
@@ -115,35 +131,38 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         client = await findClientByPhone(normalizedPhone);
         if (!client) {
           log('Failed to load created client:', clientId);
+          errors++;
           continue;
         }
-      } else {
-        log('Found existing client:', client.id);
       }
 
       let conversation = await findConversationByClientId(client.id);
       if (!conversation) {
-        const conversationId = await createConversation(client.id);
+        const conversationId = await createConversation(client.id, normalizedPhone);
         log('Created conversation:', conversationId, 'clientId=', client.id);
         conversation = await findConversationByClientId(client.id);
         if (!conversation) {
           log('Failed to load created conversation');
+          errors++;
           continue;
         }
-      } else {
-        log('Found existing conversation:', conversation.id);
       }
 
       const messageId = await saveMessage(conversation.id, text, 'incoming');
       await incrementUnreadCount(conversation.id);
-      log('Saved message:', messageId, 'conversationId=', conversation.id);
+      processed++;
+      if (debugPayload) {
+        log('Saved message:', messageId, 'conversationId=', conversation.id);
+      }
     } catch (err) {
       log('Error processing message:', msg.messageId, err);
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'Processing failed', detail: String(err) })
-      };
+      errors++;
+      // Не возвращаем 500 — обрабатываем остальные сообщения
     }
+  }
+
+  if (errors > 0 || (debugPayload && (processed > 0 || skipped > 0))) {
+    log('Done: processed=', processed, 'skipped=', skipped, 'errors=', errors);
   }
 
   return {

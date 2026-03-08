@@ -17,8 +17,12 @@ export interface WhatsAppClient {
 export interface WhatsAppConversation {
   id: string;
   clientId: string;
+  /** Номер для отображения/отправки, если клиент не загружен */
+  phone?: string;
   status: 'active' | 'archived' | 'closed';
   createdAt: Date | Timestamp;
+  /** Время последнего сообщения для сортировки */
+  lastMessageAt?: Date | Timestamp;
   /** Количество непрочитанных (входящих) сообщений; сбрасывается при открытии чата */
   unreadCount?: number;
 }
