@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { MessageSquare } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useCompanyId } from '../contexts/CompanyContext';
+import { useMobileWhatsAppChat } from '../contexts/MobileWhatsAppChatContext';
 import {
   subscribeConversationsList,
   subscribeMessages,
@@ -75,7 +76,33 @@ const WhatsAppChat: React.FC = () => {
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
 
+  const mobileChatContext = useMobileWhatsAppChat();
   const selectedItem = conversations.find((c) => c.id === selectedId);
+
+  // Синхронизация с контекстом: на mobile при открытом чате скрываем плавающие кнопки
+  useEffect(() => {
+    if (!mobileChatContext) return;
+    const open = isMobile && !!selectedId;
+    mobileChatContext.setMobileWhatsAppChatOpen(open);
+    return () => mobileChatContext.setMobileWhatsAppChatOpen(false);
+  }, [isMobile, selectedId, mobileChatContext]);
+
+  // Mobile: кнопка «Назад» браузера закрывает чат и возвращает к списку
+  useEffect(() => {
+    if (!isMobile) return;
+    const handlePopState = () => {
+      if (selectedIdRef.current) setSelectedId(null);
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [isMobile]);
+
+  // При открытии чата на mobile добавляем history state, чтобы Back сначала закрыл чат
+  useEffect(() => {
+    if (isMobile && selectedId) {
+      window.history.pushState({ whatsappChat: true }, '');
+    }
+  }, [isMobile, selectedId]);
 
   const setConversationsWithNotification = useCallback((newItems: ConversationListItem[]) => {
     const prev = prevConversationsRef.current;
@@ -274,8 +301,12 @@ const WhatsAppChat: React.FC = () => {
         } as ConversationListItem)
       : null);
 
+  const isMobileChatView = isMobile && !!selectedId;
+
   return (
-    <div className="flex flex-col h-full bg-gray-50">
+    <div
+      className={`flex flex-col h-full bg-gray-50 ${isMobileChatView ? 'overflow-hidden' : ''}`}
+    >
       {/* Заголовок: на мобильном в чате не показываем (есть свой header в ChatWindow) */}
       {(!isMobile || !selectedId) && (
         <div className="flex-none px-4 py-3 border-b bg-white">
@@ -319,11 +350,11 @@ const WhatsAppChat: React.FC = () => {
           />
         </aside>
 
-        {/* Центр: чат */}
+        {/* Центр: чат. На mobile — полноэкранная колонка с flex, composer внизу в потоке */}
         <section
           className={`
             flex flex-col min-w-0 bg-[#e5ddd5]
-            ${isMobile ? 'w-full h-full absolute inset-0' : 'flex-1'}
+            ${isMobile ? 'w-full h-full absolute inset-0 min-h-0' : 'flex-1'}
             ${showListOnly ? 'hidden' : ''}
           `}
         >

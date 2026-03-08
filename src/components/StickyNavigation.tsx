@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Warehouse, ArrowLeftRight, UserCircle, List } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
 import { useMenuVisibility } from '../contexts/MenuVisibilityContext';
+import { useMobileWhatsAppChat } from '../contexts/MobileWhatsAppChatContext';
 import { useIsMobile } from '../hooks/useIsMobile';
 
 const MOBILE_BREAKPOINT = 768;
@@ -14,6 +15,8 @@ interface StickyNavigationProps {
 export const StickyNavigation: React.FC<StickyNavigationProps> = ({ onNavigate }) => {
   const navigate = useNavigate();
   const isMobile = useIsMobile(MOBILE_BREAKPOINT);
+  const mobileChatContext = useMobileWhatsAppChat();
+  const hideForMobileChat = isMobile && mobileChatContext?.isMobileWhatsAppChatOpen;
 
   const isMobileDevice = () => {
     const userAgent = navigator.userAgent.toLowerCase();
@@ -24,9 +27,9 @@ export const StickyNavigation: React.FC<StickyNavigationProps> = ({ onNavigate }
   };
 
   const { isMenuVisible } = useMenuVisibility();
-  const shouldBeVisible = !isMobileDevice() || isMenuVisible;
+  const shouldBeVisible = (!isMobileDevice() || isMenuVisible) && !hideForMobileChat;
 
-  // Mobile: bottom 100px чтобы не перекрывать ChatInput. Desktop: bottom 96px чтобы не перекрывать кнопку «Отправить»
+  // Mobile: bottom 100px чтобы не перекрывать ChatInput. Desktop: bottom 96px
   const containerClass = [
     'fixed right-2 z-[1000] flex flex-col transition-all duration-300 ease-in-out',
     isMobile ? 'bottom-[100px] gap-1.5' : 'bottom-[96px] gap-1.5',

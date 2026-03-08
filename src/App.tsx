@@ -12,6 +12,7 @@ import { Toaster } from 'react-hot-toast';
 import './styles/animations.css';
 import { MenuVisibilityProvider } from './contexts/MenuVisibilityContext';
 import { MobileSidebarProvider } from './contexts/MobileSidebarContext';
+import { MobileWhatsAppChatProvider } from './contexts/MobileWhatsAppChatContext';
 import { CompanyProvider } from './contexts/CompanyContext';
 import { ChatProvider } from './context/ChatContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -148,6 +149,7 @@ const AppContent: React.FC = () => {
 
   return (
     <MobileSidebarProvider>
+    <MobileWhatsAppChatProvider>
     <div className="flex w-full h-screen bg-gray-50 overflow-hidden">
       {/* Sidebar */}
       <Sidebar onPageChange={setCurrentPage} currentPage={currentPage} />
@@ -160,7 +162,7 @@ const AppContent: React.FC = () => {
             setCurrentPage(page as Page);
           }} 
         />
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto min-h-0">
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <Routes>
@@ -284,6 +286,7 @@ const AppContent: React.FC = () => {
         </div>
       </main>
     </div>
+    </MobileWhatsAppChatProvider>
     </MobileSidebarProvider>
   );
 };

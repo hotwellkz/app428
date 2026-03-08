@@ -34,8 +34,6 @@ interface ChatWindowProps {
 }
 
 const CHAT_HEADER_HEIGHT = 56;
-/** Высота нижней панели ввода (composer) + запас для отступа списка сообщений */
-const CHAT_INPUT_HEIGHT = 72;
 
 function MessageStatusIcon({ msg }: { msg: WhatsAppMessage }) {
   if (msg.direction !== 'outgoing') return null;
@@ -187,11 +185,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const phone = selectedItem.phone ?? selectedItem.client?.phone ?? selectedItem.clientId ?? '—';
 
-  const messagesHeight = isMobile
-    ? `calc(100vh - ${CHAT_HEADER_HEIGHT}px - ${CHAT_INPUT_HEIGHT}px)`
-    : undefined;
-
-  return (
+  const content = (
     <>
       {/* Header: на мобильных — кнопка Назад + номер */}
       <div
@@ -214,10 +208,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         </p>
       </div>
 
-      {/* Сообщения: правый/нижний отступ — не перекрывать плавающие кнопки и панель ввода */}
+      {/* Сообщения: на mobile flex-1 min-h-0 без фикс. высоты; отступы от плавающих кнопок и composer */}
       <div
-        className={`flex-1 overflow-y-auto bg-[#e5ddd5] space-y-2 p-2 md:p-4 ${isMobile ? 'pb-24 pr-20 md:pr-[88px]' : 'pb-4 pr-[88px]'}`}
-        style={messagesHeight ? { height: messagesHeight, flex: 'none' } : undefined}
+        className={`flex-1 min-h-0 overflow-y-auto bg-[#e5ddd5] space-y-2 p-2 md:p-4 ${isMobile ? 'pb-4 pr-16 md:pr-[88px]' : 'pb-4 pr-[88px]'}`}
       >
         {messages.map((msg) => (
           <div
@@ -294,21 +287,35 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           )}
         </div>
       )}
-      <ChatInput
-        value={inputText}
-        onChange={onInputChange}
-        onSend={onSend}
-        disabled={!selectedItem?.phone || selectedItem.phone === '…'}
-        sending={sending || uploadState !== 'idle'}
-        fixedBottom={isMobile}
-        hasAttachment={!!pendingAttachment}
-        onFileSelect={onFileSelect}
-        onStartVoice={onStartVoice}
-        onStopVoice={onStopVoice}
-        isRecordingVoice={isRecordingVoice}
-      />
+      <div
+        className="flex-none"
+        style={isMobile ? { paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom, 0px))' } : undefined}
+      >
+        <ChatInput
+          value={inputText}
+          onChange={onInputChange}
+          onSend={onSend}
+          disabled={!selectedItem?.phone || selectedItem.phone === '…'}
+          sending={sending || uploadState !== 'idle'}
+          fixedBottom={false}
+          hasAttachment={!!pendingAttachment}
+          onFileSelect={onFileSelect}
+          onStartVoice={onStartVoice}
+          onStopVoice={onStopVoice}
+          isRecordingVoice={isRecordingVoice}
+        />
+      </div>
     </>
   );
+
+  if (isMobile) {
+    return (
+      <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        {content}
+      </div>
+    );
+  }
+  return content;
 };
 
 export default ChatWindow;
