@@ -1,8 +1,12 @@
-import React, { useRef } from 'react';
-import { Send, Paperclip, Mic, Square } from 'lucide-react';
+import React, { useRef, useEffect } from 'react';
+import { Send, Paperclip, Mic, Square, Loader2 } from 'lucide-react';
 
 const MAX_ATTACHMENT_MB = 10;
 const ACCEPT_ATTACHMENTS = 'image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt';
+
+const TEXTAREA_MIN_ROWS = 1;
+const TEXTAREA_MAX_ROWS = 5;
+const LINE_HEIGHT_PX = 20;
 
 interface ChatInputProps {
   value: string;
@@ -10,17 +14,11 @@ interface ChatInputProps {
   onSend: () => void;
   disabled?: boolean;
   sending?: boolean;
-  /** На мобильных — fixed снизу */
   fixedBottom?: boolean;
-  /** Есть выбранный файл для отправки (разрешаем Send) */
   hasAttachment?: boolean;
-  /** Выбор файла для отправки */
   onFileSelect?: (file: File) => void;
-  /** Запись голоса: начать */
   onStartVoice?: () => void;
-  /** Запись голоса: остановить и отправить файл */
   onStopVoice?: () => void;
-  /** Идёт запись голоса */
   isRecordingVoice?: boolean;
 }
 
@@ -38,27 +36,43 @@ const ChatInput: React.FC<ChatInputProps> = ({
   isRecordingVoice = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const hasText = value.trim().length > 0;
+  const showSend = hasText || hasAttachment;
+  const isBusy = sending;
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      onSend();
+      if (showSend && !isBusy) onSend();
     }
   };
 
-  const canSend = (value.trim().length > 0 || hasAttachment) && !disabled && !sending;
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const lineCount = Math.min(Math.max(el.value.split('\n').length, TEXTAREA_MIN_ROWS), TEXTAREA_MAX_ROWS);
+    el.style.height = `${lineCount * LINE_HEIGHT_PX + 24}px`;
+  }, [value]);
+
+  const handleActionClick = () => {
+    if (isRecordingVoice && onStopVoice) onStopVoice();
+    else if (showSend && !isBusy) onSend();
+    else if (!showSend && onStartVoice && !hasAttachment) onStartVoice();
+  };
 
   const containerClass = fixedBottom
-    ? 'fixed left-0 right-0 bottom-0 p-2 bg-gray-100 border-t border-gray-200'
-    : 'flex-none p-3 bg-gray-100';
-
+    ? 'fixed left-0 right-0 border-t border-gray-200 bg-[#f0f2f5]'
+    : 'flex-none bg-[#f0f2f5]';
   const containerStyle = fixedBottom
     ? { paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))' as const }
     : undefined;
 
   return (
-    <div className={`${containerClass} flex flex-col gap-1`} style={containerStyle}>
-      <div className="flex gap-2">
+    <div className={`${containerClass} py-2 px-2 md:px-3`} style={containerStyle}>
+      <div className="flex items-end gap-1.5 md:gap-2 max-w-full">
         {onFileSelect && (
           <>
             <input
@@ -76,47 +90,56 @@ const ChatInput: React.FC<ChatInputProps> = ({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={disabled || isRecordingVoice}
-              title="Прикрепить файл"
-              className="rounded-lg p-2 text-gray-600 hover:bg-gray-200 hover:text-gray-800 disabled:opacity-50 transition-colors"
-              aria-label="Прикрепить файл"
+              title="Прикрепить"
+              className="flex-shrink-0 p-2 rounded-full text-gray-600 hover:bg-gray-300/80 active:scale-95 transition-all disabled:opacity-50"
+              aria-label="Прикрепить"
             >
-              <Paperclip className="w-5 h-5" />
+              <Paperclip className="w-5 h-5 md:w-6 md:h-6" />
             </button>
-            {onStartVoice && onStopVoice && (
-              <button
-                type="button"
-                onClick={isRecordingVoice ? onStopVoice : onStartVoice}
-                disabled={disabled || !!hasAttachment}
-                title={isRecordingVoice ? 'Остановить запись' : 'Голосовое сообщение'}
-                className={`rounded-lg p-2 transition-colors ${
-                  isRecordingVoice
-                    ? 'bg-red-100 text-red-600 hover:bg-red-200'
-                    : 'text-gray-600 hover:bg-gray-200 hover:text-gray-800 disabled:opacity-50'
-                }`}
-                aria-label={isRecordingVoice ? 'Остановить запись' : 'Голосовое сообщение'}
-              >
-                {isRecordingVoice ? <Square className="w-5 h-5 fill-current" /> : <Mic className="w-5 h-5" />}
-              </button>
-            )}
           </>
         )}
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={hasAttachment ? 'Подпись к файлу (необязательно)' : 'Сообщение...'}
-          className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none md:px-4"
-        />
+
+        <div className="flex-1 min-w-0 flex items-end">
+          <textarea
+            ref={textareaRef}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={hasAttachment ? 'Подпись к файлу (необязательно)' : 'Сообщение...'}
+            rows={TEXTAREA_MIN_ROWS}
+            className="w-full resize-none rounded-2xl border border-gray-300 bg-white px-4 py-2.5 text-sm focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none min-h-[40px] max-h-[120px] overflow-y-auto"
+            style={{ lineHeight: `${LINE_HEIGHT_PX}px` }}
+          />
+        </div>
+
         <button
           type="button"
-          onClick={onSend}
-          disabled={!canSend}
-          title="Отправить"
-          className="rounded-lg bg-green-600 text-white px-3 py-2 flex items-center gap-1.5 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors md:px-4 md:gap-2 min-w-[7rem]"
+          onClick={handleActionClick}
+          disabled={
+            disabled ||
+            (isRecordingVoice ? false : showSend ? isBusy : !(onStartVoice && !hasAttachment))
+          }
+          title={
+            isRecordingVoice ? 'Остановить запись' : showSend ? 'Отправить' : 'Голосовое сообщение'
+          }
+          className={`flex-shrink-0 w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center transition-[background-color,opacity,transform] duration-150 ease-out active:scale-95 ${
+            isRecordingVoice
+              ? 'bg-red-500 text-white hover:bg-red-600 disabled:opacity-70'
+              : 'bg-[#25D366] text-white hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed'
+          }`}
+          aria-label={isRecordingVoice ? 'Остановить' : showSend ? 'Отправить' : 'Микрофон'}
         >
-          <Send className="w-4 h-4 flex-shrink-0" />
-          <span className="hidden sm:inline">Отправить</span>
+          <span className="inline-flex items-center justify-center transition-opacity duration-150">
+            {isBusy && showSend && !isRecordingVoice ? (
+              <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" />
+            ) : isRecordingVoice ? (
+              <Square className="w-5 h-5 md:w-6 md:h-6 fill-current" />
+            ) : showSend ? (
+              <Send className="w-5 h-5 md:w-6 md:h-6" />
+            ) : (
+              <Mic className="w-5 h-5 md:w-6 md:h-6" />
+            )}
+          </span>
         </button>
       </div>
     </div>

@@ -34,7 +34,8 @@ interface ChatWindowProps {
 }
 
 const CHAT_HEADER_HEIGHT = 56;
-const CHAT_INPUT_HEIGHT = 60;
+/** Высота нижней панели ввода (composer) + запас для отступа списка сообщений */
+const CHAT_INPUT_HEIGHT = 72;
 
 function MessageStatusIcon({ msg }: { msg: WhatsAppMessage }) {
   if (msg.direction !== 'outgoing') return null;
@@ -213,9 +214,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         </p>
       </div>
 
-      {/* Сообщения: правый отступ чтобы не перекрывались плавающими кнопками (StickyNavigation) */}
+      {/* Сообщения: правый/нижний отступ — не перекрывать плавающие кнопки и панель ввода */}
       <div
-        className={`flex-1 overflow-y-auto bg-[#e5ddd5] space-y-2 p-2 pb-4 md:p-4 ${isMobile ? 'pb-[72px] pr-[72px] md:pr-[88px]' : 'pr-[88px]'}`}
+        className={`flex-1 overflow-y-auto bg-[#e5ddd5] space-y-2 p-2 md:p-4 ${isMobile ? 'pb-24 pr-20 md:pr-[88px]' : 'pb-4 pr-[88px]'}`}
         style={messagesHeight ? { height: messagesHeight, flex: 'none' } : undefined}
       >
         {messages.map((msg) => (
