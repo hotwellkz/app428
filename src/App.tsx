@@ -94,6 +94,7 @@ const CreateTemplate = lazy(withChunkErrorRecovery(() => import('./pages/CreateT
 const EditTemplate = lazy(withChunkErrorRecovery(() => import('./pages/EditTemplate')));
 const CreateContractWithAdditionalWorks = lazy(withChunkErrorRecovery(() => import('./pages/CreateContractWithAdditionalWorks')));
 const FinishingMaterialsManager = lazy(withChunkErrorRecovery(() => import('./components/materials/FinishingMaterialsManager').then(module => ({ default: module.FinishingMaterialsManager }))));
+const DealsPage = lazy(withChunkErrorRecovery(() => import('./pages/DealsPage')));
 
 // Fallback компонент для Suspense
 const PageLoader = () => (
@@ -103,7 +104,7 @@ const PageLoader = () => (
 );
 
 type Page = 'dashboard' | 'transactions' | 'feed' | 'daily-report' | 'clients' | 'templates' | 
-  'products' | 'employees' | 'projects' | 'calculator' | 'warehouse' | 'chat' | 'finishing-materials';
+  'products' | 'employees' | 'projects' | 'calculator' | 'warehouse' | 'chat' | 'finishing-materials' | 'deals';
 
 const AppContent: React.FC = () => {
   const [currentPage, setCurrentPage] = useState<Page>('transactions');
@@ -257,6 +258,11 @@ const AppContent: React.FC = () => {
             <Route path="/warehouse/expense/new" element={
               <ApprovalGuard>
                 <NewExpense />
+              </ApprovalGuard>
+            } />
+            <Route path="/deals" element={
+              <ApprovalGuard>
+                <DealsPage />
               </ApprovalGuard>
             } />
             <Route path="/warehouse/documents" element={

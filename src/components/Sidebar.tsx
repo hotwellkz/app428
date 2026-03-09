@@ -35,7 +35,7 @@ interface MenuItem {
 }
 
 interface SidebarProps {
-  onPageChange: (page: 'dashboard' | 'transactions' | 'feed' | 'daily-report' | 'clients' | 'templates' | 'products' | 'employees' | 'projects' | 'calculator' | 'chat' | 'warehouse') => void;
+  onPageChange: (page: 'dashboard' | 'transactions' | 'feed' | 'daily-report' | 'clients' | 'templates' | 'products' | 'employees' | 'projects' | 'calculator' | 'chat' | 'warehouse' | 'deals') => void;
   currentPage: string;
 }
 
@@ -195,6 +195,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
       label: 'WhatsApp', 
       path: '/whatsapp',
       isActive: location.pathname === '/whatsapp'
+    },
+    { 
+      icon: <Building2 className="w-5 h-5" />, 
+      label: 'Сделки', 
+      path: '/deals',
+      isActive: location.pathname === '/deals'
     }
   ];
 
@@ -209,7 +215,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
     setMobileMenuOpenFalse();
   };
 
-  const isPageWithInlineHeader = location.pathname === '/feed' || location.pathname === '/profile' || location.pathname === '/clients' || location.pathname === '/client-files' || location.pathname === '/templates' || location.pathname === '/products' || location.pathname === '/employees' || location.pathname === '/calculator' || location.pathname === '/warehouse' || location.pathname === '/whatsapp' || location.pathname.startsWith('/warehouse/') || location.pathname.startsWith('/transactions/history') || location.pathname.startsWith('/transaction-history/');
+    const isPageWithInlineHeader = location.pathname === '/feed' || location.pathname === '/profile' || location.pathname === '/clients' || location.pathname === '/client-files' || location.pathname === '/templates' || location.pathname === '/products' || location.pathname === '/employees' || location.pathname === '/calculator' || location.pathname === '/warehouse' || location.pathname === '/whatsapp' || location.pathname === '/deals' || location.pathname.startsWith('/warehouse/') || location.pathname.startsWith('/transactions/history') || location.pathname.startsWith('/transaction-history/');
 
   return (
     <>
