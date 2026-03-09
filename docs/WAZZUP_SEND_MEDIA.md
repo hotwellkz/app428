@@ -35,7 +35,24 @@
 1. **Загрузка файла**: клиент загружает файл в Supabase Storage по пути `companies/{companyId}/whatsapp/media/{conversationId}/{timestamp}_{filename}` (tenant-safe). Лимит 10 МБ.
 2. **Отправка**: запрос к `send-whatsapp-message` с `contentUri`, опционально `text` (caption, только в БД), `attachmentType` (image|file|audio|voice), `fileName`.
 3. **Backend**: вызов Wazzup с `contentUri` (без `text` в одном запросе); сохранение в Firestore с `attachments` и caption в `text`.
-4. **Голос (fallback)**: Wazzup не имеет отдельного типа "voice" в API. Реализовано: запись в браузере (MediaRecorder → audio/webm) → файл `voice.webm` → загрузка в Storage → отправка как `attachmentType: 'voice'` (в БД и UI отображаем как голосовое). Провайдер получает обычный аудиофайл.
+4. **Голос (fallback)**: Wazzup не имеет отдельного типа "voice" в API. Реализовано: запись в браузере (MediaRecorder → audio/webm) → файл `voice.webm` → загрузка в Storage → отправка как `attachmentType: 'voice'` (в БД сохраняется как `audio`). В CRM голосовые отображаются inline-плеером (AudioMessageBubble), не как файл.
+
+---
+
+## Голосовые сообщения: формат и отображение
+
+### Текущий поток
+
+- **Запись**: MediaRecorder в браузере → `audio/webm` (или `audio/webm;codecs=opus` при поддержке).
+- **Файл**: `voice.webm` загружается в Supabase, отправляется в Wazzup по `contentUri`.
+- **В CRM**: все вложения с типом `audio` (в т.ч. отправленные как voice) рендерятся через **AudioMessageBubble**: play/pause, duration, progress bar, перемотка по клику; только одно аудио играет одновременно. Отдельное окно/вкладка не открывается.
+
+### Native voice note в WhatsApp
+
+- В WhatsApp нативное голосовое (voice note / PTT) отображается у получателя как «запись», а не как файл, если контент в формате **OGG/Opus** (MIME `audio/ogg; codecs=opus`).
+- Сейчас мы отправляем **WebM** → провайдер/WhatsApp может показывать его как обычный аудиофайл или вложение.
+- **Чтобы в WhatsApp приходило нативное голосовое**: нужна конвертация webm → ogg/opus (на backend или на клиенте) и отправка по `contentUri` уже в формате .ogg. В API Wazzup отдельного параметра «voice»/«ptt» нет — тип выводится из содержимого/формата.
+- Входящие от Wazzup с типом `audio`, `ptt` или `voice` маппятся в `audio` и в CRM отображаются тем же inline-плеером.
 
 ---
 

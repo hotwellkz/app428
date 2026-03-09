@@ -67,7 +67,7 @@ function parseLegacyMediaAttachments(text: string): MessageAttachment[] {
   let type: MessageAttachment['type'] = 'file';
   if (/\.(jpg|jpeg|png|gif|webp)(\?|$)/i.test(lower)) type = 'image';
   else if (/\.(mp4|webm|mov)(\?|$)/i.test(lower)) type = 'video';
-  else if (/\.(mp3|ogg|m4a|wav)(\?|$)/i.test(lower)) type = 'audio';
+  else if (/\.(mp3|ogg|m4a|wav|webm)(\?|$)/i.test(lower)) type = 'audio';
   return [{ type, url }];
 }
 

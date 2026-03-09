@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Clock, Check, CheckCheck, AlertCircle, Image, Video, Music, FileText, X } from 'lucide-react';
+import { ArrowLeft, Clock, Check, CheckCheck, AlertCircle, Image, Video, Music, FileText, X, Play, Pause } from 'lucide-react';
 import { formatMessageTime, mapProviderStatusToUiStatus } from './whatsappUtils';
 import ChatInput from './ChatInput';
 import type { WhatsAppMessage, MessageAttachment } from '../../types/whatsappDb';
@@ -36,6 +36,117 @@ interface ChatWindowProps {
 }
 
 const CHAT_HEADER_HEIGHT = 56;
+
+/** Только один аудио-элемент воспроизводится одновременно (глобально в чате). */
+let activeAudioRef: HTMLAudioElement | null = null;
+function setActiveAudio(el: HTMLAudioElement | null) {
+  if (activeAudioRef && activeAudioRef !== el) {
+    activeAudioRef.pause();
+  }
+  activeAudioRef = el;
+}
+
+function formatDuration(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function AudioMessageBubble({ att }: { att: MessageAttachment }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [duration, setDuration] = useState<number>(0);
+  const [currentTime, setCurrentTime] = useState<number>(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    const onLoadedMetadata = () => {
+      setDuration(el.duration);
+      setLoaded(true);
+    };
+    const onTimeUpdate = () => setCurrentTime(el.currentTime);
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+      setActiveAudio(null);
+    };
+    const onPause = () => {
+      setIsPlaying(false);
+      setActiveAudio(null);
+    };
+    const onPlay = () => setIsPlaying(true);
+    el.addEventListener('loadedmetadata', onLoadedMetadata);
+    el.addEventListener('timeupdate', onTimeUpdate);
+    el.addEventListener('ended', onEnded);
+    el.addEventListener('pause', onPause);
+    el.addEventListener('play', onPlay);
+    return () => {
+      el.removeEventListener('loadedmetadata', onLoadedMetadata);
+      el.removeEventListener('timeupdate', onTimeUpdate);
+      el.removeEventListener('ended', onEnded);
+      el.removeEventListener('pause', onPause);
+      el.removeEventListener('play', onPlay);
+    };
+  }, [att.url]);
+
+  const togglePlay = () => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (isPlaying) {
+      el.pause();
+      setActiveAudio(null);
+    } else {
+      setActiveAudio(el);
+      el.play().catch(() => setActiveAudio(null));
+    }
+  };
+
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = audioRef.current;
+    if (!el || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, x / rect.width));
+    el.currentTime = pct * duration;
+    setCurrentTime(el.currentTime);
+  };
+
+  return (
+    <div className="mt-1 flex items-center gap-2 min-w-[200px] max-w-[280px]">
+      <audio ref={audioRef} src={att.url} preload="metadata" />
+      <button
+        type="button"
+        onClick={togglePlay}
+        className="flex-shrink-0 w-9 h-9 rounded-full bg-green-600 hover:bg-green-700 text-white flex items-center justify-center transition-colors"
+        aria-label={isPlaying ? 'Пауза' : 'Воспроизвести'}
+      >
+        {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div
+          role="progressbar"
+          aria-valuenow={duration ? (currentTime / duration) * 100 : 0}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="h-1.5 bg-gray-300 rounded-full cursor-pointer overflow-hidden"
+          onClick={handleProgressClick}
+        >
+          <div
+            className="h-full bg-green-600 rounded-full transition-all duration-100"
+            style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%' }}
+          />
+        </div>
+        <p className="text-xs text-gray-500 mt-0.5 flex justify-between">
+          <span>{formatDuration(currentTime)}</span>
+          <span>{loaded ? formatDuration(duration) : '…'}</span>
+        </p>
+      </div>
+    </div>
+  );
+}
 
 function MessageStatusIcon({ msg }: { msg: WhatsAppMessage }) {
   if (msg.direction !== 'outgoing') return null;
@@ -141,6 +252,9 @@ function AttachmentBlock({ att }: { att: MessageAttachment }) {
         </a>
       </div>
     );
+  }
+  if (isAudio) {
+    return <AudioMessageBubble att={att} />;
   }
   return (
     <div className="mt-1 p-2 rounded bg-gray-100 border border-gray-200">

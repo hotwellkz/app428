@@ -56,7 +56,7 @@ function buildAttachmentsFromWazzup(type: string | undefined, contentUri: string
   let attachmentType: MessageAttachmentRow['type'] = 'file';
   if (t === 'image') attachmentType = 'image';
   else if (t === 'video') attachmentType = 'video';
-  else if (t === 'audio') attachmentType = 'audio';
+  else if (t === 'audio' || t === 'ptt' || t === 'voice') attachmentType = 'audio';
   else if (t === 'document') attachmentType = 'file';
   return [{ type: attachmentType, url: contentUri.trim() }];
 }
