@@ -33,8 +33,8 @@ interface SendMessageBody {
   text?: string;
   /** Публичный URL файла для отправки как медиа. Взаимоисключающе с отправкой text в Wazzup. */
   contentUri?: string;
-  /** Тип вложения для сохранения в БД: image | file | audio | voice */
-  attachmentType?: 'image' | 'file' | 'audio' | 'voice';
+  /** Тип вложения для сохранения в БД: image | video | file | audio | voice */
+  attachmentType?: 'image' | 'video' | 'file' | 'audio' | 'voice';
   /** Имя файла для отображения */
   fileName?: string;
 }

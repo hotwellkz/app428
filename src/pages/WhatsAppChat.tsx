@@ -15,19 +15,20 @@ import ChatWindow from '../components/whatsapp/ChatWindow';
 import ClientInfoPanel from '../components/whatsapp/ClientInfoPanel';
 import { supabase, CLIENTS_BUCKET } from '../lib/supabase/config';
 import { MAX_ATTACHMENT_MB } from '../components/whatsapp/ChatInput';
+import { compressImage, validateVideoFile } from '../utils/mediaUtils';
 
 const NEW_MESSAGE_SOUND_PATH = '/sounds/new-message.mp3';
 
 const WHATSAPP_MEDIA_PREFIX = 'whatsapp/media';
 const MAX_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
 
-function getAttachmentType(file: File): 'image' | 'file' | 'audio' | 'voice' {
+function getAttachmentType(file: File): 'image' | 'file' | 'audio' | 'voice' | 'video' {
   const name = file.name.toLowerCase();
   if (name.startsWith('voice.') || file.type === 'audio/webm' || file.type === 'audio/ogg') return 'voice';
   const t = file.type.toLowerCase();
   if (t.startsWith('image/')) return 'image';
   if (t.startsWith('audio/')) return 'audio';
-  if (t.startsWith('video/')) return 'file';
+  if (t.startsWith('video/')) return 'video';
   return 'file';
 }
 
@@ -176,6 +177,44 @@ const WhatsAppChat: React.FC = () => {
       return null;
     });
   }, []);
+
+  const handleCameraCapture = useCallback(
+    async (file: File) => {
+      setSendError(null);
+      const isImage = file.type.startsWith('image/');
+      const isVideo = file.type.startsWith('video/');
+      if (isImage) {
+        setUploadState('uploading');
+        try {
+          const compressed = await compressImage(file);
+          if (compressed.size > MAX_BYTES) {
+            setSendError(`Файл слишком большой. Максимум ${MAX_ATTACHMENT_MB} МБ.`);
+            setUploadState('idle');
+            return;
+          }
+          const preview = URL.createObjectURL(compressed);
+          setPendingAttachment({ file: compressed, preview });
+        } catch (err) {
+          console.error('Image compress error:', err);
+          setSendError('Не удалось обработать фото.');
+        } finally {
+          setUploadState('idle');
+        }
+        return;
+      }
+      if (isVideo) {
+        const validation = validateVideoFile(file, MAX_BYTES);
+        if (!validation.ok) {
+          setSendError(validation.error ?? 'Видео не подходит.');
+          return;
+        }
+        setPendingAttachment({ file });
+        return;
+      }
+      setSendError('Выберите фото или видео.');
+    },
+    []
+  );
 
   const startVoiceRecording = useCallback(async () => {
     setSendError(null);
@@ -381,6 +420,8 @@ const WhatsAppChat: React.FC = () => {
               onStartVoice={startVoiceRecording}
               onStopVoice={stopVoiceRecording}
               isRecordingVoice={isRecordingVoice}
+              onCameraCapture={handleCameraCapture}
+              showCameraButton={isMobile}
             />
           )}
         </section>

@@ -31,6 +31,8 @@ interface ChatWindowProps {
   onStartVoice?: () => void;
   onStopVoice?: () => void;
   isRecordingVoice?: boolean;
+  onCameraCapture?: (file: File) => void;
+  showCameraButton?: boolean;
 }
 
 const CHAT_HEADER_HEIGHT = 56;
@@ -176,6 +178,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onStartVoice,
   onStopVoice,
   isRecordingVoice = false,
+  onCameraCapture,
+  showCameraButton = false,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -303,6 +307,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           onStartVoice={onStartVoice}
           onStopVoice={onStopVoice}
           isRecordingVoice={isRecordingVoice}
+          onCameraCapture={onCameraCapture}
+          showCameraButton={showCameraButton}
         />
       </div>
     </>

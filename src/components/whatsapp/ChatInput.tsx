@@ -1,8 +1,10 @@
 import React, { useRef, useEffect } from 'react';
-import { Send, Paperclip, Mic, Square, Loader2 } from 'lucide-react';
+import { Send, Paperclip, Mic, Square, Loader2, Camera } from 'lucide-react';
 
 const MAX_ATTACHMENT_MB = 10;
 const ACCEPT_ATTACHMENTS = 'image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt';
+/** На мобильном открывает камеру (capture), на десктопе — выбор файла фото/видео */
+const ACCEPT_CAMERA = 'image/*,video/*';
 
 const TEXTAREA_MIN_ROWS = 1;
 const TEXTAREA_MAX_ROWS = 5;
@@ -20,6 +22,10 @@ interface ChatInputProps {
   onStartVoice?: () => void;
   onStopVoice?: () => void;
   isRecordingVoice?: boolean;
+  /** Съёмка фото/видео с камеры (на mobile — нативная камера) */
+  onCameraCapture?: (file: File) => void;
+  /** Показывать кнопку камеры (mobile WhatsApp-style) */
+  showCameraButton?: boolean;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -34,8 +40,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onStartVoice,
   onStopVoice,
   isRecordingVoice = false,
+  onCameraCapture,
+  showCameraButton = false,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const hasText = value.trim().length > 0;
@@ -111,6 +120,34 @@ const ChatInput: React.FC<ChatInputProps> = ({
             style={{ lineHeight: `${LINE_HEIGHT_PX}px` }}
           />
         </div>
+
+        {onCameraCapture && showCameraButton && (
+          <>
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept={ACCEPT_CAMERA}
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onCameraCapture(file);
+                e.target.value = '';
+              }}
+              aria-label="Камера"
+            />
+            <button
+              type="button"
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={disabled || isRecordingVoice}
+              title="Камера"
+              className="flex-shrink-0 p-2 rounded-full text-gray-600 hover:bg-gray-300/80 active:scale-95 transition-all disabled:opacity-50"
+              aria-label="Камера"
+            >
+              <Camera className="w-5 h-5 md:w-6 md:h-6" />
+            </button>
+          </>
+        )}
 
         <button
           type="button"
