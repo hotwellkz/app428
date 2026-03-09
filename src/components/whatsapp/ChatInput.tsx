@@ -95,7 +95,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key !== 'Enter') return;
+    if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
       if (showSend && !isBusy) onSend();
     }
