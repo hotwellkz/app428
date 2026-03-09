@@ -17,6 +17,41 @@ export interface MessageBubbleProps {
   renderAttachments: (msg: WhatsAppMessage) => React.ReactNode;
 }
 
+const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
+
+function isValidHttpUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function MessageTextWithLinks({ text }: { text: string }) {
+  const parts = text.split(URL_REGEX);
+  return (
+    <span className="text-sm whitespace-pre-wrap break-words">
+      {parts.map((part, index) => {
+        if (isValidHttpUrl(part)) {
+          return (
+            <a
+              key={index}
+              href={part}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              className="text-green-700 underline break-words hover:text-green-800"
+            >
+              {part}
+            </a>
+          );
+        }
+        return <React.Fragment key={index}>{part}</React.Fragment>;
+      })}
+    </span>
+  );
+}
+
 function ReplyBlock({ message }: { message: WhatsAppMessage }) {
   const label = message.deleted
     ? 'Сообщение удалено'
@@ -132,7 +167,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         ) : (
           <>
             {message.text ? (
-              <p className="text-sm whitespace-pre-wrap break-words">{message.text}</p>
+              <MessageTextWithLinks text={message.text} />
             ) : null}
             {renderAttachments(message)}
           </>
