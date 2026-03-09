@@ -133,6 +133,24 @@ export async function incrementUnreadCount(conversationId: string): Promise<void
   await ref.update({ unreadCount: FieldValue.increment(1) });
 }
 
+/**
+ * Пометить диалог как прочитанный (источник истины в БД; после reload badge не вернётся).
+ * Вызывается при открытии чата и при получении новых сообщений в уже открытом чате.
+ */
+export async function markConversationAsRead(
+  conversationId: string,
+  lastReadMessageId?: string | null
+): Promise<void> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
+  const update: Record<string, unknown> = {
+    unreadCount: 0,
+    lastReadAt: Timestamp.now()
+  };
+  if (lastReadMessageId) update.lastReadMessageId = lastReadMessageId;
+  await ref.update(update);
+}
+
 export interface MessageAttachmentRow {
   type: 'image' | 'video' | 'audio' | 'file';
   url: string;

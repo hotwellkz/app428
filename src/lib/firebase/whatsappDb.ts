@@ -65,7 +65,9 @@ function docToConversation(docId: string, data: Record<string, unknown>): WhatsA
     status: (data.status as WhatsAppConversation['status']) ?? 'active',
     createdAt: data.createdAt as WhatsAppConversation['createdAt'],
     lastMessageAt: data.lastMessageAt as WhatsAppConversation['lastMessageAt'],
-    unreadCount: (data.unreadCount as number) ?? 0
+    unreadCount: (data.unreadCount as number) ?? 0,
+    lastReadAt: data.lastReadAt as WhatsAppConversation['lastReadAt'],
+    lastReadMessageId: (data.lastReadMessageId as string) ?? undefined
   };
 }
 
@@ -238,13 +240,29 @@ function getMessageTime(m: WhatsAppMessage): number {
   return new Date(t as string).getTime();
 }
 
+const MARK_READ_API = '/.netlify/functions/mark-whatsapp-read';
+
 /**
- * Сбросить счётчик непрочитанных при открытии чата (все входящие считаются прочитанными).
- * Обновляет unreadCount = 0 и lastReadAt = now для корректной read-модели.
+ * Пометить диалог как прочитанный в БД (через backend, чтобы запись гарантированно сохранялась).
+ * После reload unread badge не вернётся — источник истины в документе conversation.
  */
-export async function clearUnreadCount(conversationId: string): Promise<void> {
-  const ref = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
-  await updateDoc(ref, { unreadCount: 0, lastReadAt: serverTimestamp() });
+export async function clearUnreadCount(
+  conversationId: string,
+  lastReadMessageId?: string | null
+): Promise<void> {
+  const payload: { conversationId: string; lastReadMessageId?: string } = {
+    conversationId
+  };
+  if (lastReadMessageId) payload.lastReadMessageId = lastReadMessageId;
+  const res = await fetch(MARK_READ_API, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { error?: string })?.error ?? `mark-read failed: ${res.status}`);
+  }
 }
 
 /**
@@ -325,6 +343,12 @@ export function subscribeConversationsList(
       conversations = convSnapshot.docs.map((d) =>
         docToConversation(d.id, d.data() as Record<string, unknown>)
       );
+      if (import.meta.env.DEV) {
+        console.log('[WhatsApp] conversations snapshot:', conversations.length, 'items');
+        conversations.forEach((c) => {
+          console.log('[WhatsApp] conversation:', { id: c.id, unreadCount: c.unreadCount, lastReadAt: c.lastReadAt != null ? 'set' : 'null' });
+        });
+      }
       const ids = [...new Set(conversations.map((c) => c.clientId))];
       await loadClients(ids);
       mergeAndEmit();

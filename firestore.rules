@@ -225,5 +225,24 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow write: if isAuthenticated(); // Разрешаем запись аутентифицированным пользователям
     }
+
+    // WhatsApp CRM: чтение для аутентифицированных; запись mark-as-read через backend (Netlify function),
+    // правило update — запасной вариант по companyId
+    match /whatsappClients/{clientId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+    match /whatsappConversations/{conversationId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+    match /whatsappMessages/{messageId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
   }
 }

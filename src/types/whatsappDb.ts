@@ -23,8 +23,12 @@ export interface WhatsAppConversation {
   createdAt: Date | Timestamp;
   /** Время последнего сообщения для сортировки */
   lastMessageAt?: Date | Timestamp;
-  /** Количество непрочитанных (входящих) сообщений; сбрасывается при открытии чата */
+  /** Количество непрочитанных (входящих); источник истины в БД */
   unreadCount?: number;
+  /** Время последнего «прочитано» (mark-as-read в БД) */
+  lastReadAt?: Date | Timestamp;
+  /** ID последнего прочитанного сообщения на момент mark-as-read */
+  lastReadMessageId?: string | null;
 }
 
 /** Направление сообщения */

@@ -218,22 +218,22 @@ const WhatsAppChat: React.FC = () => {
     }
     const conversationId = selectedId;
     if (import.meta.env.DEV) {
-      console.log('[WhatsApp] open chat:', { selectedId, conversationId });
+      console.log('[WhatsApp] open chat:', { selectedId, conversationId, activeChatId: selectedId });
     }
     setIndexBuilding(false);
     setLocallyReadChatIds((prev) => new Set(prev).add(conversationId));
     if (import.meta.env.DEV) {
-      console.log('[WhatsApp] mark read start:', { conversationId });
+      console.log('[WhatsApp] markAsRead start:', { conversationId, payload: { unreadCount: 0, lastReadAt: 'serverTimestamp', lastReadMessageId: null } });
     }
     clearUnreadCount(conversationId)
       .then(() => {
         if (import.meta.env.DEV) {
-          console.log('[WhatsApp] mark read success:', { conversationId });
+          console.log('[WhatsApp] markAsRead success:', { conversationId });
         }
       })
       .catch((err) => {
         if (import.meta.env.DEV) {
-          console.warn('[WhatsApp] clearUnreadCount failed:', conversationId, err);
+          console.warn('[WhatsApp] markAsRead failed:', { conversationId, error: err });
         }
       });
     const onError = (err: unknown) => {
@@ -245,6 +245,24 @@ const WhatsAppChat: React.FC = () => {
     const unsub = subscribeMessages(selectedId, setMessages, onError);
     return unsub;
   }, [selectedId]);
+
+  // Когда чат открыт и приходят новые сообщения — помечаем прочитанным в БД (чтобы badge не появлялся)
+  const markReadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!selectedId || messages.length === 0) return;
+    if (markReadDebounceRef.current) clearTimeout(markReadDebounceRef.current);
+    markReadDebounceRef.current = setTimeout(() => {
+      markReadDebounceRef.current = null;
+      const lastIncoming = [...messages].reverse().find((m) => m.direction === 'incoming');
+      const lastReadMessageId = lastIncoming?.id ?? null;
+      clearUnreadCount(selectedId, lastReadMessageId).catch((err) => {
+        if (import.meta.env.DEV) console.warn('[WhatsApp] markAsRead (on new messages) failed:', selectedId, err);
+      });
+    }, 400);
+    return () => {
+      if (markReadDebounceRef.current) clearTimeout(markReadDebounceRef.current);
+    };
+  }, [selectedId, messages]);
 
   const handleFileSelect = useCallback((file: File) => {
     setSendError(null);
