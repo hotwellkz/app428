@@ -36,6 +36,14 @@ export interface ConversationListItem {
   lastMessage: WhatsAppMessage | null;
   lastMessageAt?: Date | Timestamp;
   unreadCount: number;
+  /** Имя клиента из CRM, если контакт связан; иначе показывать phone */
+  displayTitle?: string;
+}
+
+/** Нормализация номера для единообразного сравнения и поиска */
+export function normalizePhone(phone: string): string {
+  const digits = (phone ?? '').replace(/\D/g, '');
+  return digits ? `+${digits}` : (phone ?? '').trim();
 }
 
 function docToClient(docId: string, data: Record<string, unknown>): WhatsAppClient {
@@ -185,11 +193,6 @@ export async function saveMessage(
   return ref.id;
 }
 
-/** Нормализация номера для единообразного поиска (только цифры, опционально с +) */
-function normalizePhone(phone: string): string {
-  const digits = phone.replace(/\D/g, '');
-  return digits ? `+${digits}` : phone.trim();
-}
 
 /**
  * Загрузить всех клиентов WhatsApp (для маппинга в списке диалогов).

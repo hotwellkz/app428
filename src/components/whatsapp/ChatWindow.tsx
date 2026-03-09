@@ -12,6 +12,8 @@ interface PendingAttachment {
 
 interface ChatWindowProps {
   selectedItem: ConversationListItem;
+  /** Имя клиента из CRM для шапки чата; если нет — показывается номер */
+  displayTitle?: string | null;
   messages: WhatsAppMessage[];
   inputText: string;
   onInputChange: (value: string) => void;
@@ -276,6 +278,7 @@ function AttachmentBlock({ att }: { att: MessageAttachment }) {
 
 const ChatWindow: React.FC<ChatWindowProps> = ({
   selectedItem,
+  displayTitle,
   messages,
   inputText,
   onInputChange,
@@ -302,10 +305,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   }, [messages]);
 
   const phone = selectedItem.phone ?? selectedItem.client?.phone ?? selectedItem.clientId ?? '—';
+  const title = displayTitle?.trim() || phone;
 
   const content = (
     <>
-      {/* Header: на мобильных — кнопка Назад + номер */}
+      {/* Header: на мобильных — кнопка Назад + имя/номер */}
       <div
         className="flex-none flex items-center gap-2 px-3 py-2 bg-white border-b min-h-[52px] md:min-h-0 md:px-4 md:py-2"
         style={isMobile ? { minHeight: CHAT_HEADER_HEIGHT } : undefined}
@@ -321,9 +325,14 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             <span className="text-sm font-medium">Назад</span>
           </button>
         )}
-        <p className="font-medium text-gray-800 truncate flex-1 min-w-0 text-sm md:text-base">
-          {isMobile && onBack ? phone : phone}
-        </p>
+        <div className="flex-1 min-w-0 flex flex-col truncate">
+          <p className="font-medium text-gray-800 truncate text-sm md:text-base">
+            {title}
+          </p>
+          {displayTitle?.trim() && phone && (
+            <p className="text-xs text-gray-500 truncate">{phone}</p>
+          )}
+        </div>
       </div>
 
       {/* Сообщения: на mobile flex-1 min-h-0 без фикс. высоты; отступы от плавающих кнопок и composer */}

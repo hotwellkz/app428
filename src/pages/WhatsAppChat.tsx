@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { MessageSquare } from 'lucide-react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { MessageSquare, Search } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { useMobileWhatsAppChat } from '../contexts/MobileWhatsAppChatContext';
@@ -7,8 +7,11 @@ import {
   subscribeConversationsList,
   subscribeMessages,
   clearUnreadCount,
+  normalizePhone,
   type ConversationListItem
 } from '../lib/firebase/whatsappDb';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '../lib/firebase/config';
 import type { WhatsAppMessage } from '../types/whatsappDb';
 import ConversationList from '../components/whatsapp/ConversationList';
 import ChatWindow from '../components/whatsapp/ChatWindow';
@@ -79,6 +82,10 @@ const WhatsAppChat: React.FC = () => {
 
   /** Чаты, открытые в этой сессии: в списке для них всегда показываем unreadCount=0 (защита от stale snapshot). */
   const [locallyReadChatIds, setLocallyReadChatIds] = useState<Set<string>>(() => new Set());
+  /** Имена CRM-клиентов по нормализованному телефону (для отображения в списке и в шапке чата). */
+  const [crmNamesByPhone, setCrmNamesByPhone] = useState<Map<string, string>>(() => new Map());
+  /** Поиск по имени клиента, номеру и превью сообщения */
+  const [searchQuery, setSearchQuery] = useState('');
 
   const mobileChatContext = useMobileWhatsAppChat();
   const selectedItem = conversations.find((c) => c.id === selectedId);
@@ -145,6 +152,39 @@ const WhatsAppChat: React.FC = () => {
     const unsub = subscribeConversationsList(setConversationsWithNotification, onError);
     return unsub;
   }, [setConversationsWithNotification]);
+
+  useEffect(() => {
+    if (!companyId) {
+      setCrmNamesByPhone(new Map());
+      return;
+    }
+    const q = query(
+      collection(db, 'clients'),
+      where('companyId', '==', companyId)
+    );
+    const unsub = onSnapshot(
+      q,
+      (snapshot) => {
+        const map = new Map<string, string>();
+        snapshot.docs.forEach((d) => {
+          const data = d.data();
+          const phone = data.phone as string | undefined;
+          const name = ((data.name as string) ?? '').trim();
+          if (!phone) return;
+          const norm = normalizePhone(phone);
+          if (name) {
+            if (import.meta.env.DEV && map.has(norm) && map.get(norm) !== name) {
+              console.warn('[WhatsApp] Два клиента CRM с одним номером:', norm);
+            }
+            map.set(norm, name);
+          }
+        });
+        setCrmNamesByPhone(map);
+      },
+      () => setCrmNamesByPhone(new Map())
+    );
+    return () => unsub();
+  }, [companyId]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -363,6 +403,26 @@ const WhatsAppChat: React.FC = () => {
 
   const isMobileChatView = isMobile && !!selectedId;
 
+  const listWithDisplayTitle = useMemo(() => {
+    return conversations.map((c) => {
+      const effectiveUnread = locallyReadChatIds.has(c.id) ? 0 : (c.unreadCount ?? 0);
+      const displayTitle = crmNamesByPhone.get(normalizePhone(c.phone))?.trim() || c.phone || '—';
+      return { ...c, unreadCount: effectiveUnread, displayTitle };
+    });
+  }, [conversations, locallyReadChatIds, crmNamesByPhone]);
+
+  const filteredList = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return listWithDisplayTitle;
+    return listWithDisplayTitle.filter((item) => {
+      const preview = item.lastMessage?.attachments?.length
+        ? '[медиа]'
+        : (item.lastMessage?.text ?? '').slice(0, 200);
+      const searchable = [item.displayTitle ?? '', item.phone ?? '', preview].join(' ').toLowerCase();
+      return searchable.includes(q);
+    });
+  }, [listWithDisplayTitle, searchQuery]);
+
   return (
     <div
       className={`flex flex-col h-full bg-gray-50 ${isMobileChatView ? 'overflow-hidden' : ''}`}
@@ -403,14 +463,19 @@ const WhatsAppChat: React.FC = () => {
           `}
           style={!isMobile ? { minWidth: 300 } : undefined}
         >
+          <div className="flex-none flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50/80">
+            <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Поиск по имени или номеру..."
+              className="flex-1 min-w-0 py-2 px-2 text-sm rounded-lg border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-400"
+              aria-label="Поиск по имени или номеру"
+            />
+          </div>
           <ConversationList
-            items={conversations.map((c) => {
-              const effectiveUnread = locallyReadChatIds.has(c.id) ? 0 : (c.unreadCount ?? 0);
-              if (import.meta.env.DEV && (c.unreadCount ?? 0) !== effectiveUnread) {
-                console.log('[WhatsApp] effective unread after override:', { id: c.id, raw: c.unreadCount, effective: effectiveUnread });
-              }
-              return { ...c, unreadCount: effectiveUnread };
-            })}
+            items={filteredList}
             selectedId={selectedId}
             onSelect={setSelectedId}
           />
@@ -431,6 +496,7 @@ const WhatsAppChat: React.FC = () => {
           ) : (
             <ChatWindow
               selectedItem={displayItem}
+              displayTitle={displayItem ? (crmNamesByPhone.get(normalizePhone(displayItem.phone))?.trim() || displayItem.phone || null) : null}
               messages={messages}
               inputText={inputText}
               onInputChange={setInputText}

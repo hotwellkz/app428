@@ -27,16 +27,21 @@ const ConversationList: React.FC<ConversationListProps> = ({ items, selectedId, 
               selectedId === item.id ? 'bg-green-50 border-l-4 border-l-green-500 md:border-l-4' : ''
             } ${hasUnread ? 'bg-gray-100/80' : ''}`}
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <span className={`truncate text-sm md:text-base ${hasUnread ? 'font-semibold text-gray-900' : 'font-medium text-gray-900'}`}>
-                {item.phone ?? item.client?.phone ?? item.clientId ?? '—'}
-              </span>
-              {(item.unreadCount ?? 0) > 0 && (
+            <div className="flex flex-col min-w-0 flex-1 gap-0">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`truncate text-sm md:text-base ${hasUnread ? 'font-semibold text-gray-900' : 'font-medium text-gray-900'}`}>
+                  {item.displayTitle ?? item.phone ?? item.client?.phone ?? item.clientId ?? '—'}
+                </span>
+                {(item.unreadCount ?? 0) > 0 && (
                 <span
                   className="flex-shrink-0 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-[10px] bg-red-500 text-white text-xs font-medium"
                 >
                   {item.unreadCount > 99 ? '99+' : item.unreadCount}
                 </span>
+              )}
+              </div>
+              {item.displayTitle && item.displayTitle !== (item.phone ?? item.client?.phone) && (item.phone || item.client?.phone) && (
+                <p className="truncate text-xs text-gray-500 mt-0.5">{item.phone ?? item.client?.phone}</p>
               )}
             </div>
             {item.lastMessage && (
