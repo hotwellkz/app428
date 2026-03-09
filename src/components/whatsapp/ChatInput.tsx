@@ -1,8 +1,25 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Send, Paperclip, Mic, Square, Loader2, Camera, Image, FileText, Music, User, Smile } from 'lucide-react';
-import EmojiPicker, { type EmojiClickData } from 'emoji-picker-react';
+import EmojiPicker, { type EmojiClickData, Categories } from 'emoji-picker-react';
 
 const MAX_ATTACHMENT_MB = 10;
+
+/** Русская локализация emoji picker: категории и подписи */
+const EMOJI_PICKER_RU = {
+  searchPlaceholder: 'Поиск эмодзи...',
+  previewCaption: 'Выберите эмодзи',
+  categories: [
+    { category: Categories.SUGGESTED, name: 'Недавние' },
+    { category: Categories.SMILEYS_PEOPLE, name: 'Смайлы и люди' },
+    { category: Categories.ANIMALS_NATURE, name: 'Животные и природа' },
+    { category: Categories.FOOD_DRINK, name: 'Еда и напитки' },
+    { category: Categories.TRAVEL_PLACES, name: 'Путешествия и места' },
+    { category: Categories.ACTIVITIES, name: 'Активности' },
+    { category: Categories.OBJECTS, name: 'Объекты' },
+    { category: Categories.SYMBOLS, name: 'Символы' },
+    { category: Categories.FLAGS, name: 'Флаги' }
+  ] as Array<{ category: Categories; name: string }>
+};
 const ACCEPT_ATTACHMENTS = 'image/*,audio/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt';
 /** Только камера: на mobile с capture открывает съёмку напрямую */
 const ACCEPT_CAMERA = 'image/*,video/*';
@@ -245,7 +262,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
           ref={emojiPickerRef}
           className="absolute left-2 right-2 bottom-full mb-1 z-10 rounded-xl overflow-hidden shadow-lg"
         >
-          <EmojiPicker onEmojiClick={handleEmojiClick} theme="light" width="100%" height={320} />
+          <EmojiPicker
+            onEmojiClick={handleEmojiClick}
+            theme="light"
+            width="100%"
+            height={320}
+            searchPlaceHolder={EMOJI_PICKER_RU.searchPlaceholder}
+            searchPlaceholder={EMOJI_PICKER_RU.searchPlaceholder}
+            categories={EMOJI_PICKER_RU.categories}
+            previewConfig={{ defaultCaption: EMOJI_PICKER_RU.previewCaption }}
+          />
         </div>
       )}
     </div>
