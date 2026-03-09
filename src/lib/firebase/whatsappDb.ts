@@ -10,6 +10,7 @@ import {
   orderBy,
   onSnapshot,
   serverTimestamp,
+  arrayUnion,
   type Unsubscribe
 } from 'firebase/firestore';
 import { db } from './config';
@@ -17,7 +18,8 @@ import type {
   WhatsAppClient,
   WhatsAppConversation,
   WhatsAppMessage,
-  MessageAttachment
+  MessageAttachment,
+  MessageReaction
 } from '../../types/whatsappDb';
 
 export const COLLECTIONS = {
@@ -96,6 +98,18 @@ function dataToAttachments(arr: unknown): MessageAttachment[] {
   });
 }
 
+function dataToReactions(arr: unknown): MessageReaction[] {
+  if (!Array.isArray(arr)) return [];
+  return arr.map((item) => {
+    const o = item as Record<string, unknown>;
+    return {
+      emoji: (o.emoji as string) ?? '👍',
+      authorId: (o.authorId as string) ?? '',
+      createdAt: o.createdAt as MessageReaction['createdAt']
+    };
+  }).filter((r) => r.emoji && r.authorId);
+}
+
 function docToMessage(docId: string, data: Record<string, unknown>): WhatsAppMessage {
   const rawText = (data.text as string) ?? '';
   let attachments = dataToAttachments(data.attachments);
@@ -104,6 +118,7 @@ function docToMessage(docId: string, data: Record<string, unknown>): WhatsAppMes
     attachments = parseLegacyMediaAttachments(rawText.trim());
     if (attachments.length > 0) text = '';
   }
+  const reactions = dataToReactions(data.reactions);
   return {
     id: docId,
     conversationId: (data.conversationId as string) ?? '',
@@ -115,7 +130,16 @@ function docToMessage(docId: string, data: Record<string, unknown>): WhatsAppMes
     statusUpdatedAt: data.statusUpdatedAt as WhatsAppMessage['statusUpdatedAt'],
     providerMessageId: (data.providerMessageId as string) ?? undefined,
     errorMessage: (data.errorMessage as string) ?? undefined,
-    attachments: attachments.length > 0 ? attachments : undefined
+    attachments: attachments.length > 0 ? attachments : undefined,
+    repliedToMessageId: (data.repliedToMessageId as string) ?? undefined,
+    forwarded: data.forwarded === true,
+    deleted: data.deleted === true,
+    deletedAt: data.deletedAt as WhatsAppMessage['deletedAt'],
+    deletedBy: (data.deletedBy as string) ?? undefined,
+    starred: data.starred === true,
+    starredAt: data.starredAt as WhatsAppMessage['starredAt'],
+    starredBy: (data.starredBy as string) ?? undefined,
+    reactions: reactions.length > 0 ? reactions : undefined
   };
 }
 
@@ -353,4 +377,41 @@ export function subscribeMessages(
     },
     (err) => onError?.(err)
   );
+}
+
+/** Мягкое удаление сообщения в CRM (только в UI/БД, не в WhatsApp). */
+export async function softDeleteMessage(messageId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.MESSAGES, messageId);
+  await updateDoc(ref, {
+    deleted: true,
+    deletedAt: serverTimestamp(),
+    deletedBy: null
+  });
+}
+
+/** Переключить звёздочку сообщения в CRM. */
+export async function toggleStarMessage(messageId: string, starred: boolean): Promise<void> {
+  const ref = doc(db, COLLECTIONS.MESSAGES, messageId);
+  await updateDoc(ref, {
+    starred,
+    starredAt: serverTimestamp(),
+    starredBy: null
+  });
+}
+
+/** Добавить реакцию к сообщению (только в CRM). authorId — идентификатор пользователя CRM. */
+export async function addReactionToMessage(
+  messageId: string,
+  emoji: string,
+  authorId: string
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.MESSAGES, messageId);
+  const reaction = {
+    emoji: emoji || '👍',
+    authorId,
+    createdAt: new Date()
+  };
+  await updateDoc(ref, {
+    reactions: arrayUnion(reaction)
+  });
 }

@@ -8,6 +8,9 @@ import {
   subscribeMessages,
   clearUnreadCount,
   normalizePhone,
+  softDeleteMessage,
+  toggleStarMessage,
+  addReactionToMessage,
   type ConversationListItem
 } from '../lib/firebase/whatsappDb';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -16,6 +19,7 @@ import type { WhatsAppMessage } from '../types/whatsappDb';
 import ConversationList from '../components/whatsapp/ConversationList';
 import ChatWindow from '../components/whatsapp/ChatWindow';
 import ClientInfoPanel from '../components/whatsapp/ClientInfoPanel';
+import ForwardDialog from '../components/whatsapp/ForwardDialog';
 import { supabase, CLIENTS_BUCKET } from '../lib/supabase/config';
 import { MAX_ATTACHMENT_MB } from '../components/whatsapp/ChatInput';
 import { compressImage, validateVideoFile } from '../utils/mediaUtils';
@@ -86,6 +90,18 @@ const WhatsAppChat: React.FC = () => {
   const [crmNamesByPhone, setCrmNamesByPhone] = useState<Map<string, string>>(() => new Map());
   /** Поиск по имени клиента, номеру и превью сообщения */
   const [searchQuery, setSearchQuery] = useState('');
+  /** Режим выбора сообщений и действия над ними */
+  const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
+  const [replyToMessage, setReplyToMessage] = useState<WhatsAppMessage | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ messageId: string; x: number; y: number } | null>(null);
+  const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
+  const [actionsSheetMessageId, setActionsSheetMessageId] = useState<string | null>(null);
+  const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
+  const [forwardLoading, setForwardLoading] = useState(false);
+  const overlayRef = useRef(false);
+
+  const selectionMode = selectedMessageIds.length > 0;
+  overlayRef.current = selectionMode || !!contextMenu || !!reactionPickerMessageId || !!actionsSheetMessageId || forwardDialogOpen;
 
   const mobileChatContext = useMobileWhatsAppChat();
   const selectedItem = conversations.find((c) => c.id === selectedId);
@@ -98,11 +114,20 @@ const WhatsAppChat: React.FC = () => {
     return () => mobileChatContext.setMobileWhatsAppChatOpen(false);
   }, [isMobile, selectedId, mobileChatContext]);
 
-  // Mobile: кнопка «Назад» браузера закрывает чат и возвращает к списку
+  // Mobile: кнопка «Назад» — сначала закрываем selection/меню/диалог, потом чат
   useEffect(() => {
     if (!isMobile) return;
     const handlePopState = () => {
-      if (selectedIdRef.current) setSelectedId(null);
+      if (overlayRef.current) {
+        setSelectedMessageIds([]);
+        setContextMenu(null);
+        setReactionPickerMessageId(null);
+        setActionsSheetMessageId(null);
+        setForwardDialogOpen(false);
+        window.history.pushState({ whatsappChat: true }, '');
+      } else if (selectedIdRef.current) {
+        setSelectedId(null);
+      }
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
@@ -344,13 +369,15 @@ const WhatsAppChat: React.FC = () => {
             contentUri,
             attachmentType: getAttachmentType(pendingAttachment!.file),
             fileName: pendingAttachment!.file.name,
-            text: caption || undefined
+            text: caption || undefined,
+            repliedToMessageId: replyToMessage?.id ?? undefined
           })
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
           setInputText('');
           setSendError(null);
+          setReplyToMessage(null);
           setPendingAttachment((p) => {
             if (p?.preview) URL.revokeObjectURL(p.preview);
             return null;
@@ -367,11 +394,16 @@ const WhatsAppChat: React.FC = () => {
     if (!caption) return;
     setSending(true);
     setInputText('');
+    const replyId = replyToMessage?.id;
     try {
       const res = await fetch(SEND_API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chatId: phone, text: caption })
+        body: JSON.stringify({
+          chatId: phone,
+          text: caption,
+          repliedToMessageId: replyId ?? undefined
+        })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -379,11 +411,149 @@ const WhatsAppChat: React.FC = () => {
         setSendError((data as { error?: string })?.error || 'Ошибка отправки.');
       } else {
         setSendError(null);
+        setReplyToMessage(null);
       }
     } finally {
       setSending(false);
     }
   };
+
+  const closeSelectionAndOverlays = useCallback(() => {
+    setSelectedMessageIds([]);
+    setContextMenu(null);
+    setReactionPickerMessageId(null);
+    setActionsSheetMessageId(null);
+  }, []);
+
+  const handleLongPressMessage = useCallback(
+    (messageId: string) => {
+      setSelectedMessageIds((prev) => (prev.includes(messageId) ? prev : [...prev, messageId]));
+      if (isMobile) setReactionPickerMessageId(messageId);
+    },
+    [isMobile]
+  );
+
+  const handleContextMenuMessage = useCallback((e: React.MouseEvent, messageId: string) => {
+    e.preventDefault();
+    setContextMenu({ messageId, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleReplyToMessage = useCallback((messageId: string) => {
+    const msg = messages.find((m) => m.id === messageId);
+    if (msg) setReplyToMessage(msg);
+    closeSelectionAndOverlays();
+  }, [messages, closeSelectionAndOverlays]);
+
+  const handleForwardMessages = useCallback((messageIds: string[]) => {
+    setSelectedMessageIds(messageIds);
+    setForwardDialogOpen(true);
+  }, []);
+
+  const handleDeleteMessages = useCallback(async (messageIds: string[]) => {
+    for (const id of messageIds) {
+      try {
+        await softDeleteMessage(id);
+      } catch (err) {
+        if (import.meta.env.DEV) console.warn('[WhatsApp] softDeleteMessage failed:', id, err);
+      }
+    }
+    closeSelectionAndOverlays();
+  }, [closeSelectionAndOverlays]);
+
+  const handleStarMessages = useCallback(
+    async (messageIds: string[]) => {
+      const list = messages.filter((m) => messageIds.includes(m.id));
+      const nextStarred = !list.some((m) => m.starred);
+      for (const msg of list) {
+        try {
+          await toggleStarMessage(msg.id, nextStarred);
+        } catch (err) {
+          if (import.meta.env.DEV) console.warn('[WhatsApp] toggleStarMessage failed:', msg.id, err);
+        }
+      }
+      closeSelectionAndOverlays();
+    },
+    [messages, closeSelectionAndOverlays]
+  );
+
+  const handleCopyMessage = useCallback(
+    (messageId: string) => {
+      const msg = messages.find((m) => m.id === messageId);
+      const text = msg?.deleted ? '' : (msg?.text ?? '').trim();
+      if (text && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          if (isMobile && typeof document !== 'undefined') {
+            const toast = document.createElement('div');
+            toast.textContent = 'Скопировано';
+            toast.className =
+              'fixed bottom-24 left-1/2 -translate-x-1/2 px-4 py-2 bg-gray-800 text-white text-sm rounded-lg z-[1300]';
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 1500);
+          }
+        });
+      }
+      closeSelectionAndOverlays();
+    },
+    [messages, isMobile, closeSelectionAndOverlays]
+  );
+
+  const handleReactionSelect = useCallback(
+    async (messageId: string, emoji: string) => {
+      try {
+        await addReactionToMessage(messageId, emoji, 'crm-user');
+      } catch (err) {
+        if (import.meta.env.DEV) console.warn('[WhatsApp] addReactionToMessage failed:', messageId, err);
+      }
+      setReactionPickerMessageId(null);
+    },
+    []
+  );
+
+  const handleSelectionMore = useCallback(() => {
+    if (selectedMessageIds[0]) setActionsSheetMessageId(selectedMessageIds[0]);
+  }, [selectedMessageIds]);
+
+  const handleForwardConfirm = useCallback(
+    async (targetConversationIds: string[]) => {
+      if (!selectedId || !companyId) return;
+      const toSend = messages.filter((m) => selectedMessageIds.includes(m.id));
+      if (toSend.length === 0) return;
+      const convMap = new Map(conversations.map((c) => [c.id, c]));
+      setForwardLoading(true);
+      try {
+        for (const convId of targetConversationIds) {
+          const conv = convMap.get(convId);
+          const targetPhone = conv?.phone;
+          if (!targetPhone) continue;
+          for (const msg of toSend) {
+            const payload: Record<string, unknown> = {
+              chatId: targetPhone,
+              forwarded: true
+            };
+            if (msg.deleted) continue;
+            if (msg.attachments?.length && msg.attachments[0].url) {
+              payload.contentUri = msg.attachments[0].url;
+              payload.attachmentType = msg.attachments[0].type;
+              payload.fileName = msg.attachments[0].fileName;
+              payload.text = msg.text || undefined;
+            } else {
+              payload.text = msg.text || '[медиа]';
+            }
+            await fetch(SEND_API, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+          }
+        }
+        setForwardDialogOpen(false);
+        closeSelectionAndOverlays();
+      } finally {
+        setForwardLoading(false);
+      }
+    },
+    [selectedId, companyId, messages, selectedMessageIds, conversations, closeSelectionAndOverlays]
+  );
 
   const showListOnly = isMobile && !selectedId;
   const showChatOnly = isMobile && selectedId && selectedItem;
@@ -515,6 +685,28 @@ const WhatsAppChat: React.FC = () => {
               isRecordingVoice={isRecordingVoice}
               onCameraCapture={handleCameraCapture}
               showCameraButton={isMobile}
+              selectedMessageIds={selectedMessageIds}
+              onToggleSelectMessage={(id) =>
+                setSelectedMessageIds((prev) =>
+                  prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+                )
+              }
+              onLongPressMessage={handleLongPressMessage}
+              onContextMenuMessage={handleContextMenuMessage}
+              onCloseSelection={closeSelectionAndOverlays}
+              onReplyToMessage={handleReplyToMessage}
+              onForwardMessages={handleForwardMessages}
+              onDeleteMessages={handleDeleteMessages}
+              onStarMessages={handleStarMessages}
+              onCopyMessage={handleCopyMessage}
+              onSelectionMore={handleSelectionMore}
+              onReactionSelect={handleReactionSelect}
+              replyToMessage={replyToMessage}
+              onCancelReply={() => setReplyToMessage(null)}
+              contextMenu={contextMenu}
+              onCloseContextMenu={() => setContextMenu(null)}
+              reactionPickerMessageId={reactionPickerMessageId}
+              actionsSheetMessageId={actionsSheetMessageId}
             />
           )}
         </section>
@@ -524,6 +716,20 @@ const WhatsAppChat: React.FC = () => {
           <ClientInfoPanel phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null} />
         )}
       </div>
+
+      <ForwardDialog
+        open={forwardDialogOpen}
+        targets={listWithDisplayTitle.map((c) => ({
+          id: c.id,
+          phone: c.phone,
+          displayTitle: c.displayTitle ?? c.phone
+        }))}
+        excludeConversationId={selectedId}
+        selectedCount={selectedMessageIds.length}
+        onClose={() => setForwardDialogOpen(false)}
+        onForward={handleForwardConfirm}
+        loading={forwardLoading}
+      />
     </div>
   );
 };

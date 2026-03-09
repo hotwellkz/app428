@@ -37,6 +37,10 @@ interface SendMessageBody {
   attachmentType?: 'image' | 'video' | 'file' | 'audio' | 'voice';
   /** Имя файла для отображения */
   fileName?: string;
+  /** ID сообщения в CRM, на которое отвечаем (только в БД) */
+  repliedToMessageId?: string | null;
+  /** Пометить как пересланное в CRM */
+  forwarded?: boolean;
 }
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
@@ -71,7 +75,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
 
-  const { chatId, text, contentUri, attachmentType, fileName } = body;
+  const { chatId, text, contentUri, attachmentType, fileName, repliedToMessageId, forwarded } = body;
   const hasMedia = typeof contentUri === 'string' && contentUri.trim().length > 0;
   const hasText = typeof text === 'string' && text.trim().length > 0;
   if (!chatId) {
@@ -177,7 +181,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     await saveMessage(conversationId, msgText, 'outgoing', {
       status: 'sent',
       providerMessageId: providerMessageId ?? undefined,
-      attachments
+      attachments,
+      repliedToMessageId: repliedToMessageId ?? undefined,
+      forwarded: forwarded === true
     });
     log('Message sent and saved, conversationId:', conversationId, providerMessageId ? 'providerId=' + providerMessageId : '');
 

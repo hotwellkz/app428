@@ -147,6 +147,8 @@ export interface SaveMessageOptions {
   providerMessageId?: string | null;
   attachments?: MessageAttachmentRow[];
   errorMessage?: string | null;
+  repliedToMessageId?: string | null;
+  forwarded?: boolean;
 }
 
 export async function saveMessage(
@@ -171,6 +173,8 @@ export async function saveMessage(
     data.attachments = options.attachments;
   }
   if (options.errorMessage != null) data.errorMessage = options.errorMessage;
+  if (options.repliedToMessageId != null) data.repliedToMessageId = options.repliedToMessageId;
+  if (options.forwarded === true) data.forwarded = true;
   const ref = await db.collection(COLLECTIONS.MESSAGES).add(data);
   const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
   await convRef.update({ lastMessageAt: now });

@@ -1,7 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Clock, Check, CheckCheck, AlertCircle, Image, Video, Music, FileText, X, Play, Pause } from 'lucide-react';
-import { formatMessageTime, mapProviderStatusToUiStatus } from './whatsappUtils';
+import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause } from 'lucide-react';
 import ChatInput from './ChatInput';
+import MessageBubble from './MessageBubble';
+import MessageActionBar from './MessageActionBar';
+import MessageContextMenu from './MessageContextMenu';
+import MessageReactionPicker from './MessageReactionPicker';
+import MessageActionsSheet from './MessageActionsSheet';
+import ReplyComposerPreview from './ReplyComposerPreview';
 import type { WhatsAppMessage, MessageAttachment } from '../../types/whatsappDb';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
 
@@ -35,6 +40,29 @@ interface ChatWindowProps {
   isRecordingVoice?: boolean;
   onCameraCapture?: (file: File) => void;
   showCameraButton?: boolean;
+  /** Режим выбора сообщений */
+  selectedMessageIds?: string[];
+  onToggleSelectMessage?: (messageId: string) => void;
+  onLongPressMessage?: (messageId: string) => void;
+  onContextMenuMessage?: (e: React.MouseEvent, messageId: string) => void;
+  onCloseSelection?: () => void;
+  onReplyToMessage?: (messageId: string) => void;
+  onForwardMessages?: (messageIds: string[]) => void;
+  onDeleteMessages?: (messageIds: string[]) => void;
+  onStarMessages?: (messageIds: string[]) => void;
+  onCopyMessage?: (messageId: string) => void;
+  onSelectionMore?: () => void;
+  onReactionSelect?: (messageId: string, emoji: string) => void;
+  /** Сообщение, на которое отвечаем (превью над полем ввода) */
+  replyToMessage?: WhatsAppMessage | null;
+  onCancelReply?: () => void;
+  /** Контекстное меню (desktop) */
+  contextMenu?: { messageId: string; x: number; y: number } | null;
+  onCloseContextMenu?: () => void;
+  /** Сообщение для быстрых реакций (mobile) */
+  reactionPickerMessageId?: string | null;
+  /** Сообщение для bottom sheet «Ещё» (mobile) */
+  actionsSheetMessageId?: string | null;
 }
 
 const CHAT_HEADER_HEIGHT = 56;
@@ -148,33 +176,6 @@ function AudioMessageBubble({ att }: { att: MessageAttachment }) {
       </div>
     </div>
   );
-}
-
-function MessageStatusIcon({ msg }: { msg: WhatsAppMessage }) {
-  if (msg.direction !== 'outgoing') return null;
-  const status = mapProviderStatusToUiStatus(msg.status);
-  const title =
-    status === 'pending'
-      ? 'Отправляется'
-      : status === 'sent'
-        ? 'Отправлено'
-        : status === 'delivered'
-          ? 'Доставлено'
-          : status === 'read'
-            ? 'Прочитано'
-            : status === 'failed'
-              ? msg.errorMessage || 'Ошибка'
-              : '';
-  const className = 'w-3.5 h-3.5 flex-shrink-0 ml-1 inline-block';
-  if (status === 'pending')
-    return <Clock className={`${className} text-gray-400`} title={title} aria-hidden />;
-  if (status === 'failed')
-    return <AlertCircle className={`${className} text-red-500`} title={title} aria-hidden />;
-  if (status === 'read')
-    return <CheckCheck className={`${className} text-blue-600`} title={title} aria-hidden />;
-  if (status === 'delivered')
-    return <CheckCheck className={`${className} text-gray-500`} title={title} aria-hidden />;
-  return <Check className={`${className} text-gray-500`} title={title} aria-hidden />;
 }
 
 function AttachmentBlock({ att }: { att: MessageAttachment }) {
@@ -297,8 +298,28 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   isRecordingVoice = false,
   onCameraCapture,
   showCameraButton = false,
+  selectedMessageIds = [],
+  onToggleSelectMessage,
+  onLongPressMessage,
+  onContextMenuMessage,
+  onCloseSelection,
+  onReplyToMessage,
+  onForwardMessages,
+  onDeleteMessages,
+  onStarMessages,
+  onCopyMessage,
+  onSelectionMore,
+  onReactionSelect,
+  replyToMessage = null,
+  onCancelReply,
+  contextMenu = null,
+  onCloseContextMenu,
+  reactionPickerMessageId = null,
+  actionsSheetMessageId = null,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesById = useRef<Map<string, WhatsAppMessage>>(new Map());
+  messagesById.current = new Map(messages.map((m) => [m.id, m]));
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -306,6 +327,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const phone = selectedItem.phone ?? selectedItem.client?.phone ?? selectedItem.clientId ?? '—';
   const title = displayTitle?.trim() || phone;
+  const selectionMode = selectedMessageIds.length > 0;
+  const actionsSheetMessage = actionsSheetMessageId
+    ? messages.find((m) => m.id === actionsSheetMessageId)
+    : null;
 
   const content = (
     <>
@@ -335,40 +360,94 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         </div>
       </div>
 
-      {/* Сообщения: на mobile flex-1 min-h-0 без фикс. высоты; отступы от плавающих кнопок и composer */}
+      {selectionMode && onCloseSelection && (
+        <MessageActionBar
+          selectedCount={selectedMessageIds.length}
+          onClose={onCloseSelection}
+          onReply={
+            selectedMessageIds.length === 1 && onReplyToMessage
+              ? () => onReplyToMessage(selectedMessageIds[0])
+              : undefined
+          }
+          onForward={onForwardMessages ? () => onForwardMessages(selectedMessageIds) : undefined}
+          onDelete={onDeleteMessages ? () => onDeleteMessages(selectedMessageIds) : undefined}
+          onStar={onStarMessages ? () => onStarMessages(selectedMessageIds) : undefined}
+          onMore={onSelectionMore}
+          showReply={selectedMessageIds.length === 1}
+          isMobile={isMobile}
+        />
+      )}
+
+      {/* Сообщения */}
       <div
         className={`flex-1 min-h-0 overflow-y-auto bg-[#e5ddd5] space-y-2 p-2 md:p-4 ${isMobile ? 'pb-4 pr-16 md:pr-[88px]' : 'pb-4 pr-[88px]'}`}
       >
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`rounded-lg px-3 py-2 shadow-sm max-w-[80%] md:max-w-[60%] ${
-                msg.direction === 'outgoing'
-                  ? 'bg-[#dcf8c6] text-gray-900'
-                  : 'bg-white text-gray-900'
-              }`}
-            >
-              {msg.text ? (
-                <p className="text-sm whitespace-pre-wrap break-words">{msg.text}</p>
-              ) : null}
-              {msg.attachments?.map((att, i) => (
-                <AttachmentBlock key={i} att={att} />
-              ))}
-              <p className="text-xs text-gray-500 mt-1 flex items-center justify-end gap-0.5">
-                {formatMessageTime(msg.createdAt)}
-                <MessageStatusIcon msg={msg} />
-              </p>
-              {msg.direction === 'outgoing' && msg.status === 'failed' && msg.errorMessage && (
-                <p className="text-xs text-red-600 mt-0.5">{msg.errorMessage}</p>
-              )}
-            </div>
-          </div>
-        ))}
+        {messages.map((msg) => {
+          const repliedTo = msg.repliedToMessageId
+            ? messagesById.current.get(msg.repliedToMessageId!)
+            : null;
+          return (
+            <MessageBubble
+              key={msg.id}
+              message={msg}
+              repliedToMessage={repliedTo ?? null}
+              isSelected={selectedMessageIds.includes(msg.id)}
+              onLongPress={onLongPressMessage}
+              onContextMenu={onContextMenuMessage}
+              onTap={selectionMode ? onToggleSelectMessage : undefined}
+              renderAttachments={(m) =>
+                m.attachments?.map((att, i) => <AttachmentBlock key={i} att={att} />) ?? null
+              }
+            />
+          );
+        })}
         <div ref={messagesEndRef} />
       </div>
+
+      {reactionPickerMessageId && onReactionSelect && (
+        <div className="flex-none flex justify-center p-2 bg-gray-100/90 border-t">
+          <MessageReactionPicker
+            messageId={reactionPickerMessageId}
+            onSelect={(emoji) => onReactionSelect(reactionPickerMessageId, emoji)}
+            onClose={onCloseSelection ?? (() => {})}
+            anchorRef={{ current: null }}
+            isMobile={isMobile}
+          />
+        </div>
+      )}
+
+      {contextMenu && (
+        <MessageContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={onCloseContextMenu ?? (() => {})}
+          onReply={() => { onReplyToMessage?.(contextMenu.messageId); onCloseContextMenu?.(); }}
+          onForward={() => { onForwardMessages?.([contextMenu.messageId]); onCloseContextMenu?.(); }}
+          onCopy={() => { onCopyMessage?.(contextMenu.messageId); onCloseContextMenu?.(); }}
+          onStar={() => { onStarMessages?.([contextMenu.messageId]); onCloseContextMenu?.(); }}
+          onDelete={() => { onDeleteMessages?.([contextMenu.messageId]); onCloseContextMenu?.(); }}
+          hasText={!!messages.find((m) => m.id === contextMenu.messageId)?.text?.trim()}
+          isStarred={!!messages.find((m) => m.id === contextMenu.messageId)?.starred}
+        />
+      )}
+
+      {actionsSheetMessageId && actionsSheetMessage && (
+        <MessageActionsSheet
+          open={true}
+          onClose={onCloseSelection ?? (() => {})}
+          onReply={() => { onReplyToMessage?.(actionsSheetMessageId); onCloseSelection?.(); }}
+          onForward={() => { onForwardMessages?.(selectedMessageIds); onCloseSelection?.(); }}
+          onCopy={() => { onCopyMessage?.(actionsSheetMessageId); onCloseSelection?.(); }}
+          onStar={() => { onStarMessages?.(selectedMessageIds); onCloseSelection?.(); }}
+          onDelete={() => { onDeleteMessages?.(selectedMessageIds); onCloseSelection?.(); }}
+          hasText={!!actionsSheetMessage.text?.trim()}
+          isStarred={!!actionsSheetMessage.starred}
+        />
+      )}
+
+      {replyToMessage && onCancelReply && (
+        <ReplyComposerPreview message={replyToMessage} onCancel={onCancelReply} />
+      )}
 
       {sendError && (
         <div className="flex-none px-2 py-1.5 bg-red-50 border-t border-red-200 flex items-center justify-between gap-2">

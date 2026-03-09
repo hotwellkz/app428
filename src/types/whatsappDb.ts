@@ -46,6 +46,13 @@ export interface MessageAttachment {
   thumbnailUrl?: string | null;
 }
 
+/** Реакция на сообщение (только в CRM) */
+export interface MessageReaction {
+  emoji: string;
+  authorId: string;
+  createdAt: Date | Timestamp;
+}
+
 /** Сообщение в диалоге */
 export interface WhatsAppMessage {
   id: string;
@@ -63,4 +70,18 @@ export interface WhatsAppMessage {
   errorMessage?: string | null;
   /** Медиа-вложения (вместо сырого текста [media: url]) */
   attachments?: MessageAttachment[];
+  /** Ответ на сообщение (ID сообщения в CRM) */
+  repliedToMessageId?: string | null;
+  /** Помечено как пересланное (только в CRM) */
+  forwarded?: boolean;
+  /** Удалено в CRM (soft delete) */
+  deleted?: boolean;
+  deletedAt?: Date | Timestamp;
+  deletedBy?: string | null;
+  /** В избранном в CRM */
+  starred?: boolean;
+  starredAt?: Date | Timestamp;
+  starredBy?: string | null;
+  /** Реакции (только в CRM) */
+  reactions?: MessageReaction[];
 }
