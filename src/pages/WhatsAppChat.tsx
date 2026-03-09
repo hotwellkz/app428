@@ -77,6 +77,9 @@ const WhatsAppChat: React.FC = () => {
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
 
+  /** Чаты, открытые в этой сессии: в списке для них всегда показываем unreadCount=0 (защита от stale snapshot). */
+  const [locallyReadChatIds, setLocallyReadChatIds] = useState<Set<string>>(() => new Set());
+
   const mobileChatContext = useMobileWhatsAppChat();
   const selectedItem = conversations.find((c) => c.id === selectedId);
 
@@ -148,12 +151,26 @@ const WhatsAppChat: React.FC = () => {
       setMessages([]);
       return;
     }
+    const conversationId = selectedId;
+    if (import.meta.env.DEV) {
+      console.log('[WhatsApp] open chat:', { selectedId, conversationId });
+    }
     setIndexBuilding(false);
-    clearUnreadCount(selectedId).catch((err) => {
-      if (import.meta.env.DEV) {
-        console.warn('[WhatsApp] clearUnreadCount failed:', err);
-      }
-    });
+    setLocallyReadChatIds((prev) => new Set(prev).add(conversationId));
+    if (import.meta.env.DEV) {
+      console.log('[WhatsApp] mark read start:', { conversationId });
+    }
+    clearUnreadCount(conversationId)
+      .then(() => {
+        if (import.meta.env.DEV) {
+          console.log('[WhatsApp] mark read success:', { conversationId });
+        }
+      })
+      .catch((err) => {
+        if (import.meta.env.DEV) {
+          console.warn('[WhatsApp] clearUnreadCount failed:', conversationId, err);
+        }
+      });
     const onError = (err: unknown) => {
       const msg = String(err && typeof err === 'object' && 'message' in err ? (err as Error).message : err);
       if (msg.includes('index') && msg.includes('building')) {
@@ -387,9 +404,13 @@ const WhatsAppChat: React.FC = () => {
           style={!isMobile ? { minWidth: 300 } : undefined}
         >
           <ConversationList
-            items={conversations.map((c) =>
-              c.id === selectedId ? { ...c, unreadCount: 0 } : c
-            )}
+            items={conversations.map((c) => {
+              const effectiveUnread = locallyReadChatIds.has(c.id) ? 0 : (c.unreadCount ?? 0);
+              if (import.meta.env.DEV && (c.unreadCount ?? 0) !== effectiveUnread) {
+                console.log('[WhatsApp] effective unread after override:', { id: c.id, raw: c.unreadCount, effective: effectiveUnread });
+              }
+              return { ...c, unreadCount: effectiveUnread };
+            })}
             selectedId={selectedId}
             onSelect={setSelectedId}
           />
