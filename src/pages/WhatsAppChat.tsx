@@ -149,7 +149,11 @@ const WhatsAppChat: React.FC = () => {
       return;
     }
     setIndexBuilding(false);
-    clearUnreadCount(selectedId).catch(() => {});
+    clearUnreadCount(selectedId).catch((err) => {
+      if (import.meta.env.DEV) {
+        console.warn('[WhatsApp] clearUnreadCount failed:', err);
+      }
+    });
     const onError = (err: unknown) => {
       const msg = String(err && typeof err === 'object' && 'message' in err ? (err as Error).message : err);
       if (msg.includes('index') && msg.includes('building')) {
@@ -383,7 +387,9 @@ const WhatsAppChat: React.FC = () => {
           style={!isMobile ? { minWidth: 300 } : undefined}
         >
           <ConversationList
-            items={conversations}
+            items={conversations.map((c) =>
+              c.id === selectedId ? { ...c, unreadCount: 0 } : c
+            )}
             selectedId={selectedId}
             onSelect={setSelectedId}
           />

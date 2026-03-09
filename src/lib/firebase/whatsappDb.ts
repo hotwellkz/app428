@@ -212,11 +212,12 @@ function getMessageTime(m: WhatsAppMessage): number {
 }
 
 /**
- * Сбросить счётчик непрочитанных при открытии чата.
+ * Сбросить счётчик непрочитанных при открытии чата (все входящие считаются прочитанными).
+ * Обновляет unreadCount = 0 и lastReadAt = now для корректной read-модели.
  */
 export async function clearUnreadCount(conversationId: string): Promise<void> {
   const ref = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
-  await updateDoc(ref, { unreadCount: 0 });
+  await updateDoc(ref, { unreadCount: 0, lastReadAt: serverTimestamp() });
 }
 
 /**
