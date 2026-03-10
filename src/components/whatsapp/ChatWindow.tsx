@@ -645,6 +645,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const [aiMode, setAiMode] = useState<'normal' | 'short' | 'close' | null>(null);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
+  const [transcribeErrorId, setTranscribeErrorId] = useState<string | null>(null);
 
   const handleAiReply = async (mode: 'normal' | 'short' | 'close') => {
     // Шаг 6: базовый debug-лог на клик
@@ -774,8 +775,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     // если уже есть расшифровка — повторно не вызываем
                     if (m.transcription && m.transcription.trim().length > 0) return;
                     setTranscribingId(m.id);
+                    setTranscribeErrorId(null);
                     try {
-                      const res = await fetch('/api/ai/transcribe-voice', {
+                      const res = await fetch('/.netlify/functions/ai-transcribe-voice', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ audioUrl: att.url, messageId: m.id })
@@ -792,6 +794,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                             data
                           });
                         }
+                        setTranscribeErrorId(m.id);
                         return;
                       }
                       const txt = (data.text ?? '').trim();
@@ -807,6 +810,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                         // eslint-disable-next-line no-console
                         console.error('[ChatWindow] transcribe-voice error', e);
                       }
+                      setTranscribeErrorId(m.id);
                     } finally {
                       setTranscribingId(null);
                     }
@@ -833,6 +837,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                             )}
                             <span>Расшифровать</span>
                           </button>
+                        )}
+                        {!showTranscription && transcribeErrorId === m.id && (
+                          <div className="mt-0.5 text-[11px] text-red-600">
+                            Ошибка распознавания
+                          </div>
                         )}
                         {showTranscription && (
                           <div className="mt-0.5 rounded-md bg-white/80 px-2 py-1 text-[11px] text-gray-700 border border-gray-200">
