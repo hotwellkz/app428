@@ -162,7 +162,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
       const sep = base && !base.endsWith(' ') ? ' ' : '';
       onChange(base + sep + insert);
     }
-  }, [speechTranscript, onChange, resetDictation, value);
+  }, [speechTranscript, onChange, resetDictation, value]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Enter') return;
