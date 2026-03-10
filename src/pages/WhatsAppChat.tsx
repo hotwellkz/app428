@@ -808,7 +808,7 @@ const WhatsAppChat: React.FC = () => {
       const statusId = normPhone ? dealStatusByPhone.get(normPhone) ?? null : null;
       const displayTitle =
         crmNamesByPhone.get(normalizePhone(c.phone))?.trim() || c.phone || '—';
-      const status = statusId ? dealStatuses.find((s) => s.id === statusId) ?? null;
+        const status = statusId ? (dealStatuses.find((s) => s.id === statusId) ?? null) : null;
       const dealStatusColor = status?.color?.trim() || null;
       const dealStatusName = status?.name?.trim() || null;
       return {
