@@ -1,0 +1,182 @@
+import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
+
+const LOG_PREFIX = '[ai-analyze-client]';
+
+const CORS_HEADERS: Record<string, string> = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
+};
+
+function withCors(res: HandlerResponse): HandlerResponse {
+  return { ...res, headers: { ...CORS_HEADERS, ...res.headers } };
+}
+
+function log(...args: unknown[]) {
+  console.log(LOG_PREFIX, ...args);
+}
+
+interface AiMessage {
+  role: 'client' | 'manager';
+  text: string;
+}
+
+interface AnalyzeClientBody {
+  chatId?: string;
+  messages?: AiMessage[];
+}
+
+export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
+  if (event.httpMethod === 'OPTIONS') {
+    return withCors({ statusCode: 204, headers: {}, body: '' });
+  }
+
+  if (event.httpMethod !== 'POST') {
+    return withCors({
+      statusCode: 405,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Method Not Allowed' }),
+    });
+  }
+
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    log('Missing OPENAI_API_KEY');
+    return withCors({
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'OpenAI API key is not configured' }),
+    });
+  }
+
+  let body: AnalyzeClientBody;
+  try {
+    body = typeof event.body === 'string' ? JSON.parse(event.body) : (event.body as AnalyzeClientBody) ?? {};
+  } catch (e) {
+    log('Invalid JSON body:', e);
+    return withCors({
+      statusCode: 400,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Invalid JSON' }),
+    });
+  }
+
+  const chatId = (body.chatId ?? '').toString();
+  const rawMessages = Array.isArray(body.messages) ? body.messages : [];
+  if (!chatId || rawMessages.length === 0) {
+    return withCors({
+      statusCode: 400,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'chatId and messages are required' }),
+    });
+  }
+
+  const messages = rawMessages
+    .filter((m) => m && typeof m.text === 'string' && m.text.trim().length > 0)
+    .slice(-30);
+
+  if (messages.length === 0) {
+    return withCors({
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: null, comment: null }),
+    });
+  }
+
+  const systemPrompt =
+    'Ты помощник CRM системы строительной компании.\n' +
+    'Твоя задача анализировать переписку клиента и определить:\n' +
+    '1) имя клиента\n' +
+    '2) краткое описание клиента для CRM\n\n' +
+    'Правила:\n' +
+    '- не брать имя менеджера\n' +
+    '- если имя клиента не найдено — вернуть null\n' +
+    '- комментарий должен быть коротким и полезным для менеджеров\n' +
+    '- ответ вернуть строго в формате JSON.\n';
+
+  const chatContext = {
+    chatId,
+    messages: messages.map((m) => ({
+      role: m.role,
+      text: m.text,
+    })),
+  };
+
+  const userPrompt =
+    'Вот переписка:\n\n' +
+    JSON.stringify(chatContext, null, 2) +
+    '\n\nОпредели:\n1) имя клиента\n2) краткий комментарий о клиенте\n\n' +
+    'Ответ:\n{\n"name": "Александр",\n"comment": "Интересуется строительством дома из SIP панелей около 170 м². ' +
+    'Спрашивает стоимость панелей, монтаж и вентиляцию."\n}\n';
+
+  try {
+    log('Calling OpenAI for chatId', chatId, 'messages=', messages.length);
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+        max_tokens: 160,
+      }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      log('OpenAI API error:', response.status, text);
+      return withCors({
+        statusCode: 502,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: 'OpenAI API error', status: response.status }),
+      });
+    }
+
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const content = data.choices?.[0]?.message?.content ?? '';
+    let parsed: { name?: string | null; comment?: string | null } = { name: null, comment: null };
+    try {
+      parsed = JSON.parse(content);
+    } catch (e) {
+      log('Failed to parse OpenAI JSON content, returning nulls:', e);
+    }
+
+    const name =
+      typeof parsed.name === 'string'
+        ? parsed.name.trim() || null
+        : parsed.name === null
+        ? null
+        : null;
+
+    const comment =
+      typeof parsed.comment === 'string'
+        ? parsed.comment.trim() || null
+        : parsed.comment === null
+        ? null
+        : null;
+
+    return withCors({
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, comment }),
+    });
+  } catch (e) {
+    log('OpenAI request failed:', e);
+    return withCors({
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Failed to analyze client', detail: String(e) }),
+    });
+  }
+};
+

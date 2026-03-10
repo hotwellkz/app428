@@ -17,6 +17,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/ai/analyze-client"
+  to = "/.netlify/functions/ai-analyze-client"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
