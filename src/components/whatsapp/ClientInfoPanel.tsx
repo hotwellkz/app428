@@ -7,23 +7,23 @@ import { Sparkles } from 'lucide-react';
 const COLLECTION_CLIENTS = 'clients';
 const COLLECTION_DEALS = 'deals';
 
-type DealStatus = 'new' | 'in_progress' | 'closed' | 'lost';
-
 export interface DealCard {
   id: string;
   clientPhone: string;
-  status: DealStatus;
+  /** Идентификатор статуса сделки (из коллекции dealStatuses) */
+  statusId?: string | null;
+  /** Старое поле статуса (для обратной совместимости) */
+  status?: string | null;
   source: string;
   createdAt: unknown;
   updatedAt: unknown;
 }
 
-const DEAL_STATUS_LABELS: Record<DealStatus, string> = {
-  new: 'Новая',
-  in_progress: 'В работе',
-  closed: 'Закрыта',
-  lost: 'Потеряна',
-};
+export interface DealStatusRecord {
+  id: string;
+  name: string;
+  color: string;
+}
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -91,7 +91,8 @@ async function getDealByClientPhone(phone: string, companyId: string): Promise<D
   return {
     id: d.id,
     clientPhone: (data.clientPhone as string) ?? normalized,
-    status: (data.status as DealStatus) ?? 'new',
+    statusId: (data.statusId as string | undefined) ?? (data.status as string | undefined) ?? null,
+    status: (data.status as string | undefined) ?? null,
     source: (data.source as string) ?? 'whatsapp',
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
@@ -102,6 +103,7 @@ async function createDealForClient(phone: string, companyId: string): Promise<De
   const normalized = normalizePhone(phone);
   const ref = await addDoc(collection(db, COLLECTION_DEALS), {
     clientPhone: normalized,
+    statusId: 'new',
     status: 'new',
     source: 'whatsapp',
     createdAt: serverTimestamp(),
@@ -111,6 +113,7 @@ async function createDealForClient(phone: string, companyId: string): Promise<De
   return {
     id: ref.id,
     clientPhone: normalized,
+    statusId: 'new',
     status: 'new',
     source: 'whatsapp',
     createdAt: null,
@@ -125,9 +128,11 @@ interface ClientInfoPanelProps {
   phone: string | null;
   /** Сообщения текущего диалога (для AI-анализа имени) */
   messages?: WhatsAppMessage[];
+  /** Настроенные статусы сделок компании */
+  dealStatuses?: DealStatusRecord[];
 }
 
-const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [] }) => {
+const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [], dealStatuses }) => {
   const companyId = useCompanyId();
   const [client, setClient] = useState<WhatsAppClientCard | null>(null);
   const [deal, setDeal] = useState<DealCard | null>(null);
@@ -139,6 +144,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [] 
   const [editSource, setEditSource] = useState('');
   const [editComment, setEditComment] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [newStatusName, setNewStatusName] = useState('');
+  const [newStatusColor, setNewStatusColor] = useState('#6B7280');
 
   const loadClientAndDeal = React.useCallback(() => {
     if (!phone) return;
@@ -346,27 +354,112 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [] 
               </button>
 
               <div className="mt-4 pt-4 border-t border-gray-200">
-                <h3 className="text-sm font-semibold text-gray-700">Сделка</h3>
-                {deal ? (
-                  <p className="mt-1 text-sm text-gray-900">{DEAL_STATUS_LABELS[deal.status]}</p>
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Сделка</h3>
+                {dealStatuses && dealStatuses.length > 0 ? (
+                  <div className="space-y-2">
+                    {(() => {
+                      const currentStatusId = deal?.statusId ?? deal?.status ?? null;
+                      const current =
+                        (currentStatusId &&
+                          dealStatuses.find((s) => s.id === currentStatusId)) ??
+                        null;
+                      return (
+                        <button
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium border border-gray-200 bg-gray-50"
+                        >
+                          <span
+                            className="inline-flex h-2 w-2 rounded-full"
+                            style={{ backgroundColor: current?.color ?? '#6B7280' }}
+                          />
+                          <span>{current?.name ?? 'Без статуса'}</span>
+                        </button>
+                      );
+                    })()}
+                    <div className="mt-1 space-y-1">
+                      {dealStatuses.map((s) => (
+                        <button
+                          key={s.id}
+                          type="button"
+                          onClick={async () => {
+                            if (!phone) return;
+                            const normalized = normalizePhone(phone);
+                            setCreatingDeal(true);
+                            try {
+                              if (!deal) {
+                                const newDeal = await createDealForClient(phone, companyId);
+                                await updateDoc(doc(db, COLLECTION_DEALS, newDeal.id), {
+                                  statusId: s.id,
+                                  status: s.id,
+                                  updatedAt: serverTimestamp()
+                                });
+                                setDeal({
+                                  ...newDeal,
+                                  statusId: s.id,
+                                  status: s.id
+                                });
+                              } else {
+                                await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
+                                  statusId: s.id,
+                                  status: s.id,
+                                  updatedAt: serverTimestamp()
+                                });
+                                setDeal({ ...deal, statusId: s.id, status: s.id });
+                              }
+                            } finally {
+                              setCreatingDeal(false);
+                            }
+                          }}
+                          className="w-full text-left px-2 py-1 rounded-md text-xs hover:bg-gray-100 flex items-center gap-2"
+                        >
+                          <span
+                            className="inline-flex h-2 w-2 rounded-full"
+                            style={{ backgroundColor: s.color }}
+                          />
+                          <span>{s.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowStatusModal(true)}
+                      className="mt-1 text-[11px] text-green-600 hover:text-green-700"
+                    >
+                      + Добавить статус
+                    </button>
+                  </div>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      if (!phone) return;
-                      setCreatingDeal(true);
-                      try {
-                        const newDeal = await createDealForClient(phone, companyId);
-                        setDeal(newDeal);
-                      } finally {
-                        setCreatingDeal(false);
-                      }
-                    }}
-                    disabled={creatingDeal}
-                    className="mt-2 w-full py-2 text-sm font-medium text-green-600 border border-green-500 rounded-lg hover:bg-green-50 disabled:opacity-50"
-                  >
-                    {creatingDeal ? 'Создание…' : 'Создать сделку'}
-                  </button>
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-500">
+                      Статусы сделок ещё не настроены.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowStatusModal(true)}
+                      className="mt-1 text-[11px] text-green-600 hover:text-green-700"
+                    >
+                      + Добавить первый статус
+                    </button>
+                    {!deal && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!phone) return;
+                          setCreatingDeal(true);
+                          try {
+                            const newDeal = await createDealForClient(phone, companyId);
+                            setDeal(newDeal);
+                          } finally {
+                            setCreatingDeal(false);
+                          }
+                        }}
+                        disabled={creatingDeal}
+                        className="mt-2 w-full py-2 text-sm font-medium text-green-600 border border-green-500 rounded-lg hover:bg-green-50 disabled:opacity-50"
+                      >
+                        {creatingDeal ? 'Создание…' : 'Создать сделку'}
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
             </>
@@ -438,6 +531,62 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [] 
             </div>
           )}
         </>
+      )}
+      {showStatusModal && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-xs">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">Новый статус сделки</h3>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Название</label>
+                <input
+                  type="text"
+                  value={newStatusName}
+                  onChange={(e) => setNewStatusName(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Например: Назначена встреча"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Цвет</label>
+                <input
+                  type="color"
+                  value={newStatusColor}
+                  onChange={(e) => setNewStatusColor(e.target.value)}
+                  className="h-8 w-16 border border-gray-300 rounded"
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowStatusModal(false)}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={!newStatusName.trim()}
+                onClick={async () => {
+                  if (!companyId || !newStatusName.trim()) return;
+                  const col = collection(db, 'dealStatuses');
+                  await addDoc(col, {
+                    name: newStatusName.trim(),
+                    color: newStatusColor,
+                    order: dealStatuses?.length ?? 0,
+                    companyId
+                  });
+                  setShowStatusModal(false);
+                  setNewStatusName('');
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                Создать
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </aside>
   );

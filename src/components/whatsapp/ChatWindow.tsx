@@ -67,6 +67,8 @@ interface ChatWindowProps {
   incognitoMode?: boolean;
   /** Открытие карточки клиента (mobile bottom sheet) */
   onOpenClientInfo?: () => void;
+  /** Записи базы знаний компании для AI-ответов */
+  knowledgeBase?: Array<{ title: string; content: string; category?: string }>;
 }
 
 const CHAT_HEADER_HEIGHT = 56;
@@ -628,7 +630,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   reactionPickerMessageId = null,
   actionsSheetMessageId = null,
   incognitoMode = false,
-  onOpenClientInfo
+  onOpenClientInfo,
+  knowledgeBase
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesById = useRef<Map<string, WhatsAppMessage>>(new Map());
@@ -668,13 +671,25 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
     setAiMode(mode);
     try {
-      const payload = {
+      const payload: {
+        mode: 'normal' | 'short' | 'close';
+        messages: { role: 'client' | 'manager'; text: string }[];
+        knowledgeBase?: { title?: string; content?: string; category?: string | null }[];
+      } = {
         mode,
         messages: recent.map((m) => ({
           role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
           text: m._content.replace(/<[^>]*>/g, '').trim()
         }))
       };
+
+      if (knowledgeBase && knowledgeBase.length > 0) {
+        payload.knowledgeBase = knowledgeBase.map((k) => ({
+          title: k.title,
+          content: k.content,
+          category: k.category ?? ''
+        }));
+      }
       // Шаг 3: вызов backend endpoint (Netlify Function)
       const res = await fetch('/.netlify/functions/ai-generate-reply', {
         method: 'POST',

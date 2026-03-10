@@ -96,6 +96,7 @@ const EditTemplate = lazy(withChunkErrorRecovery(() => import('./pages/EditTempl
 const CreateContractWithAdditionalWorks = lazy(withChunkErrorRecovery(() => import('./pages/CreateContractWithAdditionalWorks')));
 const FinishingMaterialsManager = lazy(withChunkErrorRecovery(() => import('./components/materials/FinishingMaterialsManager').then(module => ({ default: module.FinishingMaterialsManager }))));
 const DealsPage = lazy(withChunkErrorRecovery(() => import('./pages/DealsPage')));
+const KnowledgeBaseSettings = lazy(withChunkErrorRecovery(() => import('./pages/KnowledgeBaseSettings')));
 
 // Fallback компонент для Suspense
 const PageLoader = () => (
@@ -280,6 +281,11 @@ const AppContent: React.FC = () => {
             <Route path="/whatsapp" element={
               <ApprovalGuard>
                 <WhatsAppChat />
+              </ApprovalGuard>
+            } />
+            <Route path="/settings/knowledge" element={
+              <ApprovalGuard>
+                <KnowledgeBaseSettings />
               </ApprovalGuard>
             } />
             <Route path="/finishing-materials" element={

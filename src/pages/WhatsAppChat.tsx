@@ -105,6 +105,13 @@ const WhatsAppChat: React.FC = () => {
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [forwardLoading, setForwardLoading] = useState(false);
   const [mobileClientSheetOpen, setMobileClientSheetOpen] = useState(false);
+  const [knowledgeBase, setKnowledgeBase] = useState<
+    Array<{ id: string; title: string; content: string; category: string }>
+  >([]);
+  type SimpleDealStatus = { id: string; name: string; color: string; order: number; isDefault?: boolean };
+  const [dealStatuses, setDealStatuses] = useState<SimpleDealStatus[]>([]);
+  const [dealStatusByPhone, setDealStatusByPhone] = useState<Map<string, string>>(() => new Map());
+  const [dealStatusFilter, setDealStatusFilter] = useState<'all' | string>('all');
   const overlayRef = useRef(false);
 
   const selectionMode = selectedMessageIds.length > 0;
@@ -259,6 +266,92 @@ const WhatsAppChat: React.FC = () => {
         setCrmNamesByPhone(map);
       },
       () => setCrmNamesByPhone(new Map())
+    );
+    return () => unsub();
+  }, [companyId]);
+
+  // Подписка на статусы сделок компании
+  useEffect(() => {
+    if (!companyId) {
+      setDealStatuses([]);
+      return;
+    }
+    const col = collection(db, 'dealStatuses');
+    const q = query(col, where('companyId', '==', companyId));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list: SimpleDealStatus[] = snap.docs.map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            name: (data.name as string) ?? d.id,
+            color: (data.color as string) ?? '#6B7280',
+            order: typeof data.order === 'number' ? data.order : 0,
+            isDefault: !!data.isDefault
+          };
+        });
+        list.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ru'));
+        setDealStatuses(list);
+      },
+      () => setDealStatuses([])
+    );
+    return () => unsub();
+  }, [companyId]);
+
+  // Подписка на сделки: карта телефон -> статус
+  useEffect(() => {
+    if (!companyId) {
+      setDealStatusByPhone(new Map());
+      return;
+    }
+    const col = collection(db, 'deals');
+    const q = query(col, where('companyId', '==', companyId));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const map = new Map<string, string>();
+        snap.docs.forEach((d) => {
+          const data = d.data() as any;
+          const phone = data.clientPhone as string | undefined;
+          if (!phone) return;
+          const norm = normalizePhone(phone);
+          const statusId =
+            (data.statusId as string | undefined) || (data.status as string | undefined) || null;
+          if (norm && statusId) {
+            map.set(norm, statusId);
+          }
+        });
+        setDealStatusByPhone(map);
+      },
+      () => setDealStatusByPhone(new Map())
+    );
+    return () => unsub();
+  }, [companyId]);
+
+  // Подписка на базу знаний компании для AI-ответов (кэшируется в памяти)
+  useEffect(() => {
+    if (!companyId) {
+      setKnowledgeBase([]);
+      return;
+    }
+    const col = collection(db, 'knowledgeBase');
+    const q = query(col, where('companyId', '==', companyId));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            title: (data.title as string) ?? '',
+            content: (data.content as string) ?? '',
+            category: (data.category as string) ?? ''
+          };
+        });
+        setKnowledgeBase(list);
+      },
+      () => setKnowledgeBase([])
     );
     return () => unsub();
   }, [companyId]);
@@ -711,10 +804,13 @@ const WhatsAppChat: React.FC = () => {
   const listWithDisplayTitle = useMemo(() => {
     return conversations.map((c) => {
       const effectiveUnread = locallyReadChatIds.has(c.id) ? 0 : (c.unreadCount ?? 0);
-      const displayTitle = crmNamesByPhone.get(normalizePhone(c.phone))?.trim() || c.phone || '—';
-      return { ...c, unreadCount: effectiveUnread, displayTitle };
+      const normPhone = normalizePhone(c.phone ?? c.client?.phone ?? '');
+      const statusId = normPhone ? dealStatusByPhone.get(normPhone) ?? null : null;
+      const displayTitle =
+        crmNamesByPhone.get(normalizePhone(c.phone))?.trim() || c.phone || '—';
+      return { ...c, unreadCount: effectiveUnread, displayTitle, dealStatusId: statusId };
     });
-  }, [conversations, locallyReadChatIds, crmNamesByPhone]);
+  }, [conversations, locallyReadChatIds, crmNamesByPhone, dealStatusByPhone]);
 
   const { waitingCount, unreadCount } = useMemo(() => {
     let waiting = 0;
@@ -739,6 +835,10 @@ const WhatsAppChat: React.FC = () => {
         const searchable = [item.displayTitle ?? '', item.phone ?? '', preview].join(' ').toLowerCase();
         return searchable.includes(q);
       });
+    }
+
+    if (dealStatusFilter !== 'all') {
+      base = base.filter((item) => (item as any).dealStatusId === dealStatusFilter);
     }
 
     const withState = base.map((item) => ({
@@ -776,7 +876,7 @@ const WhatsAppChat: React.FC = () => {
     }
 
     return result;
-  }, [listWithDisplayTitle, searchQuery, activeFilter]);
+  }, [listWithDisplayTitle, searchQuery, activeFilter, dealStatusFilter]);
 
   return (
     <div
@@ -902,6 +1002,24 @@ const WhatsAppChat: React.FC = () => {
                 </span>
               </button>
             </div>
+            {dealStatuses.length > 0 && (
+              <div className="px-3 pb-2">
+                <select
+                  value={dealStatusFilter}
+                  onChange={(e) =>
+                    setDealStatusFilter(e.target.value === 'all' ? 'all' : e.target.value)
+                  }
+                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
+                >
+                  <option value="all">Все сделки</option>
+                  {dealStatuses.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
           <ConversationList
             items={filteredList}
@@ -974,6 +1092,7 @@ const WhatsAppChat: React.FC = () => {
               actionsSheetMessageId={actionsSheetMessageId}
               incognitoMode={incognitoMode}
               onOpenClientInfo={isMobile ? () => setMobileClientSheetOpen(true) : undefined}
+              knowledgeBase={knowledgeBase}
             />
           )}
         </section>
@@ -983,6 +1102,7 @@ const WhatsAppChat: React.FC = () => {
           <ClientInfoPanel
             phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null}
             messages={messages}
+            dealStatuses={dealStatuses}
           />
         )}
       </div>
@@ -1027,6 +1147,7 @@ const WhatsAppChat: React.FC = () => {
                     : selectedItem.client?.phone ?? null
                 }
                 messages={messages}
+                dealStatuses={dealStatuses}
               />
             </div>
           </div>

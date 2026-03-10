@@ -28,6 +28,11 @@ interface AiMessage {
 interface GenerateReplyBody {
   messages?: AiMessage[];
   mode?: Mode;
+  knowledgeBase?: Array<{
+    title?: string;
+    content?: string;
+    category?: string | null;
+  }>;
 }
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
@@ -67,6 +72,11 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
   const rawMessages = Array.isArray(body.messages) ? body.messages : [];
   const mode: Mode = body.mode === 'short' || body.mode === 'close' ? body.mode : 'normal';
+  const knowledgeBase = Array.isArray(body.knowledgeBase)
+    ? body.knowledgeBase.filter(
+        (k) => k && typeof k.content === 'string' && (k.content ?? '').trim().length > 0
+      )
+    : [];
 
   const messages = rawMessages
     .filter((m) => m && typeof m.text === 'string' && m.text.trim().length > 0)
@@ -118,6 +128,22 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         '- Можно задать 1–2 уточняющих вопроса.\n' +
         '- Коротко, по делу.\n';
 
+  const kbSection =
+    knowledgeBase.length > 0
+      ? '\n\nДополнительный контекст — база знаний компании (краткие факты):\n' +
+        JSON.stringify(
+          knowledgeBase.map((k) => ({
+            title: k.title ?? '',
+            category: k.category ?? '',
+            content: k.content ?? ''
+          })),
+          null,
+          2
+        ) +
+        '\n\nИспользуй эти факты для точных ответов на вопросы клиента (адрес, график работы, цены, условия и т.п.). ' +
+        'Если нужной информации в базе знаний нет — не придумывай конкретные цифры, честно напиши, что нужно уточнить у менеджера или предложи связаться.'
+      : '';
+
   const userPrompt =
     'Вот переписка между клиентом и менеджером (client = клиент, manager = менеджер):\n\n' +
     JSON.stringify(
@@ -125,8 +151,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       null,
       2
     ) +
-    '\n\n' +
-    'Текущий режим: ' +
+    (kbSection || '') +
+    '\n\nТекущий режим: ' +
     mode +
     '.\n' +
     modeInstructions +

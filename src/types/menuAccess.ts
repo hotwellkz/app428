@@ -13,6 +13,7 @@ export type MenuSectionId =
   | 'products'
   | 'employees'
   | 'whatsapp'
+  | 'knowledgeBase'
   | 'deals';
 
 export interface MenuAccess {
@@ -26,6 +27,7 @@ export interface MenuAccess {
   products: boolean;
   employees: boolean;
   whatsapp: boolean;
+  knowledgeBase: boolean;
   deals: boolean;
 }
 
@@ -41,6 +43,7 @@ export const DEFAULT_MENU_ACCESS: MenuAccess = {
   products: true,
   employees: true,
   whatsapp: true,
+  knowledgeBase: true,
   deals: true,
 };
 
@@ -56,6 +59,8 @@ export const MENU_SECTIONS: { id: MenuSectionId; label: string; path: string }[]
   { id: 'products', label: 'Товары и цены', path: '/products' },
   { id: 'employees', label: 'Сотрудники', path: '/employees' },
   { id: 'whatsapp', label: 'WhatsApp', path: '/whatsapp' },
+   // knowledgeBase разделим отдельно, чтобы можно было гибко управлять доступом
+  { id: 'knowledgeBase', label: 'AI База знаний', path: '/settings/knowledge' },
   { id: 'deals', label: 'Сделки', path: '/deals' },
 ];
 

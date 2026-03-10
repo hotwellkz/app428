@@ -5,7 +5,7 @@ import { getConversationAttentionState } from '../../lib/firebase/whatsappDb';
 import Avatar from './Avatar';
 
 interface ConversationListProps {
-  items: ConversationListItem[];
+  items: (ConversationListItem & { dealStatusId?: string | null })[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   /** Открытие контекстного меню для диалога (desktop: правый клик, mobile: long press) */
@@ -68,6 +68,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
         };
 
         const waitingDuration = !hasUnread && isNeedReply ? getWaitingDurationText() : null;
+        const dealStatusId = (item as any).dealStatusId as string | null | undefined;
         return (
           <button
             key={item.id}
@@ -146,6 +147,19 @@ const ConversationList: React.FC<ConversationListProps> = ({
                       Ждёт ответа{waitingDuration ? ` • ${waitingDuration}` : ''}
                     </span>
                   </div>
+                </div>
+              )}
+              {dealStatusId && (
+                <div className="mt-0.5">
+                  <span className="inline-flex items-center gap-1 text-[10px] md:text-[11px] text-gray-600">
+                    {/* Цвет самого статуса сейчас не знаем (есть только id),
+                       но уже показываем бейдж по id. Цвет можно добавить позже,
+                       когда ConversationList будет получать сами объекты статусов. */}
+                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-gray-400" />
+                    <span className="px-1.5 py-0.5 rounded-full bg-gray-50 border border-gray-200">
+                      {dealStatusId}
+                    </span>
+                  </span>
                 </div>
               )}
               {item.displayTitle && item.displayTitle !== (item.phone ?? item.client?.phone) && (item.phone || item.client?.phone) && (

@@ -150,6 +150,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
     { icon: <Package className="w-5 h-5" />, label: 'Товары и цены', path: '/products', sectionId: 'products', isActive: location.pathname === '/products' },
     { icon: <Users className="w-5 h-5" />, label: 'Сотрудники', path: '/employees', sectionId: 'employees', isActive: location.pathname === '/employees' },
     { icon: <MessageSquare className="w-5 h-5" />, label: 'WhatsApp', path: '/whatsapp', sectionId: 'whatsapp', isActive: location.pathname === '/whatsapp' },
+    { icon: <Shield className="w-5 h-5" />, label: 'AI База знаний', path: '/settings/knowledge', sectionId: 'knowledgeBase', isActive: location.pathname === '/settings/knowledge' },
     { icon: <Building2 className="w-5 h-5" />, label: 'Сделки', path: '/deals', sectionId: 'deals', isActive: location.pathname === '/deals' },
   ];
   const menuItems = allMenuItems.filter((item) => canAccess(item.sectionId));
@@ -165,7 +166,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
     setMobileMenuOpenFalse();
   };
 
-    const isPageWithInlineHeader = location.pathname === '/feed' || location.pathname === '/profile' || location.pathname === '/clients' || location.pathname === '/client-files' || location.pathname === '/templates' || location.pathname === '/products' || location.pathname === '/employees' || location.pathname === '/calculator' || location.pathname === '/warehouse' || location.pathname === '/whatsapp' || location.pathname === '/deals' || location.pathname.startsWith('/warehouse/') || location.pathname.startsWith('/transactions/history') || location.pathname.startsWith('/transaction-history/');
+    const isPageWithInlineHeader = location.pathname === '/feed' || location.pathname === '/profile' || location.pathname === '/clients' || location.pathname === '/client-files' || location.pathname === '/templates' || location.pathname === '/products' || location.pathname === '/employees' || location.pathname === '/calculator' || location.pathname === '/warehouse' || location.pathname === '/whatsapp' || location.pathname === '/deals' || location.pathname === '/settings/knowledge' || location.pathname.startsWith('/warehouse/') || location.pathname.startsWith('/transactions/history') || location.pathname.startsWith('/transaction-history/');
 
   return (
     <>
