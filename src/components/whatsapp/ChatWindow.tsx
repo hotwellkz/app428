@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause, User } from 'lucide-react';
 import ChatInput from './ChatInput';
 import MessageBubble from './MessageBubble';
+import { PdfThumbnail } from './PdfThumbnail';
+import { PdfViewer } from './PdfViewer';
 import MessageActionBar from './MessageActionBar';
 import MessageContextMenu from './MessageContextMenu';
 import MessageReactionPicker from './MessageReactionPicker';
@@ -206,11 +208,14 @@ const AttachmentPreviewModal: React.FC<AttachmentPreviewModalProps> = ({ attachm
             </div>
           )}
           {category === 'pdf' && (
-            <iframe
-              src={attachment.url}
-              title={title}
-              className="w-full h-[70vh] rounded bg-white"
-            />
+            <div className="w-full h-[70vh] min-h-0 rounded overflow-hidden flex flex-col">
+              <PdfViewer
+                url={attachment.url}
+                fileName={attachment.fileName ?? title}
+                onClose={onClose}
+                toolbar
+              />
+            </div>
           )}
           {category === 'text' && (
             <div className="w-full max-h-[70vh] overflow-auto bg-black/60 rounded p-3 text-xs md:text-sm">
@@ -272,6 +277,13 @@ function formatDuration(seconds: number): string {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatFileSize(bytes: number | undefined): string {
+  if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return '';
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
 }
 
 function AudioMessageBubble({ att }: { att: MessageAttachment }) {
@@ -550,6 +562,44 @@ function AttachmentBlock({
   }
   if (isAudio) {
     return <AudioMessageBubble att={att} />;
+  }
+  // PDF: карточка с превью первой страницы, название, размер, Открыть, Скачать
+  if (getAttachmentCategory(att) === 'pdf') {
+    return (
+      <div className="mt-1 rounded-lg border border-gray-200 bg-white overflow-hidden max-w-[280px] shadow-sm">
+        <button
+          type="button"
+          onClick={() => onPreview?.(att)}
+          className="block w-full text-left focus:outline-none"
+        >
+          <PdfThumbnail url={att.url} className="w-full" />
+        </button>
+        <div className="p-2 border-t border-gray-100">
+          <p className="text-sm font-medium text-gray-800 truncate">{att.fileName || 'Документ.pdf'}</p>
+          {att.size != null && (
+            <p className="text-xs text-gray-500">{formatFileSize(att.size)}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 px-2 pb-2">
+          <button
+            type="button"
+            onClick={() => onPreview?.(att)}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm font-medium"
+          >
+            Открыть
+          </button>
+          <a
+            href={att.url}
+            download={att.fileName}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm"
+          >
+            Скачать
+          </a>
+        </div>
+      </div>
+    );
   }
   return (
     <div className="mt-1 p-2 rounded bg-gray-100 border border-gray-200">

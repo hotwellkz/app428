@@ -121,6 +121,16 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url);
 
+  // Не перехватываем запросы к другим доменам (CORS): картинки/ресурсы с hotwell.kz и т.д. загружаются браузером без fetch()
+  try {
+    const appOrigin = self.registration.scope ? new URL(self.registration.scope).origin : (self.location && self.location.origin);
+    if (appOrigin && url.origin !== appOrigin) {
+      return;
+    }
+  } catch (e) {
+    // при ошибке не перехватываем cross-origin
+  }
+
   // Полностью отключаем кэширование для маршрута /calculator
   if (url.pathname === '/calculator' || url.pathname.startsWith('/calculator/')) {
     event.respondWith(fetch(event.request));
