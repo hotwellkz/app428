@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause } from 'lucide-react';
+import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause, User } from 'lucide-react';
 import ChatInput from './ChatInput';
 import MessageBubble from './MessageBubble';
 import MessageActionBar from './MessageActionBar';
@@ -65,6 +65,8 @@ interface ChatWindowProps {
   actionsSheetMessageId?: string | null;
   /** Режим инкогнито: просмотр без отметки о прочтении и без отправки */
   incognitoMode?: boolean;
+  /** Открытие карточки клиента (mobile bottom sheet) */
+  onOpenClientInfo?: () => void;
 }
 
 const CHAT_HEADER_HEIGHT = 56;
@@ -626,6 +628,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   reactionPickerMessageId = null,
   actionsSheetMessageId = null,
   incognitoMode = false,
+  onOpenClientInfo
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesById = useRef<Map<string, WhatsAppMessage>>(new Map());
@@ -725,6 +728,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             <p className="text-xs text-gray-500 truncate">{phone}</p>
           )}
         </div>
+        {isMobile && onOpenClientInfo && (
+          <button
+            type="button"
+            onClick={onOpenClientInfo}
+            className="flex-shrink-0 p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+            aria-label="Профиль клиента"
+            title="Профиль клиента"
+          >
+            <User className="w-5 h-5" />
+          </button>
+        )}
       </div>
 
       {selectionMode && onCloseSelection && (

@@ -104,6 +104,7 @@ const WhatsAppChat: React.FC = () => {
   const [actionsSheetMessageId, setActionsSheetMessageId] = useState<string | null>(null);
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [forwardLoading, setForwardLoading] = useState(false);
+  const [mobileClientSheetOpen, setMobileClientSheetOpen] = useState(false);
   const overlayRef = useRef(false);
 
   const selectionMode = selectedMessageIds.length > 0;
@@ -972,6 +973,7 @@ const WhatsAppChat: React.FC = () => {
               reactionPickerMessageId={reactionPickerMessageId}
               actionsSheetMessageId={actionsSheetMessageId}
               incognitoMode={incognitoMode}
+              onOpenClientInfo={isMobile ? () => setMobileClientSheetOpen(true) : undefined}
             />
           )}
         </section>
@@ -998,6 +1000,38 @@ const WhatsAppChat: React.FC = () => {
         onForward={handleForwardConfirm}
         loading={forwardLoading}
       />
+      {/* Mobile: bottom sheet с карточкой клиента */}
+      {isMobile && mobileClientSheetOpen && selectedItem && (
+        <div
+          className="fixed inset-0 z-[1100] flex flex-col justify-end"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Карточка клиента"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setMobileClientSheetOpen(false)}
+            aria-label="Закрыть карточку клиента"
+          />
+          <div
+            className="relative bg-white rounded-t-2xl shadow-xl max-h-[80vh] pb-[env(safe-area-inset-bottom)] pt-2"
+            style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))' }}
+          >
+            <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto mb-3" aria-hidden />
+            <div className="px-3 pb-3 overflow-y-auto">
+              <ClientInfoPanel
+                phone={
+                  selectedItem.phone && selectedItem.phone !== '…'
+                    ? selectedItem.phone
+                    : selectedItem.client?.phone ?? null
+                }
+                messages={messages}
+              />
+            </div>
+          </div>
+        </div>
+      )}
       {conversationMenu && (() => {
         const conv = listWithDisplayTitle.find((c) => c.id === conversationMenu.id) ?? null;
         const attention = conv ? getConversationAttentionState(conv) : 'normal';
