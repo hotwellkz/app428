@@ -647,6 +647,10 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
 
   const handleAiReply = async (mode: 'normal' | 'short' | 'close') => {
+    // Шаг 6: базовый debug-лог на клик
+    // eslint-disable-next-line no-console
+    console.log('[WhatsApp] AI reply requested:', mode);
+
     if (!onInputChange || !messages || messages.length === 0) return;
     if (aiMode) return;
     const recent = messages
@@ -667,28 +671,28 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           text: m._content.replace(/<[^>]*>/g, '').trim()
         }))
       };
-      const res = await fetch('/api/ai/generate-reply', {
+      // Шаг 3: вызов backend endpoint (Netlify Function)
+      const res = await fetch('/.netlify/functions/ai-generate-reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
       const data = (await res.json().catch(() => ({}))) as { reply?: string; error?: string };
       if (!res.ok || data.error) {
-        if (import.meta.env.DEV) {
-          // eslint-disable-next-line no-console
-          console.error('[ChatWindow] AI generate reply failed', { status: res.status, data });
-        }
+        // Шаг 7: логируем ошибку вне зависимости от env,
+        // чтобы было видно в console в браузере
+        // eslint-disable-next-line no-console
+        console.error('[WhatsApp] AI generate reply failed', { mode, status: res.status, data });
         return;
       }
       const reply = typeof data.reply === 'string' ? data.reply.trim() : '';
       if (reply) {
+        // Шаг 5: вставляем текст в поле ввода, НЕ отправляя автоматически
         onInputChange(reply);
       }
     } catch (e) {
-      if (import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
-        console.error('[ChatWindow] AI generate reply error', e);
-      }
+      // eslint-disable-next-line no-console
+      console.error('[WhatsApp] AI generate reply error', { mode, error: e });
     } finally {
       setAiMode(null);
     }
