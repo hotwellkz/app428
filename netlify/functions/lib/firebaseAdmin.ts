@@ -51,6 +51,7 @@ export interface WhatsAppClientRow {
   name: string;
   phone: string;
   createdAt: Timestamp;
+  avatarUrl?: string | null;
 }
 
 export interface WhatsAppConversationRow {
@@ -79,22 +80,30 @@ export async function findClientByPhone(phone: string): Promise<WhatsAppClientRo
     id: d.id,
     name: (data.name as string) ?? '',
     phone: (data.phone as string) ?? normalized,
-    createdAt: data.createdAt as Timestamp
+    createdAt: data.createdAt as Timestamp,
+    avatarUrl: (data.avatarUrl as string | null) ?? null
   };
 }
 
 export const DEFAULT_COMPANY_ID = 'hotwell';
 
-export async function createClient(phone: string, name: string = ''): Promise<string> {
+export async function createClient(phone: string, name: string = '', avatarUrl?: string | null): Promise<string> {
   const db = getDb();
   const normalized = normalizePhone(phone);
   const ref = await db.collection(COLLECTIONS.CLIENTS).add({
     name: name || normalized,
     phone: normalized,
+    avatarUrl: avatarUrl ?? null,
     createdAt: Timestamp.now(),
     companyId: DEFAULT_COMPANY_ID
   });
   return ref.id;
+}
+
+export async function updateClientAvatar(clientId: string, avatarUrl: string): Promise<void> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.CLIENTS).doc(clientId);
+  await ref.update({ avatarUrl });
 }
 
 export async function findConversationByClientId(clientId: string): Promise<WhatsAppConversationRow | null> {

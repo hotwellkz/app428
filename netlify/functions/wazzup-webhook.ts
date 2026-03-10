@@ -2,6 +2,7 @@ import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions'
 import {
   findClientByPhone,
   createClient,
+  updateClientAvatar,
   findConversationByClientId,
   createConversation,
   incrementUnreadCount,
@@ -141,6 +142,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const textContent = (msg.text ?? '').trim();
     const text = textContent || (hasMedia ? '' : '[no text]');
     const authorName = msg.contact?.name ?? '';
+    const avatarUri = msg.contact?.avatarUri ?? undefined;
 
     try {
       if (debugPayload) {
@@ -163,13 +165,22 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
       let client = await findClientByPhone(normalizedPhone);
       if (!client) {
-        const clientId = await createClient(normalizedPhone, authorName);
+        const clientId = await createClient(normalizedPhone, authorName, avatarUri ?? null);
         log('Created client:', clientId, 'phone=', normalizedPhone);
         client = await findClientByPhone(normalizedPhone);
         if (!client) {
           log('Failed to load created client:', clientId);
           errors++;
           continue;
+        }
+      } else if (avatarUri && !client.avatarUrl) {
+        try {
+          await updateClientAvatar(client.id, avatarUri);
+          if (debugPayload) {
+            log('Updated client avatar:', client.id);
+          }
+        } catch (e) {
+          log('Failed to update client avatar:', client.id, e);
         }
       }
 

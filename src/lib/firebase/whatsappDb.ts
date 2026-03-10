@@ -89,6 +89,7 @@ function docToClient(docId: string, data: Record<string, unknown>): WhatsAppClie
     id: docId,
     name: (data.name as string) ?? '',
     phone: (data.phone as string) ?? '',
+    avatarUrl: (data.avatarUrl as string | null) ?? null,
     companyId: data.companyId as string | undefined,
     createdAt: data.createdAt as WhatsAppClient['createdAt']
   };

@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { formatLastMessageTime } from './whatsappUtils';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
 import { getConversationAttentionState } from '../../lib/firebase/whatsappDb';
+import Avatar from './Avatar';
 
 interface ConversationListProps {
   items: ConversationListItem[];
@@ -72,16 +73,21 @@ const ConversationList: React.FC<ConversationListProps> = ({
           >
             <div className="flex flex-col min-w-0 flex-1 gap-0 relative">
               <div className="flex items-center gap-2 min-w-0">
+                <Avatar
+                  name={item.displayTitle ?? item.client?.name ?? item.phone ?? item.client?.phone ?? undefined}
+                  phone={item.phone ?? item.client?.phone ?? undefined}
+                  avatarUrl={item.client?.avatarUrl ?? null}
+                />
                 <span className={`truncate text-sm md:text-base ${hasUnread ? 'font-semibold text-gray-900' : 'font-medium text-gray-900'}`}>
                   {item.displayTitle ?? item.phone ?? item.client?.phone ?? item.clientId ?? '—'}
                 </span>
                 {(item.unreadCount ?? 0) > 0 && (
-                <span
-                  className="flex-shrink-0 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-[10px] bg-red-500 text-white text-xs font-medium"
-                >
-                  {item.unreadCount > 99 ? '99+' : item.unreadCount}
-                </span>
-              )}
+                  <span
+                    className="flex-shrink-0 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-[10px] bg-red-500 text-white text-xs font-medium"
+                  >
+                    {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                  </span>
+                )}
               </div>
               {/* Дополнительный маркер «нужен ответ» — только если нет unread */}
               {!hasUnread && isNeedReply && (

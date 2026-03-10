@@ -10,6 +10,8 @@ export interface WhatsAppClient {
   id: string;
   name: string;
   phone: string;
+  /** Аватар контакта (если есть, например из Wazzup/WhatsApp) */
+  avatarUrl?: string | null;
   /** Владелец контакта (тенант) */
   companyId?: string;
   createdAt: Date | Timestamp;
