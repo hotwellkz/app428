@@ -133,7 +133,14 @@ const ChatInput: React.FC<ChatInputProps> = ({
     el.style.height = 'auto';
     const newHeight = Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT_PX);
     el.style.height = `${newHeight}px`;
-    if (autoFocusOnChange && !disabled) {
+    // Важно: не сбрасываем каретку в конец, если пользователь уже редактирует текст
+    // (textarea в фокусе) — иначе ломается редактирование в середине строки.
+    if (
+      autoFocusOnChange &&
+      !disabled &&
+      typeof document !== 'undefined' &&
+      document.activeElement !== el
+    ) {
       el.focus();
       const len = el.value.length;
       el.setSelectionRange(len, len);
