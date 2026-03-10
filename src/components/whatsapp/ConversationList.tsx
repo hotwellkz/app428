@@ -5,7 +5,13 @@ import { getConversationAttentionState } from '../../lib/firebase/whatsappDb';
 import Avatar from './Avatar';
 
 interface ConversationListProps {
-  items: (ConversationListItem & { dealStatusId?: string | null })[];
+  items: (ConversationListItem & {
+    dealStatusId?: string | null;
+    /** Цвет точки статуса сделки (hex или CSS color). Fallback — серый. */
+    dealStatusColor?: string | null;
+    /** Название статуса для tooltip при наведении на точку */
+    dealStatusName?: string | null;
+  })[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   /** Открытие контекстного меню для диалога (desktop: правый клик, mobile: long press) */
@@ -37,13 +43,6 @@ const ConversationList: React.FC<ConversationListProps> = ({
         const hasUnread = (item.unreadCount ?? 0) > 0;
         const attention = getConversationAttentionState(item);
         const isNeedReply = attention === 'need_reply';
-        const statusDotClass =
-          attention === 'unread'
-            ? 'bg-red-500'
-            : attention === 'need_reply'
-            ? 'bg-amber-400'
-            : 'bg-gray-300';
-
         const getWaitingDurationText = (): string | null => {
           const t = item.lastIncomingAt ?? item.lastMessage?.createdAt ?? null;
           if (!t) return null;
@@ -68,11 +67,12 @@ const ConversationList: React.FC<ConversationListProps> = ({
         };
 
         const waitingDuration = !hasUnread && isNeedReply ? getWaitingDurationText() : null;
-        const dealStatusId = (item as any).dealStatusId as string | null | undefined;
-        const dealStatusLabel =
-          dealStatusId === 'new' || dealStatusId === 'Новый'
-            ? 'Новый'
-            : dealStatusId ?? null;
+        const dealStatusColor = (item as { dealStatusColor?: string | null }).dealStatusColor;
+        const dealStatusName = (item as { dealStatusName?: string | null }).dealStatusName;
+        const statusDotStyle = dealStatusColor
+          ? { backgroundColor: dealStatusColor }
+          : undefined;
+        const statusDotClass = dealStatusColor ? '' : 'bg-gray-400';
         return (
           <button
             key={item.id}
@@ -124,9 +124,14 @@ const ConversationList: React.FC<ConversationListProps> = ({
             ].join(' ')}
           >
             <div className="flex flex-col min-w-0 flex-1 gap-0.5 relative">
-              {/* Первая строка: аватар, имя/телефон, статус, время, badge непрочитанного */}
+              {/* Первая строка: точка статуса сделки, аватар, имя/телефон, время, badge непрочитанного */}
               <div className="flex items-center gap-2 min-w-0">
-                <span className={`flex-shrink-0 w-2 h-2 rounded-full ${statusDotClass}`} />
+                <span
+                  className={`flex-shrink-0 w-2 h-2 rounded-full ${statusDotClass}`}
+                  style={statusDotStyle}
+                  title={dealStatusName ?? undefined}
+                  aria-hidden
+                />
                 <Avatar
                   name={item.displayTitle ?? item.client?.name ?? item.phone ?? item.client?.phone ?? undefined}
                   phone={item.phone ?? item.client?.phone ?? undefined}
@@ -140,14 +145,6 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   >
                     {item.displayTitle ?? item.phone ?? item.client?.phone ?? item.clientId ?? '—'}
                   </span>
-                  {dealStatusLabel && (
-                    <span className="inline-flex items-center gap-1 text-[10px] md:text-[11px] text-gray-600">
-                      <span className="inline-flex h-1.5 w-1.5 rounded-full bg-gray-400" />
-                      <span className="px-1.5 py-0.5 rounded-full bg-gray-50 border border-gray-200">
-                        {dealStatusLabel}
-                      </span>
-                    </span>
-                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   {item.lastMessage && (

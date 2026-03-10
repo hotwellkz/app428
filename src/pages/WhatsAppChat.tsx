@@ -808,9 +808,19 @@ const WhatsAppChat: React.FC = () => {
       const statusId = normPhone ? dealStatusByPhone.get(normPhone) ?? null : null;
       const displayTitle =
         crmNamesByPhone.get(normalizePhone(c.phone))?.trim() || c.phone || '—';
-      return { ...c, unreadCount: effectiveUnread, displayTitle, dealStatusId: statusId };
+      const status = statusId ? dealStatuses.find((s) => s.id === statusId) ?? null;
+      const dealStatusColor = status?.color?.trim() || null;
+      const dealStatusName = status?.name?.trim() || null;
+      return {
+        ...c,
+        unreadCount: effectiveUnread,
+        displayTitle,
+        dealStatusId: statusId,
+        dealStatusColor: dealStatusColor || undefined,
+        dealStatusName: dealStatusName || undefined
+      };
     });
-  }, [conversations, locallyReadChatIds, crmNamesByPhone, dealStatusByPhone]);
+  }, [conversations, locallyReadChatIds, crmNamesByPhone, dealStatusByPhone, dealStatuses]);
 
   const { waitingCount, unreadCount } = useMemo(() => {
     let waiting = 0;
