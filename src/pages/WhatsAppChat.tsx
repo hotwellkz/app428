@@ -860,14 +860,14 @@ const WhatsAppChat: React.FC = () => {
                 aria-label="Поиск по имени или номеру"
               />
             </div>
-            <div className="flex items-center gap-1 px-3 pb-2 text-xs md:text-sm">
+            <div className="flex items-center gap-2 px-3 pb-2 text-[11px] md:text-xs">
               <button
                 type="button"
                 onClick={() => setActiveFilter('all')}
-                className={`px-2 py-1 rounded-full border text-xs md:text-[13px] ${
+                className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-full border ${
                   activeFilter === 'all'
-                    ? 'border-green-500 bg-green-50 text-green-700 font-medium'
-                    : 'border-transparent text-gray-600 hover:bg-gray-100'
+                    ? 'bg-[#E7F5ED] border-transparent text-[#1B8E5A] font-medium'
+                    : 'bg-transparent border-[#E5E7EB] text-[#6B7280] hover:bg-[#F9FAFB]'
                 }`}
               >
                 Все
@@ -875,26 +875,30 @@ const WhatsAppChat: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActiveFilter('waiting')}
-                className={`px-2 py-1 rounded-full border text-xs md:text-[13px] inline-flex items-center gap-1 ${
+                className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-full border ${
                   activeFilter === 'waiting'
-                    ? 'border-amber-500 bg-amber-50 text-amber-800 font-medium'
-                    : 'border-transparent text-gray-600 hover:bg-gray-100'
+                    ? 'bg-[#E7F5ED] border-transparent text-[#1B8E5A] font-medium'
+                    : 'bg-transparent border-[#E5E7EB] text-[#6B7280] hover:bg-[#F9FAFB]'
                 }`}
               >
-                <span className="text-amber-500">🟠</span>
-                <span>Ждут ответа{waitingCount > 0 ? ` (${waitingCount})` : ''}</span>
+                <span className="inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: '#FF9F2F' }} />
+                <span className="whitespace-nowrap">
+                  Ждут{waitingCount > 0 ? ` ${waitingCount}` : ''}
+                </span>
               </button>
               <button
                 type="button"
                 onClick={() => setActiveFilter('unread')}
-                className={`px-2 py-1 rounded-full border text-xs md:text-[13px] inline-flex items-center gap-1 ${
+                className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-full border ${
                   activeFilter === 'unread'
-                    ? 'border-red-500 bg-red-50 text-red-700 font-medium'
-                    : 'border-transparent text-gray-600 hover:bg-gray-100'
+                    ? 'bg-[#E7F5ED] border-transparent text-[#1B8E5A] font-medium'
+                    : 'bg-transparent border-[#E5E7EB] text-[#6B7280] hover:bg-[#F9FAFB]'
                 }`}
               >
-                <span className="text-red-500">🔴</span>
-                <span>Непрочитанные{unreadCount > 0 ? ` (${unreadCount})` : ''}</span>
+                <span className="inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: '#FF4D4F' }} />
+                <span className="whitespace-nowrap">
+                  Непрочитанные{unreadCount > 0 ? ` ${unreadCount}` : ''}
+                </span>
               </button>
             </div>
           </div>
