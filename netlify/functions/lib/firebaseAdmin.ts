@@ -296,12 +296,24 @@ export async function updateMessageStatus(
     .get();
   if (snap.empty) return false;
   const ref = snap.docs[0].ref;
+   const docData = snap.docs[0].data() as { direction?: string; channel?: string } | undefined;
   const update: Record<string, unknown> = {
     status,
     statusUpdatedAt: Timestamp.now()
   };
   if (status === 'failed' && errorMessage != null) update.errorMessage = errorMessage;
   await ref.update(update);
+  if (process.env.WAZZUP_WEBHOOK_DEBUG === '1') {
+    // Диагностика: статусы в webhook в основном приходят для исходящих сообщений (direction === 'outgoing').
+    // Это важно для понимания ограничений read/unread-sync: статусы не сигнализируют о прочтении входящих в сторонних клиентах.
+    // eslint-disable-next-line no-console
+    console.log('[firebaseAdmin.updateMessageStatus]', {
+      providerMessageId,
+      newStatus: status,
+      direction: docData?.direction ?? null,
+      channel: docData?.channel ?? null
+    });
+  }
   return true;
 }
 
