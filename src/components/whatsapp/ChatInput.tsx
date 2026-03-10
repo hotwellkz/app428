@@ -16,6 +16,7 @@ import {
   Target
 } from 'lucide-react';
 import EmojiPicker, { type EmojiClickData, Categories } from 'emoji-picker-react';
+import { useSpeechToText } from '../../hooks/useSpeechToText';
 
 const MAX_ATTACHMENT_MB = 10;
 
@@ -96,6 +97,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
+  const {
+    isSupported: isSpeechSupported,
+    isListening: isDictating,
+    transcript: speechTranscript,
+    error: speechError,
+    start: startDictation,
+    stop: stopDictation,
+    reset: resetDictation
+  } = useSpeechToText({ lang: 'ru-RU' });
+
   const hasText = value.trim().length > 0;
   const showSend = hasText || hasAttachment;
   const isBusy = sending;
@@ -116,6 +127,42 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setShowAttachmentSheet(false);
     audioInputRef.current?.click();
   };
+
+  // Когда появился новый распознанный текст — добавляем его в draft
+  useEffect(() => {
+    if (!speechTranscript.trim()) return;
+
+    const el = textareaRef.current;
+    const insert = speechTranscript.trim();
+
+    // Сбросим локальное состояние хука, чтобы не переиспользовать старый текст
+    resetDictation();
+
+    if (el) {
+      const start = el.selectionStart;
+      const end = el.selectionEnd;
+      const base = value;
+      const prefix = base.slice(0, start);
+      const suffix = base.slice(end);
+      const sepBefore = prefix && !prefix.endsWith(' ') ? ' ' : '';
+      const sepAfter = suffix && !suffix.startsWith(' ') ? ' ' : '';
+      const next = prefix + sepBefore + insert + sepAfter + suffix;
+      onChange(next);
+
+      // После обновления значения восстанавливаем каретку сразу после вставленного текста
+      requestAnimationFrame(() => {
+        const el2 = textareaRef.current;
+        if (!el2) return;
+        const pos = (prefix + sepBefore + insert).length;
+        el2.focus();
+        el2.setSelectionRange(pos, pos);
+      });
+    } else {
+      const base = value;
+      const sep = base && !base.endsWith(' ') ? ' ' : '';
+      onChange(base + sep + insert);
+    }
+  }, [speechTranscript, onChange, resetDictation, value);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Enter') return;
@@ -226,6 +273,26 @@ const ChatInput: React.FC<ChatInputProps> = ({
             >
               <Smile className="w-5 h-5 md:w-6 md:h-6" />
             </button>
+            {isSpeechSupported && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (isDictating) stopDictation();
+                  else startDictation();
+                }}
+                disabled={disabled || isRecordingVoice}
+                title="Голосовая диктовка"
+                className="flex-shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                aria-label="Голосовая диктовка"
+                aria-pressed={isDictating}
+              >
+                {isDictating ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Mic className="w-4 h-4" />
+                )}
+              </button>
+            )}
             <textarea
               ref={textareaRef}
               value={value}
