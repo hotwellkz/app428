@@ -232,6 +232,11 @@ body {
   user-select: none;
 }
 
+/* Улучшаем скролл сообщений WhatsApp на мобильных устройствах */
+.message {
+  touch-action: pan-y;
+}
+
 /* Адаптивные стили */
 @media (max-width: 640px) {
   .container {

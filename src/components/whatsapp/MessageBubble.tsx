@@ -3,7 +3,8 @@ import { formatMessageTime } from './whatsappUtils';
 import MessageStatusIcon from './MessageStatusIcon';
 import type { WhatsAppMessage, MessageAttachment } from '../../types/whatsappDb';
 
-const LONG_PRESS_MS = 400;
+const LONG_PRESS_MS = 650;
+const TOUCH_MOVE_THRESHOLD_PX = 10;
 
 export interface MessageBubbleProps {
   message: WhatsAppMessage;
@@ -103,21 +104,52 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   renderAttachments,
 }) => {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const touchStartXRef = useRef<number | null>(null);
+  const touchStartYRef = useRef<number | null>(null);
 
-  const handleTouchStart = useCallback(() => {
-    if (!onLongPress) return;
-    longPressTimerRef.current = setTimeout(() => {
-      longPressTimerRef.current = null;
-      onLongPress(message.id);
-    }, LONG_PRESS_MS);
-  }, [message.id, onLongPress]);
-
-  const handleTouchEnd = useCallback(() => {
+  const clearLongPressTimer = useCallback(() => {
     if (longPressTimerRef.current) {
       clearTimeout(longPressTimerRef.current);
       longPressTimerRef.current = null;
     }
   }, []);
+
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (!onLongPress) return;
+      if (e.touches.length !== 1) return;
+      const touch = e.touches[0];
+      touchStartXRef.current = touch.clientX;
+      touchStartYRef.current = touch.clientY;
+      clearLongPressTimer();
+      longPressTimerRef.current = setTimeout(() => {
+        longPressTimerRef.current = null;
+        onLongPress(message.id);
+      }, LONG_PRESS_MS);
+    },
+    [onLongPress, message.id, clearLongPressTimer]
+  );
+
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (!longPressTimerRef.current) return;
+      if (e.touches.length !== 1) return;
+      if (touchStartXRef.current == null || touchStartYRef.current == null) return;
+      const touch = e.touches[0];
+      const dx = Math.abs(touch.clientX - touchStartXRef.current);
+      const dy = Math.abs(touch.clientY - touchStartYRef.current);
+      if (dx > TOUCH_MOVE_THRESHOLD_PX || dy > TOUCH_MOVE_THRESHOLD_PX) {
+        clearLongPressTimer();
+      }
+    },
+    [clearLongPressTimer]
+  );
+
+  const handleTouchEnd = useCallback(() => {
+    clearLongPressTimer();
+    touchStartXRef.current = null;
+    touchStartYRef.current = null;
+  }, [clearLongPressTimer]);
 
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
@@ -144,8 +176,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   return (
     <div
-      className={`flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}
+      className={`message flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}
       onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
