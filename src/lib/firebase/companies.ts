@@ -8,10 +8,12 @@ import {
   query,
   where,
   updateDoc,
+  deleteDoc,
   serverTimestamp
 } from 'firebase/firestore';
 import { db } from './config';
 import type { CompanyUserRole } from '../../types/company';
+import type { MenuAccess } from '../../types/menuAccess';
 
 const COMPANIES = 'companies';
 const COMPANY_USERS = 'company_users';
@@ -32,6 +34,8 @@ export interface CompanyUserRow {
   companyId: string;
   userId: string;
   role: CompanyUserRole;
+  menuAccess?: MenuAccess;
+  email?: string;
 }
 
 /** Создать компанию. Возвращает id созданной компании. */
@@ -127,4 +131,58 @@ export async function updateCompanyStatus(companyId: string, status: CompanyStat
     status,
     updatedAt: serverTimestamp()
   });
+}
+
+/** Список пользователей компании (company_users по companyId). */
+export async function getCompanyUsers(companyId: string): Promise<CompanyUserRow[]> {
+  const q = query(
+    collection(db, COMPANY_USERS),
+    where('companyId', '==', companyId)
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      companyId: (data.companyId as string) ?? '',
+      userId: (data.userId as string) ?? d.id,
+      role: (data.role as CompanyUserRole) ?? 'member',
+      menuAccess: data.menuAccess as MenuAccess | undefined,
+      email: data.email as string | undefined
+    };
+  });
+}
+
+/** Обновить права доступа к разделам меню для пользователя компании. */
+export async function updateCompanyUserMenuAccess(
+  userId: string,
+  menuAccess: MenuAccess
+): Promise<void> {
+  const ref = doc(db, COMPANY_USERS, userId);
+  await updateDoc(ref, {
+    menuAccess,
+    updatedAt: serverTimestamp()
+  });
+}
+
+/** Получить документ company_users для пользователя (role + menuAccess). */
+export async function getCompanyUser(userId: string): Promise<CompanyUserRow | null> {
+  const ref = doc(db, COMPANY_USERS, userId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  const data = snap.data();
+  return {
+    id: snap.id,
+    companyId: (data.companyId as string) ?? '',
+    userId: (data.userId as string) ?? snap.id,
+    role: (data.role as CompanyUserRole) ?? 'member',
+    menuAccess: data.menuAccess as MenuAccess | undefined,
+    email: data.email as string | undefined
+  };
+}
+
+/** Удалить привязку пользователя к компании (company_users/{userId}). Доступно owner/admin компании или global_admin. */
+export async function deleteCompanyUser(userId: string): Promise<void> {
+  const ref = doc(db, COMPANY_USERS, userId);
+  await deleteDoc(ref);
 }

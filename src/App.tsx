@@ -5,6 +5,7 @@ import { AuthGuard } from './components/auth/AuthGuard';
 import { CompanyBlockedGuard } from './components/auth/CompanyBlockedGuard';
 import { AdminRoute } from './components/auth/AdminRoute';
 import { ApprovalGuard } from './components/auth/ApprovalGuard';
+import { MenuAccessGuard } from './components/auth/MenuAccessGuard';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
 import { LoadingSpinner } from './components/LoadingSpinner';
@@ -166,6 +167,7 @@ const AppContent: React.FC = () => {
         <div className="flex-1 overflow-auto min-h-0">
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
+              <MenuAccessGuard>
               <Routes>
             <Route path="/" element={<Navigate to="/transactions" replace />} />
             <Route path="/admin" element={
@@ -287,6 +289,7 @@ const AppContent: React.FC = () => {
             } />
             <Route path="/profile" element={<Profile />} />
               </Routes>
+              </MenuAccessGuard>
             </Suspense>
           </ErrorBoundary>
         </div>

@@ -26,11 +26,14 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useMenuVisibility } from '../contexts/MenuVisibilityContext';
 import { useMobileSidebar } from '../contexts/MobileSidebarContext';
+import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
+import type { MenuSectionId } from '../types/menuAccess';
 
 interface MenuItem {
   icon: React.ReactNode;
   label: string;
   path: string;
+  sectionId: MenuSectionId;
   isActive?: boolean;
 }
 
@@ -96,6 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('sidebar-collapsed') === 'true';
   });
+  const { canAccess } = useCurrentCompanyUser();
   
   const navigate = useNavigate();
   const location = useLocation();
@@ -135,74 +139,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
     localStorage.setItem('sidebar-collapsed', newState.toString());
   };
 
-  const menuItems: MenuItem[] = [
-    { 
-      icon: <ArrowLeftRight size={20} />, 
-      label: 'Транзакции', 
-      path: '/transactions',
-      isActive: location.pathname === '/transactions'
-    },
-    { 
-      icon: <ScrollText size={20} />, 
-      label: 'Лента', 
-      path: '/feed',
-      isActive: location.pathname === '/feed'
-    },
-    { 
-      icon: <Users size={20} />, 
-      label: 'Клиенты', 
-      path: '/clients',
-      isActive: location.pathname === '/clients'
-    },
-    { 
-      icon: <Warehouse className="w-5 h-5" />, 
-      label: 'Склад', 
-      path: '/warehouse',
-      isActive: location.pathname === '/warehouse'
-    },
-    { 
-      icon: <Calculator className="w-5 h-5" />, 
-      label: 'Калькулятор', 
-      path: '/calculator',
-      isActive: location.pathname === '/calculator'
-    },
-    { 
-      icon: <Folder size={20} />,
-      label: 'Файлы клиентов',
-      path: '/client-files',
-      isActive: location.pathname === '/client-files' || location.pathname.includes('/clients/') && location.pathname.includes('/files')
-    },
-    { 
-      icon: <FileText className="w-5 h-5" />, 
-      label: 'Шаблоны договоров', 
-      path: '/templates',
-      isActive: location.pathname === '/templates'
-    },
-    { 
-      icon: <Package className="w-5 h-5" />, 
-      label: 'Товары и цены', 
-      path: '/products',
-      isActive: location.pathname === '/products'
-    },
-    { 
-      icon: <Users className="w-5 h-5" />, 
-      label: 'Сотрудники', 
-      path: '/employees',
-      isActive: location.pathname === '/employees'
-    },
-    { 
-      icon: <MessageSquare className="w-5 h-5" />, 
-      label: 'WhatsApp', 
-      path: '/whatsapp',
-      isActive: location.pathname === '/whatsapp'
-    },
-    { 
-      icon: <Building2 className="w-5 h-5" />, 
-      label: 'Сделки', 
-      path: '/deals',
-      isActive: location.pathname === '/deals'
-    }
+  const allMenuItems: MenuItem[] = [
+    { icon: <ArrowLeftRight size={20} />, label: 'Транзакции', path: '/transactions', sectionId: 'transactions', isActive: location.pathname === '/transactions' },
+    { icon: <ScrollText size={20} />, label: 'Лента', path: '/feed', sectionId: 'feed', isActive: location.pathname === '/feed' },
+    { icon: <Users size={20} />, label: 'Клиенты', path: '/clients', sectionId: 'clients', isActive: location.pathname === '/clients' },
+    { icon: <Warehouse className="w-5 h-5" />, label: 'Склад', path: '/warehouse', sectionId: 'warehouse', isActive: location.pathname === '/warehouse' },
+    { icon: <Calculator className="w-5 h-5" />, label: 'Калькулятор', path: '/calculator', sectionId: 'calculator', isActive: location.pathname === '/calculator' },
+    { icon: <Folder size={20} />, label: 'Файлы клиентов', path: '/client-files', sectionId: 'clientFiles', isActive: location.pathname === '/client-files' || (location.pathname.includes('/clients/') && location.pathname.includes('/files')) },
+    { icon: <FileText className="w-5 h-5" />, label: 'Шаблоны договоров', path: '/templates', sectionId: 'templates', isActive: location.pathname === '/templates' },
+    { icon: <Package className="w-5 h-5" />, label: 'Товары и цены', path: '/products', sectionId: 'products', isActive: location.pathname === '/products' },
+    { icon: <Users className="w-5 h-5" />, label: 'Сотрудники', path: '/employees', sectionId: 'employees', isActive: location.pathname === '/employees' },
+    { icon: <MessageSquare className="w-5 h-5" />, label: 'WhatsApp', path: '/whatsapp', sectionId: 'whatsapp', isActive: location.pathname === '/whatsapp' },
+    { icon: <Building2 className="w-5 h-5" />, label: 'Сделки', path: '/deals', sectionId: 'deals', isActive: location.pathname === '/deals' },
   ];
+  const menuItems = allMenuItems.filter((item) => canAccess(item.sectionId));
 
   const handleMenuItemClick = (item: MenuItem) => {
     navigate(item.path);

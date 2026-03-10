@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Plus, Menu, Search, UserPlus } from 'lucide-react';
+import { ArrowLeft, Plus, Menu, Search, UserPlus, Shield, Trash2, Eraser } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useMobileSidebar } from '../contexts/MobileSidebarContext';
@@ -23,14 +23,26 @@ import { EmployeeStatusFilter } from '../components/employees/EmployeeStatusFilt
 import { EmployeeStats } from '../components/employees/EmployeeStats';
 import { useEmployeeHistory } from '../hooks/useEmployeeHistory';
 import { useIsAdmin } from '../hooks/useIsAdmin';
+import { useCompanyUsers } from '../hooks/useCompanyUsers';
 import { Navigate } from 'react-router-dom';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { MenuAccessModal } from '../components/employees/MenuAccessModal';
+import { deleteCompanyUser } from '../lib/firebase/companies';
+import { showSuccessNotification } from '../utils/notifications';
+
+const ROLE_LABELS: Record<string, string> = {
+  owner: 'Владелец',
+  admin: 'Администратор',
+  manager: 'Менеджер',
+  member: 'Сотрудник'
+};
 
 export const Employees: React.FC = () => {
   const companyId = useCompanyId();
   const { user } = useAuth();
-  const { canAccessEmployees, loading: adminCheckLoading } = useIsAdmin();
+  const { canAccessEmployees, canManageUsers, loading: adminCheckLoading } = useIsAdmin();
   const { employees, loading } = useEmployees();
+  const { users: companyUsers, orphans: companyUserOrphans, loading: companyUsersLoading } = useCompanyUsers();
   const { 
     searchQuery, 
     setSearchQuery, 
@@ -55,6 +67,52 @@ export const Employees: React.FC = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
+  const [menuAccessUser, setMenuAccessUser] = useState<{ userId: string; userName: string } | null>(null);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
+  const [clearingOrphanId, setClearingOrphanId] = useState<string | null>(null);
+
+  const handleRemoveFromCompany = async (targetUserId: string, displayName: string) => {
+    if (!window.confirm(`Удалить пользователя «${displayName}» из компании? Он потеряет доступ к системе.`)) return;
+    setRemovingUserId(targetUserId);
+    try {
+      await deleteCompanyUser(targetUserId);
+      showSuccessNotification('Пользователь удалён из компании');
+    } catch (e) {
+      showErrorNotification(e instanceof Error ? e.message : 'Не удалось удалить');
+    } finally {
+      setRemovingUserId(null);
+    }
+  };
+
+  const handleClearOrphan = async (targetUserId: string) => {
+    if (!window.confirm('Удалить эту осиротевшую запись из базы? Документ company_users будет удалён.')) return;
+    setClearingOrphanId(targetUserId);
+    try {
+      await deleteCompanyUser(targetUserId);
+      showSuccessNotification('Осиротевшая запись удалена');
+    } catch (e) {
+      showErrorNotification(e instanceof Error ? e.message : 'Не удалось очистить');
+    } finally {
+      setClearingOrphanId(null);
+    }
+  };
+
+  const handleClearAllOrphans = async () => {
+    if (companyUserOrphans.length === 0) return;
+    if (!window.confirm(`Удалить все ${companyUserOrphans.length} осиротевших записей?`)) return;
+    let ok = 0;
+    let err = 0;
+    for (const o of companyUserOrphans) {
+      try {
+        await deleteCompanyUser(o.userId);
+        ok += 1;
+      } catch {
+        err += 1;
+      }
+    }
+    if (ok) showSuccessNotification(`Удалено записей: ${ok}`);
+    if (err) showErrorNotification(`Не удалось удалить: ${err}`);
+  };
 
   const navigate = useNavigate();
   const { toggle: toggleMobileSidebar } = useMobileSidebar();
@@ -199,6 +257,133 @@ export const Employees: React.FC = () => {
 
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex flex-col">
+            {canManageUsers && (
+              <div className="mb-6 bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200">
+                  <h2 className="text-base font-semibold text-gray-900">Пользователи с доступом к системе</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">Управление правами доступа к разделам меню</p>
+                </div>
+                {companyUsersLoading ? (
+                  <div className="p-4 flex justify-center">
+                    <LoadingSpinner />
+                  </div>
+                ) : companyUsers.length === 0 && companyUserOrphans.length === 0 ? (
+                  <div className="p-4 text-sm text-gray-500">Нет пользователей. Пригласите пользователя по кнопке выше.</div>
+                ) : (
+                  <>
+                    {companyUsers.length > 0 && (
+                      <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email / Имя</th>
+                              <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Роль</th>
+                              <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Действия</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {companyUsers.map((cu) => {
+                              const isSelf = cu.userId === user?.uid;
+                              const display = cu.displayName || cu.email || cu.userId;
+                              return (
+                                <tr key={cu.userId} className="hover:bg-gray-50">
+                                  <td className="px-4 py-3 text-sm text-gray-900">{display}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">{ROLE_LABELS[cu.role] ?? cu.role}</td>
+                                  <td className="px-4 py-3 text-right">
+                                  <div className="flex justify-end gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => !isSelf && setMenuAccessUser({ userId: cu.userId, userName: display })}
+                                      disabled={isSelf}
+                                      title={isSelf ? 'Нельзя изменить права себе' : 'Права доступа к разделам'}
+                                      className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"
+                                    >
+                                      <Shield className="w-5 h-5" />
+                                    </button>
+                                    {!isSelf && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRemoveFromCompany(cu.userId, display)}
+                                        disabled={removingUserId === cu.userId}
+                                        title="Удалить из компании"
+                                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg disabled:opacity-50"
+                                      >
+                                        {removingUserId === cu.userId ? (
+                                          <span className="inline-block w-5 h-5 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                                        ) : (
+                                          <Trash2 className="w-5 h-5" />
+                                        )}
+                                      </button>
+                                    )}
+                                  </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {companyUserOrphans.length > 0 && (
+                      <div className="border-t border-gray-200 px-4 py-3 bg-amber-50/50">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <p className="text-sm text-amber-800">
+                            Осиротевшие записи (пользователь удалён, в Firestore осталась только привязка): {companyUserOrphans.length}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleClearAllOrphans}
+                            className="text-sm font-medium text-amber-700 hover:text-amber-900 flex items-center gap-1"
+                          >
+                            <Eraser className="w-4 h-4" />
+                            Очистить все
+                          </button>
+                        </div>
+                        <div className="overflow-x-auto mt-2">
+                          <table className="min-w-full divide-y divide-amber-200">
+                            <thead className="bg-amber-100/50">
+                              <tr>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-amber-800 uppercase">Email / ID</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-amber-800 uppercase">Роль</th>
+                                <th className="px-4 py-2 text-right text-xs font-medium text-amber-800 uppercase">Действия</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-amber-100">
+                              {companyUserOrphans.map((o) => {
+                                const display = o.email || o.userId;
+                                return (
+                                  <tr key={o.userId} className="hover:bg-amber-50/50">
+                                    <td className="px-4 py-2 text-sm text-amber-900">{display}</td>
+                                    <td className="px-4 py-2 text-sm text-amber-700">{ROLE_LABELS[o.role] ?? o.role}</td>
+                                    <td className="px-4 py-2 text-right">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleClearOrphan(o.userId)}
+                                        disabled={clearingOrphanId === o.userId}
+                                        title="Удалить осиротевшую запись из базы"
+                                        className="p-2 text-amber-700 hover:bg-amber-100 rounded-lg disabled:opacity-50 flex items-center gap-1"
+                                      >
+                                        {clearingOrphanId === o.userId ? (
+                                          <span className="inline-block w-4 h-4 border-2 border-amber-700 border-t-transparent rounded-full animate-spin" />
+                                        ) : (
+                                          <Eraser className="w-4 h-4" />
+                                        )}
+                                        Очистить
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="mb-6">
               <EmployeeStats
                 totalEmployees={stats.total}
@@ -311,6 +496,16 @@ export const Employees: React.FC = () => {
             category={selectedCategory}
             isOpen={showHistory}
             onClose={handleCloseHistory}
+          />
+        )}
+
+        {menuAccessUser && (
+          <MenuAccessModal
+            isOpen={!!menuAccessUser}
+            onClose={() => setMenuAccessUser(null)}
+            userId={menuAccessUser.userId}
+            userName={menuAccessUser.userName}
+            onSaved={() => setMenuAccessUser(null)}
           />
         )}
     </div>

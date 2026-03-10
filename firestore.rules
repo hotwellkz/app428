@@ -34,12 +34,20 @@ service cloud.firestore {
       allow update, delete: if isAuthenticated() && (resource.data.ownerId == request.auth.uid || isGlobalAdmin());
     }
 
-    // company_users: документ id = userId; чтение своей записи
+    // company_users: документ id = userId; чтение своей записи; owner/admin компании могут читать и обновлять (menuAccess) других пользователей той же компании
+    function isCompanyOwnerOrAdmin() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.role in ['owner', 'admin'];
+    }
     match /company_users/{userId} {
       allow read: if isAuthenticated() && request.auth.uid == userId;
       allow read: if isGlobalAdmin();
+      allow read: if isCompanyOwnerOrAdmin() && resource.data.companyId == get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId;
       allow create: if isAuthenticated() && request.auth.uid == userId;
       allow update, delete: if isAuthenticated() && (request.auth.uid == userId || isGlobalAdmin());
+      allow update: if isCompanyOwnerOrAdmin() && resource.data.companyId == get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId;
+      allow delete: if isCompanyOwnerOrAdmin() && resource.data.companyId == get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId;
     }
 
     // Users: чтение своего документа; create при регистрации/fallback; global_admin читает всех
