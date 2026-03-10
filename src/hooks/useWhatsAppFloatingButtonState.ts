@@ -30,14 +30,14 @@ export interface WhatsAppFloatingButtonState {
  *
  * Источник: коллекция whatsappConversations (лёгкая подписка).
  */
-export function useWhatsAppFloatingButtonState(): WhatsAppFloatingButtonState {
+export function useWhatsAppFloatingButtonState(enabled: boolean = true): WhatsAppFloatingButtonState {
   const companyId = useCompanyId();
   const [rows, setRows] = useState<
     Array<{ unreadCount?: number; lastIncomingAt?: TimeLike; lastOutgoingAt?: TimeLike }>
   >([]);
 
   useEffect(() => {
-    if (!companyId) {
+    if (!enabled || !companyId) {
       setRows([]);
       return;
     }
@@ -67,7 +67,7 @@ export function useWhatsAppFloatingButtonState(): WhatsAppFloatingButtonState {
         setRows([]);
       }
     );
-  }, [companyId]);
+  }, [companyId, enabled]);
 
   return useMemo(() => {
     const unreadChatsCount = rows.reduce((acc, c) => acc + ((c.unreadCount ?? 0) > 0 ? 1 : 0), 0);
