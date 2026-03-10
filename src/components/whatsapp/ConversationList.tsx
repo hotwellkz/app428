@@ -7,9 +7,16 @@ interface ConversationListProps {
   items: ConversationListItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Ручной сброс статуса «Ждёт ответа» для конкретного диалога */
+  onDismissNeedReply?: (id: string) => void;
 }
 
-const ConversationList: React.FC<ConversationListProps> = ({ items, selectedId, onSelect }) => {
+const ConversationList: React.FC<ConversationListProps> = ({
+  items,
+  selectedId,
+  onSelect,
+  onDismissNeedReply
+}) => {
   return (
     <div className="flex-1 overflow-y-auto">
       {items.length === 0 && (
@@ -48,11 +55,25 @@ const ConversationList: React.FC<ConversationListProps> = ({ items, selectedId, 
               </div>
               {/* Дополнительный маркер «нужен ответ» — только если нет unread */}
               {!hasUnread && isNeedReply && (
-                <div className="flex items-center gap-1 mt-0.5">
-                  <span className="inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-amber-400" />
-                  <span className="text-[11px] md:text-xs text-amber-600 font-medium">
-                    Ждёт ответа
-                  </span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-1">
+                    <span className="inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span className="text-[11px] md:text-xs text-amber-600 font-medium">
+                      Ждёт ответа
+                    </span>
+                  </div>
+                  {onDismissNeedReply && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDismissNeedReply(item.id);
+                      }}
+                      className="text-[10px] md:text-xs text-gray-400 hover:text-gray-600 hover:underline"
+                    >
+                      Сбросить
+                    </button>
+                  )}
                 </div>
               )}
               {item.displayTitle && item.displayTitle !== (item.phone ?? item.client?.phone) && (item.phone || item.client?.phone) && (

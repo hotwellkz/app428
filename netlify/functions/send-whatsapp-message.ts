@@ -107,9 +107,24 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
   const caption = hasText ? (text ?? '').trim() : '';
-  log('Send to', normalizedPhone, hasMedia ? 'contentUri' : 'text', hasMedia ? contentUri?.slice(0, 60) + '...' : caption.length);
+  const isDev = process.env.NODE_ENV !== 'production';
+  if (isDev) {
+    log('Prepare send payload', {
+      originalChatId: chatId,
+      normalizedPhone,
+      finalChatIdForWazzup: normalizedPhone.replace(/^\+/, ''),
+      hasMedia,
+      hasText,
+      captionLength: caption.length,
+      attachmentType,
+      hasRepliedTo: !!repliedToMessageId,
+      forwarded: forwarded === true,
+      companyId: effectiveCompanyId
+    });
+  }
 
   let conversationId: string;
+  let clientId: string;
   try {
     let client = await findClientByPhone(normalizedPhone);
     if (!client) {
@@ -118,6 +133,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       client = await findClientByPhone(normalizedPhone);
       if (!client) throw new Error('Failed to load created client');
     }
+    clientId = client.id;
 
     let conversation = await findConversationByClientId(client.id);
     if (!conversation) {
@@ -127,6 +143,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       if (!conversation) throw new Error('Failed to load created conversation');
     }
     conversationId = conversation.id;
+    if (isDev) {
+      log('Resolved conversation for send', { clientId, conversationId });
+    }
   } catch (err) {
     log('Firestore error:', err);
     return withCors({
@@ -147,6 +166,15 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     } else {
       wazzupBody.text = caption;
     }
+    if (isDev) {
+      log('Wazzup request body (safe)', {
+        channelId: wazzupBody.channelId,
+        chatType: wazzupBody.chatType,
+        chatId: wazzupBody.chatId,
+        hasText: !!wazzupBody.text,
+        hasContentUri: !!wazzupBody.contentUri
+      });
+    }
 
     const res = await fetch(WAZZUP_MESSAGE_URL, {
       method: 'POST',
@@ -166,7 +194,11 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     }
 
     if (!res.ok) {
-      log('Wazzup API error:', res.status, resText);
+      if (isDev) {
+        log('Wazzup API error:', res.status, resText.slice(0, 500));
+      } else {
+        log('Wazzup API error:', res.status);
+      }
       return withCors({
         statusCode: res.status >= 500 ? 502 : 400,
         headers: { 'Content-Type': 'application/json' },

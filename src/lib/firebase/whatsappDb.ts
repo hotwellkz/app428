@@ -41,6 +41,8 @@ export interface ConversationListItem {
   lastIncomingAt?: Date | Timestamp | null;
   /** Время последнего исходящего сообщения (для derived state awaiting reply) */
   lastOutgoingAt?: Date | Timestamp | null;
+  /** Время последнего ручного сброса состояния «ждёт ответа» (one-shot dismiss). */
+  awaitingReplyDismissedAt?: Date | Timestamp | null;
   unreadCount: number;
   /** Имя клиента из CRM, если контакт связан; иначе показывать phone */
   displayTitle?: string;
@@ -55,7 +57,12 @@ export function getConversationAttentionState(item: ConversationListItem): Conve
   const lastIncoming = getMessageTimeFromDateLike(item.lastIncomingAt);
   if (!lastIncoming) return 'normal';
   const lastOutgoing = getMessageTimeFromDateLike(item.lastOutgoingAt);
-  const awaitingReply = lastOutgoing == null || lastOutgoing < lastIncoming;
+  const lastDismissed = getMessageTimeFromDateLike(item.awaitingReplyDismissedAt ?? null);
+  const baseline = Math.max(
+    lastOutgoing ?? 0,
+    lastDismissed ?? 0
+  );
+  const awaitingReply = baseline === 0 || baseline < lastIncoming;
   return awaitingReply ? 'need_reply' : 'normal';
 }
 
@@ -302,6 +309,17 @@ export async function clearUnreadCount(
 }
 
 /**
+ * Разовый сброс состояния «ждёт ответа» для диалога.
+ * Ставит awaitingReplyDismissedAt = serverTimestamp(), не отключая будущие срабатывания.
+ */
+export async function dismissAwaitingReply(conversationId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
+  await updateDoc(ref, {
+    awaitingReplyDismissedAt: serverTimestamp()
+  });
+}
+
+/**
  * Подписка на список диалогов с данными клиента и последним сообщением (realtime).
  * @param onError опционально вызывается при ошибке (например, индекс ещё строится)
  * @returns функция отписки
@@ -335,6 +353,7 @@ export function subscribeConversationsList(
         lastMessageAt: c.lastMessageAt,
         lastIncomingAt: c.lastIncomingAt,
         lastOutgoingAt: c.lastOutgoingAt,
+        awaitingReplyDismissedAt: c.awaitingReplyDismissedAt ?? null,
         unreadCount: c.unreadCount ?? 0
       };
     });

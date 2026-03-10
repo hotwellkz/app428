@@ -33,7 +33,7 @@ export interface WhatsAppFloatingButtonState {
 export function useWhatsAppFloatingButtonState(enabled: boolean = true): WhatsAppFloatingButtonState {
   const companyId = useCompanyId();
   const [rows, setRows] = useState<
-    Array<{ unreadCount?: number; lastIncomingAt?: TimeLike; lastOutgoingAt?: TimeLike }>
+    Array<{ unreadCount?: number; lastIncomingAt?: TimeLike; lastOutgoingAt?: TimeLike; awaitingReplyDismissedAt?: TimeLike }>
   >([]);
 
   useEffect(() => {
@@ -54,7 +54,8 @@ export function useWhatsAppFloatingButtonState(enabled: boolean = true): WhatsAp
           return {
             unreadCount: (data.unreadCount as number | undefined) ?? 0,
             lastIncomingAt: (data.lastIncomingAt as TimeLike) ?? null,
-            lastOutgoingAt: (data.lastOutgoingAt as TimeLike) ?? null
+            lastOutgoingAt: (data.lastOutgoingAt as TimeLike) ?? null,
+            awaitingReplyDismissedAt: (data.awaitingReplyDismissedAt as TimeLike) ?? null
           };
         });
         setRows(list);
@@ -78,7 +79,12 @@ export function useWhatsAppFloatingButtonState(enabled: boolean = true): WhatsAp
       const incoming = toMillis(c.lastIncomingAt);
       if (!incoming) return acc;
       const outgoing = toMillis(c.lastOutgoingAt);
-      const awaiting = outgoing == null || outgoing < incoming;
+      const dismissed = toMillis(c.awaitingReplyDismissedAt);
+      const baseline = Math.max(
+        outgoing ?? 0,
+        dismissed ?? 0
+      );
+      const awaiting = baseline === 0 || baseline < incoming;
       return acc + (awaiting ? 1 : 0);
     }, 0);
 

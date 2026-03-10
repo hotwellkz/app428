@@ -7,6 +7,7 @@ import {
   subscribeConversationsList,
   subscribeMessages,
   clearUnreadCount,
+  dismissAwaitingReply,
   normalizePhone,
   softDeleteMessage,
   toggleStarMessage,
@@ -102,6 +103,29 @@ const WhatsAppChat: React.FC = () => {
 
   const selectionMode = selectedMessageIds.length > 0;
   overlayRef.current = selectionMode || !!contextMenu || !!reactionPickerMessageId || !!actionsSheetMessageId || forwardDialogOpen;
+
+  // Режим «Инкогнито»: просмотр без отметки о прочтении и без отправки
+  const [incognitoMode, setIncognitoMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage.getItem('whatsappIncognito') === '1';
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      if (incognitoMode) {
+        window.localStorage.setItem('whatsappIncognito', '1');
+      } else {
+        window.localStorage.removeItem('whatsappIncognito');
+      }
+    } catch {
+      // ignore storage errors
+    }
+  }, [incognitoMode]);
 
   const mobileChatContext = useMobileWhatsAppChat();
   const selectedItem = conversations.find((c) => c.id === selectedId);
@@ -228,25 +252,32 @@ const WhatsAppChat: React.FC = () => {
       console.log('[WhatsApp] open chat:', { selectedId, conversationId, activeChatId: selectedId });
     }
     setIndexBuilding(false);
-    setLocallyReadChatIds((prev) => new Set(prev).add(conversationId));
-    if (import.meta.env.DEV) {
-      console.log('[WhatsApp] markAsRead start:', {
+    if (!incognitoMode) {
+      setLocallyReadChatIds((prev) => new Set(prev).add(conversationId));
+      if (import.meta.env.DEV) {
+        console.log('[WhatsApp] markAsRead start:', {
+          conversationId,
+          companyId,
+          payload: { unreadCount: 0, lastReadAt: 'serverTimestamp', lastReadMessageId: null }
+        });
+      }
+      clearUnreadCount(conversationId, undefined, companyId ?? null)
+        .then(() => {
+          if (import.meta.env.DEV) {
+            console.log('[WhatsApp] markAsRead success:', { conversationId });
+          }
+        })
+        .catch((err) => {
+          if (import.meta.env.DEV) {
+            console.warn('[WhatsApp] markAsRead failed:', { conversationId, error: err });
+          }
+        });
+    } else if (import.meta.env.DEV) {
+      console.log('[WhatsApp] incognito mode: skip markAsRead for conversation', {
         conversationId,
-        companyId,
-        payload: { unreadCount: 0, lastReadAt: 'serverTimestamp', lastReadMessageId: null }
+        companyId
       });
     }
-    clearUnreadCount(conversationId, undefined, companyId ?? null)
-      .then(() => {
-        if (import.meta.env.DEV) {
-          console.log('[WhatsApp] markAsRead success:', { conversationId });
-        }
-      })
-      .catch((err) => {
-        if (import.meta.env.DEV) {
-          console.warn('[WhatsApp] markAsRead failed:', { conversationId, error: err });
-        }
-      });
     const onError = (err: unknown) => {
       const msg = String(err && typeof err === 'object' && 'message' in err ? (err as Error).message : err);
       if (msg.includes('index') && msg.includes('building')) {
@@ -255,12 +286,12 @@ const WhatsAppChat: React.FC = () => {
     };
     const unsub = subscribeMessages(selectedId, setMessages, onError);
     return unsub;
-  }, [selectedId]);
+  }, [selectedId, companyId, incognitoMode]);
 
   // Когда чат открыт и приходят новые сообщения — помечаем прочитанным в БД (чтобы badge не появлялся)
   const markReadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!selectedId || messages.length === 0 || !companyId) return;
+    if (!selectedId || messages.length === 0 || !companyId || incognitoMode) return;
     if (markReadDebounceRef.current) clearTimeout(markReadDebounceRef.current);
     markReadDebounceRef.current = setTimeout(() => {
       markReadDebounceRef.current = null;
@@ -268,14 +299,18 @@ const WhatsAppChat: React.FC = () => {
       const lastReadMessageId = lastIncoming?.id ?? null;
       clearUnreadCount(selectedId, lastReadMessageId, companyId).catch((err) => {
         if (import.meta.env.DEV) {
-          console.warn('[WhatsApp] markAsRead (on new messages) failed:', { selectedId, companyId, error: err });
+          console.warn('[WhatsApp] markAsRead (on new messages) failed:', {
+            selectedId,
+            companyId,
+            error: err
+          });
         }
       });
     }, 400);
     return () => {
       if (markReadDebounceRef.current) clearTimeout(markReadDebounceRef.current);
     };
-  }, [selectedId, messages, companyId]);
+  }, [selectedId, messages, companyId, incognitoMode]);
 
   const handleFileSelect = useCallback((file: File) => {
     setSendError(null);
@@ -369,6 +404,10 @@ const WhatsAppChat: React.FC = () => {
   }, [pendingAttachment]);
 
   const handleSend = async () => {
+    if (incognitoMode) {
+      // В режиме инкогнито отправка отключена (просмотр-only).
+      return;
+    }
     const phone = selectedItem?.phone ?? selectedItem?.client?.phone;
     if (!phone || phone === '…' || sending || uploadState !== 'idle') return;
 
@@ -415,7 +454,28 @@ const WhatsAppChat: React.FC = () => {
             return null;
           });
         } else {
-          setSendError((data as { error?: string })?.error || 'Ошибка отправки. Попробуйте ещё раз.');
+          const d = data as { error?: string; status?: number; detail?: any };
+          let message = 'Сообщение не отправлено: проверьте номер, текст или вложение.';
+          if (d?.error === 'Wazzup API error') {
+            const detail = d.detail as any;
+            let providerMsg = '';
+            if (detail && typeof detail === 'object') {
+              const firstData =
+                Array.isArray((detail as any).data) && (detail as any).data.length > 0
+                  ? (detail as any).data[0]
+                  : null;
+              const code = firstData?.code || (detail as any).error;
+              const desc = firstData?.description || (detail as any).description;
+              if (code && desc) providerMsg = `${code}: ${desc}`;
+              else providerMsg = desc || code || (detail as any).message || (detail as any).raw || '';
+            }
+            if (providerMsg) {
+              message = `Wazzup: ${providerMsg}`;
+            }
+          } else if (d?.error) {
+            message = d.error;
+          }
+          setSendError(message);
         }
       } finally {
         setUploadState('idle');
@@ -440,8 +500,29 @@ const WhatsAppChat: React.FC = () => {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
+        const d = data as { error?: string; status?: number; detail?: any };
+        let message = 'Сообщение не отправлено: проверьте номер, текст или вложение.';
+        if (d?.error === 'Wazzup API error') {
+          const detail = d.detail as any;
+          let providerMsg = '';
+          if (detail && typeof detail === 'object') {
+            const firstData =
+              Array.isArray((detail as any).data) && (detail as any).data.length > 0
+                ? (detail as any).data[0]
+                : null;
+            const code = firstData?.code || (detail as any).error;
+            const desc = firstData?.description || (detail as any).description;
+            if (code && desc) providerMsg = `${code}: ${desc}`;
+            else providerMsg = desc || code || (detail as any).message || (detail as any).raw || '';
+          }
+          if (providerMsg) {
+            message = `Wazzup: ${providerMsg}`;
+          }
+        } else if (d?.error) {
+          message = d.error;
+        }
         setInputText(caption);
-        setSendError((data as { error?: string })?.error || 'Ошибка отправки.');
+        setSendError(message);
       } else {
         setSendError(null);
         setReplyToMessage(null);
@@ -633,10 +714,41 @@ const WhatsAppChat: React.FC = () => {
       {/* Заголовок: на мобильном в чате не показываем (есть свой header в ChatWindow) */}
       {(!isMobile || !selectedId) && (
         <div className="flex-none px-4 py-3 border-b bg-white">
-          <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-green-600" />
-            WhatsApp
-          </h1>
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
+              <MessageSquare className="w-5 h-5 text-green-600" />
+              WhatsApp
+            </h1>
+            <button
+              type="button"
+              onClick={() => setIncognitoMode((v) => !v)}
+              className="inline-flex items-center gap-2 text-xs md:text-sm px-2 py-1 rounded-full border transition-colors
+                border-gray-300 bg-gray-50 hover:bg-gray-100
+                data-[active=true]:border-amber-400 data-[active=true]:bg-amber-50"
+              data-active={incognitoMode ? 'true' : 'false'}
+            >
+              <span
+                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                  incognitoMode ? 'bg-amber-400' : 'bg-gray-300'
+                }`}
+                aria-hidden="true"
+              >
+                <span
+                  className={`h-3 w-3 rounded-full bg-white shadow transition-transform ${
+                    incognitoMode ? 'translate-x-3' : 'translate-x-0'
+                  }`}
+                />
+              </span>
+              <span className={incognitoMode ? 'text-amber-700 font-medium' : 'text-gray-600'}>
+                Инкогнито
+              </span>
+            </button>
+          </div>
+          {incognitoMode && (
+            <p className="mt-2 text-[11px] md:text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1 inline-flex items-center gap-1">
+              Просмотр без отметки о прочтении и без отправки сообщений.
+            </p>
+          )}
         </div>
       )}
 
@@ -681,6 +793,18 @@ const WhatsAppChat: React.FC = () => {
             items={filteredList}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            onDismissNeedReply={async (id) => {
+              try {
+                await dismissAwaitingReply(id);
+                if (import.meta.env.DEV) {
+                  console.log('[WhatsApp] awaitingReply dismissed for conversation', id);
+                }
+              } catch (err) {
+                if (import.meta.env.DEV) {
+                  console.warn('[WhatsApp] dismissAwaitingReply failed', { id, err });
+                }
+              }
+            }}
           />
         </aside>
 
@@ -740,6 +864,7 @@ const WhatsAppChat: React.FC = () => {
               onCloseContextMenu={() => setContextMenu(null)}
               reactionPickerMessageId={reactionPickerMessageId}
               actionsSheetMessageId={actionsSheetMessageId}
+              incognitoMode={incognitoMode}
             />
           )}
         </section>

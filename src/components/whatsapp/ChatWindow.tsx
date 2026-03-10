@@ -63,9 +63,196 @@ interface ChatWindowProps {
   reactionPickerMessageId?: string | null;
   /** Сообщение для bottom sheet «Ещё» (mobile) */
   actionsSheetMessageId?: string | null;
+  /** Режим инкогнито: просмотр без отметки о прочтении и без отправки */
+  incognitoMode?: boolean;
 }
 
 const CHAT_HEADER_HEIGHT = 56;
+
+type AttachmentCategory = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'office' | 'unknown';
+
+function getAttachmentCategory(att: MessageAttachment): AttachmentCategory {
+  const mime = att.mimeType?.toLowerCase() ?? '';
+  const name = att.fileName?.toLowerCase() ?? '';
+
+  if (att.type === 'image' || mime.startsWith('image/')) return 'image';
+  if (att.type === 'video' || mime.startsWith('video/')) return 'video';
+  if (att.type === 'audio' || mime.startsWith('audio/')) return 'audio';
+
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+
+  if (
+    mime === 'text/plain' ||
+    name.endsWith('.txt') ||
+    mime === 'application/json' ||
+    name.endsWith('.json')
+  ) {
+    return 'text';
+  }
+
+  if (
+    name.endsWith('.doc') ||
+    name.endsWith('.docx') ||
+    name.endsWith('.xls') ||
+    name.endsWith('.xlsx') ||
+    name.endsWith('.ppt') ||
+    name.endsWith('.pptx')
+  ) {
+    return 'office';
+  }
+
+  return 'unknown';
+}
+
+function canPreviewInline(att: MessageAttachment): boolean {
+  const cat = getAttachmentCategory(att);
+  return cat === 'image' || cat === 'video' || cat === 'audio' || cat === 'pdf' || cat === 'text';
+}
+
+interface AttachmentPreviewModalProps {
+  attachment: MessageAttachment;
+  onClose: () => void;
+}
+
+const AttachmentPreviewModal: React.FC<AttachmentPreviewModalProps> = ({ attachment, onClose }) => {
+  const category = getAttachmentCategory(attachment);
+  const [textContent, setTextContent] = useState<string | null>(null);
+  const [textLoading, setTextLoading] = useState(false);
+  const [textError, setTextError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (category !== 'text') return;
+    let cancelled = false;
+    setTextLoading(true);
+    setTextError(null);
+    fetch(attachment.url)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const txt = await res.text();
+        if (!cancelled) {
+          setTextContent(txt);
+          setTextLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setTextError(
+            import.meta.env.DEV
+              ? `Не удалось загрузить текст: ${String(err)}`
+              : 'Не удалось загрузить текст файла'
+          );
+          setTextLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attachment.url, category]);
+
+  const title = attachment.fileName || 'Файл';
+  const mimeLabel = attachment.mimeType || getAttachmentCategory(attachment);
+
+  const openOriginal = () => {
+    window.open(attachment.url, '_blank', 'noopener,noreferrer');
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[1200] bg-black/80 flex items-center justify-center px-4"
+      onClick={onClose}
+    >
+      <div
+        className="relative w-full max-w-5xl max-h-[90vh] bg-gray-900 text-white rounded-lg shadow-lg flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-4 py-2 border-b border-gray-700">
+          <div className="min-w-0">
+            <p className="text-sm font-medium truncate">{title}</p>
+            <p className="text-xs text-gray-300 truncate">{mimeLabel}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-full bg-black/40 hover:bg-black/70 text-white"
+            aria-label="Закрыть"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="flex-1 min-h-0 p-3 md:p-4 flex items-center justify-center">
+          {category === 'image' && (
+            <img
+              src={attachment.url}
+              alt={attachment.fileName ?? ''}
+              className="max-w-full max-h-[70vh] object-contain rounded bg-black"
+            />
+          )}
+          {category === 'video' && (
+            <video
+              src={attachment.url}
+              controls
+              autoPlay
+              playsInline
+              className="max-w-full max-h-[70vh] rounded bg-black"
+            />
+          )}
+          {category === 'audio' && (
+            <div className="w-full max-w-lg">
+              <audio src={attachment.url} controls className="w-full" />
+            </div>
+          )}
+          {category === 'pdf' && (
+            <iframe
+              src={attachment.url}
+              title={title}
+              className="w-full h-[70vh] rounded bg-white"
+            />
+          )}
+          {category === 'text' && (
+            <div className="w-full max-h-[70vh] overflow-auto bg-black/60 rounded p-3 text-xs md:text-sm">
+              {textLoading && <p className="text-gray-300">Загрузка содержимого…</p>}
+              {textError && <p className="text-red-300">{textError}</p>}
+              {!textLoading && !textError && (
+                <pre className="whitespace-pre-wrap break-words font-mono text-gray-100">
+                  {textContent ?? ''}
+                </pre>
+              )}
+            </div>
+          )}
+          {(category === 'office' || category === 'unknown') && (
+            <div className="text-center text-sm text-gray-200 space-y-2">
+              <p>Предпросмотр для этого типа файла внутри CRM недоступен.</p>
+              <p className="text-xs text-gray-400">
+                Используйте «Открыть оригинал» или «Скачать», чтобы просмотреть документ.
+              </p>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center justify-between px-4 py-2 border-t border-gray-800 text-xs md:text-sm">
+          <div className="text-gray-300 truncate">{attachment.url}</div>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={openOriginal}
+              className="text-green-400 hover:text-green-200 underline"
+            >
+              Открыть оригинал
+            </button>
+            <a
+              href={attachment.url}
+              download={attachment.fileName}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-200 hover:text-white underline"
+            >
+              Скачать
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 /** Только один аудио-элемент воспроизводится одновременно (глобально в чате). */
 let activeAudioRef: HTMLAudioElement | null = null;
@@ -287,10 +474,10 @@ function VideoMessageBubble({ att }: { att: MessageAttachment }) {
 
 function AttachmentBlock({
   att,
-  onImageClick
+  onPreview
 }: {
   att: MessageAttachment;
-  onImageClick?: (att: MessageAttachment) => void;
+  onPreview?: (att: MessageAttachment) => void;
 }) {
   const [imgError, setImgError] = useState(false);
   const isImage = att.type === 'image';
@@ -320,12 +507,20 @@ function AttachmentBlock({
     </a>
   );
 
+  const handleOpen = () => {
+    if (onPreview && canPreviewInline(att)) {
+      onPreview(att);
+    } else {
+      window.open(att.url, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   if (isImage && !imgError) {
     return (
       <div className="mt-1 rounded overflow-hidden max-w-full">
         <button
           type="button"
-          onClick={() => onImageClick?.(att)}
+          onClick={() => onPreview?.(att)}
           className="block focus:outline-none"
         >
           <img
@@ -354,17 +549,38 @@ function AttachmentBlock({
   }
   return (
     <div className="mt-1 p-2 rounded bg-gray-100 border border-gray-200">
-      {link}
-      {att.type === 'file' && (
-        <a
-          href={att.url}
-          download={att.fileName}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-gray-600 hover:underline ml-2"
-        >
-          Скачать
-        </a>
+      {att.type === 'file' ? (
+        <>
+          <div className="flex items-center gap-2">
+            <FileText className="w-5 h-5 text-gray-700 flex-shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm text-gray-800 truncate">{att.fileName || 'Файл'}</p>
+              {att.mimeType && (
+                <p className="text-xs text-gray-500 truncate">{att.mimeType}</p>
+              )}
+            </div>
+          </div>
+          <div className="mt-2 flex items-center gap-3 text-xs text-gray-700">
+            <button
+              type="button"
+              onClick={handleOpen}
+              className="text-green-700 hover:text-green-800 hover:underline"
+            >
+              Открыть
+            </button>
+            <a
+              href={att.url}
+              download={att.fileName}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-600 hover:text-gray-800 hover:underline"
+            >
+              Скачать
+            </a>
+          </div>
+        </>
+      ) : (
+        link
       )}
     </div>
   );
@@ -409,11 +625,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onCloseContextMenu,
   reactionPickerMessageId = null,
   actionsSheetMessageId = null,
+  incognitoMode = false,
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesById = useRef<Map<string, WhatsAppMessage>>(new Map());
   messagesById.current = new Map(messages.map((m) => [m.id, m]));
-  const [imageViewerAtt, setImageViewerAtt] = useState<MessageAttachment | null>(null);
+  const [previewAtt, setPreviewAtt] = useState<MessageAttachment | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -491,7 +708,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               onTap={selectionMode ? onToggleSelectMessage : undefined}
               renderAttachments={(m) =>
                 m.attachments?.map((att, i) => (
-                  <AttachmentBlock key={i} att={att} onImageClick={setImageViewerAtt} />
+                  <AttachmentBlock key={i} att={att} onPreview={setPreviewAtt} />
                 )) ?? null
               }
             />
@@ -545,63 +762,13 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         <ReplyComposerPreview message={replyToMessage} onCancel={onCancelReply} />
       )}
 
-      {imageViewerAtt && (
-        <div
-          className="fixed inset-0 z-[1200] bg-black/80 flex items-center justify-center px-4"
-          onClick={() => {
-            setImageViewerAtt(null);
-            if (import.meta.env.DEV) {
-              console.log('[WhatsApp] image viewer close');
-            }
+      {previewAtt && (
+        <AttachmentPreviewModal
+          attachment={previewAtt}
+          onClose={() => {
+            setPreviewAtt(null);
           }}
-        >
-          <div
-            className="relative max-w-5xl max-h-[90vh] w-full flex items-center justify-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => setImageViewerAtt(null)}
-              className="absolute top-2 right-2 p-2 rounded-full bg-black/60 text-white hover:bg-black/80"
-              aria-label="Закрыть"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <img
-              src={imageViewerAtt.url}
-              alt={imageViewerAtt.fileName ?? ''}
-              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-lg bg-black"
-              onError={() => {
-                if (import.meta.env.DEV) {
-                  console.warn('[WhatsApp] image viewer load error:', {
-                    url: imageViewerAtt.url,
-                    fileName: imageViewerAtt.fileName
-                  });
-                }
-              }}
-            />
-            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 rounded-full px-4 py-1 text-xs text-white">
-              <button
-                type="button"
-                onClick={() => {
-                  window.open(imageViewerAtt.url, '_blank', 'noopener,noreferrer');
-                }}
-                className="hover:underline"
-              >
-                Открыть оригинал
-              </button>
-              <a
-                href={imageViewerAtt.url}
-                download={imageViewerAtt.fileName}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline"
-              >
-                Скачать
-              </a>
-            </div>
-          </div>
-        </div>
+        />
       )}
 
       {sendError && (
@@ -652,11 +819,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         className="flex-none"
         style={isMobile ? { paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom, 0px))' } : undefined}
       >
+        {incognitoMode && (
+          <div className="px-3 pt-2 pb-1 text-[11px] md:text-xs text-amber-800 bg-amber-50 border-t border-amber-200">
+            Режим инкогнито: отправка сообщений отключена, просмотр не помечает чаты прочитанными.
+          </div>
+        )}
         <ChatInput
           value={inputText}
           onChange={onInputChange}
           onSend={onSend}
-          disabled={!selectedItem?.phone || selectedItem.phone === '…'}
+          disabled={incognitoMode || !selectedItem?.phone || selectedItem.phone === '…'}
           sending={sending || uploadState !== 'idle'}
           fixedBottom={false}
           hasAttachment={!!pendingAttachment}
