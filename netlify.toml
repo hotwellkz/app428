@@ -23,6 +23,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/ai/generate-reply"
+  to = "/.netlify/functions/ai-generate-reply"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

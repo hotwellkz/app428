@@ -643,6 +643,52 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     ? messages.find((m) => m.id === actionsSheetMessageId)
     : null;
 
+  const [aiMode, setAiMode] = useState<'normal' | 'short' | 'close' | null>(null);
+
+  const handleAiReply = async (mode: 'normal' | 'short' | 'close') => {
+    if (!onInputChange || !messages || messages.length === 0) return;
+    if (aiMode) return;
+    const recent = messages
+      .filter((m) => (m.text ?? '').trim().length > 0 && !m.deleted)
+      .slice(-15);
+    if (recent.length === 0) return;
+
+    setAiMode(mode);
+    try {
+      const payload = {
+        mode,
+        messages: recent.map((m) => ({
+          role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
+          text: (m.text ?? '').replace(/<[^>]*>/g, '').trim()
+        }))
+      };
+      const res = await fetch('/api/ai/generate-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = (await res.json().catch(() => ({}))) as { reply?: string; error?: string };
+      if (!res.ok || data.error) {
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.error('[ChatWindow] AI generate reply failed', { status: res.status, data });
+        }
+        return;
+      }
+      const reply = typeof data.reply === 'string' ? data.reply.trim() : '';
+      if (reply) {
+        onInputChange(reply);
+      }
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.error('[ChatWindow] AI generate reply error', e);
+      }
+    } finally {
+      setAiMode(null);
+    }
+  };
+
   const content = (
     <>
       {/* Header: на мобильных — кнопка Назад + имя/номер */}
@@ -838,6 +884,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           isRecordingVoice={isRecordingVoice}
           onCameraCapture={onCameraCapture}
           showCameraButton={showCameraButton}
+          onAiReply={incognitoMode ? undefined : handleAiReply}
+          aiModeLoading={aiMode}
+          autoFocusOnChange
         />
       </div>
     </>

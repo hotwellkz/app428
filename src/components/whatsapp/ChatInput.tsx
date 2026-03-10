@@ -1,5 +1,20 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
-import { Send, Paperclip, Mic, Square, Loader2, Camera, Image, FileText, Music, User, Smile } from 'lucide-react';
+import {
+  Send,
+  Paperclip,
+  Mic,
+  Square,
+  Loader2,
+  Camera,
+  Image,
+  FileText,
+  Music,
+  User,
+  Smile,
+  Sparkles,
+  Zap,
+  Target
+} from 'lucide-react';
 import EmojiPicker, { type EmojiClickData, Categories } from 'emoji-picker-react';
 
 const MAX_ATTACHMENT_MB = 10;
@@ -47,6 +62,12 @@ interface ChatInputProps {
   onCameraCapture?: (file: File) => void;
   /** Показывать кнопку камеры (mobile WhatsApp-style) */
   showCameraButton?: boolean;
+  /** Вызов AI-ответа по режиму */
+  onAiReply?: (mode: 'normal' | 'short' | 'close') => void;
+  /** Какой режим сейчас генерируется (для loader на кнопке) */
+  aiModeLoading?: 'normal' | 'short' | 'close' | null;
+  /** Автофокус на поле при изменении value (для AI-подстановки) */
+  autoFocusOnChange?: boolean;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -63,6 +84,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
   isRecordingVoice = false,
   onCameraCapture,
   showCameraButton = false,
+  onAiReply,
+  aiModeLoading = null,
+  autoFocusOnChange = false
 }) => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -108,7 +132,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
     el.style.height = 'auto';
     const lineCount = Math.min(Math.max(el.value.split('\n').length, TEXTAREA_MIN_ROWS), TEXTAREA_MAX_ROWS);
     el.style.height = `${lineCount * LINE_HEIGHT_PX + 24}px`;
-  }, [value]);
+    if (autoFocusOnChange && !disabled) {
+      el.focus();
+      const len = el.value.length;
+      el.setSelectionRange(len, len);
+    }
+  }, [value, autoFocusOnChange, disabled]);
 
   const handleActionClick = () => {
     if (isRecordingVoice && onStopVoice) onStopVoice();
@@ -226,38 +255,85 @@ const ChatInput: React.FC<ChatInputProps> = ({
             )}
           </div>
 
-        <button
-          type="button"
-          onClick={handleActionClick}
-          disabled={
-            disabled ||
-            (isRecordingVoice ? false : showSend ? isBusy : !(onStartVoice && !hasAttachment))
-          }
-          title={
-            isRecordingVoice ? 'Остановить запись' : showSend ? 'Отправить' : 'Голосовое сообщение'
-          }
-          className={`flex-shrink-0 w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center transition-[background-color,opacity,transform] duration-150 ease-out active:scale-95 ${
-            isRecordingVoice
-              ? 'bg-red-500 text-white hover:bg-red-600 disabled:opacity-70'
-              : 'bg-[#25D366] text-white hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed'
-          }`}
-          aria-label={isRecordingVoice ? 'Остановить' : showSend ? 'Отправить' : 'Микрофон'}
-        >
-          <span className="inline-flex items-center justify-center transition-opacity duration-150">
-            {isBusy && showSend && !isRecordingVoice ? (
-              <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" />
-            ) : isRecordingVoice ? (
-              <Square className="w-5 h-5 md:w-6 md:h-6 fill-current" />
-            ) : showSend ? (
-              <Send className="w-5 h-5 md:w-6 md:h-6" />
-            ) : (
-              <Mic className="w-5 h-5 md:w-6 md:h-6" />
-            )}
-          </span>
-        </button>
-      </div>
+          <button
+            type="button"
+            onClick={handleActionClick}
+            disabled={
+              disabled ||
+              (isRecordingVoice ? false : showSend ? isBusy : !(onStartVoice && !hasAttachment))
+            }
+            title={
+              isRecordingVoice ? 'Остановить запись' : showSend ? 'Отправить' : 'Голосовое сообщение'
+            }
+            className={`flex-shrink-0 w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center transition-[background-color,opacity,transform] duration-150 ease-out active:scale-95 ${
+              isRecordingVoice
+                ? 'bg-red-500 text-white hover:bg-red-600 disabled:opacity-70'
+                : 'bg-[#25D366] text-white hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed'
+            }`}
+            aria-label={isRecordingVoice ? 'Остановить' : showSend ? 'Отправить' : 'Микрофон'}
+          >
+            <span className="inline-flex items-center justify-center transition-opacity duration-150">
+              {isBusy && showSend && !isRecordingVoice ? (
+                <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" />
+              ) : isRecordingVoice ? (
+                <Square className="w-5 h-5 md:w-6 md:h-6 fill-current" />
+              ) : showSend ? (
+                <Send className="w-5 h-5 md:w-6 md:h-6" />
+              ) : (
+                <Mic className="w-5 h-5 md:w-6 md:h-6" />
+              )}
+            </span>
+          </button>
+        </div>
 
-      {/* Emoji picker: над панелью ввода */}
+        {onAiReply && (
+          <div className="mt-1 flex justify-end gap-1.5 md:gap-2 px-1">
+            <button
+              type="button"
+              onClick={() => onAiReply('normal')}
+              disabled={disabled || !!aiModeLoading}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-emerald-300 bg-white px-2 py-0.5 text-[11px] md:text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+              title="AI сгенерировать ответ"
+            >
+              {aiModeLoading === 'normal' ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Sparkles className="w-3 h-3" />
+              )}
+              <span className="hidden md:inline">Ответ</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onAiReply('short')}
+              disabled={disabled || !!aiModeLoading}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-indigo-300 bg-white px-2 py-0.5 text-[11px] md:text-xs text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+              title="AI: очень коротко"
+            >
+              {aiModeLoading === 'short' ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Zap className="w-3 h-3" />
+              )}
+              <span className="hidden md:inline">Кратко</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => onAiReply('close')}
+              disabled={disabled || !!aiModeLoading}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-amber-300 bg-white px-2 py-0.5 text-[11px] md:text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+              title="AI: продвинуть сделку"
+            >
+              {aiModeLoading === 'close' ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <Target className="w-3 h-3" />
+              )}
+              <span className="hidden md:inline">Закрыть</span>
+            </button>
+          </div>
+        )}
+
+        {/* Emoji picker: над панелью ввода */}
       {showEmojiPicker && (
         <div
           ref={emojiPickerRef}
