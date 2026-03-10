@@ -67,6 +67,12 @@ export interface WhatsAppConversationRow {
   lastIncomingAt?: Timestamp;
   /** Время последнего исходящего сообщения (для derived state awaiting reply) */
   lastOutgoingAt?: Timestamp;
+  /** Время последнего сообщения клиента (для аналитики unread) */
+  lastClientMessageTime?: Timestamp;
+  /** Время последнего сообщения менеджера (для аналитики unread) */
+  lastManagerMessageTime?: Timestamp;
+  /** Кто отправил последнее сообщение: client | manager */
+  lastMessageSender?: 'client' | 'manager';
 }
 
 export async function findClientByPhone(phone: string): Promise<WhatsAppClientRow | null> {
@@ -142,6 +148,9 @@ export async function createConversation(clientId: string, phone: string): Promi
     unreadCount: 0,
     lastIncomingAt: null,
     lastOutgoingAt: null,
+    lastClientMessageTime: null,
+    lastManagerMessageTime: null,
+    lastMessageSender: null,
     companyId: DEFAULT_COMPANY_ID
   });
   return ref.id;
@@ -151,7 +160,12 @@ export async function createConversation(clientId: string, phone: string): Promi
 export async function incrementUnreadCount(conversationId: string): Promise<void> {
   const db = getDb();
   const ref = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
-  await ref.update({ unreadCount: FieldValue.increment(1) });
+  const now = Timestamp.now();
+  await ref.update({
+    unreadCount: FieldValue.increment(1),
+    lastClientMessageTime: now,
+    lastMessageSender: 'client'
+  });
 }
 
 /**
@@ -233,9 +247,22 @@ export async function saveMessage(
   if (options.forwarded === true) data.forwarded = true;
   const ref = await db.collection(COLLECTIONS.MESSAGES).add(data);
   const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
-  const convUpdate: Record<string, unknown> = { lastMessageAt: now };
-  if (direction === 'incoming') convUpdate.lastIncomingAt = now;
-  if (direction === 'outgoing') convUpdate.lastOutgoingAt = now;
+  const convUpdate: Record<string, unknown> = {
+    lastMessageAt: now
+  };
+  if (direction === 'incoming') {
+    convUpdate.lastIncomingAt = now;
+    convUpdate.lastClientMessageTime = now;
+    convUpdate.lastMessageSender = 'client';
+    // Входящее сообщение увеличивает unreadCount, но здесь не изменяем счётчик:
+    // для webhook используется incrementUnreadCount, чтобы избежать двойного инкремента.
+  }
+  if (direction === 'outgoing') {
+    convUpdate.lastOutgoingAt = now;
+    convUpdate.lastManagerMessageTime = now;
+    convUpdate.lastMessageSender = 'manager';
+    convUpdate.unreadCount = 0;
+  }
   await convRef.update(convUpdate);
   return ref.id;
 }
@@ -280,8 +307,17 @@ export async function upsertMessageFromWebhook(
       }
       const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
       const convUpdate: Record<string, unknown> = { lastMessageAt: now };
-      if (direction === 'incoming') convUpdate.lastIncomingAt = now;
-      if (direction === 'outgoing') convUpdate.lastOutgoingAt = now;
+      if (direction === 'incoming') {
+        convUpdate.lastIncomingAt = now;
+        convUpdate.lastClientMessageTime = now;
+        convUpdate.lastMessageSender = 'client';
+      }
+      if (direction === 'outgoing') {
+        convUpdate.lastOutgoingAt = now;
+        convUpdate.lastManagerMessageTime = now;
+        convUpdate.lastMessageSender = 'manager';
+        convUpdate.unreadCount = 0;
+      }
       await convRef.update(convUpdate);
       return { id: docRef.id, created: false };
     }

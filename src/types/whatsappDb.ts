@@ -33,6 +33,12 @@ export interface WhatsAppConversation {
   lastIncomingAt?: Date | Timestamp | null;
   /** Время последнего исходящего сообщения (для derived state awaiting reply) */
   lastOutgoingAt?: Date | Timestamp | null;
+  /** Время последнего сообщения клиента */
+  lastClientMessageTime?: Date | Timestamp | null;
+  /** Время последнего сообщения менеджера */
+  lastManagerMessageTime?: Date | Timestamp | null;
+  /** Кто отправил последнее сообщение: client | manager */
+  lastMessageSender?: 'client' | 'manager' | null;
   /** Количество непрочитанных (входящих); источник истины в БД */
   unreadCount?: number;
   /** Время последнего «прочитано» (mark-as-read в БД) */
