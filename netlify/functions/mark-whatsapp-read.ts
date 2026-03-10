@@ -1,5 +1,5 @@
 import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
-import { markConversationAsRead } from './lib/firebaseAdmin';
+import { markConversationAsRead, DEFAULT_COMPANY_ID } from './lib/firebaseAdmin';
 
 const LOG_PREFIX = '[mark-whatsapp-read]';
 
@@ -17,6 +17,7 @@ function withCors(res: HandlerResponse): HandlerResponse {
 interface MarkReadBody {
   conversationId: string;
   lastReadMessageId?: string | null;
+  companyId?: string | null;
 }
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
@@ -30,7 +31,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
   let body: MarkReadBody;
   try {
-    body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body ?? {};
+    body = typeof event.body === 'string' ? JSON.parse(event.body) : (event.body as MarkReadBody) ?? {};
   } catch (e) {
     console.warn(LOG_PREFIX, 'Invalid JSON:', e);
     return withCors({
@@ -40,7 +41,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
 
-  const { conversationId, lastReadMessageId } = body;
+  const { conversationId, lastReadMessageId, companyId } = body;
   if (!conversationId || typeof conversationId !== 'string' || !conversationId.trim()) {
     return withCors({
       statusCode: 400,
@@ -50,7 +51,11 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   try {
-    await markConversationAsRead(conversationId.trim(), lastReadMessageId ?? undefined);
+    const effectiveCompanyId = (companyId ?? DEFAULT_COMPANY_ID).trim();
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(LOG_PREFIX, 'request', { conversationId, lastReadMessageId: lastReadMessageId ?? null, companyId: effectiveCompanyId });
+    }
+    await markConversationAsRead(conversationId.trim(), lastReadMessageId ?? undefined, effectiveCompanyId);
     if (process.env.NODE_ENV !== 'production') {
       console.log(LOG_PREFIX, 'marked read', conversationId, lastReadMessageId ?? '');
     }

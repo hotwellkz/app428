@@ -226,23 +226,42 @@ service cloud.firestore {
       allow write: if isAuthenticated(); // Разрешаем запись аутентифицированным пользователям
     }
 
-    // WhatsApp CRM: чтение для аутентифицированных; запись mark-as-read через backend (Netlify function),
-    // правило update — запасной вариант по companyId
+    // WhatsApp CRM: строгая изоляция по companyId пользователя или global_admin
     match /whatsappClients/{clientId} {
-      allow read: if isAuthenticated();
-      allow write: if isAuthenticated();
+      allow read, update, delete: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || isGlobalAdmin()
+      );
     }
     match /whatsappConversations/{conversationId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read, update, delete: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || isGlobalAdmin()
+      );
     }
     match /whatsappMessages/{messageId} {
-      allow read: if isAuthenticated();
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated();
-      allow delete: if isAuthenticated();
+      allow read, update, delete: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || isGlobalAdmin()
+      );
     }
 
     // Сделки (воронка продаж): pipelines, pipeline_stages, deals, deal_activity_log

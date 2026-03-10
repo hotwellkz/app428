@@ -10,12 +10,16 @@ export interface WhatsAppClient {
   id: string;
   name: string;
   phone: string;
+  /** Владелец контакта (тенант) */
+  companyId?: string;
   createdAt: Date | Timestamp;
 }
 
 /** Диалог с контактом */
 export interface WhatsAppConversation {
   id: string;
+  /** Владелец диалога (тенант) */
+  companyId?: string;
   clientId: string;
   /** Номер для отображения/отправки, если клиент не загружен */
   phone?: string;
@@ -60,6 +64,8 @@ export interface MessageReaction {
 /** Сообщение в диалоге */
 export interface WhatsAppMessage {
   id: string;
+  /** Владелец сообщения (тенант) */
+  companyId?: string;
   conversationId: string;
   text: string;
   direction: MessageDirection;

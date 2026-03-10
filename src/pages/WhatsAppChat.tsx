@@ -168,15 +168,22 @@ const WhatsAppChat: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    if (!companyId) {
+      setConversations([]);
+      return;
+    }
+    if (import.meta.env.DEV) {
+      console.log('[WhatsApp] subscribeConversationsList start', { companyId });
+    }
     const onError = (err: unknown) => {
       const msg = String(err && typeof err === 'object' && 'message' in err ? (err as Error).message : err);
       if (msg.includes('index') && msg.includes('building')) {
         setIndexBuilding(true);
       }
     };
-    const unsub = subscribeConversationsList(setConversationsWithNotification, onError);
+    const unsub = subscribeConversationsList(companyId, setConversationsWithNotification, onError);
     return unsub;
-  }, [setConversationsWithNotification]);
+  }, [companyId, setConversationsWithNotification]);
 
   useEffect(() => {
     if (!companyId) {
@@ -223,9 +230,13 @@ const WhatsAppChat: React.FC = () => {
     setIndexBuilding(false);
     setLocallyReadChatIds((prev) => new Set(prev).add(conversationId));
     if (import.meta.env.DEV) {
-      console.log('[WhatsApp] markAsRead start:', { conversationId, payload: { unreadCount: 0, lastReadAt: 'serverTimestamp', lastReadMessageId: null } });
+      console.log('[WhatsApp] markAsRead start:', {
+        conversationId,
+        companyId,
+        payload: { unreadCount: 0, lastReadAt: 'serverTimestamp', lastReadMessageId: null }
+      });
     }
-    clearUnreadCount(conversationId)
+    clearUnreadCount(conversationId, undefined, companyId ?? null)
       .then(() => {
         if (import.meta.env.DEV) {
           console.log('[WhatsApp] markAsRead success:', { conversationId });
@@ -249,20 +260,22 @@ const WhatsAppChat: React.FC = () => {
   // Когда чат открыт и приходят новые сообщения — помечаем прочитанным в БД (чтобы badge не появлялся)
   const markReadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!selectedId || messages.length === 0) return;
+    if (!selectedId || messages.length === 0 || !companyId) return;
     if (markReadDebounceRef.current) clearTimeout(markReadDebounceRef.current);
     markReadDebounceRef.current = setTimeout(() => {
       markReadDebounceRef.current = null;
       const lastIncoming = [...messages].reverse().find((m) => m.direction === 'incoming');
       const lastReadMessageId = lastIncoming?.id ?? null;
-      clearUnreadCount(selectedId, lastReadMessageId).catch((err) => {
-        if (import.meta.env.DEV) console.warn('[WhatsApp] markAsRead (on new messages) failed:', selectedId, err);
+      clearUnreadCount(selectedId, lastReadMessageId, companyId).catch((err) => {
+        if (import.meta.env.DEV) {
+          console.warn('[WhatsApp] markAsRead (on new messages) failed:', { selectedId, companyId, error: err });
+        }
       });
     }, 400);
     return () => {
       if (markReadDebounceRef.current) clearTimeout(markReadDebounceRef.current);
     };
-  }, [selectedId, messages]);
+  }, [selectedId, messages, companyId]);
 
   const handleFileSelect = useCallback((file: File) => {
     setSendError(null);
@@ -388,7 +401,8 @@ const WhatsAppChat: React.FC = () => {
             attachmentType: getAttachmentType(pendingAttachment!.file),
             fileName: pendingAttachment!.file.name,
             text: caption || undefined,
-            repliedToMessageId: replyToMessage?.id ?? undefined
+            repliedToMessageId: replyToMessage?.id ?? undefined,
+            companyId: companyId ?? undefined
           })
         });
         const data = await res.json().catch(() => ({}));
@@ -420,7 +434,8 @@ const WhatsAppChat: React.FC = () => {
         body: JSON.stringify({
           chatId: phone,
           text: caption,
-          repliedToMessageId: replyId ?? undefined
+          repliedToMessageId: replyId ?? undefined,
+          companyId: companyId ?? undefined
         })
       });
       const data = await res.json().catch(() => ({}));

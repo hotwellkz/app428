@@ -75,7 +75,7 @@ export async function findClientByPhone(phone: string): Promise<WhatsAppClientRo
   };
 }
 
-const DEFAULT_COMPANY_ID = 'hotwell';
+export const DEFAULT_COMPANY_ID = 'hotwell';
 
 export async function createClient(phone: string, name: string = ''): Promise<string> {
   const db = getDb();
@@ -139,10 +139,27 @@ export async function incrementUnreadCount(conversationId: string): Promise<void
  */
 export async function markConversationAsRead(
   conversationId: string,
-  lastReadMessageId?: string | null
+  lastReadMessageId?: string | null,
+  expectedCompanyId?: string
 ): Promise<void> {
   const db = getDb();
   const ref = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
+  if (expectedCompanyId) {
+    const snap = await ref.get();
+    if (!snap.exists) {
+      console.warn('[markConversationAsRead] conversation not found', { conversationId, expectedCompanyId });
+      return;
+    }
+    const data = snap.data() as { companyId?: string } | undefined;
+    if (data?.companyId && data.companyId !== expectedCompanyId) {
+      console.warn('[markConversationAsRead] companyId mismatch, skip update', {
+        conversationId,
+        docCompanyId: data.companyId,
+        expectedCompanyId
+      });
+      return;
+    }
+  }
   const update: Record<string, unknown> = {
     unreadCount: 0,
     lastReadAt: Timestamp.now()

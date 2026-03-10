@@ -5,7 +5,8 @@ import {
   findConversationByClientId,
   createConversation,
   saveMessage,
-  normalizePhone
+  normalizePhone,
+  DEFAULT_COMPANY_ID
 } from './lib/firebaseAdmin';
 
 const WAZZUP_MESSAGE_URL = 'https://api.wazzup24.com/v3/message';
@@ -41,6 +42,8 @@ interface SendMessageBody {
   repliedToMessageId?: string | null;
   /** Пометить как пересланное в CRM */
   forwarded?: boolean;
+  /** Текущий tenant в CRM (для валидации) */
+  companyId?: string;
 }
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
@@ -75,7 +78,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
 
-  const { chatId, text, contentUri, attachmentType, fileName, repliedToMessageId, forwarded } = body;
+  const { chatId, text, contentUri, attachmentType, fileName, repliedToMessageId, forwarded, companyId } = body;
   const hasMedia = typeof contentUri === 'string' && contentUri.trim().length > 0;
   const hasText = typeof text === 'string' && text.trim().length > 0;
   if (!chatId) {
@@ -94,6 +97,15 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   const normalizedPhone = normalizePhone(chatId);
+  const effectiveCompanyId = (companyId ?? DEFAULT_COMPANY_ID).trim();
+  if (effectiveCompanyId !== DEFAULT_COMPANY_ID) {
+    log('Forbidden: WhatsApp not configured for companyId', effectiveCompanyId);
+    return withCors({
+      statusCode: 403,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'WhatsApp не настроен для этой компании' })
+    });
+  }
   const caption = hasText ? (text ?? '').trim() : '';
   log('Send to', normalizedPhone, hasMedia ? 'contentUri' : 'text', hasMedia ? contentUri?.slice(0, 60) + '...' : caption.length);
 

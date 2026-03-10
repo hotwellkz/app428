@@ -53,6 +53,7 @@ function docToClient(docId: string, data: Record<string, unknown>): WhatsAppClie
     id: docId,
     name: (data.name as string) ?? '',
     phone: (data.phone as string) ?? '',
+    companyId: data.companyId as string | undefined,
     createdAt: data.createdAt as WhatsAppClient['createdAt']
   };
 }
@@ -60,6 +61,7 @@ function docToClient(docId: string, data: Record<string, unknown>): WhatsAppClie
 function docToConversation(docId: string, data: Record<string, unknown>): WhatsAppConversation {
   return {
     id: docId,
+    companyId: (data.companyId as string) ?? undefined,
     clientId: (data.clientId as string) ?? '',
     phone: data.phone as string | undefined,
     status: (data.status as WhatsAppConversation['status']) ?? 'active',
@@ -123,6 +125,7 @@ function docToMessage(docId: string, data: Record<string, unknown>): WhatsAppMes
   const reactions = dataToReactions(data.reactions);
   return {
     id: docId,
+    companyId: (data.companyId as string) ?? undefined,
     conversationId: (data.conversationId as string) ?? '',
     text,
     direction: (data.direction as WhatsAppMessage['direction']) ?? 'incoming',
@@ -248,12 +251,14 @@ const MARK_READ_API = '/.netlify/functions/mark-whatsapp-read';
  */
 export async function clearUnreadCount(
   conversationId: string,
-  lastReadMessageId?: string | null
+  lastReadMessageId?: string | null,
+  companyId?: string | null
 ): Promise<void> {
-  const payload: { conversationId: string; lastReadMessageId?: string } = {
+  const payload: { conversationId: string; lastReadMessageId?: string; companyId?: string } = {
     conversationId
   };
   if (lastReadMessageId) payload.lastReadMessageId = lastReadMessageId;
+  if (companyId) payload.companyId = companyId;
   const res = await fetch(MARK_READ_API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -271,6 +276,7 @@ export async function clearUnreadCount(
  * @returns функция отписки
  */
 export function subscribeConversationsList(
+  companyId: string,
   callback: (items: ConversationListItem[]) => void,
   onError?: (err: unknown) => void
 ): Unsubscribe {
@@ -334,11 +340,14 @@ export function subscribeConversationsList(
     );
   }
 
+  const conversationsQuery = query(
+    collection(db, COLLECTIONS.CONVERSATIONS),
+    where('companyId', '==', companyId),
+    orderBy('createdAt', 'desc')
+  );
+
   const unsubConv = onSnapshot(
-    query(
-      collection(db, COLLECTIONS.CONVERSATIONS),
-      orderBy('createdAt', 'desc')
-    ),
+    conversationsQuery,
     async (convSnapshot) => {
       conversations = convSnapshot.docs.map((d) =>
         docToConversation(d.id, d.data() as Record<string, unknown>)
