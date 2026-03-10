@@ -69,6 +69,10 @@ const ConversationList: React.FC<ConversationListProps> = ({
 
         const waitingDuration = !hasUnread && isNeedReply ? getWaitingDurationText() : null;
         const dealStatusId = (item as any).dealStatusId as string | null | undefined;
+        const dealStatusLabel =
+          dealStatusId === 'new' || dealStatusId === 'Новый'
+            ? 'Новый'
+            : dealStatusId ?? null;
         return (
           <button
             key={item.id}
@@ -113,13 +117,14 @@ const ConversationList: React.FC<ConversationListProps> = ({
               onConversationContextMenu(item.id, e.clientX, e.clientY, 'desktop');
             }}
             className={[
-              'chat-list-item w-full text-left border-b border-gray-100 hover:bg-gray-50 transition-colors px-3 py-2.5 md:px-4 md:py-3',
+              'chat-list-item w-full text-left border-b border-gray-100 hover:bg-gray-50 transition-colors px-3 py-2 md:px-4 md:py-2.5',
               selectedId === item.id ? 'bg-green-50 border-l-4 border-l-green-500 md:border-l-4' : '',
               hasUnread ? 'bg-gray-100/80' : '',
               !hasUnread && isNeedReply && selectedId !== item.id ? 'bg-amber-50/60' : ''
             ].join(' ')}
           >
-            <div className="flex flex-col min-w-0 flex-1 gap-0 relative">
+            <div className="flex flex-col min-w-0 flex-1 gap-0.5 relative">
+              {/* Первая строка: аватар, имя/телефон, статус, время, badge непрочитанного */}
               <div className="flex items-center gap-2 min-w-0">
                 <span className={`flex-shrink-0 w-2 h-2 rounded-full ${statusDotClass}`} />
                 <Avatar
@@ -127,59 +132,65 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   phone={item.phone ?? item.client?.phone ?? undefined}
                   avatarUrl={item.client?.avatarUrl ?? null}
                 />
-                <span className={`truncate text-sm md:text-base ${hasUnread ? 'font-semibold text-gray-900' : 'font-medium text-gray-900'}`}>
-                  {item.displayTitle ?? item.phone ?? item.client?.phone ?? item.clientId ?? '—'}
-                </span>
-                {(item.unreadCount ?? 0) > 0 && (
+                <div className="flex-1 min-w-0 flex items-center gap-2">
                   <span
-                    className="flex-shrink-0 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-[10px] bg-red-500 text-white text-xs font-medium"
+                    className={`truncate text-sm md:text-[15px] ${
+                      hasUnread ? 'font-semibold text-gray-900' : 'font-medium text-gray-900'
+                    }`}
                   >
-                    {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                    {item.displayTitle ?? item.phone ?? item.client?.phone ?? item.clientId ?? '—'}
                   </span>
-                )}
+                  {dealStatusLabel && (
+                    <span className="inline-flex items-center gap-1 text-[10px] md:text-[11px] text-gray-600">
+                      <span className="inline-flex h-1.5 w-1.5 rounded-full bg-gray-400" />
+                      <span className="px-1.5 py-0.5 rounded-full bg-gray-50 border border-gray-200">
+                        {dealStatusLabel}
+                      </span>
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                  {item.lastMessage && (
+                    <span className="text-[11px] text-gray-400">
+                      {formatLastMessageTime(item.lastMessage.createdAt)}
+                    </span>
+                  )}
+                  {(item.unreadCount ?? 0) > 0 && (
+                    <span
+                      className="flex-shrink-0 min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-[10px] bg-red-500 text-white text-xs font-medium"
+                    >
+                      {item.unreadCount > 99 ? '99+' : item.unreadCount}
+                    </span>
+                  )}
+                </div>
               </div>
-              {/* Дополнительный маркер «нужен ответ» — только если нет unread */}
-              {!hasUnread && isNeedReply && (
-                <div className="flex items-center gap-2 mt-0.5">
-                  <div className="flex items-center gap-1">
-                    <span className="inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-amber-400" />
-                    <span className="text-[11px] md:text-xs text-amber-600 font-medium">
-                      Ждёт ответа{waitingDuration ? ` • ${waitingDuration}` : ''}
-                    </span>
-                  </div>
-                </div>
-              )}
-              {dealStatusId && (
-                <div className="mt-0.5">
-                  <span className="inline-flex items-center gap-1 text-[10px] md:text-[11px] text-gray-600">
-                    {/* Цвет самого статуса сейчас не знаем (есть только id),
-                       но уже показываем бейдж по id. Цвет можно добавить позже,
-                       когда ConversationList будет получать сами объекты статусов. */}
-                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-gray-400" />
-                    <span className="px-1.5 py-0.5 rounded-full bg-gray-50 border border-gray-200">
-                      {dealStatusId}
-                    </span>
-                  </span>
-                </div>
-              )}
-              {item.displayTitle && item.displayTitle !== (item.phone ?? item.client?.phone) && (item.phone || item.client?.phone) && (
-                <p className="truncate text-xs text-gray-500 mt-0.5">{item.phone ?? item.client?.phone}</p>
-              )}
-            </div>
-            {item.lastMessage && (
-              <div className="flex justify-between items-center gap-2 mt-0.5">
-                <span className={`truncate flex-1 text-xs md:text-sm ${hasUnread ? 'text-gray-700 font-medium' : 'text-gray-500'}`}>
-                  {item.lastMessage.attachments?.length
-                    ? '[медиа]'
-                    : item.lastMessage.text.startsWith('[media') || item.lastMessage.text === '[no text]'
+              {/* Вторая строка: превью последнего сообщения */}
+              {item.lastMessage && (
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`truncate text-xs md:text-sm ${
+                      hasUnread ? 'text-gray-700 font-medium' : 'text-gray-500'
+                    }`}
+                  >
+                    {item.lastMessage.attachments?.length
+                      ? '[медиа]'
+                      : item.lastMessage.text.startsWith('[media') ||
+                        item.lastMessage.text === '[no text]'
                       ? '[медиа]'
                       : item.lastMessage.text || '[медиа]'}
-                </span>
-                <span className="text-xs text-gray-400 flex-shrink-0">
-                  {formatLastMessageTime(item.lastMessage.createdAt)}
-                </span>
-              </div>
-            )}
+                  </span>
+                </div>
+              )}
+              {/* Дополнительный маркер «нужен ответ» — только если нет unread */}
+              {!hasUnread && isNeedReply && (
+                <div className="flex items-center gap-1">
+                  <span className="inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span className="text-[11px] md:text-xs text-amber-600 font-medium">
+                    Ждёт ответа{waitingDuration ? ` • ${waitingDuration}` : ''}
+                  </span>
+                </div>
+              )}
+            </div>
           </button>
         );
       })}
