@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useRef } from 'react';
 import { formatLastMessageTime } from './whatsappUtils';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
 import { getConversationAttentionState } from '../../lib/firebase/whatsappDb';
@@ -13,6 +13,11 @@ interface ConversationListProps {
 }
 
 const LONG_PRESS_MS = 400;
+
+const isMobileDevice = (): boolean => {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+};
 
 const ConversationList: React.FC<ConversationListProps> = ({
   items,
@@ -72,45 +77,44 @@ const ConversationList: React.FC<ConversationListProps> = ({
             key={item.id}
             type="button"
             onClick={() => onSelect(item.id)}
-            onContextMenu={(e) => {
-              if (!onConversationContextMenu) return;
-              e.preventDefault();
-              onConversationContextMenu(item.id, e.clientX, e.clientY, 'desktop');
-            }}
-            onTouchStart={
-              isMobile
-                ? undefined
-                : () => {
-                    if (!onConversationContextMenu) return;
+            onMouseDown={
+              onConversationContextMenu && !isMobileDevice()
+                ? () => {
                     if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
                     longPressTimerRef.current = setTimeout(() => {
                       longPressTimerRef.current = null;
                       const x = window.innerWidth / 2;
                       const y = window.innerHeight;
-                      onConversationContextMenu(item.id, x, y, 'mobile');
+                      onConversationContextMenu(item.id, x, y, 'desktop');
                     }, LONG_PRESS_MS);
                   }
+                : undefined
             }
-            onTouchEnd={
-              isMobile
-                ? undefined
-                : () => {
+            onMouseUp={
+              !isMobileDevice()
+                ? () => {
                     if (longPressTimerRef.current) {
                       clearTimeout(longPressTimerRef.current);
                       longPressTimerRef.current = null;
                     }
                   }
+                : undefined
             }
-            onTouchCancel={
-              isMobile
-                ? undefined
-                : () => {
+            onMouseLeave={
+              !isMobileDevice()
+                ? () => {
                     if (longPressTimerRef.current) {
                       clearTimeout(longPressTimerRef.current);
                       longPressTimerRef.current = null;
                     }
                   }
+                : undefined
             }
+            onContextMenu={(e) => {
+              if (!onConversationContextMenu) return;
+              e.preventDefault();
+              onConversationContextMenu(item.id, e.clientX, e.clientY, 'desktop');
+            }}
             className={[
               'chat-list-item w-full text-left border-b border-gray-100 hover:bg-gray-50 transition-colors px-3 py-2.5 md:px-4 md:py-3',
               selectedId === item.id ? 'bg-green-50 border-l-4 border-l-green-500 md:border-l-4' : '',

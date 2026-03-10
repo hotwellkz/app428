@@ -227,6 +227,9 @@ body {
 /* Улучшаем скролл списка чатов WhatsApp на мобильных устройствах */
 .chat-list-item {
   touch-action: pan-y;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Адаптивные стили */
