@@ -7,7 +7,11 @@ const COLLECTIONS = {
   CONVERSATIONS: 'whatsappConversations',
   MESSAGES: 'whatsappMessages',
   CRM_CLIENTS: 'clients',
-  DEALS: 'deals'
+  DEALS: 'deals',
+  COMPANY_INVITES: 'company_invites',
+  COMPANIES: 'companies',
+  COMPANY_USERS: 'company_users',
+  USERS: 'users'
 } as const;
 
 function normalizePhone(phone: string): string {
@@ -372,7 +376,21 @@ export async function verifyIdToken(idToken: string): Promise<string> {
   return decoded.uid;
 }
 
-/** Удалить все данные компании: company, company_users, clients, transactions, messages, deals. */
+/** Мягкое удаление компании: status = deleted, deletedAt, deletedBy. Связанные данные не удаляются. */
+export async function softDeleteCompany(companyId: string, deletedByUid: string): Promise<void> {
+  const db = getDb();
+  const companyRef = db.collection('companies').doc(companyId);
+  const companySnap = await companyRef.get();
+  if (!companySnap.exists) throw new Error('Company not found');
+  await companyRef.update({
+    status: 'deleted',
+    deletedAt: Timestamp.now(),
+    deletedBy: deletedByUid,
+    updatedAt: Timestamp.now()
+  });
+}
+
+/** Удалить все данные компании (hard delete). Использовать только при необходимости полного удаления. */
 export async function deleteCompanyData(companyId: string): Promise<void> {
   const db = getDb();
   const BATCH_SIZE = 500;
@@ -410,3 +428,122 @@ export async function deleteCompanyData(companyId: string): Promise<void> {
 }
 
 export { normalizePhone };
+
+// ---------- Приглашения в компанию (multi-tenant) ----------
+
+export interface InvitePublicInfo {
+  companyName: string;
+  email: string;
+  role: string;
+}
+
+/** Получить публичную информацию приглашения по токену (для экрана принятия). */
+export async function getInviteByToken(token: string): Promise<InvitePublicInfo | null> {
+  const db = getDb();
+  const now = new Date();
+  const snap = await db
+    .collection(COLLECTIONS.COMPANY_INVITES)
+    .where('token', '==', token)
+    .where('status', '==', 'pending')
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  const data = doc.data();
+  const expiresAt = data.expiresAt as { toDate?: () => Date } | Date | null;
+  const expires =
+    expiresAt && typeof (expiresAt as { toDate?: () => Date }).toDate === 'function'
+      ? (expiresAt as { toDate: () => Date }).toDate()
+      : expiresAt instanceof Date
+        ? expiresAt
+        : null;
+  if (expires && expires.getTime() < now.getTime()) return null;
+  const companyId = data.companyId as string;
+  const companySnap = await db.collection(COLLECTIONS.COMPANIES).doc(companyId).get();
+  const companyName = companySnap.exists ? ((companySnap.data()?.name as string) ?? '') : '';
+  return {
+    companyName,
+    email: (data.email as string) ?? '',
+    role: (data.role as string) ?? 'member'
+  };
+}
+
+/** Принять приглашение: создать пользователя Auth, users, company_users, обновить invite. Возвращает customToken для входа. */
+export async function acceptInvite(
+  token: string,
+  displayName: string,
+  password: string
+): Promise<{ customToken: string }> {
+  const db = getDb();
+  const auth = ensureApp();
+  const now = new Date();
+  const snap = await db
+    .collection(COLLECTIONS.COMPANY_INVITES)
+    .where('token', '==', token)
+    .where('status', '==', 'pending')
+    .limit(1)
+    .get();
+  if (snap.empty) {
+    throw new Error('Приглашение недействительно или истекло');
+  }
+  const inviteRef = snap.docs[0].ref;
+  const data = snap.docs[0].data();
+  const expiresAt = data.expiresAt as { toDate?: () => Date } | Date | null;
+  const expires =
+    expiresAt && typeof (expiresAt as { toDate?: () => Date }).toDate === 'function'
+      ? (expiresAt as { toDate: () => Date }).toDate()
+      : expiresAt instanceof Date
+        ? expiresAt
+        : null;
+  if (expires && expires.getTime() < now.getTime()) {
+    throw new Error('Приглашение недействительно или истекло');
+  }
+  const companyId = data.companyId as string;
+  const email = (data.email as string) ?? '';
+  const role = (data.role as string) ?? 'member';
+  if (!email) {
+    throw new Error('Приглашение недействительно или истекло');
+  }
+  const trimmedName = (displayName ?? '').trim() || email.split('@')[0];
+  let uid: string;
+  try {
+    const userRecord = await auth.createUser({
+      email,
+      password,
+      displayName: trimmedName
+    });
+    uid = userRecord.uid;
+  } catch (err: unknown) {
+    const code = (err as { code?: string })?.code;
+    if (code === 'auth/email-already-exists' || code === 'auth/email-already-in-use') {
+      throw new Error('Пользователь с таким email уже зарегистрирован. Войдите в систему или используйте «Присоединиться по приглашению» с другим приглашением.');
+    }
+    throw err;
+  }
+  const timestamp = Timestamp.now();
+  await db.collection(COLLECTIONS.USERS).doc(uid).set({
+    email,
+    displayName: trimmedName,
+    role,
+    companyId,
+    isApproved: true,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+  await db.collection(COLLECTIONS.COMPANY_USERS).doc(uid).set({
+    companyId,
+    userId: uid,
+    email,
+    role,
+    status: 'active',
+    invitedBy: data.invitedBy ?? null,
+    createdAt: timestamp,
+    updatedAt: timestamp
+  });
+  await inviteRef.update({
+    status: 'accepted',
+    updatedAt: timestamp
+  });
+  const customToken = await auth.createCustomToken(uid);
+  return { customToken };
+}

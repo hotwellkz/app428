@@ -277,5 +277,24 @@ service cloud.firestore {
     match /deal_activity_log/{logId} {
       allow read, write: if isAuthenticated();
     }
+
+    // Приглашения в компанию: только своя компания (create/read/update по companyId)
+    match /company_invites/{inviteId} {
+      allow read: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && request.resource.data.companyId == get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && request.resource.data.companyId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId)
+        || isGlobalAdmin()
+      );
+      allow update, delete: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+    }
   }
 }

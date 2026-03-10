@@ -2,9 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { auth } from '../../lib/firebase/auth';
 import { LoginForm } from './LoginForm';
-import { RegisterForm } from './RegisterForm';
 import { LoadingSpinner } from '../LoadingSpinner';
 import { RegisterCompany } from '../../pages/RegisterCompany';
+import { AcceptInvitePage } from '../../pages/AcceptInvitePage';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -13,7 +13,6 @@ interface AuthGuardProps {
 export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [showRegister, setShowRegister] = useState(false);
   const location = useLocation();
 
   useEffect(() => {
@@ -30,18 +29,15 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
   }
 
   if (!isAuthenticated) {
-    if (location.pathname === '/register') {
+    if (location.pathname === '/accept-invite') {
+      return <AcceptInvitePage onSuccess={() => setIsAuthenticated(true)} />;
+    }
+    if (location.pathname === '/register' || location.pathname === '/register-company') {
       return <RegisterCompany />;
     }
-    return showRegister ? (
-      <RegisterForm
-        onSuccess={() => setIsAuthenticated(true)}
-        onLoginClick={() => setShowRegister(false)}
-      />
-    ) : (
+    return (
       <LoginForm
         onSuccess={() => setIsAuthenticated(true)}
-        onRegisterClick={() => setShowRegister(true)}
       />
     );
   }

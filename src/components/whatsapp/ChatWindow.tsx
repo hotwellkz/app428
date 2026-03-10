@@ -285,7 +285,13 @@ function VideoMessageBubble({ att }: { att: MessageAttachment }) {
   );
 }
 
-function AttachmentBlock({ att }: { att: MessageAttachment }) {
+function AttachmentBlock({
+  att,
+  onImageClick
+}: {
+  att: MessageAttachment;
+  onImageClick?: (att: MessageAttachment) => void;
+}) {
   const [imgError, setImgError] = useState(false);
   const isImage = att.type === 'image';
   const isVideo = att.type === 'video';
@@ -317,24 +323,18 @@ function AttachmentBlock({ att }: { att: MessageAttachment }) {
   if (isImage && !imgError) {
     return (
       <div className="mt-1 rounded overflow-hidden max-w-full">
-        <a href={att.url} target="_blank" rel="noopener noreferrer" className="block">
+        <button
+          type="button"
+          onClick={() => onImageClick?.(att)}
+          className="block focus:outline-none"
+        >
           <img
             src={att.url}
             alt=""
             className="max-h-48 max-w-full object-contain rounded border border-gray-200"
             onError={() => setImgError(true)}
           />
-        </a>
-        {att.url && (
-          <a
-            href={att.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-gray-500 hover:underline mt-0.5 block"
-          >
-            Открыть
-          </a>
-        )}
+        </button>
       </div>
     );
   }
@@ -413,6 +413,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesById = useRef<Map<string, WhatsAppMessage>>(new Map());
   messagesById.current = new Map(messages.map((m) => [m.id, m]));
+  const [imageViewerAtt, setImageViewerAtt] = useState<MessageAttachment | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -489,7 +490,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               onContextMenu={onContextMenuMessage}
               onTap={selectionMode ? onToggleSelectMessage : undefined}
               renderAttachments={(m) =>
-                m.attachments?.map((att, i) => <AttachmentBlock key={i} att={att} />) ?? null
+                m.attachments?.map((att, i) => (
+                  <AttachmentBlock key={i} att={att} onImageClick={setImageViewerAtt} />
+                )) ?? null
               }
             />
           );
@@ -540,6 +543,65 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
       {replyToMessage && onCancelReply && (
         <ReplyComposerPreview message={replyToMessage} onCancel={onCancelReply} />
+      )}
+
+      {imageViewerAtt && (
+        <div
+          className="fixed inset-0 z-[1200] bg-black/80 flex items-center justify-center px-4"
+          onClick={() => {
+            setImageViewerAtt(null);
+            if (import.meta.env.DEV) {
+              console.log('[WhatsApp] image viewer close');
+            }
+          }}
+        >
+          <div
+            className="relative max-w-5xl max-h-[90vh] w-full flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setImageViewerAtt(null)}
+              className="absolute top-2 right-2 p-2 rounded-full bg-black/60 text-white hover:bg-black/80"
+              aria-label="Закрыть"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img
+              src={imageViewerAtt.url}
+              alt={imageViewerAtt.fileName ?? ''}
+              className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-lg bg-black"
+              onError={() => {
+                if (import.meta.env.DEV) {
+                  console.warn('[WhatsApp] image viewer load error:', {
+                    url: imageViewerAtt.url,
+                    fileName: imageViewerAtt.fileName
+                  });
+                }
+              }}
+            />
+            <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/60 rounded-full px-4 py-1 text-xs text-white">
+              <button
+                type="button"
+                onClick={() => {
+                  window.open(imageViewerAtt.url, '_blank', 'noopener,noreferrer');
+                }}
+                className="hover:underline"
+              >
+                Открыть оригинал
+              </button>
+              <a
+                href={imageViewerAtt.url}
+                download={imageViewerAtt.fileName}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline"
+              >
+                Скачать
+              </a>
+            </div>
+          </div>
+        </div>
       )}
 
       {sendError && (

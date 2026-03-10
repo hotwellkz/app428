@@ -6,10 +6,13 @@ import { Eye, EyeOff } from 'lucide-react';
 
 export const RegisterCompany: React.FC = () => {
   const [companyName, setCompanyName] = useState('');
+  const [ownerName, setOwnerName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -20,21 +23,42 @@ export const RegisterCompany: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMessage(null);
     if (!companyName.trim()) {
-      showErrorNotification('Введите название компании');
+      setErrorMessage('Введите название компании');
+      return;
+    }
+    if (!ownerName.trim()) {
+      setErrorMessage('Введите имя владельца');
+      return;
+    }
+    if (!email.trim()) {
+      setErrorMessage('Введите email');
+      return;
+    }
+    if (!password) {
+      setErrorMessage('Введите пароль');
+      return;
+    }
+    if (password.length < 6) {
+      setErrorMessage('Пароль должен быть не менее 6 символов');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setErrorMessage('Пароли не совпадают');
       return;
     }
     setLoading(true);
     try {
-      await registerCompanyUser(companyName.trim(), email, password);
+      await registerCompanyUser(companyName.trim(), email, password, ownerName.trim());
       showSuccessNotification('Компания и аккаунт созданы');
       navigate('/', { replace: true });
     } catch (err: unknown) {
       const msg =
         err && typeof err === 'object' && 'message' in err
           ? (err as Error).message
-          : 'Ошибка при регистрации';
-      showErrorNotification(msg);
+          : 'Не удалось создать компанию. Попробуйте ещё раз.';
+      setErrorMessage(msg);
     } finally {
       setLoading(false);
     }
@@ -45,7 +69,7 @@ export const RegisterCompany: React.FC = () => {
       <div className="max-w-md w-full space-y-8">
         <div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Регистрация компании
+            Создать компанию
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
             Создайте компанию и аккаунт владельца
@@ -63,9 +87,24 @@ export const RegisterCompany: React.FC = () => {
                 type="text"
                 required
                 value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
+                onChange={(e) => { setCompanyName(e.target.value); setErrorMessage(null); }}
                 className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
                 placeholder="ООО Рога и копыта"
+              />
+            </div>
+            <div>
+              <label htmlFor="owner-name" className="block text-sm font-medium text-gray-700 mb-1">
+                Имя владельца
+              </label>
+              <input
+                id="owner-name"
+                name="ownerName"
+                type="text"
+                required
+                value={ownerName}
+                onChange={(e) => { setOwnerName(e.target.value); setErrorMessage(null); }}
+                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
+                placeholder="Иван Иванов"
               />
             </div>
             <div>
@@ -79,7 +118,7 @@ export const RegisterCompany: React.FC = () => {
                 autoComplete="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => { setEmail(e.target.value); setErrorMessage(null); }}
                 className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
                 placeholder="email@example.com"
               />
@@ -96,9 +135,9 @@ export const RegisterCompany: React.FC = () => {
                   autoComplete="new-password"
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => { setPassword(e.target.value); setErrorMessage(null); }}
                   className="appearance-none relative block w-full px-3 py-2 pr-10 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
-                  placeholder="Пароль"
+                  placeholder="Не менее 6 символов"
                 />
                 <button
                   type="button"
@@ -113,14 +152,35 @@ export const RegisterCompany: React.FC = () => {
                 </button>
               </div>
             </div>
+            <div>
+              <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700 mb-1">
+                Подтверждение пароля
+              </label>
+              <input
+                id="confirm-password"
+                name="confirmPassword"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                required
+                value={confirmPassword}
+                onChange={(e) => { setConfirmPassword(e.target.value); setErrorMessage(null); }}
+                className="appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 sm:text-sm"
+                placeholder="Повторите пароль"
+              />
+            </div>
           </div>
+          {errorMessage && (
+            <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              {errorMessage}
+            </div>
+          )}
           <div>
             <button
               type="submit"
               disabled={loading}
               className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 disabled:opacity-50"
             >
-              {loading ? 'Создание…' : 'Зарегистрировать компанию'}
+              {loading ? 'Создание…' : 'Создать компанию'}
             </button>
           </div>
           <p className="text-center text-sm text-gray-600">

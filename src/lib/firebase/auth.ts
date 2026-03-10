@@ -1,4 +1,4 @@
-import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithCustomToken, signOut, updateProfile } from 'firebase/auth';
 import { doc, setDoc, getDoc, collection, getDocs, query, where, serverTimestamp } from 'firebase/firestore';
 import { app } from './config';
 import { db } from './config';
@@ -11,7 +11,7 @@ function devLog(...args: unknown[]) {
   if (DEV_LOG) console.log('[RegisterCompany]', ...args);
 }
 
-/** Преобразование кода ошибки Firebase Auth в сообщение для пользователя. */
+/** Преобразование кода ошибки Firebase Auth (регистрация) в сообщение для пользователя. */
 function authErrorMessage(code: string, defaultMsg: string): string {
   switch (code) {
     case 'auth/email-already-in-use':
@@ -29,6 +29,25 @@ function authErrorMessage(code: string, defaultMsg: string): string {
   }
 }
 
+/** Преобразование кода ошибки Firebase Auth (логин) в человеко-понятное сообщение на русском. */
+function authLoginErrorMessage(code: string): string {
+  switch (code) {
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+      return 'Неверный email или пароль';
+    case 'auth/user-not-found':
+      return 'Аккаунт с таким email не найден';
+    case 'auth/invalid-email':
+      return 'Некорректный формат email';
+    case 'auth/too-many-requests':
+      return 'Слишком много попыток входа. Попробуйте чуть позже';
+    case 'auth/network-request-failed':
+      return 'Ошибка сети. Проверьте подключение к интернету';
+    default:
+      return 'Не удалось войти в систему. Попробуйте ещё раз';
+  }
+}
+
 const GLOBAL_ADMIN_EMAILS: string[] = (import.meta.env.VITE_APPROVED_EMAILS || '')
   .split(',')
   .map((e) => e.trim().toLowerCase())
@@ -38,7 +57,8 @@ const GLOBAL_ADMIN_EMAILS: string[] = (import.meta.env.VITE_APPROVED_EMAILS || '
 export const registerCompanyUser = async (
   companyName: string,
   email: string,
-  password: string
+  password: string,
+  ownerDisplayName?: string
 ) => {
   try {
     devLog('uid (will set after Auth)', 'start');
@@ -48,6 +68,7 @@ export const registerCompanyUser = async (
     const uid = user.uid;
     devLog('uid', uid);
 
+    const displayName = (ownerDisplayName ?? companyName).trim() || companyName.trim();
     const isGlobalAdmin = GLOBAL_ADMIN_EMAILS.includes((email || '').toLowerCase());
     const role = isGlobalAdmin ? 'global_admin' : 'owner';
 
@@ -58,7 +79,7 @@ export const registerCompanyUser = async (
     // 3. Один раз записать users/{uid} с полным контрактом (без промежуточного companyId: null)
     await setDoc(doc(db, 'users', uid), {
       email,
-      displayName: companyName.trim(),
+      displayName,
       role,
       companyId,
       isApproved: true,
@@ -108,7 +129,7 @@ export const registerCompanyUser = async (
     );
 
     // 6. Обновить profile Auth
-    await updateProfile(user, { displayName: companyName.trim() });
+    await updateProfile(user, { displayName });
 
     return user;
   } catch (err: unknown) {
@@ -120,54 +141,11 @@ export const registerCompanyUser = async (
   }
 };
 
-export const registerUser = async (email: string, password: string, displayName: string) => {
-  try {
-    console.log('Начинаем процесс регистрации для:', email);
-    
-    // Проверяем инициализацию Firebase
-    if (!auth) {
-      console.error('Firebase Auth не инициализирован');
-      throw new Error('Ошибка инициализации Firebase');
-    }
-
-    // Создаем пользователя
-    console.log('Создаем пользователя в Firebase Auth...');
-    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    console.log('Пользователь успешно создан в Firebase Auth:', userCredential.user.uid);
-    
-    // Создаем запись в Firestore
-    console.log('Создаем запись пользователя в Firestore...');
-    await setDoc(doc(db, 'users', userCredential.user.uid), {
-      email,
-      displayName,
-      role: 'user',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp()
-    });
-    console.log('Запись в Firestore успешно создана');
-
-    // Обновляем профиль
-    console.log('Обновляем displayName пользователя...');
-    await updateProfile(userCredential.user, { displayName });
-    console.log('Профиль пользователя успешно обновлен');
-
-    return userCredential.user;
-  } catch (error: any) {
-    console.error('Ошибка при регистрации:', error.code, error.message);
-    switch (error.code) {
-      case 'auth/email-already-in-use':
-        throw new Error('Этот email уже используется');
-      case 'auth/invalid-email':
-        throw new Error('Некорректный email');
-      case 'auth/weak-password':
-        throw new Error('Слишком простой пароль');
-      case 'auth/operation-not-allowed':
-        console.error('Email/Password регистрация не включена в Firebase Console');
-        throw new Error('Регистрация временно недоступна');
-      default:
-        throw new Error(`Ошибка при регистрации: ${error.message}`);
-    }
-  }
+/** Регистрация без привязки к компании запрещена (multi-tenant). Используйте «Создать компанию» или «Присоединиться по приглашению». */
+export const registerUser = async (_email: string, _password: string, _displayName: string) => {
+  throw new Error(
+    'Нельзя зарегистрироваться без компании. Используйте «Создать компанию» или «Присоединиться по приглашению».'
+  );
 };
 
 /** Создать документ users/{uid}, если его нет (fallback при логине или при загрузке приложения). */
@@ -211,20 +189,17 @@ export const loginUser = async (email: string, password: string) => {
 
     return userCredential.user;
   } catch (error: any) {
-    console.error('Ошибка при входе:', error.code, error.message);
-    switch (error.code) {
-      case 'auth/invalid-email':
-        throw new Error('Некорректный email');
-      case 'auth/user-disabled':
-        throw new Error('Аккаунт заблокирован');
-      case 'auth/user-not-found':
-        throw new Error('Пользователь не найден');
-      case 'auth/wrong-password':
-        throw new Error('Неверный пароль');
-      default:
-        throw new Error(`Ошибка при входе: ${error.message}`);
-    }
+    console.error('Ошибка при входе:', error?.code, error?.message);
+    const code: string | undefined = error?.code;
+    const message = code ? authLoginErrorMessage(code) : 'Не удалось войти в систему. Попробуйте ещё раз';
+    throw new Error(message);
   }
+};
+
+/** Вход по custom token (после принятия приглашения через backend). */
+export const loginWithCustomToken = async (customToken: string) => {
+  const userCredential = await signInWithCustomToken(auth, customToken);
+  return userCredential.user;
 };
 
 export const logoutUser = async () => {

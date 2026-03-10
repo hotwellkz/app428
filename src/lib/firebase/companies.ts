@@ -17,7 +17,7 @@ const COMPANIES = 'companies';
 const COMPANY_USERS = 'company_users';
 const USERS = 'users';
 
-export type CompanyStatus = 'active' | 'blocked';
+export type CompanyStatus = 'active' | 'blocked' | 'deleted';
 
 export interface CompanyRow {
   id: string;
@@ -40,7 +40,8 @@ export async function createCompany(name: string, ownerId: string): Promise<stri
     name: name.trim(),
     ownerId,
     status: 'active',
-    createdAt: serverTimestamp()
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
   });
   return ref.id;
 }
@@ -92,19 +93,22 @@ export async function getCompany(companyId: string): Promise<CompanyRow | null> 
   };
 }
 
-/** Список всех компаний (только для global_admin). */
+/** Список всех компаний (только для global_admin). Деактивированные (deleted) не возвращаются. */
 export async function getAllCompanies(): Promise<CompanyRow[]> {
   const snap = await getDocs(collection(db, COMPANIES));
-  return snap.docs.map((d) => {
-    const data = d.data();
-    return {
-      id: d.id,
-      name: (data.name as string) ?? '',
-      ownerId: (data.ownerId as string) ?? '',
-      createdAt: data.createdAt ?? null,
-      status: (data.status as CompanyRow['status']) ?? 'active'
-    };
-  });
+  return snap.docs
+    .map((d) => {
+      const data = d.data();
+      const status = (data.status as CompanyRow['status']) ?? 'active';
+      return {
+        id: d.id,
+        name: (data.name as string) ?? '',
+        ownerId: (data.ownerId as string) ?? '',
+        createdAt: data.createdAt ?? null,
+        status
+      };
+    })
+    .filter((c) => c.status !== 'deleted');
 }
 
 /** Количество пользователей в компании. */
@@ -117,7 +121,10 @@ export async function getCompanyUsersCount(companyId: string): Promise<number> {
   return snap.size;
 }
 
-/** Обновить статус компании (active | blocked). Только global_admin или owner. */
+/** Обновить статус компании (active | blocked | deleted). Только global_admin или owner. */
 export async function updateCompanyStatus(companyId: string, status: CompanyStatus): Promise<void> {
-  await updateDoc(doc(db, COMPANIES, companyId), { status });
+  await updateDoc(doc(db, COMPANIES, companyId), {
+    status,
+    updatedAt: serverTimestamp()
+  });
 }

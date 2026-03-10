@@ -29,7 +29,7 @@ export const CompanyBlockedGuard: React.FC<CompanyBlockedGuardProps> = ({ childr
           </div>
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Компания заблокирована</h2>
           <p className="text-gray-600">
-            Доступ к вашей компании приостановлен. Обратитесь к администратору платформы.
+            Доступ к вашей компании приостановлен или компания деактивирована. Обратитесь к администратору платформы.
           </p>
         </div>
       </div>

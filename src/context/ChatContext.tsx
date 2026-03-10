@@ -353,14 +353,20 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         }
     };
 
+    const whatsappStatusFailuresRef = useRef(0);
+
     const getWhatsAppStatus = async (): Promise<void> => {
         if (!isChatApiAvailable) return;
         try {
             const response = await axios.get<WhatsAppStatusResponse>(`${BASE_URL}${API_CONFIG.ENDPOINTS.whatsapp.status}`);
             setWhatsappStatus(response.data.status);
+            whatsappStatusFailuresRef.current = 0;
         } catch (error: unknown) {
             const status = axios.isAxiosError(error) ? error.response?.status : null;
             setWhatsappStatus('disconnected');
+            if (import.meta.env.DEV && (status === 500 || status === 502 || !status)) {
+                whatsappStatusFailuresRef.current += 1;
+            }
             if (status !== 404) {
                 console.error('Error getting WhatsApp status:', error);
             }
@@ -506,13 +512,19 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
         getWhatsAppStatus();
     }, [isChatApiAvailable]);
 
-    // Периодическая проверка статуса WhatsApp только при доступном API
+    // Периодическая проверка статуса WhatsApp; в DEV при повторных 500/502 реже опрашиваем
     useEffect(() => {
         if (!isChatApiAvailable) return;
-        const interval = setInterval(() => {
-            getWhatsAppStatus();
-        }, 5000);
-        return () => clearInterval(interval);
+        let timeoutId: ReturnType<typeof setTimeout>;
+        const scheduleNext = (): void => {
+            const delay =
+                import.meta.env.DEV && whatsappStatusFailuresRef.current >= 2 ? 30_000 : 5_000;
+            timeoutId = setTimeout(() => {
+                getWhatsAppStatus().finally(scheduleNext);
+            }, delay);
+        };
+        scheduleNext();
+        return () => clearTimeout(timeoutId);
     }, [isChatApiAvailable]);
 
     return (

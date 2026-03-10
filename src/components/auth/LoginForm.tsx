@@ -2,30 +2,48 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { loginUser } from '../../lib/firebase/auth';
 import { showErrorNotification, showSuccessNotification } from '../../utils/notifications';
-import { LogIn, Eye, EyeOff } from 'lucide-react';
+import { LogIn, Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 interface LoginFormProps {
   onSuccess: () => void;
-  onRegisterClick: () => void;
 }
 
-export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onRegisterClick }) => {
+export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess }) => {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Сбрасываем прошлую ошибку перед новой попыткой
+    setErrorMessage(null);
+
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password;
+
+    // Локальная валидация без запроса в Firebase
+    if (!trimmedEmail) {
+      setErrorMessage('Введите email');
+      return;
+    }
+    if (!trimmedPassword) {
+      setErrorMessage('Введите пароль');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await loginUser(email, password);
+      await loginUser(trimmedEmail, trimmedPassword);
       showSuccessNotification('Вход выполнен успешно');
       onSuccess();
     } catch (error) {
-      showErrorNotification(error instanceof Error ? error.message : 'Ошибка при входе');
+      const msg = error instanceof Error ? error.message : 'Не удалось войти в систему. Попробуйте ещё раз';
+      setErrorMessage(msg);
     } finally {
       setLoading(false);
     }
@@ -52,7 +70,10 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onRegisterClick
                 autoComplete="email"
                 required
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 focus:z-10 sm:text-sm"
                 placeholder="Email"
               />
@@ -69,8 +90,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onRegisterClick
                   autoComplete="current-password"
                   required
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none rounded-none relative block w-full px-3 py-2 pr-10 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 focus:z-10 sm:text-sm"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  className={`appearance-none rounded-none relative block w-full px-3 py-2 pr-10 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:z-10 sm:text-sm border ${
+                    errorMessage ? 'border-red-300 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-emerald-500 focus:ring-emerald-500'
+                  }`}
                   placeholder="Пароль"
                 />
                 <button
@@ -88,6 +114,13 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onRegisterClick
             </div>
           </div>
 
+          {errorMessage && (
+            <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 flex items-start gap-2 text-sm text-red-700">
+              <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
+              <p>{errorMessage}</p>
+            </div>
+          )}
+
           <div>
             <button
               type="submit"
@@ -104,17 +137,17 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSuccess, onRegisterClick
           <div className="text-center space-y-2">
             <button
               type="button"
-              onClick={() => navigate('/register')}
+              onClick={() => navigate('/register-company')}
               className="block w-full text-sm font-medium text-emerald-600 hover:text-emerald-500"
             >
-              Регистрация компании
+              Создать компанию
             </button>
             <button
               type="button"
-              onClick={onRegisterClick}
+              onClick={() => navigate('/accept-invite')}
               className="text-sm text-emerald-600 hover:text-emerald-500"
             >
-              Нет аккаунта? Зарегистрироваться
+              Присоединиться по приглашению
             </button>
           </div>
         </form>

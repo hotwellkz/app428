@@ -71,9 +71,14 @@ class ConnectionStabilizer {
     private maxQueueSize = 50;
     private queueTimeout = 30000; // 30 секунд
     private statusCheckInterval: NodeJS.Timeout | null = null;
+    private statusCheckIntervalMs = 5000;
     private listeners: ((state: ConnectionState) => void)[] = [];
     private lastHealthCheckTime = 0;
     private healthCheckCooldown = 10000; // 10 секунд между проверками при 503
+    /** В DEV: один раз показали, что бэкенд недоступен (не спамим в консоль). */
+    private devBackendUnavailableLogged = false;
+    /** В DEV: не логировать каждую 500 от handleConnectionError. */
+    private dev500ErrorLogged = false;
 
     // Настройки retry по умолчанию
     private defaultRetryConfig: RetryConfig = {
@@ -169,6 +174,12 @@ class ConnectionStabilizer {
             // authenticated означает что QR отсканирован и идет загрузка
             const isReady = whatsappReady || (whatsappAuthenticated && (whatsappState === 'authenticated' || whatsappState === 'ready'));
             
+            this.devBackendUnavailableLogged = false;
+            this.dev500ErrorLogged = false;
+            if (this.statusCheckIntervalMs !== 5000) {
+                this.statusCheckIntervalMs = 5000;
+                this.scheduleStatusCheck();
+            }
             this.updateState({
                 isConnected: true,
                 isServerReady: isReady,
@@ -207,29 +218,41 @@ class ConnectionStabilizer {
             } else if (shouldMarkDisconnected) {
                 console.warn(`⚠️ Server disconnected after ${consecutiveFailures} failures:`, error.message);
             } else {
-                console.warn(`⚠️ Server status check failed (${consecutiveFailures}/3):`, error.message);
+                if (import.meta.env.DEV && consecutiveFailures >= 2) {
+                    if (!this.devBackendUnavailableLogged) {
+                        this.devBackendUnavailableLogged = true;
+                        console.warn(
+                            '⚠️ В режиме разработки Netlify Functions недоступны (health возвращает ошибку). ' +
+                            'Запустите "npm run dev:full" для полной работы с бэкендом. Проверка health будет раз в 30 сек.'
+                        );
+                    }
+                    if (this.statusCheckIntervalMs !== 30000) {
+                        this.statusCheckIntervalMs = 30000;
+                        this.scheduleStatusCheck();
+                    }
+                } else if (!import.meta.env.DEV || consecutiveFailures < 2) {
+                    console.warn(`⚠️ Server status check failed (${consecutiveFailures}/3):`, error.message);
+                }
             }
-            
+
             return false;
         }
     }
 
+    private scheduleStatusCheck(): void {
+        if (this.statusCheckInterval) {
+            clearInterval(this.statusCheckInterval);
+            this.statusCheckInterval = null;
+        }
+        this.statusCheckInterval = setInterval(() => {
+            this.checkServerStatus();
+        }, this.statusCheckIntervalMs);
+    }
+
     // Мониторинг состояния сервера с адаптивными интервалами
     private startStatusMonitoring(): void {
-        // Немедленная проверка
         this.checkServerStatus();
-
-        // Периодическая проверка с адаптивным интервалом и backoff
-        this.statusCheckInterval = setInterval(() => {
-            // Увеличиваем интервал при ошибках (exponential backoff)
-            const baseInterval = 5000; // 5 секунд базовый интервал
-            const backoffFactor = Math.min(this.state.failureCount, 5); // Максимум 5x
-            const interval = this.state.is503ErrorActive 
-                ? 15000 // 15 сек при 503
-                : baseInterval * (1 + backoffFactor * 0.5); // Увеличиваем при ошибках
-            
-            this.checkServerStatus();
-        }, 5000);
+        this.scheduleStatusCheck();
     }
 
     // Настройка перехватчиков Axios
@@ -360,7 +383,17 @@ class ConnectionStabilizer {
                     });
                 }
             } else {
-                console.error('🔥 Server error detected:', error.response?.status, error.response?.statusText);
+                if (import.meta.env.DEV && error.response?.status === 500) {
+                    if (!this.dev500ErrorLogged) {
+                        this.dev500ErrorLogged = true;
+                        console.warn(
+                            '🔥 Server error 500 (часто при запуске только Vite без Netlify Dev). ' +
+                            'Для работы с функциями запустите: npm run dev:full'
+                        );
+                    }
+                } else {
+                    console.error('🔥 Server error detected:', error.response?.status, error.response?.statusText);
+                }
             }
         }
     }

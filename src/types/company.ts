@@ -7,7 +7,7 @@ export interface Company {
   createdAt: Timestamp | null;
 }
 
-export type CompanyUserRole = 'owner' | 'admin' | 'member';
+export type CompanyUserRole = 'owner' | 'admin' | 'manager' | 'member';
 
 export interface CompanyUser {
   id: string;

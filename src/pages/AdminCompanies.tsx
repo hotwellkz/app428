@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Building2, Trash2, Ban, CheckCircle, Loader } from 'lucide-react';
-import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
+import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { auth } from '../lib/firebase/auth';
 import {
@@ -19,6 +19,7 @@ export const AdminCompanies: React.FC = () => {
   const [companies, setCompanies] = useState<(CompanyRow & { ownerEmail: string; usersCount: number })[]>([]);
   const [loading, setLoading] = useState(true);
   const [actioningId, setActioningId] = useState<string | null>(null);
+  const [companyToDelete, setCompanyToDelete] = useState<CompanyRow | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,13 +78,22 @@ export const AdminCompanies: React.FC = () => {
     }
   };
 
-  const handleDelete = async (company: CompanyRow) => {
-    if (!window.confirm(`Удалить компанию «${company.name}» и все её данные (клиенты, транзакции, сообщения, файлы)? Это нельзя отменить.`)) return;
+  const handleDeleteClick = (company: CompanyRow) => {
+    setCompanyToDelete(company);
+  };
+
+  const handleDeleteConfirm = async () => {
+    const company = companyToDelete;
+    if (!company) return;
     setActioningId(company.id);
+    if (import.meta.env.DEV) {
+      console.log('[AdminCompanies] delete company:', { companyId: company.id, name: company.name });
+    }
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) {
         showErrorNotification('Нужно войти в систему');
+        setCompanyToDelete(null);
         return;
       }
       const res = await fetch(DELETE_API, {
@@ -94,14 +104,25 @@ export const AdminCompanies: React.FC = () => {
         },
         body: JSON.stringify({ companyId: company.id })
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string; companyId?: string; mode?: string };
       if (!res.ok) {
-        throw new Error(data.message || `Ошибка ${res.status}`);
+        const msg = data.error ?? `Ошибка ${res.status}`;
+        if (import.meta.env.DEV) console.warn('[AdminCompanies] delete failed:', { status: res.status, data });
+        throw new Error(msg);
       }
-      showSuccessNotification('Компания удалена');
+      if (data.success !== true) {
+        throw new Error(data.error ?? 'Не удалось удалить компанию');
+      }
+      if (import.meta.env.DEV) {
+        console.log('[AdminCompanies] delete success:', { companyId: data.companyId, mode: data.mode });
+      }
+      showSuccessNotification('Компания деактивирована');
+      setCompanyToDelete(null);
       await load();
     } catch (e) {
-      showErrorNotification(e instanceof Error ? e.message : 'Ошибка удаления');
+      const msg = e instanceof Error ? e.message : 'Не удалось удалить компанию';
+      showErrorNotification(msg);
+      if (import.meta.env.DEV) console.warn('[AdminCompanies] delete error:', e);
     } finally {
       setActioningId(null);
     }
@@ -183,7 +204,7 @@ export const AdminCompanies: React.FC = () => {
                         )}
                         <button
                           type="button"
-                          onClick={() => handleDelete(c)}
+                          onClick={() => handleDeleteClick(c)}
                           disabled={actioningId === c.id}
                           className="p-2 text-red-600 hover:bg-red-50 rounded disabled:opacity-50"
                           title="Удалить компанию"
@@ -200,6 +221,35 @@ export const AdminCompanies: React.FC = () => {
           {companies.length === 0 && !loading && (
             <div className="text-center py-12 text-gray-500">Нет компаний</div>
           )}
+        </div>
+      )}
+
+      {companyToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Удалить компанию?</h3>
+            <p className="text-gray-600 text-sm mb-4">
+              Компания «{companyToDelete.name}» будет деактивирована и скрыта из активных. Пользователи этой компании не смогут войти.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => setCompanyToDelete(null)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 font-medium"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteConfirm}
+                disabled={actioningId === companyToDelete.id}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium disabled:opacity-50 flex items-center gap-2"
+              >
+                {actioningId === companyToDelete.id ? <Loader className="w-4 h-4 animate-spin" /> : null}
+                Удалить
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

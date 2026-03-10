@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Plus, Menu, Search } from 'lucide-react';
+import { ArrowLeft, Plus, Menu, Search, UserPlus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 import { useMobileSidebar } from '../contexts/MobileSidebarContext';
 import { HeaderSearchBar } from '../components/HeaderSearchBar';
 import { Employee, EmployeeFormData } from '../types/employee';
 import { EmployeeList } from '../components/employees/EmployeeList';
 import { EmployeeForm } from '../components/employees/EmployeeForm';
 import { DeleteEmployeeModal } from '../components/employees/DeleteEmployeeModal';
+import { InviteUserModal } from '../components/employees/InviteUserModal';
 import { TransactionHistory } from '../components/transactions/history/TransactionHistory';
 import { EmployeeContract } from '../components/employees/EmployeeContract';
 import { CategoryCardType } from '../types';
@@ -26,6 +28,7 @@ import { LoadingSpinner } from '../components/LoadingSpinner';
 
 export const Employees: React.FC = () => {
   const companyId = useCompanyId();
+  const { user } = useAuth();
   const { canAccessEmployees, loading: adminCheckLoading } = useIsAdmin();
   const { employees, loading } = useEmployees();
   const { 
@@ -50,6 +53,7 @@ export const Employees: React.FC = () => {
   const [showContract, setShowContract] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
 
   const navigate = useNavigate();
@@ -207,11 +211,21 @@ export const Employees: React.FC = () => {
                 <div className="hidden md:block flex-1 min-w-0">
                   <EmployeeSearchBar value={searchQuery} onChange={setSearchQuery} />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <EmployeeStatusFilter
                     value={statusFilter}
                     onChange={setStatusFilter}
                   />
+                  {companyId && user?.uid && (
+                    <button
+                      onClick={() => setShowInviteModal(true)}
+                      className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center whitespace-nowrap"
+                    >
+                      <UserPlus className="w-5 h-5 mr-1" />
+                      <span className="hidden sm:inline">Пригласить пользователя</span>
+                      <span className="sm:hidden">Пригласить</span>
+                    </button>
+                  )}
                   <button
                     onClick={() => setShowAddForm(true)}
                     className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors flex items-center whitespace-nowrap"
@@ -248,6 +262,15 @@ export const Employees: React.FC = () => {
           onClose={() => setShowAddForm(false)}
           onSave={handleSave}
         />
+
+        {companyId && user?.uid && (
+          <InviteUserModal
+            isOpen={showInviteModal}
+            onClose={() => setShowInviteModal(false)}
+            companyId={companyId}
+            invitedBy={user.uid}
+          />
+        )}
 
         {selectedEmployee && (
           <>

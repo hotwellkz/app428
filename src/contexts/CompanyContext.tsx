@@ -31,7 +31,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
       setCompanyId(id ?? null);
       if (id) {
         const company = await getCompany(id);
-        setCompanyBlocked(company?.status === 'blocked');
+        setCompanyBlocked(company?.status === 'blocked' || company?.status === 'deleted');
       } else {
         setCompanyBlocked(false);
       }
@@ -43,7 +43,7 @@ export function CompanyProvider({ children }: { children: React.ReactNode }) {
         setCompanyId(id ?? null);
         if (id) {
           const company = await getCompany(id);
-          setCompanyBlocked(company?.status === 'blocked');
+          setCompanyBlocked(company?.status === 'blocked' || company?.status === 'deleted');
         } else {
           setCompanyBlocked(false);
         }

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:full": "netlify dev",
     "build": "tsc && vite build",
     "test": "vitest run",
     "lint": "eslint .",
