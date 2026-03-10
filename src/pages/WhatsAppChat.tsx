@@ -133,6 +133,18 @@ const WhatsAppChat: React.FC = () => {
   type ConversationMenuState = { id: string; x: number; y: number; source: 'desktop' | 'mobile' } | null;
   const [conversationMenu, setConversationMenu] = useState<ConversationMenuState>(null);
 
+  // Закрытие контекстного меню по ESC
+  useEffect(() => {
+    if (!conversationMenu) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setConversationMenu(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [conversationMenu]);
+
   const mobileChatContext = useMobileWhatsAppChat();
   const selectedItem = conversations.find((c) => c.id === selectedId);
 
@@ -1070,115 +1082,6 @@ const WhatsAppChat: React.FC = () => {
                   Вернуть в непрочитанные
                 </button>
               )}
-            </div>
-          </div>
-        );
-      })()}
-      {conversationMenu && (() => {
-        const conv = listWithDisplayTitle.find((c) => c.id === conversationMenu.id) ?? null;
-        const attention = conv ? getConversationAttentionState(conv) : 'normal';
-        const isNeedReply = attention === 'need_reply';
-        const handleDismiss = async () => {
-          if (!conv || !isNeedReply) {
-            setConversationMenu(null);
-            return;
-          }
-          if (import.meta.env.DEV) {
-            console.log('[WhatsApp] dismiss awaiting reply click', { conversationId: conv.id });
-          }
-          // optimistic UI: сразу считаем, что статус снят
-          setConversations((prev) =>
-            prev.map((c) =>
-              c.id === conv.id ? { ...c, awaitingReplyDismissedAt: new Date() } : c
-            )
-          );
-          try {
-            await dismissAwaitingReply(conv.id);
-            if (import.meta.env.DEV) {
-              console.log('[WhatsApp] dismiss awaiting reply success', { conversationId: conv.id });
-            }
-          } catch (error) {
-            if (import.meta.env.DEV) {
-              console.error('[WhatsApp] dismiss awaiting reply failed', error);
-            }
-            showErrorNotification('Не удалось сбросить статус "Ждёт ответа"');
-          } finally {
-            setConversationMenu(null);
-          }
-        };
-
-        if (conversationMenu.source === 'mobile' && isMobile) {
-          // Mobile: bottom sheet
-          return (
-            <div
-              className="fixed inset-0 z-[1300] flex flex-col justify-end bg-black/40"
-              onClick={() => setConversationMenu(null)}
-            >
-              <div
-                className="bg-white rounded-t-2xl shadow-xl p-3 space-y-1"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto mb-2" />
-                {isNeedReply && (
-                  <button
-                    type="button"
-                    onClick={handleDismiss}
-                    className="w-full text-left px-3 py-2 rounded-lg text-sm text-amber-700 hover:bg-amber-50"
-                  >
-                    Сбросить статус «Ждёт ответа»
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setConversationMenu(null)}
-                  className="w-full text-left px-3 py-2 rounded-lg text-sm text-gray-700 hover:bg-gray-100"
-                >
-                  Отмена
-                </button>
-              </div>
-            </div>
-          );
-        }
-
-        // Desktop: контекстное меню у курсора
-        const menuX = conversationMenu.x;
-        const menuY = conversationMenu.y;
-        return (
-          <div
-            className="fixed inset-0 z-[1300]"
-            onClick={() => setConversationMenu(null)}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              setConversationMenu(null);
-            }}
-          >
-            <div
-              className="absolute min-w-[220px] rounded-md bg-white shadow-lg border border-gray-200 py-1 text-sm text-gray-800"
-              style={{ top: menuY, left: menuX }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedId(conv?.id ?? null);
-                  setConversationMenu(null);
-                }}
-                className="w-full text-left px-3 py-1.5 hover:bg-gray-100"
-              >
-                Открыть чат
-              </button>
-              <button
-                type="button"
-                disabled={!isNeedReply}
-                onClick={isNeedReply ? handleDismiss : undefined}
-                className={`w-full text-left px-3 py-1.5 ${
-                  isNeedReply
-                    ? 'hover:bg-amber-50 text-amber-700'
-                    : 'text-gray-400 cursor-default'
-                }`}
-              >
-                Сбросить статус «Ждёт ответа»
-              </button>
             </div>
           </div>
         );
