@@ -1,6 +1,7 @@
 import React from 'react';
 import { formatLastMessageTime } from './whatsappUtils';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
+import { getConversationAttentionState } from '../../lib/firebase/whatsappDb';
 
 interface ConversationListProps {
   items: ConversationListItem[];
@@ -18,16 +19,21 @@ const ConversationList: React.FC<ConversationListProps> = ({ items, selectedId, 
       )}
       {items.map((item) => {
         const hasUnread = (item.unreadCount ?? 0) > 0;
+        const attention = getConversationAttentionState(item);
+        const isNeedReply = attention === 'need_reply';
         return (
           <button
             key={item.id}
             type="button"
             onClick={() => onSelect(item.id)}
-            className={`w-full text-left border-b border-gray-100 hover:bg-gray-50 transition-colors px-3 py-2.5 md:px-4 md:py-3 ${
-              selectedId === item.id ? 'bg-green-50 border-l-4 border-l-green-500 md:border-l-4' : ''
-            } ${hasUnread ? 'bg-gray-100/80' : ''}`}
+            className={[
+              'w-full text-left border-b border-gray-100 hover:bg-gray-50 transition-colors px-3 py-2.5 md:px-4 md:py-3',
+              selectedId === item.id ? 'bg-green-50 border-l-4 border-l-green-500 md:border-l-4' : '',
+              hasUnread ? 'bg-gray-100/80' : '',
+              !hasUnread && isNeedReply && selectedId !== item.id ? 'bg-amber-50/60' : ''
+            ].join(' ')}
           >
-            <div className="flex flex-col min-w-0 flex-1 gap-0">
+            <div className="flex flex-col min-w-0 flex-1 gap-0 relative">
               <div className="flex items-center gap-2 min-w-0">
                 <span className={`truncate text-sm md:text-base ${hasUnread ? 'font-semibold text-gray-900' : 'font-medium text-gray-900'}`}>
                   {item.displayTitle ?? item.phone ?? item.client?.phone ?? item.clientId ?? '—'}
@@ -40,6 +46,15 @@ const ConversationList: React.FC<ConversationListProps> = ({ items, selectedId, 
                 </span>
               )}
               </div>
+              {/* Дополнительный маркер «нужен ответ» — только если нет unread */}
+              {!hasUnread && isNeedReply && (
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-amber-400" />
+                  <span className="text-[11px] md:text-xs text-amber-600 font-medium">
+                    Ждёт ответа
+                  </span>
+                </div>
+              )}
               {item.displayTitle && item.displayTitle !== (item.phone ?? item.client?.phone) && (item.phone || item.client?.phone) && (
                 <p className="truncate text-xs text-gray-500 mt-0.5">{item.phone ?? item.client?.phone}</p>
               )}

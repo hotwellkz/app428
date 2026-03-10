@@ -37,9 +37,38 @@ export interface ConversationListItem {
   client: WhatsAppClient | null;
   lastMessage: WhatsAppMessage | null;
   lastMessageAt?: Date | Timestamp;
+  /** Время последнего входящего сообщения (для derived state awaiting reply) */
+  lastIncomingAt?: Date | Timestamp | null;
+  /** Время последнего исходящего сообщения (для derived state awaiting reply) */
+  lastOutgoingAt?: Date | Timestamp | null;
   unreadCount: number;
   /** Имя клиента из CRM, если контакт связан; иначе показывать phone */
   displayTitle?: string;
+}
+
+export type ConversationAttentionState = 'unread' | 'need_reply' | 'normal';
+
+/** Derived-state для визуального внимания: unread / need_reply / normal. */
+export function getConversationAttentionState(item: ConversationListItem): ConversationAttentionState {
+  const unread = item.unreadCount ?? 0;
+  if (unread > 0) return 'unread';
+  const lastIncoming = getMessageTimeFromDateLike(item.lastIncomingAt);
+  if (!lastIncoming) return 'normal';
+  const lastOutgoing = getMessageTimeFromDateLike(item.lastOutgoingAt);
+  const awaitingReply = lastOutgoing == null || lastOutgoing < lastIncoming;
+  return awaitingReply ? 'need_reply' : 'normal';
+}
+
+function getMessageTimeFromDateLike(t: Date | Timestamp | null | undefined): number | null {
+  if (!t) return null;
+  if (typeof (t as { toMillis?: () => number }).toMillis === 'function') {
+    return (t as { toMillis: () => number }).toMillis();
+  }
+  if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) {
+    return ((t as { seconds: number }).seconds ?? 0) * 1000;
+  }
+  if (t instanceof Date) return t.getTime();
+  return null;
 }
 
 /** Нормализация номера для единообразного сравнения и поиска */
@@ -304,6 +333,8 @@ export function subscribeConversationsList(
         client,
         lastMessage,
         lastMessageAt: c.lastMessageAt,
+        lastIncomingAt: c.lastIncomingAt,
+        lastOutgoingAt: c.lastOutgoingAt,
         unreadCount: c.unreadCount ?? 0
       };
     });
