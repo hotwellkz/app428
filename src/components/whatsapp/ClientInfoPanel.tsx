@@ -183,7 +183,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [] 
           text: (m.text ?? '').replace(/<[^>]*>/g, '').trim(),
         })),
       };
-      const res = await fetch('/api/ai/analyze-client', {
+      const res = await fetch('/.netlify/functions/ai-analyze-client', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
