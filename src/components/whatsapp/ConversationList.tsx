@@ -32,6 +32,37 @@ const ConversationList: React.FC<ConversationListProps> = ({
         const hasUnread = (item.unreadCount ?? 0) > 0;
         const attention = getConversationAttentionState(item);
         const isNeedReply = attention === 'need_reply';
+        const statusDotClass =
+          attention === 'unread'
+            ? 'bg-red-500'
+            : attention === 'need_reply'
+            ? 'bg-amber-400'
+            : 'bg-gray-300';
+
+        const getWaitingDurationText = (): string | null => {
+          const t = item.lastIncomingAt ?? item.lastMessage?.createdAt ?? null;
+          if (!t) return null;
+          let ms: number;
+          if (typeof (t as { toMillis?: () => number }).toMillis === 'function') {
+            ms = (t as { toMillis: () => number }).toMillis();
+          } else if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) {
+            ms = ((t as { seconds: number }).seconds ?? 0) * 1000;
+          } else if (t instanceof Date) {
+            ms = t.getTime();
+          } else {
+            return null;
+          }
+          const diffMs = Date.now() - ms;
+          if (diffMs <= 0) return '0 мин';
+          const totalMin = Math.floor(diffMs / 60000);
+          const hours = Math.floor(totalMin / 60);
+          const minutes = totalMin % 60;
+          if (hours <= 0) return `${totalMin} мин`;
+          if (minutes === 0) return `${hours} ч`;
+          return `${hours} ч ${minutes} мин`;
+        };
+
+        const waitingDuration = !hasUnread && isNeedReply ? getWaitingDurationText() : null;
         return (
           <button
             key={item.id}
@@ -73,6 +104,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
           >
             <div className="flex flex-col min-w-0 flex-1 gap-0 relative">
               <div className="flex items-center gap-2 min-w-0">
+                <span className={`flex-shrink-0 w-2 h-2 rounded-full ${statusDotClass}`} />
                 <Avatar
                   name={item.displayTitle ?? item.client?.name ?? item.phone ?? item.client?.phone ?? undefined}
                   phone={item.phone ?? item.client?.phone ?? undefined}
@@ -95,7 +127,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   <div className="flex items-center gap-1">
                     <span className="inline-flex items-center justify-center w-1.5 h-1.5 rounded-full bg-amber-400" />
                     <span className="text-[11px] md:text-xs text-amber-600 font-medium">
-                      Ждёт ответа
+                      Ждёт ответа{waitingDuration ? ` • ${waitingDuration}` : ''}
                     </span>
                   </div>
                 </div>

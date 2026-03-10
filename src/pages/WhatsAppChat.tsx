@@ -80,6 +80,8 @@ const WhatsAppChat: React.FC = () => {
   const [pendingAttachment, setPendingAttachment] = useState<{ file: File; preview?: string } | null>(null);
   const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'sending'>('idle');
   const [sendError, setSendError] = useState<string | null>(null);
+  type ChatFilter = 'all' | 'waiting' | 'unread';
+  const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -713,17 +715,67 @@ const WhatsAppChat: React.FC = () => {
     });
   }, [conversations, locallyReadChatIds, crmNamesByPhone]);
 
+  const { waitingCount, unreadCount } = useMemo(() => {
+    let waiting = 0;
+    let unread = 0;
+    for (const item of listWithDisplayTitle) {
+      const att = getConversationAttentionState(item);
+      if (att === 'unread') unread += 1;
+      else if (att === 'need_reply') waiting += 1;
+    }
+    return { waitingCount: waiting, unreadCount: unread };
+  }, [listWithDisplayTitle]);
+
   const filteredList = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return listWithDisplayTitle;
-    return listWithDisplayTitle.filter((item) => {
-      const preview = item.lastMessage?.attachments?.length
-        ? '[медиа]'
-        : (item.lastMessage?.text ?? '').slice(0, 200);
-      const searchable = [item.displayTitle ?? '', item.phone ?? '', preview].join(' ').toLowerCase();
-      return searchable.includes(q);
-    });
-  }, [listWithDisplayTitle, searchQuery]);
+
+    let base = listWithDisplayTitle;
+    if (q) {
+      base = base.filter((item) => {
+        const preview = item.lastMessage?.attachments?.length
+          ? '[медиа]'
+          : (item.lastMessage?.text ?? '').slice(0, 200);
+        const searchable = [item.displayTitle ?? '', item.phone ?? '', preview].join(' ').toLowerCase();
+        return searchable.includes(q);
+      });
+    }
+
+    const withState = base.map((item) => ({
+      item,
+      attention: getConversationAttentionState(item)
+    }));
+
+    let filtered = withState;
+    if (activeFilter === 'unread') {
+      filtered = withState.filter((x) => x.attention === 'unread');
+    } else if (activeFilter === 'waiting') {
+      filtered = withState.filter((x) => x.attention === 'need_reply');
+    }
+
+    let result = filtered.map((x) => x.item);
+
+    if (activeFilter === 'waiting') {
+      const getTimeFromDateLike = (t: unknown): number => {
+        if (!t) return 0;
+        if (typeof (t as { toMillis?: () => number }).toMillis === 'function') {
+          return (t as { toMillis: () => number }).toMillis();
+        }
+        if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) {
+          return ((t as { seconds: number }).seconds ?? 0) * 1000;
+        }
+        if (t instanceof Date) return t.getTime();
+        return 0;
+      };
+      result = [...result].sort((a, b) => {
+        const aTime = getTimeFromDateLike(a.lastIncomingAt ?? a.lastMessageAt ?? null);
+        const bTime = getTimeFromDateLike(b.lastIncomingAt ?? b.lastMessageAt ?? null);
+        // Чем дольше чат ждёт ответа, тем выше: более раннее входящее сообщение выше
+        return aTime - bTime;
+      });
+    }
+
+    return result;
+  }, [listWithDisplayTitle, searchQuery, activeFilter]);
 
   return (
     <div
@@ -796,16 +848,55 @@ const WhatsAppChat: React.FC = () => {
           `}
           style={!isMobile ? { minWidth: 300 } : undefined}
         >
-          <div className="flex-none flex items-center gap-2 px-3 py-2 border-b border-gray-100 bg-gray-50/80">
-            <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Поиск по имени или номеру..."
-              className="flex-1 min-w-0 py-2 px-2 text-sm rounded-lg border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-400"
-              aria-label="Поиск по имени или номеру"
-            />
+          <div className="flex-none border-b border-gray-100 bg-gray-50/80">
+            <div className="flex items-center gap-2 px-3 py-2">
+              <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Поиск по имени или номеру..."
+                className="flex-1 min-w-0 py-2 px-2 text-sm rounded-lg border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-400"
+                aria-label="Поиск по имени или номеру"
+              />
+            </div>
+            <div className="flex items-center gap-1 px-3 pb-2 text-xs md:text-sm">
+              <button
+                type="button"
+                onClick={() => setActiveFilter('all')}
+                className={`px-2 py-1 rounded-full border text-xs md:text-[13px] ${
+                  activeFilter === 'all'
+                    ? 'border-green-500 bg-green-50 text-green-700 font-medium'
+                    : 'border-transparent text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Все
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveFilter('waiting')}
+                className={`px-2 py-1 rounded-full border text-xs md:text-[13px] inline-flex items-center gap-1 ${
+                  activeFilter === 'waiting'
+                    ? 'border-amber-500 bg-amber-50 text-amber-800 font-medium'
+                    : 'border-transparent text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <span className="text-amber-500">🟠</span>
+                <span>Ждут ответа{waitingCount > 0 ? ` (${waitingCount})` : ''}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveFilter('unread')}
+                className={`px-2 py-1 rounded-full border text-xs md:text-[13px] inline-flex items-center gap-1 ${
+                  activeFilter === 'unread'
+                    ? 'border-red-500 bg-red-50 text-red-700 font-medium'
+                    : 'border-transparent text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <span className="text-red-500">🔴</span>
+                <span>Непрочитанные{unreadCount > 0 ? ` (${unreadCount})` : ''}</span>
+              </button>
+            </div>
           </div>
           <ConversationList
             items={filteredList}
