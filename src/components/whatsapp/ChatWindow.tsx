@@ -178,6 +178,113 @@ function AudioMessageBubble({ att }: { att: MessageAttachment }) {
   );
 }
 
+function VideoMessageBubble({ att }: { att: MessageAttachment }) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [duration, setDuration] = useState<number | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleLoadedMetadata = () => {
+    const el = videoRef.current;
+    if (!el) return;
+    setDuration(isFinite(el.duration) ? el.duration : null);
+  };
+
+  const handleError = () => {
+    setError('Не удалось загрузить видео');
+    if (import.meta.env.DEV) {
+      console.warn('[WhatsApp] video playback error:', {
+        url: att.url,
+        mimeType: att.mimeType,
+        fileName: att.fileName
+      });
+    }
+  };
+
+  const handlePlayClick = () => {
+    setIsPlaying(true);
+  };
+
+  const handleEnded = () => {
+    setIsPlaying(false);
+  };
+
+  const durationLabel =
+    duration != null && Number.isFinite(duration) ? formatDuration(duration) : null;
+
+  return (
+    <div className="mt-1 w-full max-w-xs md:max-w-sm">
+      <div className="relative bg-black rounded-lg overflow-hidden">
+        {!error && !isPlaying && (
+          <button
+            type="button"
+            className="relative w-full focus:outline-none"
+            onClick={handlePlayClick}
+          >
+            <video
+              src={att.url}
+              muted
+              playsInline
+              preload="metadata"
+              className="w-full max-h-64 object-contain bg-black"
+              onLoadedMetadata={handleLoadedMetadata}
+              onError={handleError}
+            />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center text-white">
+                <Play className="w-6 h-6 ml-0.5" />
+              </div>
+            </div>
+            {durationLabel && (
+              <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs">
+                {durationLabel}
+              </div>
+            )}
+          </button>
+        )}
+        {!error && isPlaying && (
+          <video
+            ref={videoRef}
+            src={att.url}
+            controls
+            autoPlay
+            playsInline
+            preload="metadata"
+            className="w-full max-h-64 object-contain bg-black"
+            onLoadedMetadata={handleLoadedMetadata}
+            onError={handleError}
+            onEnded={handleEnded}
+          />
+        )}
+        {error && (
+          <div className="p-3 text-sm text-gray-100">
+            <p>{error}</p>
+          </div>
+        )}
+      </div>
+      <div className="mt-1 flex items-center justify-between gap-2 text-xs text-gray-600">
+        <a
+          href={att.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:underline"
+        >
+          Открыть
+        </a>
+        <a
+          href={att.url}
+          download={att.fileName}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:underline text-gray-500"
+        >
+          Скачать
+        </a>
+      </div>
+    </div>
+  );
+}
+
 function AttachmentBlock({ att }: { att: MessageAttachment }) {
   const [imgError, setImgError] = useState(false);
   const isImage = att.type === 'image';
@@ -240,21 +347,7 @@ function AttachmentBlock({ att }: { att: MessageAttachment }) {
     );
   }
   if (isVideo) {
-    return (
-      <div className="mt-1 p-2 rounded bg-gray-100 border border-gray-200 flex flex-wrap items-center gap-2">
-        <Video className="w-5 h-5 text-gray-600" />
-        {link}
-        <a
-          href={att.url}
-          download
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-xs text-gray-600 hover:underline"
-        >
-          Скачать
-        </a>
-      </div>
-    );
+    return <VideoMessageBubble att={att} />;
   }
   if (isAudio) {
     return <AudioMessageBubble att={att} />;
