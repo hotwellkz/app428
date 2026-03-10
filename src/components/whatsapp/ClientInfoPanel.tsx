@@ -190,6 +190,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [] 
       });
       const data = (await res.json().catch(() => ({}))) as {
         name?: string | null;
+        leadTitle?: string | null;
         comment?: string | null;
         error?: string;
       };
@@ -200,8 +201,15 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [] 
         }
         return;
       }
-      const nextName =
+      const rawName =
         typeof data.name === 'string' ? data.name.trim() : data.name === null ? null : null;
+      const rawLeadTitle =
+        typeof data.leadTitle === 'string'
+          ? data.leadTitle.trim()
+          : data.leadTitle === null
+          ? null
+          : null;
+      const nextName = rawName && rawName.length > 0 ? rawName : rawLeadTitle && rawLeadTitle.length > 0 ? rawLeadTitle : null;
       const nextComment =
         typeof data.comment === 'string'
           ? data.comment.trim()

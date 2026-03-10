@@ -80,20 +80,23 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: null, comment: null }),
+      body: JSON.stringify({ name: null, leadTitle: null, comment: null }),
     });
   }
 
   const systemPrompt =
-    'Ты помощник CRM системы строительной компании.\n' +
-    'Твоя задача анализировать переписку клиента и определить:\n' +
-    '1) имя клиента\n' +
-    '2) краткое описание клиента для CRM\n\n' +
+    'Ты AI помощник CRM строительной компании.\n' +
+    'Твоя задача:\n' +
+    '1) найти имя клиента, если он представился;\n' +
+    '2) если имени нет — придумать короткое и понятное название лида (leadTitle) по контексту переписки;\n' +
+    '3) составить краткий полезный комментарий для менеджеров.\n\n' +
     'Правила:\n' +
-    '- не брать имя менеджера\n' +
-    '- если имя клиента не найдено — вернуть null\n' +
-    '- комментарий должен быть коротким и полезным для менеджеров\n' +
-    '- ответ вернуть строго в формате JSON.\n';
+    '- имя клиента бери только если он сам его назвал;\n' +
+    '- не используй имя менеджера;\n' +
+    '- если имя клиента отсутствует, сгенерируй leadTitle на основе типа объекта, площади, размеров, материала и т.п.;\n' +
+    '- leadTitle должен быть максимально коротким и понятным, например: "Дом SIP ~170м²", "Дом 12.5×35", "Каркас 30м²", "Баня ~40м²", "Дом 2 этажа ~140м²";\n' +
+    '- комментарий должен быть коротким, но информативным;\n' +
+    '- ответ верни строго в формате JSON с полями name, leadTitle и comment.\n';
 
   const chatContext = {
     chatId,
@@ -106,9 +109,15 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   const userPrompt =
     'Вот переписка:\n\n' +
     JSON.stringify(chatContext, null, 2) +
-    '\n\nОпредели:\n1) имя клиента\n2) краткий комментарий о клиенте\n\n' +
-    'Ответ:\n{\n"name": "Александр",\n"comment": "Интересуется строительством дома из SIP панелей около 170 м². ' +
-    'Спрашивает стоимость панелей, монтаж и вентиляцию."\n}\n';
+    '\n\nОпредели:\n' +
+    '1) имя клиента (если он представился);\n' +
+    '2) если имени нет — короткое название лида leadTitle (по объекту, площади, материалу и т.п.);\n' +
+    '3) краткий комментарий о клиенте для CRM.\n\n' +
+    'Ответ:\n{\n' +
+    '"name": "Александр",\n' +
+    '"leadTitle": "Дом SIP ~170м²",\n' +
+    '"comment": "Интересуется строительством дома из SIP панелей около 170 м². Спрашивает стоимость панелей, монтаж и вентиляцию."\n' +
+    '}\n';
 
   try {
     log('Calling OpenAI for chatId', chatId, 'messages=', messages.length);
@@ -144,7 +153,11 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       choices?: Array<{ message?: { content?: string } }>;
     };
     const content = data.choices?.[0]?.message?.content ?? '';
-    let parsed: { name?: string | null; comment?: string | null } = { name: null, comment: null };
+    let parsed: { name?: string | null; leadTitle?: string | null; comment?: string | null } = {
+      name: null,
+      leadTitle: null,
+      comment: null
+    };
     try {
       parsed = JSON.parse(content);
     } catch (e) {
@@ -158,6 +171,13 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         ? null
         : null;
 
+    const leadTitle =
+      typeof parsed.leadTitle === 'string'
+        ? parsed.leadTitle.trim() || null
+        : parsed.leadTitle === null
+        ? null
+        : null;
+
     const comment =
       typeof parsed.comment === 'string'
         ? parsed.comment.trim() || null
@@ -168,7 +188,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, comment }),
+      body: JSON.stringify({ name, leadTitle, comment }),
     });
   } catch (e) {
     log('OpenAI request failed:', e);
