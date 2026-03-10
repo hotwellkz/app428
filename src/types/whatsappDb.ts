@@ -80,6 +80,8 @@ export interface WhatsAppMessage {
   companyId?: string;
   conversationId: string;
   text: string;
+  /** Расшифровка голосового/аудио сообщения (voice → text) */
+  transcription?: string | null;
   direction: MessageDirection;
   createdAt: Date | Timestamp;
   channel: MessageChannel;

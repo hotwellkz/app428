@@ -170,7 +170,11 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [] 
   const handleAIAnalyze = async () => {
     if (!phone || aiLoading) return;
     const recent = messages
-      .filter((m) => (m.text ?? '').trim().length > 0 && !m.deleted)
+      .map((m) => ({
+        ...m,
+        _content: (m.transcription ?? m.text ?? '').trim()
+      }))
+      .filter((m) => m._content.length > 0 && !m.deleted)
       .slice(-30);
     if (recent.length === 0) return;
 
@@ -180,7 +184,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [] 
         chatId: normalizePhone(phone),
         messages: recent.map((m) => ({
           role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
-          text: (m.text ?? '').replace(/<[^>]*>/g, '').trim(),
+          text: m._content.replace(/<[^>]*>/g, '').trim(),
         })),
       };
       const res = await fetch('/.netlify/functions/ai-analyze-client', {

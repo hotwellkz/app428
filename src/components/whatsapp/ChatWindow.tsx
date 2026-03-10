@@ -644,12 +644,17 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
     : null;
 
   const [aiMode, setAiMode] = useState<'normal' | 'short' | 'close' | null>(null);
+  const [transcribingId, setTranscribingId] = useState<string | null>(null);
 
   const handleAiReply = async (mode: 'normal' | 'short' | 'close') => {
     if (!onInputChange || !messages || messages.length === 0) return;
     if (aiMode) return;
     const recent = messages
-      .filter((m) => (m.text ?? '').trim().length > 0 && !m.deleted)
+      .map((m) => ({
+        ...m,
+        _content: (m.transcription ?? m.text ?? '').trim()
+      }))
+      .filter((m) => m._content.length > 0 && !m.deleted)
       .slice(-15);
     if (recent.length === 0) return;
 
@@ -659,7 +664,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         mode,
         messages: recent.map((m) => ({
           role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
-          text: (m.text ?? '').replace(/<[^>]*>/g, '').trim()
+          text: m._content.replace(/<[^>]*>/g, '').trim()
         }))
       };
       const res = await fetch('/api/ai/generate-reply', {
@@ -753,9 +758,90 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               onContextMenu={onContextMenuMessage}
               onTap={selectionMode ? onToggleSelectMessage : undefined}
               renderAttachments={(m) =>
-                m.attachments?.map((att, i) => (
-                  <AttachmentBlock key={i} att={att} onPreview={setPreviewAtt} />
-                )) ?? null
+                m.attachments?.map((att, i) => {
+                  const isAudio = att.type === 'audio';
+                  const key = `${m.id}-${i}`;
+                  if (!isAudio) {
+                    return <AttachmentBlock key={key} att={att} onPreview={setPreviewAtt} />;
+                  }
+
+                  const handleTranscribe = async () => {
+                    if (!att.url || transcribingId === m.id) return;
+                    // если уже есть расшифровка — повторно не вызываем
+                    if (m.transcription && m.transcription.trim().length > 0) return;
+                    setTranscribingId(m.id);
+                    try {
+                      const res = await fetch('/api/ai/transcribe-voice', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ audioUrl: att.url, messageId: m.id })
+                      });
+                      const data = (await res.json().catch(() => ({}))) as {
+                        text?: string;
+                        error?: string;
+                      };
+                      if (!res.ok || data.error) {
+                        if (import.meta.env.DEV) {
+                          // eslint-disable-next-line no-console
+                          console.error('[ChatWindow] transcribe-voice failed', {
+                            status: res.status,
+                            data
+                          });
+                        }
+                        return;
+                      }
+                      const txt = (data.text ?? '').trim();
+                      if (txt) {
+                        // локально патчим сообщение, чтобы сразу показать текст
+                        messagesById.current.set(m.id, {
+                          ...m,
+                          transcription: txt
+                        });
+                      }
+                    } catch (e) {
+                      if (import.meta.env.DEV) {
+                        // eslint-disable-next-line no-console
+                        console.error('[ChatWindow] transcribe-voice error', e);
+                      }
+                    } finally {
+                      setTranscribingId(null);
+                    }
+                  };
+
+                  const showTranscription = m.transcription && m.transcription.trim().length > 0;
+                  const isLoading = transcribingId === m.id;
+
+                  return (
+                    <div key={key} className="space-y-1">
+                      <AttachmentBlock att={att} onPreview={setPreviewAtt} />
+                      <div className="pl-1 pr-1">
+                        {!showTranscription && (
+                          <button
+                            type="button"
+                            onClick={handleTranscribe}
+                            disabled={isLoading}
+                            className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-dashed border-gray-300 px-2 py-0.5 text-[11px] text-gray-600 hover:bg-gray-100 disabled:opacity-50"
+                          >
+                            {isLoading ? (
+                              <span className="h-3 w-3 border border-gray-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <span className="text-xs">📝</span>
+                            )}
+                            <span>Расшифровать</span>
+                          </button>
+                        )}
+                        {showTranscription && (
+                          <div className="mt-0.5 rounded-md bg-white/80 px-2 py-1 text-[11px] text-gray-700 border border-gray-200">
+                            <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-0.5">
+                              Текст
+                            </div>
+                            <span className="whitespace-pre-wrap break-words">{m.transcription}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                }) ?? null
               }
             />
           );

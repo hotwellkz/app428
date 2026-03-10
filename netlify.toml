@@ -29,6 +29,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/ai/transcribe-voice"
+  to = "/.netlify/functions/ai-transcribe-voice"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

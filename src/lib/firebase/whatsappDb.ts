@@ -172,6 +172,7 @@ function docToMessage(docId: string, data: Record<string, unknown>): WhatsAppMes
     companyId: (data.companyId as string) ?? undefined,
     conversationId: (data.conversationId as string) ?? '',
     text,
+    transcription: (data.transcription as string | null) ?? null,
     direction: (data.direction as WhatsAppMessage['direction']) ?? 'incoming',
     createdAt: data.createdAt as WhatsAppMessage['createdAt'],
     channel: (data.channel as WhatsAppMessage['channel']) ?? 'whatsapp',

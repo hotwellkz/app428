@@ -32,7 +32,7 @@ function getFirebaseServiceAccountJson(): string {
   return parts.join('');
 }
 
-function getDb() {
+export function getDb() {
   if (getApps().length === 0) {
     const json = getFirebaseServiceAccountJson();
     let credential: ServiceAccount;
