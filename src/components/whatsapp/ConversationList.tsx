@@ -26,10 +26,6 @@ const ConversationList: React.FC<ConversationListProps> = ({
   onConversationContextMenu
 }) => {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const isMobile = useMemo(
-    () => (typeof navigator !== 'undefined' ? /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) : false),
-    []
-  );
   return (
     <div className="flex-1 overflow-y-auto">
       {items.length === 0 && (
