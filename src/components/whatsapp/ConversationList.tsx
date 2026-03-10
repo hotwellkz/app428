@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { formatLastMessageTime } from './whatsappUtils';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
 import { getConversationAttentionState } from '../../lib/firebase/whatsappDb';
@@ -7,16 +7,19 @@ interface ConversationListProps {
   items: ConversationListItem[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  /** Ручной сброс статуса «Ждёт ответа» для конкретного диалога */
-  onDismissNeedReply?: (id: string) => void;
+  /** Открытие контекстного меню для диалога (desktop: правый клик, mobile: long press) */
+  onConversationContextMenu?: (id: string, x: number, y: number, source: 'desktop' | 'mobile') => void;
 }
+
+const LONG_PRESS_MS = 400;
 
 const ConversationList: React.FC<ConversationListProps> = ({
   items,
   selectedId,
   onSelect,
-  onDismissNeedReply
+  onConversationContextMenu
 }) => {
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   return (
     <div className="flex-1 overflow-y-auto">
       {items.length === 0 && (
@@ -33,6 +36,33 @@ const ConversationList: React.FC<ConversationListProps> = ({
             key={item.id}
             type="button"
             onClick={() => onSelect(item.id)}
+            onContextMenu={(e) => {
+              if (!onConversationContextMenu) return;
+              e.preventDefault();
+              onConversationContextMenu(item.id, e.clientX, e.clientY, 'desktop');
+            }}
+            onTouchStart={() => {
+              if (!onConversationContextMenu) return;
+              if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current);
+              longPressTimerRef.current = setTimeout(() => {
+                longPressTimerRef.current = null;
+                const x = window.innerWidth / 2;
+                const y = window.innerHeight;
+                onConversationContextMenu(item.id, x, y, 'mobile');
+              }, LONG_PRESS_MS);
+            }}
+            onTouchEnd={() => {
+              if (longPressTimerRef.current) {
+                clearTimeout(longPressTimerRef.current);
+                longPressTimerRef.current = null;
+              }
+            }}
+            onTouchCancel={() => {
+              if (longPressTimerRef.current) {
+                clearTimeout(longPressTimerRef.current);
+                longPressTimerRef.current = null;
+              }
+            }}
             className={[
               'w-full text-left border-b border-gray-100 hover:bg-gray-50 transition-colors px-3 py-2.5 md:px-4 md:py-3',
               selectedId === item.id ? 'bg-green-50 border-l-4 border-l-green-500 md:border-l-4' : '',
@@ -62,18 +92,6 @@ const ConversationList: React.FC<ConversationListProps> = ({
                       Ждёт ответа
                     </span>
                   </div>
-                  {onDismissNeedReply && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDismissNeedReply(item.id);
-                      }}
-                      className="text-[10px] md:text-xs text-gray-400 hover:text-gray-600 hover:underline"
-                    >
-                      Сбросить
-                    </button>
-                  )}
                 </div>
               )}
               {item.displayTitle && item.displayTitle !== (item.phone ?? item.client?.phone) && (item.phone || item.client?.phone) && (

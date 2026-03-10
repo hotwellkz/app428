@@ -4,7 +4,6 @@ import {
   createClient,
   findConversationByClientId,
   createConversation,
-  saveMessage,
   incrementUnreadCount,
   updateMessageStatus,
   normalizePhone,
@@ -13,6 +12,7 @@ import {
   updateCrmClientLastMessageAt,
   findDealByClientPhone,
   createDeal,
+  upsertMessageFromWebhook,
   type MessageAttachmentRow
 } from './lib/firebaseAdmin';
 
@@ -108,14 +108,25 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
   for (const msg of messages) {
     const chatType = msg.chatType ?? '';
-    const isIncoming = msg.isEcho === false || msg.status === 'inbound';
-    if (chatType !== 'whatsapp' || !isIncoming) {
-      if (debugPayload) {
-        log('Skip non-WA or outgoing:', msg.messageId, 'chatType=', chatType, 'isEcho=', msg.isEcho, 'status=', msg.status);
-      }
+    const status = (msg.status ?? '').toLowerCase();
+    const isEcho = msg.isEcho === true;
+    if (debugPayload) {
+      log('Message item:', {
+        messageId: msg.messageId,
+        chatType,
+        status,
+        isEcho,
+        chatId: msg.chatId,
+        type: msg.type
+      });
+    }
+    if (chatType !== 'whatsapp') {
+      if (debugPayload) log('Skip non-whatsapp chatType:', chatType, 'messageId=', msg.messageId);
       skipped++;
       continue;
     }
+
+    const direction: 'incoming' | 'outgoing' = isEcho ? 'outgoing' : 'incoming';
 
     const phone = msg.chatId ?? msg.contact?.phone ?? '';
     if (!phone) {
@@ -174,14 +185,44 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         }
       }
 
-      const savedId = await saveMessage(conversation.id, text, 'incoming', {
-        providerMessageId: msg.messageId ?? undefined,
-        attachments: attachments.length > 0 ? attachments : undefined
-      });
-      await incrementUnreadCount(conversation.id);
-      processed++;
-      if (debugPayload) {
-        log('Saved message:', savedId, 'conversationId=', conversation.id, hasMedia ? 'with attachment' : '');
+      if (direction === 'incoming') {
+        const { id: savedId, created } = await upsertMessageFromWebhook(conversation.id, text, 'incoming', {
+          providerMessageId: msg.messageId ?? undefined,
+          attachments: attachments.length > 0 ? attachments : undefined
+        });
+        if (created) {
+          await incrementUnreadCount(conversation.id);
+        }
+        processed++;
+        if (debugPayload) {
+          log(
+            'Saved incoming message:',
+            savedId,
+            'conversationId=',
+            conversation.id,
+            hasMedia ? 'with attachment' : '',
+            'created=',
+            created
+          );
+        }
+      } else {
+        // Исходящее сообщение (isEcho === true): сохраняем как outgoing, но не трогаем unreadCount
+        const { id: savedId, created } = await upsertMessageFromWebhook(conversation.id, text, 'outgoing', {
+          providerMessageId: msg.messageId ?? undefined,
+          attachments: attachments.length > 0 ? attachments : undefined
+        });
+        processed++;
+        if (debugPayload) {
+          log(
+            'Saved outgoing message (webhook):',
+            savedId,
+            'conversationId=',
+            conversation.id,
+            hasMedia ? 'with attachment' : '',
+            'created=',
+            created
+          );
+        }
       }
     } catch (err) {
       log('Error processing message:', msg.messageId, err);

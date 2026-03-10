@@ -320,6 +320,24 @@ export async function dismissAwaitingReply(conversationId: string): Promise<void
 }
 
 /**
+ * Ручной перевод диалога в состояние «есть непрочитанные».
+ * Минимально: unreadCount >= 1, опционально сброс lastReadAt.
+ */
+export async function markConversationAsUnread(conversationId: string): Promise<void> {
+  const ref = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    throw new Error('Conversation not found');
+  }
+  const data = snap.data() as { unreadCount?: number };
+  const current = data.unreadCount ?? 0;
+  const next = current > 0 ? current : 1;
+  await updateDoc(ref, {
+    unreadCount: next
+  });
+}
+
+/**
  * Подписка на список диалогов с данными клиента и последним сообщением (realtime).
  * @param onError опционально вызывается при ошибке (например, индекс ещё строится)
  * @returns функция отписки

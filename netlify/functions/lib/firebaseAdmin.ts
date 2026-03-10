@@ -231,6 +231,57 @@ export async function saveMessage(
   return ref.id;
 }
 
+/**
+ * Upsert-сохранение сообщения по providerMessageId (используется в webhook Wazzup).
+ * Если сообщение с таким providerMessageId уже есть — обновляем его (text/attachments) и conversation.last*,
+ * иначе создаём новое сообщение как в saveMessage.
+ */
+export async function upsertMessageFromWebhook(
+  conversationId: string,
+  text: string,
+  direction: 'incoming' | 'outgoing',
+  options: SaveMessageOptions = {}
+): Promise<{ id: string; created: boolean }> {
+  const db = getDb();
+  const now = Timestamp.now();
+  const providerId = options.providerMessageId ?? null;
+
+  if (providerId) {
+    const existingSnap = await db
+      .collection(COLLECTIONS.MESSAGES)
+      .where('providerMessageId', '==', providerId)
+      .limit(1)
+      .get();
+    if (!existingSnap.empty) {
+      const docRef = existingSnap.docs[0].ref;
+      const update: Record<string, unknown> = {};
+      // Обновляем текст, если был пустой/технический
+      const existingData = existingSnap.docs[0].data() as { text?: string; attachments?: unknown[] };
+      if (text && (!existingData.text || existingData.text === '[no text]')) {
+        update.text = text;
+      }
+      if (options.attachments && options.attachments.length > 0 && !existingData.attachments) {
+        update.attachments = options.attachments;
+      }
+      if (direction && existingData && existingData['direction'] !== direction) {
+        update.direction = direction;
+      }
+      if (Object.keys(update).length > 0) {
+        await docRef.update(update);
+      }
+      const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
+      const convUpdate: Record<string, unknown> = { lastMessageAt: now };
+      if (direction === 'incoming') convUpdate.lastIncomingAt = now;
+      if (direction === 'outgoing') convUpdate.lastOutgoingAt = now;
+      await convRef.update(convUpdate);
+      return { id: docRef.id, created: false };
+    }
+  }
+
+  const id = await saveMessage(conversationId, text, direction, options);
+  return { id, created: true };
+}
+
 /** Обновить статус сообщения по providerMessageId (из webhook statuses). */
 export async function updateMessageStatus(
   providerMessageId: string,
