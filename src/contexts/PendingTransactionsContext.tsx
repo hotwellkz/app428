@@ -4,6 +4,7 @@ import { db } from '../lib/firebase';
 import { useCompanyId } from './CompanyContext';
 
 export interface PendingSummary {
+  /** Чистая сумма pending для сущности (net): income = плюс, expense = минус */
   pendingAmount: number;
   pendingCount: number;
   hasNeedsReview: boolean;
@@ -43,7 +44,6 @@ export function PendingTransactionsProvider({ children }: { children: React.Reac
           const amountRaw = Number(data.amount);
           if (!Number.isFinite(amountRaw)) nanAmounts++;
           const safeAmount = Number.isFinite(amountRaw) ? amountRaw : 0;
-          const pendingAmountAbs = Math.abs(safeAmount);
           const needsReview = data.needsReview === true;
           const status = (data.status as string | undefined) ?? 'pending';
           statusCounts[status] = (statusCounts[status] ?? 0) + 1;
@@ -63,7 +63,9 @@ export function PendingTransactionsProvider({ children }: { children: React.Reac
 
           const cur = next[categoryId] ?? { pendingAmount: 0, pendingCount: 0, hasNeedsReview: false };
           next[categoryId] = {
-            pendingAmount: cur.pendingAmount + pendingAmountAbs,
+            // В pending транзакциях amount уже имеет знак относительно categoryId:
+            // income -> +amount, expense -> -amount. Поэтому суммируем как есть.
+            pendingAmount: cur.pendingAmount + safeAmount,
             pendingCount: cur.pendingCount + 1,
             hasNeedsReview: cur.hasNeedsReview || needsReview
           };

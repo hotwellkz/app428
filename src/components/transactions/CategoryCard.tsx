@@ -49,16 +49,19 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
   // pendingAmount/hasNeedsReview берём из единого провайдера PendingTransactionsProvider (одна подписка на все pending транзакции)
 
   const formatPendingAmountCompact = (value: number): string => {
+    const sign = value > 0 ? '+' : value < 0 ? '-' : '';
     const abs = Math.abs(value);
     if (abs < 1000) {
-      return Math.round(abs).toString();
+      return `${sign}${Math.round(abs)}`;
     }
     if (abs < 1_000_000) {
       const v = abs / 1000;
-      return v % 1 === 0 ? `${v.toFixed(0)}k` : `${v.toFixed(1)}k`;
+      const body = v % 1 === 0 ? `${v.toFixed(0)}k` : `${v.toFixed(1)}k`;
+      return `${sign}${body}`;
     }
     const v = abs / 1_000_000;
-    return v % 1 === 0 ? `${v.toFixed(0)}M` : `${v.toFixed(1)}M`;
+    const body = v % 1 === 0 ? `${v.toFixed(0)}M` : `${v.toFixed(1)}M`;
+    return `${sign}${body}`;
   };
 
   const handleClick = (e: React.MouseEvent) => {
@@ -89,11 +92,12 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
     >
       <div className={`relative w-12 h-12 ${category.color || 'bg-emerald-500'} rounded-full flex items-center justify-center shadow-lg`}>
         {renderIcon()}
-        {pendingAmount > 0 && (
+        {pendingAmount !== 0 && (
           <div
             className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 sm:px-2 rounded-full shadow-md"
             style={{
-              backgroundColor: hasNeedsReview ? '#FAAD14' : '#FF4D4F',
+              // Цвет по знаку net pending: плюс — зелёный, минус — красный
+              backgroundColor: pendingAmount > 0 ? '#10b981' : '#FF4D4F',
               color: '#FFFFFF',
               minWidth: 20,
               height: 18,
@@ -105,13 +109,20 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
             }}
             title={
               hasNeedsReview
-                ? 'Есть операции, требующие уточнения'
-                : `Ожидает одобрения: ${formatAmount(pendingAmount)} ₸`
+                ? `Есть операции, требующие уточнения. Net: ${formatAmount(pendingAmount)} ₸`
+                : `Ожидает одобрения (net): ${formatAmount(pendingAmount)} ₸`
             }
           >
             <span className="text-[10px] leading-none sm:text-[11px]">
               {formatPendingAmountCompact(pendingAmount)}
             </span>
+            {hasNeedsReview && (
+              <span
+                className="absolute -left-1 -bottom-1 w-2 h-2 rounded-full"
+                style={{ backgroundColor: '#FAAD14', boxShadow: '0 2px 6px rgba(0,0,0,0.15)' }}
+                title="Есть операции, требующие уточнения"
+              />
+            )}
           </div>
         )}
       </div>
