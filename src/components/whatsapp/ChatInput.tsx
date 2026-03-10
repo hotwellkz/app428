@@ -43,8 +43,7 @@ const ACCEPT_DOCUMENT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,applica
 const ACCEPT_AUDIO = 'audio/*';
 
 const TEXTAREA_MIN_ROWS = 1;
-const TEXTAREA_MAX_ROWS = 5;
-const LINE_HEIGHT_PX = 20;
+const TEXTAREA_MAX_HEIGHT_PX = 120;
 
 interface ChatInputProps {
   value: string;
@@ -120,7 +119,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Enter') return;
-    if (e.ctrlKey || e.metaKey) {
+    // Enter → отправить сообщение
+    // Shift + Enter → перенос строки
+    if (!e.shiftKey) {
       e.preventDefault();
       if (showSend && !isBusy) onSend();
     }
@@ -130,8 +131,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    const lineCount = Math.min(Math.max(el.value.split('\n').length, TEXTAREA_MIN_ROWS), TEXTAREA_MAX_ROWS);
-    el.style.height = `${lineCount * LINE_HEIGHT_PX + 24}px`;
+    const newHeight = Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT_PX);
+    el.style.height = `${newHeight}px`;
     if (autoFocusOnChange && !disabled) {
       el.focus();
       const len = el.value.length;
@@ -226,8 +227,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
               onFocus={() => setShowEmojiPicker(false)}
               placeholder={hasAttachment ? 'Подпись к файлу (необязательно)' : 'Сообщение...'}
               rows={TEXTAREA_MIN_ROWS}
-              className="flex-1 min-w-0 resize-none bg-transparent border-0 px-1 py-2.5 text-sm outline-none min-h-[36px] max-h-[120px] overflow-y-auto rounded-none"
-              style={{ lineHeight: `${LINE_HEIGHT_PX}px` }}
+              className="flex-1 min-w-0 resize-none bg-transparent border-0 px-3 py-2.5 text-sm leading-[1.4] outline-none min-h-[40px] max-h-[120px] overflow-y-auto rounded-none"
             />
             {onFileSelect && (
               <button
