@@ -286,6 +286,28 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // AI База знаний (knowledgeBase): доступ только по companyId пользователя или global_admin
+    match /knowledgeBase/{docId} {
+      allow read, update, delete: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId
+            == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
+            == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId
+            == request.resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
+            == request.resource.data.companyId)
+        || isGlobalAdmin()
+      );
+    }
+
     // Приглашения в компанию: только своя компания (create/read/update по companyId)
     match /company_invites/{inviteId} {
       allow read: if isAuthenticated() && (
