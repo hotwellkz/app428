@@ -184,11 +184,15 @@ export const Feed: React.FC = () => {
     hasMore,
     loadMore,
     totalCount,
-    refresh
+    refresh,
+    patchTransaction
   } = useFeedPaginated({
     defaultDays: 60,
     enabled: !!user && !authLoading
   });
+
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
 
   const loadMoreSentinelRef = useRef<HTMLDivElement>(null);
   const loadMoreTriggeredRef = useRef(false);
@@ -782,25 +786,30 @@ export const Feed: React.FC = () => {
   };
 
   const handleApprove = async (transaction: Transaction) => {
+    setApprovingId(transaction.id);
     try {
       await approveTransaction(transaction.id);
+      patchTransaction(transaction.id, { status: 'approved' });
       showSuccessNotification('Транзакция одобрена');
-      // Не вызываем refresh() — onSnapshot в useFeedPaginated получит обновление из Firestore
-      // и обновит список без перезагрузки, сохраняя позицию скролла
     } catch (error) {
       console.error('Error approving transaction:', error);
       showErrorNotification(error instanceof Error ? error.message : 'Ошибка при одобрении транзакции');
+    } finally {
+      setApprovingId(null);
     }
   };
 
   const handleReject = async (transaction: Transaction) => {
+    setRejectingId(transaction.id);
     try {
       await rejectTransaction(transaction.id);
+      patchTransaction(transaction.id, { status: 'rejected' });
       showSuccessNotification('Транзакция отклонена');
-      // Не вызываем refresh() — onSnapshot обновит данные, скролл сохранится
     } catch (error) {
       console.error('Error rejecting transaction:', error);
       showErrorNotification(error instanceof Error ? error.message : 'Ошибка при отклонении транзакции');
+    } finally {
+      setRejectingId(null);
     }
   };
 
@@ -1115,6 +1124,8 @@ export const Feed: React.FC = () => {
                 onApprove={handleApprove}
                 onEdit={setEditingTransaction}
                 onDeleteRequest={setTransactionToDelete}
+                approvingTransactionId={approvingId}
+                rejectingTransactionId={rejectingId}
                 hasMore={hasMore}
                 loading={paginatedLoadingMore}
                 onLoadMore={loadMore}

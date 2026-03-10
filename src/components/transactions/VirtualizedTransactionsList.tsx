@@ -103,7 +103,9 @@ const TransactionRowContent = memo(function TransactionRowContent({
   onWaybillClick,
   onApprove,
   onEdit,
-  onDeleteRequest
+  onDeleteRequest,
+  approvingTransactionId,
+  rejectingTransactionId
 }: {
   row: VirtualizedRow;
   context: TransactionCardContext;
@@ -114,6 +116,8 @@ const TransactionRowContent = memo(function TransactionRowContent({
   onApprove?: (t: TransactionCardTransaction) => void;
   onEdit?: (t: TransactionCardTransaction) => void;
   onDeleteRequest?: (t: TransactionCardTransaction) => void;
+  approvingTransactionId?: string | null;
+  rejectingTransactionId?: string | null;
 }) {
   if (isDateRow(row)) {
     return <DateRow dateLabel={row.dateLabel} total={row.total} />;
@@ -137,6 +141,8 @@ const TransactionRowContent = memo(function TransactionRowContent({
         onApprove={onApprove}
         onEdit={onEdit}
         onDeleteRequest={onDeleteRequest}
+        approvingTransactionId={approvingTransactionId}
+        rejectingTransactionId={rejectingTransactionId}
       />
     </div>
   );
@@ -155,6 +161,8 @@ export interface VirtualizedTransactionsListProps {
   onApprove?: (t: TransactionCardTransaction) => void;
   onEdit?: (t: TransactionCardTransaction) => void;
   onDeleteRequest?: (t: TransactionCardTransaction) => void;
+  approvingTransactionId?: string | null;
+  rejectingTransactionId?: string | null;
   hasMore: boolean;
   loading: boolean;
   onLoadMore: () => void;
@@ -176,6 +184,8 @@ function VirtualizedTransactionsListInner({
   onApprove,
   onEdit,
   onDeleteRequest,
+  approvingTransactionId,
+  rejectingTransactionId,
   hasMore,
   loading,
   onLoadMore,
@@ -285,6 +295,8 @@ function VirtualizedTransactionsListInner({
               onApprove={onApprove}
               onEdit={onEdit}
               onDeleteRequest={onDeleteRequest}
+              approvingTransactionId={approvingTransactionId}
+              rejectingTransactionId={rejectingTransactionId}
             />
           </div>
         );

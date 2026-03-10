@@ -53,6 +53,8 @@ interface UseFeedPaginatedReturn {
   loadMore: () => void;
   refresh: () => void;
   totalCount: number;
+  /** Локальное обновление одной транзакции (для мгновенного UI после approve/reject). */
+  patchTransaction: (transactionId: string, patch: Partial<FeedTransaction>) => void;
 }
 
 function processSnapshot(
@@ -251,6 +253,13 @@ export const useFeedPaginated = ({
     loadInitialData();
   }, [loadInitialData]);
 
+  /** Мгновенное обновление одной транзакции в state (optimistic / immediate UI после approve/reject). */
+  const patchTransaction = useCallback((transactionId: string, patch: Partial<FeedTransaction>) => {
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === transactionId ? { ...t, ...patch } : t))
+    );
+  }, []);
+
   // Загружаем данные при монтировании
   useEffect(() => {
     return loadInitialData();
@@ -272,7 +281,8 @@ export const useFeedPaginated = ({
     hasMore,
     loadMore,
     refresh,
-    totalCount
+    totalCount,
+    patchTransaction
   };
 };
 

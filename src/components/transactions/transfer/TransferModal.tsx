@@ -847,9 +847,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
             )}
           </div>
 
-          {/* Нижняя панель (mobile): скрепка, камера, отправка */}
+          {/* Нижняя панель (mobile): скрепка, камера, отправка. pr-14 — safe-area от плавающего сайдбара (StickyNavigation) справа. */}
           <div
-            className="flex-shrink-0 md:hidden flex items-center justify-end gap-3 p-3 bg-white"
+            className="flex-shrink-0 md:hidden flex items-center justify-end gap-3 p-3 pr-14 bg-white"
             style={{ borderTop: '1px solid #e5e7eb' }}
           >
             <button

@@ -37,6 +37,10 @@ export interface TransactionCardProps {
   onWaybillClick?: (transaction: TransactionCardTransaction) => void;
   /** Одобрить (только context=feed) */
   onApprove?: (transaction: TransactionCardTransaction) => void;
+  /** ID транзакции, для которой идёт одобрение (показать loading на кнопке) */
+  approvingTransactionId?: string | null;
+  /** ID транзакции, для которой идёт отклонение (показать loading на кнопке) */
+  rejectingTransactionId?: string | null;
   /** Редактировать (только context=feed) */
   onEdit?: (transaction: TransactionCardTransaction) => void;
   /** Запрос на удаление (показать модалку с паролем и т.д.) */
@@ -60,6 +64,8 @@ export const TransactionCard = React.memo<TransactionCardProps>(function Transac
   onReceiptClick,
   onWaybillClick,
   onApprove,
+  approvingTransactionId,
+  rejectingTransactionId,
   onEdit,
   onDeleteRequest
 }) {
@@ -353,13 +359,18 @@ export const TransactionCard = React.memo<TransactionCardProps>(function Transac
                   <button
                     onClick={() => onApprove(transaction)}
                     type="button"
-                    className="inline-flex items-center font-medium text-[13px] rounded-[12px] text-white hover:opacity-90 transition-opacity"
+                    disabled={approvingTransactionId === transaction.id}
+                    className="inline-flex items-center font-medium text-[13px] rounded-[12px] text-white hover:opacity-90 transition-opacity disabled:opacity-70 disabled:cursor-not-allowed"
                     style={{
                       background: '#10b981',
                       padding: '6px 12px'
                     }}
                   >
-                    Одобрить
+                    {approvingTransactionId === transaction.id ? (
+                      <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      'Одобрить'
+                    )}
                   </button>
                 )}
               </div>
