@@ -27,6 +27,10 @@ export interface WhatsAppConversation {
   createdAt: Date | Timestamp;
   /** Время последнего сообщения для сортировки */
   lastMessageAt?: Date | Timestamp;
+  /** Время последнего входящего сообщения (для derived state awaiting reply) */
+  lastIncomingAt?: Date | Timestamp | null;
+  /** Время последнего исходящего сообщения (для derived state awaiting reply) */
+  lastOutgoingAt?: Date | Timestamp | null;
   /** Количество непрочитанных (входящих); источник истины в БД */
   unreadCount?: number;
   /** Время последнего «прочитано» (mark-as-read в БД) */

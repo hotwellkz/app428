@@ -62,6 +62,10 @@ export interface WhatsAppConversationRow {
   createdAt: Timestamp;
   unreadCount?: number;
   lastMessageAt?: Timestamp;
+  /** Время последнего входящего сообщения (для derived state awaiting reply) */
+  lastIncomingAt?: Timestamp;
+  /** Время последнего исходящего сообщения (для derived state awaiting reply) */
+  lastOutgoingAt?: Timestamp;
 }
 
 export async function findClientByPhone(phone: string): Promise<WhatsAppClientRow | null> {
@@ -111,7 +115,9 @@ export async function findConversationByClientId(clientId: string): Promise<What
     status: data.status as string,
     createdAt: data.createdAt as Timestamp,
     unreadCount: (data.unreadCount as number) ?? 0,
-    lastMessageAt: data.lastMessageAt as Timestamp | undefined
+    lastMessageAt: data.lastMessageAt as Timestamp | undefined,
+    lastIncomingAt: data.lastIncomingAt as Timestamp | undefined,
+    lastOutgoingAt: data.lastOutgoingAt as Timestamp | undefined
   };
 }
 
@@ -125,6 +131,8 @@ export async function createConversation(clientId: string, phone: string): Promi
     createdAt: now,
     lastMessageAt: now,
     unreadCount: 0,
+    lastIncomingAt: null,
+    lastOutgoingAt: null,
     companyId: DEFAULT_COMPANY_ID
   });
   return ref.id;
@@ -216,7 +224,10 @@ export async function saveMessage(
   if (options.forwarded === true) data.forwarded = true;
   const ref = await db.collection(COLLECTIONS.MESSAGES).add(data);
   const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
-  await convRef.update({ lastMessageAt: now });
+  const convUpdate: Record<string, unknown> = { lastMessageAt: now };
+  if (direction === 'incoming') convUpdate.lastIncomingAt = now;
+  if (direction === 'outgoing') convUpdate.lastOutgoingAt = now;
+  await convRef.update(convUpdate);
   return ref.id;
 }
 

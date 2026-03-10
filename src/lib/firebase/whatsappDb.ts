@@ -67,6 +67,8 @@ function docToConversation(docId: string, data: Record<string, unknown>): WhatsA
     status: (data.status as WhatsAppConversation['status']) ?? 'active',
     createdAt: data.createdAt as WhatsAppConversation['createdAt'],
     lastMessageAt: data.lastMessageAt as WhatsAppConversation['lastMessageAt'],
+    lastIncomingAt: (data.lastIncomingAt as WhatsAppConversation['lastIncomingAt']) ?? null,
+    lastOutgoingAt: (data.lastOutgoingAt as WhatsAppConversation['lastOutgoingAt']) ?? null,
     unreadCount: (data.unreadCount as number) ?? 0,
     lastReadAt: data.lastReadAt as WhatsAppConversation['lastReadAt'],
     lastReadMessageId: (data.lastReadMessageId as string) ?? undefined

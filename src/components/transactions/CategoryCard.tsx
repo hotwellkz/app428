@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { CategoryCardType } from '../../types';
 import { useDraggable } from '@dnd-kit/core';
 import { formatAmount } from '../../utils/formatUtils';
-import { collection, query, onSnapshot, where } from 'firebase/firestore';
+import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { Home } from 'lucide-react';
-import { useCompanyId } from '../../contexts/CompanyContext';
+import { usePendingSummaryByCategoryId } from '../../contexts/PendingTransactionsContext';
 
 interface CategoryCardProps {
   category: CategoryCardType;
@@ -18,14 +18,12 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
   onHistoryClick,
   isDragging = false
 }) => {
-  const companyId = useCompanyId();
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: category.id,
     data: category
   });
   const [warehouseTotal, setWarehouseTotal] = useState(0);
-  const [pendingAmount, setPendingAmount] = useState(0);
-  const [hasNeedsReview, setHasNeedsReview] = useState(false);
+  const { pendingAmount, hasNeedsReview } = usePendingSummaryByCategoryId(category.id);
 
   const style = transform ? {
     transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
@@ -48,41 +46,7 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
     }
   }, [category.row, category.title]);
 
-  // Реальное время: сумма НЕОДОБРЕННЫХ (pending) входящих транзакций для этой категории
-  useEffect(() => {
-    if (!category.id) return;
-
-    const q = query(
-      collection(db, 'transactions'),
-      where('companyId', '==', companyId),
-      where('categoryId', '==', category.id),
-      where('status', '==', 'pending'),
-      where('type', '==', 'income')
-    );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      try {
-        let total = 0;
-        let anyNeedsReview = false;
-        snapshot.docs.forEach((doc) => {
-          const data = doc.data() as any;
-          const amount = Number(data.amount) || 0;
-          total += amount;
-          if (data.needsReview) {
-            anyNeedsReview = true;
-          }
-        });
-        setPendingAmount(total > 0 ? total : 0);
-        setHasNeedsReview(anyNeedsReview);
-      } catch (error) {
-        console.error('Error computing pendingAmount for category', category.id, error);
-        setPendingAmount(0);
-        setHasNeedsReview(false);
-      }
-    });
-
-    return () => unsubscribe();
-  }, [category.id, companyId]);
+  // pendingAmount/hasNeedsReview берём из единого провайдера PendingTransactionsProvider (одна подписка на все pending транзакции)
 
   const formatPendingAmountCompact = (value: number): string => {
     const abs = Math.abs(value);

@@ -29,6 +29,7 @@ import { useNavigate } from 'react-router-dom';
 import { RayBackground } from '../components/RayBackground';
 import { Scrollbars } from 'react-custom-scrollbars-2';
 import { PageMetadata } from '../components/PageMetadata';
+import { PendingTransactionsProvider } from '../contexts/PendingTransactionsContext';
 
 export const Transactions: React.FC = () => {
   const companyId = useCompanyId();
@@ -291,15 +292,16 @@ export const Transactions: React.FC = () => {
         autoHideTimeout={1000}
         autoHideDuration={200}
       >
-        <DndContext 
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-          onDragCancel={() => setActiveId(null)}
-        >
-          <div className="relative min-h-screen">
-            <RayBackground theme="light" />
-            <div className="relative z-10 p-2 sm:p-3 space-y-2">
+        <PendingTransactionsProvider>
+          <DndContext
+            sensors={sensors}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveId(null)}
+          >
+            <div className="relative min-h-screen">
+              <RayBackground theme="light" />
+              <div className="relative z-10 p-2 sm:p-3 space-y-2">
               <CategoryRow
                 title="Клиенты"
                 categories={clientCategories}
@@ -336,7 +338,7 @@ export const Transactions: React.FC = () => {
                 onAddCategory={() => setShowAddWarehouseModal(true)}
                 rowNumber={4}
               />
-            </div>
+              </div>
 
             {showHistory && selectedCategory && (
               <TransactionHistory
@@ -364,8 +366,9 @@ export const Transactions: React.FC = () => {
                 onClose={() => setShowAddWarehouseModal(false)}
               />
             )}
-          </div>
-        </DndContext>
+            </div>
+          </DndContext>
+        </PendingTransactionsProvider>
       </Scrollbars>
     </div>
   );
