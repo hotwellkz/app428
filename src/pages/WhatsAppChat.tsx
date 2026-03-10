@@ -883,7 +883,10 @@ const WhatsAppChat: React.FC = () => {
 
         {/* Правая колонка: карточка клиента (только desktop, 320px) */}
         {!isMobile && (
-          <ClientInfoPanel phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null} />
+          <ClientInfoPanel
+            phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null}
+            messages={messages}
+          />
         )}
       </div>
 

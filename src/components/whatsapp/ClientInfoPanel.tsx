@@ -117,12 +117,16 @@ async function createDealForClient(phone: string, companyId: string): Promise<De
   };
 }
 
+import type { WhatsAppMessage } from '../../types/whatsappDb';
+
 interface ClientInfoPanelProps {
   /** Номер телефона (chatId) выбранного диалога */
   phone: string | null;
+  /** Сообщения текущего диалога (для AI-анализа имени) */
+  messages?: WhatsAppMessage[];
 }
 
-const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone }) => {
+const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [] }) => {
   const companyId = useCompanyId();
   const [client, setClient] = useState<WhatsAppClientCard | null>(null);
   const [deal, setDeal] = useState<DealCard | null>(null);
@@ -133,6 +137,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone }) => {
   const [editName, setEditName] = useState('');
   const [editSource, setEditSource] = useState('');
   const [editComment, setEditComment] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiNameSuggestion, setAiNameSuggestion] = useState<string | null>(null);
 
   const loadClientAndDeal = React.useCallback(() => {
     if (!phone) return;
@@ -161,6 +167,92 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone }) => {
     }
     loadClientAndDeal();
   }, [phone, loadClientAndDeal]);
+
+  const handleAiSuggestName = async () => {
+    if (!phone || aiLoading) return;
+    // Берём последние до 40 сообщений с текстом
+    const recent = messages
+      .filter((m) => (m.text ?? '').trim().length > 0 && !m.deleted)
+      .slice(-40);
+    if (recent.length === 0) {
+      return;
+    }
+    setAiLoading(true);
+    setAiNameSuggestion(null);
+    try {
+      const payload = {
+        chatId: normalizePhone(phone),
+        messages: recent.map((m) => ({
+          role: m.direction === 'incoming' ? 'client' as const : 'manager' as const,
+          text: (m.text ?? '').replace(/<[^>]*>/g, '').trim()
+        }))
+      };
+      const res = await fetch('/.netlify/functions/ai-extract-client-name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = (await res.json().catch(() => ({}))) as { name?: string | null; error?: string };
+      if (!res.ok || data.error) {
+        if (import.meta.env.DEV) {
+          // eslint-disable-next-line no-console
+          console.error('[ClientInfoPanel] AI extract name failed', { status: res.status, data });
+        }
+        return;
+      }
+      const name = typeof data.name === 'string' ? data.name.trim() : null;
+      setAiNameSuggestion(name || null);
+    } catch (e) {
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.error('[ClientInfoPanel] AI extract name error', e);
+      }
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleApplyAiName = async () => {
+    if (!phone || !aiNameSuggestion) return;
+    const trimmed = aiNameSuggestion.trim();
+    if (!trimmed) return;
+    setSaving(true);
+    try {
+      const normalized = normalizePhone(phone);
+      if (client) {
+        await updateDoc(doc(db, COLLECTION_CLIENTS, client.id), {
+          name: trimmed
+        });
+        setClient({
+          ...client,
+          name: trimmed
+        });
+        setEditName(trimmed);
+      } else {
+        // Клиента ещё нет — создаём карточку только с именем и телефоном
+        const ref = await addDoc(collection(db, COLLECTION_CLIENTS), {
+          phone: normalized,
+          name: trimmed,
+          source: '',
+          comment: '',
+          createdAt: serverTimestamp(),
+          companyId
+        });
+        setClient({
+          id: ref.id,
+          phone: normalized,
+          name: trimmed,
+          source: '',
+          comment: '',
+          createdAt: null
+        });
+        setEditName(trimmed);
+      }
+      setAiNameSuggestion(null);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const startEdit = () => {
     setEditName(client?.name ?? '');
@@ -243,7 +335,18 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone }) => {
               <dl className="mt-4 space-y-2 text-sm">
                 <div>
                   <dt className="text-gray-500">Имя</dt>
-                  <dd className="text-gray-900">{client?.name || '—'}</dd>
+                  <dd className="flex items-center gap-2">
+                    <span className="text-gray-900">{client?.name || '—'}</span>
+                    <button
+                      type="button"
+                      onClick={handleAiSuggestName}
+                      disabled={aiLoading || messages.length === 0}
+                      className="inline-flex items-center justify-center w-7 h-7 rounded-full border border-dashed border-amber-300 text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                      title="Определить имя клиента с помощью AI"
+                    >
+                      ✨
+                    </button>
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-gray-500">Телефон</dt>
@@ -262,6 +365,30 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone }) => {
                   <dd className="text-gray-900">{client?.createdAt ? formatDate(client.createdAt) : '—'}</dd>
                 </div>
               </dl>
+              {aiNameSuggestion && (
+                <div className="mt-3 p-2 rounded-lg border border-dashed border-amber-300 bg-amber-50">
+                  <p className="text-xs text-gray-700 mb-1">
+                    AI предлагает имя клиента: <span className="font-semibold">«{aiNameSuggestion}»</span>
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleApplyAiName}
+                      disabled={saving}
+                      className="px-3 py-1 text-xs font-medium rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                    >
+                      Применить
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAiNameSuggestion(null)}
+                      className="px-3 py-1 text-xs font-medium rounded border border-gray-300 text-gray-700 hover:bg-gray-50"
+                    >
+                      Отмена
+                    </button>
+                  </div>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={startEdit}
