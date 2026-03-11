@@ -7,6 +7,7 @@ import html2canvas from 'html2canvas';
 
 const CACHE_KEY = 'whatsapp_calculator_cache';
 const KP_CAPTURE_ID = 'wa-kp-capture';
+const KP_RENDER_ID = 'commercial-offer-render';
 const TARGET_WIDTH = 1080;
 const TARGET_HEIGHT = 1350;
 const CAPTION =
@@ -119,14 +120,51 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
     if (finalResult.total <= 0) return;
     setSendingProposal(true);
     try {
-      const container = document.getElementById(KP_CAPTURE_ID);
-      if (!container) throw new Error('Capture container not found');
+      const node =
+        document.getElementById(KP_RENDER_ID) || document.getElementById(KP_CAPTURE_ID);
+      if (!node) {
+        console.error('KP capture: node not found', { KP_RENDER_ID, KP_CAPTURE_ID });
+        throw new Error('Capture container not found');
+      }
 
-      const canvas = await html2canvas(container, {
+      await document.fonts.ready;
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => resolve());
+        });
+      });
+
+      const imgs = node.querySelectorAll('img');
+      await Promise.all(
+        Array.from(imgs).map(
+          (img) =>
+            new Promise<void>((resolve) => {
+              if (img.complete) {
+                resolve();
+                return;
+              }
+              img.onload = () => resolve();
+              img.onerror = () => resolve();
+            })
+        )
+      );
+
+      if (import.meta.env.DEV) {
+        const rect = node.getBoundingClientRect();
+        console.log('KP capture node', {
+          id: node.id,
+          rect: { width: rect.width, height: rect.height },
+          innerHTMLLength: node.innerHTML?.length ?? 0,
+          total: finalResult.total
+        });
+      }
+
+      const canvas = await html2canvas(node, {
         scale: 2,
         useCORS: true,
         logging: false,
-        backgroundColor: '#ffffff'
+        backgroundColor: '#ffffff',
+        allowTaint: true
       });
 
       const out = document.createElement('canvas');
@@ -150,7 +188,7 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
         out.toBlob(
           (b) => (b ? resolve(b) : reject(new Error('toBlob failed'))),
           'image/jpeg',
-          0.92
+          0.95
         );
       });
       await onSendProposalImage(blob, CAPTION);
@@ -271,14 +309,27 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
         </div>
       </div>
 
-      {/* Скрытый блок для рендера КП и захвата в изображение */}
+      {/* Блок для рендера КП вне экрана (без visibility:hidden — иначе html2canvas даёт белый кадр) */}
       <div
         id={KP_CAPTURE_ID}
         ref={captureRef}
-        className="fixed left-[-9999px] top-0 w-[1080px] overflow-auto bg-white"
-        style={{ visibility: 'hidden', pointerEvents: 'none' }}
+        className="fixed top-0 z-[-1] overflow-auto bg-white"
+        style={{
+          left: -10000,
+          width: TARGET_WIDTH,
+          minHeight: TARGET_HEIGHT,
+          background: '#ffffff',
+          color: '#111'
+        }}
       >
-        <div style={{ width: 1080, minHeight: 1350 }}>
+        <div
+          id={KP_RENDER_ID}
+          style={{
+            width: TARGET_WIDTH,
+            minHeight: TARGET_HEIGHT,
+            background: '#ffffff'
+          }}
+        >
           <CommercialProposal
             area={area}
             parameters={paramsForProposal}
