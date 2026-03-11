@@ -464,6 +464,34 @@ const WhatsAppChat: React.FC = () => {
     };
   }, [selectedId, messages, companyId, incognitoMode]);
 
+  const listWithDisplayTitle = useMemo(() => {
+    return conversations.map((c) => {
+      const effectiveUnread = locallyReadChatIds.has(c.id) ? 0 : (c.unreadCount ?? 0);
+      const normPhone = normalizePhone(c.phone ?? c.client?.phone ?? '');
+      const statusId = normPhone ? dealStatusByPhone.get(normPhone) ?? null : null;
+      const managerId = normPhone ? managerByPhone.get(normPhone) ?? null : null;
+      const displayTitle =
+        crmNamesByPhone.get(normalizePhone(c.phone))?.trim() || c.phone || '—';
+      const status = statusId ? (dealStatuses.find((s) => s.id === statusId) ?? null) : null;
+      const dealStatusColor = status?.color?.trim() || null;
+      const dealStatusName = status?.name?.trim() || null;
+      const manager = managerId ? (managers.find((m) => m.id === managerId) ?? null) : null;
+      const managerColor = manager?.color?.trim() || null;
+      const managerName = manager?.name?.trim() || null;
+      return {
+        ...c,
+        unreadCount: effectiveUnread,
+        displayTitle,
+        dealStatusId: statusId,
+        dealStatusColor: dealStatusColor || undefined,
+        dealStatusName: dealStatusName || undefined,
+        managerId: managerId ?? undefined,
+        managerColor: managerColor || undefined,
+        managerName: managerName || undefined
+      };
+    });
+  }, [conversations, locallyReadChatIds, crmNamesByPhone, dealStatusByPhone, dealStatuses, managerByPhone, managers]);
+
   const handleFileSelect = useCallback((file: File) => {
     setSendError(null);
     if (file.size > MAX_BYTES) {
@@ -886,34 +914,6 @@ const WhatsAppChat: React.FC = () => {
       : null);
 
   const isMobileChatView = isMobile && !!selectedId;
-
-  const listWithDisplayTitle = useMemo(() => {
-    return conversations.map((c) => {
-      const effectiveUnread = locallyReadChatIds.has(c.id) ? 0 : (c.unreadCount ?? 0);
-      const normPhone = normalizePhone(c.phone ?? c.client?.phone ?? '');
-      const statusId = normPhone ? dealStatusByPhone.get(normPhone) ?? null : null;
-      const managerId = normPhone ? managerByPhone.get(normPhone) ?? null : null;
-      const displayTitle =
-        crmNamesByPhone.get(normalizePhone(c.phone))?.trim() || c.phone || '—';
-      const status = statusId ? (dealStatuses.find((s) => s.id === statusId) ?? null) : null;
-      const dealStatusColor = status?.color?.trim() || null;
-      const dealStatusName = status?.name?.trim() || null;
-      const manager = managerId ? (managers.find((m) => m.id === managerId) ?? null) : null;
-      const managerColor = manager?.color?.trim() || null;
-      const managerName = manager?.name?.trim() || null;
-      return {
-        ...c,
-        unreadCount: effectiveUnread,
-        displayTitle,
-        dealStatusId: statusId,
-        dealStatusColor: dealStatusColor || undefined,
-        dealStatusName: dealStatusName || undefined,
-        managerId: managerId ?? undefined,
-        managerColor: managerColor || undefined,
-        managerName: managerName || undefined
-      };
-    });
-  }, [conversations, locallyReadChatIds, crmNamesByPhone, dealStatusByPhone, dealStatuses, managerByPhone, managers]);
 
   const { waitingCount, unreadCount } = useMemo(() => {
     let waiting = 0;
