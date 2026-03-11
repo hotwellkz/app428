@@ -14,12 +14,20 @@ export interface DealCard {
   statusId?: string | null;
   /** Старое поле статуса (для обратной совместимости) */
   status?: string | null;
+  /** Идентификатор ответственного менеджера (из коллекции chatManagers) */
+  managerId?: string | null;
   source: string;
   createdAt: unknown;
   updatedAt: unknown;
 }
 
 export interface DealStatusRecord {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface ChatManagerRecord {
   id: string;
   name: string;
   color: string;
@@ -93,6 +101,7 @@ async function getDealByClientPhone(phone: string, companyId: string): Promise<D
     clientPhone: (data.clientPhone as string) ?? normalized,
     statusId: (data.statusId as string | undefined) ?? (data.status as string | undefined) ?? null,
     status: (data.status as string | undefined) ?? null,
+    managerId: (data.managerId as string | undefined) ?? null,
     source: (data.source as string) ?? 'whatsapp',
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
@@ -115,6 +124,7 @@ async function createDealForClient(phone: string, companyId: string): Promise<De
     clientPhone: normalized,
     statusId: 'new',
     status: 'new',
+    managerId: null,
     source: 'whatsapp',
     createdAt: null,
     updatedAt: null,
@@ -123,6 +133,8 @@ async function createDealForClient(phone: string, companyId: string): Promise<De
 
 import type { WhatsAppMessage } from '../../types/whatsappDb';
 
+const COLLECTION_MANAGERS = 'chatManagers';
+
 interface ClientInfoPanelProps {
   /** Номер телефона (chatId) выбранного диалога */
   phone: string | null;
@@ -130,9 +142,11 @@ interface ClientInfoPanelProps {
   messages?: WhatsAppMessage[];
   /** Настроенные статусы сделок компании */
   dealStatuses?: DealStatusRecord[];
+  /** Справочник менеджеров для назначения на клиента */
+  managers?: ChatManagerRecord[];
 }
 
-const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [], dealStatuses }) => {
+const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [], dealStatuses, managers = [] }) => {
   const companyId = useCompanyId();
   const [client, setClient] = useState<WhatsAppClientCard | null>(null);
   const [deal, setDeal] = useState<DealCard | null>(null);
@@ -147,6 +161,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [newStatusName, setNewStatusName] = useState('');
   const [newStatusColor, setNewStatusColor] = useState('#6B7280');
+  const [showManagerModal, setShowManagerModal] = useState(false);
+  const [newManagerName, setNewManagerName] = useState('');
+  const [newManagerColor, setNewManagerColor] = useState('#3B82F6');
 
   const loadClientAndDeal = React.useCallback(() => {
     if (!phone) return;
@@ -462,6 +479,91 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
                   </div>
                 )}
               </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Ответственный менеджер</h3>
+                {managers.length > 0 ? (
+                  <div className="space-y-1">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="manager"
+                        checked={!deal?.managerId}
+                        onChange={async () => {
+                          if (!phone || !deal) return;
+                          setCreatingDeal(true);
+                          try {
+                            await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
+                              managerId: null,
+                              updatedAt: serverTimestamp()
+                            });
+                            setDeal({ ...deal, managerId: null });
+                          } finally {
+                            setCreatingDeal(false);
+                          }
+                        }}
+                        className="text-green-600"
+                      />
+                      <span className="text-sm text-gray-600">Без менеджера</span>
+                    </label>
+                    {managers.map((mg) => (
+                      <label key={mg.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="manager"
+                          checked={deal?.managerId === mg.id}
+                          onChange={async () => {
+                            if (!phone) return;
+                            setCreatingDeal(true);
+                            try {
+                              if (!deal) {
+                                const newDeal = await createDealForClient(phone, companyId);
+                                await updateDoc(doc(db, COLLECTION_DEALS, newDeal.id), {
+                                  managerId: mg.id,
+                                  updatedAt: serverTimestamp()
+                                });
+                                setDeal({ ...newDeal, managerId: mg.id });
+                              } else {
+                                await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
+                                  managerId: mg.id,
+                                  updatedAt: serverTimestamp()
+                                });
+                                setDeal({ ...deal, managerId: mg.id });
+                              }
+                            } finally {
+                              setCreatingDeal(false);
+                            }
+                          }}
+                          className="text-green-600"
+                        />
+                        <span
+                          className="inline-flex h-2 w-2 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: mg.color }}
+                        />
+                        <span className="text-sm text-gray-800">{mg.name}</span>
+                      </label>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => setShowManagerModal(true)}
+                      className="mt-1 text-[11px] text-green-600 hover:text-green-700"
+                    >
+                      + Добавить менеджера
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-500 mb-1">Менеджеры не добавлены.</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowManagerModal(true)}
+                      className="text-[11px] text-green-600 hover:text-green-700"
+                    >
+                      + Добавить первого менеджера
+                    </button>
+                  </>
+                )}
+              </div>
             </>
           ) : (
             <div className="mt-4 space-y-3">
@@ -579,6 +681,62 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
                   });
                   setShowStatusModal(false);
                   setNewStatusName('');
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                Создать
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showManagerModal && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-xs">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">Новый менеджер</h3>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Имя</label>
+                <input
+                  type="text"
+                  value={newManagerName}
+                  onChange={(e) => setNewManagerName(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Например: Маргарита"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Цвет</label>
+                <input
+                  type="color"
+                  value={newManagerColor}
+                  onChange={(e) => setNewManagerColor(e.target.value)}
+                  className="h-8 w-16 border border-gray-300 rounded"
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowManagerModal(false)}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={!newManagerName.trim()}
+                onClick={async () => {
+                  if (!companyId || !newManagerName.trim()) return;
+                  const col = collection(db, COLLECTION_MANAGERS);
+                  await addDoc(col, {
+                    name: newManagerName.trim(),
+                    color: newManagerColor,
+                    order: managers?.length ?? 0,
+                    companyId
+                  });
+                  setShowManagerModal(false);
+                  setNewManagerName('');
                 }}
                 className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
               >

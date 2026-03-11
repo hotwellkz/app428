@@ -109,9 +109,13 @@ const WhatsAppChat: React.FC = () => {
     Array<{ id: string; title: string; content: string; category: string }>
   >([]);
   type SimpleDealStatus = { id: string; name: string; color: string; order: number; isDefault?: boolean };
+  type SimpleManager = { id: string; name: string; color: string; order: number };
   const [dealStatuses, setDealStatuses] = useState<SimpleDealStatus[]>([]);
   const [dealStatusByPhone, setDealStatusByPhone] = useState<Map<string, string>>(() => new Map());
   const [dealStatusFilter, setDealStatusFilter] = useState<'all' | string>('all');
+  const [managers, setManagers] = useState<SimpleManager[]>([]);
+  const [managerByPhone, setManagerByPhone] = useState<Map<string, string>>(() => new Map());
+  const [managerFilter, setManagerFilter] = useState<'all' | 'none' | string>('all');
   const overlayRef = useRef(false);
 
   const selectionMode = selectedMessageIds.length > 0;
@@ -299,10 +303,39 @@ const WhatsAppChat: React.FC = () => {
     return () => unsub();
   }, [companyId]);
 
-  // Подписка на сделки: карта телефон -> статус
+  // Подписка на менеджеров чатов
+  useEffect(() => {
+    if (!companyId) {
+      setManagers([]);
+      return;
+    }
+    const col = collection(db, 'chatManagers');
+    const q = query(col, where('companyId', '==', companyId));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list: SimpleManager[] = snap.docs.map((d) => {
+          const data = d.data() as Record<string, unknown>;
+          return {
+            id: d.id,
+            name: (data.name as string) ?? d.id,
+            color: (data.color as string) ?? '#6B7280',
+            order: typeof data.order === 'number' ? data.order : 0
+          };
+        });
+        list.sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ru'));
+        setManagers(list);
+      },
+      () => setManagers([])
+    );
+    return () => unsub();
+  }, [companyId]);
+
+  // Подписка на сделки: карта телефон -> статус и телефон -> менеджер
   useEffect(() => {
     if (!companyId) {
       setDealStatusByPhone(new Map());
+      setManagerByPhone(new Map());
       return;
     }
     const col = collection(db, 'deals');
@@ -310,21 +343,26 @@ const WhatsAppChat: React.FC = () => {
     const unsub = onSnapshot(
       q,
       (snap) => {
-        const map = new Map<string, string>();
+        const statusMap = new Map<string, string>();
+        const mgrMap = new Map<string, string>();
         snap.docs.forEach((d) => {
-          const data = d.data() as any;
+          const data = d.data() as Record<string, unknown>;
           const phone = data.clientPhone as string | undefined;
           if (!phone) return;
           const norm = normalizePhone(phone);
           const statusId =
             (data.statusId as string | undefined) || (data.status as string | undefined) || null;
-          if (norm && statusId) {
-            map.set(norm, statusId);
-          }
+          if (norm && statusId) statusMap.set(norm, statusId);
+          const managerId = data.managerId as string | undefined;
+          if (norm && managerId) mgrMap.set(norm, managerId);
         });
-        setDealStatusByPhone(map);
+        setDealStatusByPhone(statusMap);
+        setManagerByPhone(mgrMap);
       },
-      () => setDealStatusByPhone(new Map())
+      () => {
+        setDealStatusByPhone(new Map());
+        setManagerByPhone(new Map());
+      }
     );
     return () => unsub();
   }, [companyId]);
@@ -806,21 +844,28 @@ const WhatsAppChat: React.FC = () => {
       const effectiveUnread = locallyReadChatIds.has(c.id) ? 0 : (c.unreadCount ?? 0);
       const normPhone = normalizePhone(c.phone ?? c.client?.phone ?? '');
       const statusId = normPhone ? dealStatusByPhone.get(normPhone) ?? null : null;
+      const managerId = normPhone ? managerByPhone.get(normPhone) ?? null : null;
       const displayTitle =
         crmNamesByPhone.get(normalizePhone(c.phone))?.trim() || c.phone || '—';
-        const status = statusId ? (dealStatuses.find((s) => s.id === statusId) ?? null) : null;
+      const status = statusId ? (dealStatuses.find((s) => s.id === statusId) ?? null) : null;
       const dealStatusColor = status?.color?.trim() || null;
       const dealStatusName = status?.name?.trim() || null;
+      const manager = managerId ? (managers.find((m) => m.id === managerId) ?? null) : null;
+      const managerColor = manager?.color?.trim() || null;
+      const managerName = manager?.name?.trim() || null;
       return {
         ...c,
         unreadCount: effectiveUnread,
         displayTitle,
         dealStatusId: statusId,
         dealStatusColor: dealStatusColor || undefined,
-        dealStatusName: dealStatusName || undefined
+        dealStatusName: dealStatusName || undefined,
+        managerId: managerId ?? undefined,
+        managerColor: managerColor || undefined,
+        managerName: managerName || undefined
       };
     });
-  }, [conversations, locallyReadChatIds, crmNamesByPhone, dealStatusByPhone, dealStatuses]);
+  }, [conversations, locallyReadChatIds, crmNamesByPhone, dealStatusByPhone, dealStatuses, managerByPhone, managers]);
 
   const { waitingCount, unreadCount } = useMemo(() => {
     let waiting = 0;
@@ -848,7 +893,14 @@ const WhatsAppChat: React.FC = () => {
     }
 
     if (dealStatusFilter !== 'all') {
-      base = base.filter((item) => (item as any).dealStatusId === dealStatusFilter);
+      base = base.filter((item) => (item as { dealStatusId?: string }).dealStatusId === dealStatusFilter);
+    }
+    if (managerFilter !== 'all') {
+      base = base.filter((item) => {
+        const mid = (item as { managerId?: string }).managerId;
+        if (managerFilter === 'none') return !mid;
+        return mid === managerFilter;
+      });
     }
 
     const withState = base.map((item) => ({
@@ -886,7 +938,7 @@ const WhatsAppChat: React.FC = () => {
     }
 
     return result;
-  }, [listWithDisplayTitle, searchQuery, activeFilter, dealStatusFilter]);
+  }, [listWithDisplayTitle, searchQuery, activeFilter, dealStatusFilter, managerFilter]);
 
   return (
     <div
@@ -1030,6 +1082,24 @@ const WhatsAppChat: React.FC = () => {
                 </select>
               </div>
             )}
+            <div className="px-3 pb-2">
+              <select
+                value={managerFilter}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setManagerFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
+                }}
+                className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
+              >
+                <option value="all">Все менеджеры</option>
+                <option value="none">Без менеджера</option>
+                {managers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <ConversationList
             items={filteredList}
@@ -1113,6 +1183,7 @@ const WhatsAppChat: React.FC = () => {
             phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null}
             messages={messages}
             dealStatuses={dealStatuses}
+            managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
           />
         )}
       </div>
@@ -1158,6 +1229,7 @@ const WhatsAppChat: React.FC = () => {
                 }
                 messages={messages}
                 dealStatuses={dealStatuses}
+                managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
               />
             </div>
           </div>

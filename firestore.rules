@@ -286,6 +286,28 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // Менеджеры чатов (WhatsApp CRM): по companyId или global_admin
+    match /chatManagers/{docId} {
+      allow read, update, delete: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId
+            == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
+            == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId
+            == request.resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
+            == request.resource.data.companyId)
+        || isGlobalAdmin()
+      );
+    }
+
     // Статусы сделок (WhatsApp CRM): по companyId или global_admin
     match /dealStatuses/{docId} {
       allow read, update, delete: if isAuthenticated() && (

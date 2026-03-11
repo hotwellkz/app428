@@ -7,14 +7,15 @@ import Avatar from './Avatar';
 interface ConversationListProps {
   items: (ConversationListItem & {
     dealStatusId?: string | null;
-    /** Цвет точки статуса сделки (hex или CSS color). Fallback — серый. */
     dealStatusColor?: string | null;
-    /** Название статуса для tooltip при наведении на точку */
     dealStatusName?: string | null;
+    /** Цвет точки ответственного менеджера */
+    managerColor?: string | null;
+    /** Имя менеджера для tooltip */
+    managerName?: string | null;
   })[];
   selectedId: string | null;
   onSelect: (id: string) => void;
-  /** Открытие контекстного меню для диалога (desktop: правый клик, mobile: long press) */
   onConversationContextMenu?: (id: string, x: number, y: number, source: 'desktop' | 'mobile') => void;
 }
 
@@ -69,10 +70,13 @@ const ConversationList: React.FC<ConversationListProps> = ({
         const waitingDuration = !hasUnread && isNeedReply ? getWaitingDurationText() : null;
         const dealStatusColor = (item as { dealStatusColor?: string | null }).dealStatusColor;
         const dealStatusName = (item as { dealStatusName?: string | null }).dealStatusName;
+        const managerColor = (item as { managerColor?: string | null }).managerColor;
+        const managerName = (item as { managerName?: string | null }).managerName;
         const statusDotStyle = dealStatusColor
           ? { backgroundColor: dealStatusColor }
           : undefined;
         const statusDotClass = dealStatusColor ? '' : 'bg-gray-400';
+        const managerDotStyle = managerColor ? { backgroundColor: managerColor } : undefined;
         return (
           <button
             key={item.id}
@@ -124,7 +128,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
             ].join(' ')}
           >
             <div className="flex flex-col min-w-0 flex-1 gap-0.5 relative">
-              {/* Первая строка: точка статуса сделки, аватар, имя/телефон, время, badge непрочитанного */}
+              {/* Первая строка: статус сделки, менеджер, аватар, имя/телефон, время, badge */}
               <div className="flex items-center gap-2 min-w-0">
                 <span
                   className={`flex-shrink-0 w-2 h-2 rounded-full ${statusDotClass}`}
@@ -132,6 +136,14 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   title={dealStatusName ?? undefined}
                   aria-hidden
                 />
+                {managerColor && (
+                  <span
+                    className="flex-shrink-0 w-1.5 h-1.5 rounded-full"
+                    style={managerDotStyle}
+                    title={managerName ?? undefined}
+                    aria-hidden
+                  />
+                )}
                 <Avatar
                   name={item.displayTitle ?? item.client?.name ?? item.phone ?? item.client?.phone ?? undefined}
                   phone={item.phone ?? item.client?.phone ?? undefined}
