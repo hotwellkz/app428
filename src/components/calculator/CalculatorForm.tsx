@@ -83,38 +83,42 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
     houseShape: 'Простая форма',
   };
 
-  // Инициализируем значения по умолчанию после загрузки конфигурации (и из initialValues при наличии)
+  // Инициализируем стандартные значения один раз после загрузки конфигурации. Кэш (initialValues) подмешиваем только по непустым полям.
   useEffect(() => {
-    if (configLoaded) {
-      const config = getConfigSync();
-      setFormData(prev => {
-        const defaults = {
-          foundation: prev.foundation || STANDARD_DEFAULTS.foundation,
-          floors: prev.floors || STANDARD_DEFAULTS.floors,
-          firstFloorType: prev.firstFloorType || STANDARD_DEFAULTS.firstFloorType,
-          secondFloorType: prev.secondFloorType || config.SECOND_FLOOR_TYPE_OPTIONS[0]?.label || '',
-          thirdFloorType: prev.thirdFloorType || config.THIRD_FLOOR_TYPE_OPTIONS[0]?.label || '',
-          firstFloorHeight: prev.firstFloorHeight || STANDARD_DEFAULTS.firstFloorHeight,
-          secondFloorHeight: prev.secondFloorHeight || config.FLOOR_HEIGHT_OPTIONS[0]?.label || '',
-          thirdFloorHeight: prev.thirdFloorHeight || config.FLOOR_HEIGHT_OPTIONS[0]?.label || '',
-          firstFloorThickness: prev.firstFloorThickness || STANDARD_DEFAULTS.firstFloorThickness,
-          secondFloorThickness: prev.secondFloorThickness || config.WALL_THICKNESS_OPTIONS[0]?.label || '',
-          thirdFloorThickness: prev.thirdFloorThickness || config.WALL_THICKNESS_OPTIONS[0]?.label || '',
-          partitionType: prev.partitionType || STANDARD_DEFAULTS.partitionType,
-          ceiling: prev.ceiling || STANDARD_DEFAULTS.ceiling,
-          roofType: prev.roofType || STANDARD_DEFAULTS.roofType,
-          houseShape: prev.houseShape || STANDARD_DEFAULTS.houseShape,
-          additionalWorks: prev.additionalWorks || config.ADDITIONAL_WORKS_OPTIONS[0]?.label || '',
-          deliveryCity: prev.deliveryCity || (config.DELIVERY_OPTIONS || DELIVERY_CITIES)[0]?.label || '',
-        };
-        const next = { ...prev, ...defaults };
-        if (initialValues && Object.keys(initialValues).length > 0 && !appliedInitialRef.current) {
-          appliedInitialRef.current = true;
-          return { ...next, ...initialValues };
-        }
-        return next;
-      });
-    }
+    if (!configLoaded || appliedInitialRef.current) return;
+    appliedInitialRef.current = true;
+    const config = getConfigSync();
+    setFormData(prev => {
+      const defaults = {
+        foundation: prev.foundation || STANDARD_DEFAULTS.foundation,
+        floors: prev.floors || STANDARD_DEFAULTS.floors,
+        firstFloorType: prev.firstFloorType || STANDARD_DEFAULTS.firstFloorType,
+        secondFloorType: prev.secondFloorType || config.SECOND_FLOOR_TYPE_OPTIONS[0]?.label || '',
+        thirdFloorType: prev.thirdFloorType || config.THIRD_FLOOR_TYPE_OPTIONS[0]?.label || '',
+        firstFloorHeight: prev.firstFloorHeight || STANDARD_DEFAULTS.firstFloorHeight,
+        secondFloorHeight: prev.secondFloorHeight || config.FLOOR_HEIGHT_OPTIONS[0]?.label || '',
+        thirdFloorHeight: prev.thirdFloorHeight || config.FLOOR_HEIGHT_OPTIONS[0]?.label || '',
+        firstFloorThickness: prev.firstFloorThickness || STANDARD_DEFAULTS.firstFloorThickness,
+        secondFloorThickness: prev.secondFloorThickness || config.WALL_THICKNESS_OPTIONS[0]?.label || '',
+        thirdFloorThickness: prev.thirdFloorThickness || config.WALL_THICKNESS_OPTIONS[0]?.label || '',
+        partitionType: prev.partitionType || STANDARD_DEFAULTS.partitionType,
+        ceiling: prev.ceiling || STANDARD_DEFAULTS.ceiling,
+        roofType: prev.roofType || STANDARD_DEFAULTS.roofType,
+        houseShape: prev.houseShape || STANDARD_DEFAULTS.houseShape,
+        additionalWorks: prev.additionalWorks || config.ADDITIONAL_WORKS_OPTIONS[0]?.label || '',
+        deliveryCity: prev.deliveryCity || (config.DELIVERY_OPTIONS || DELIVERY_CITIES)[0]?.label || '',
+      };
+      const next = { ...prev, ...defaults };
+      if (!initialValues || typeof initialValues !== 'object') return next;
+      const merged = { ...next };
+      for (const [key, val] of Object.entries(initialValues)) {
+        if (val === undefined || val === null) continue;
+        if (typeof val === 'string' && val.trim() === '') continue;
+        if (typeof val === 'number' && Number.isNaN(val)) continue;
+        if (key in merged) merged[key as keyof CalculatorState] = val as never;
+      }
+      return merged;
+    });
   }, [configLoaded, initialValues]);
 
   const [areaError, setAreaError] = useState<string>('');

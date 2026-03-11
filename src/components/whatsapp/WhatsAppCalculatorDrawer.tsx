@@ -76,18 +76,18 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
   });
   const [simpleMode, setSimpleMode] = useState(true);
   const [sendingProposal, setSendingProposal] = useState(false);
-  const [initialValues, setInitialValues] = useState<Record<string, unknown> | undefined>(undefined);
   const [theme, setTheme] = useState<'green' | 'blue' | 'gray'>('green');
   const captureRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (open) {
-      const cached = loadCache();
-      if (cached?.parameters && typeof cached.parameters === 'object')
-        setInitialValues(cached.parameters as Record<string, unknown>);
-      else setInitialValues(undefined);
-    }
-  }, [open]);
+  // Кэш подставляем при рендере, чтобы форма получила его до первого эффекта и не затирала STANDARD_DEFAULTS
+  const initialValues: Record<string, unknown> | undefined = open
+    ? (() => {
+        const cached = loadCache();
+        return cached?.parameters && typeof cached.parameters === 'object'
+          ? (cached.parameters as Record<string, unknown>)
+          : undefined;
+      })()
+    : undefined;
 
   const handleCalculationChange = useCallback((result: CalculationResult, newArea: number) => {
     setCalculationResult(result);
