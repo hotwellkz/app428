@@ -69,6 +69,12 @@ body {
   z-index: 1050;
 }
 
+/* Подписи форм и фильтров — без переноса текста */
+.form-label,
+.filter-label {
+  white-space: nowrap;
+}
+
 /* Модальное окно для адреса */
 .address-modal-overlay {
   position: fixed;

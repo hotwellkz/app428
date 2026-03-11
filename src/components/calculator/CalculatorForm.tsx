@@ -339,7 +339,7 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Площадь застройки */}
         <Input
-          label="Площадь застройки (м²)"
+          label="Площадь застр. (м²)"
           value={formData.area}
           onChange={(value) => handleFieldChange('area', value)}
           type="number"

@@ -1075,7 +1075,7 @@ const WhatsAppChat: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActiveFilter('all')}
-                className={`inline-flex items-center justify-center min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
+                className={`filter-label inline-flex items-center justify-center min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
                   activeFilter === 'all'
                     ? 'bg-green-100 border-green-200 text-green-800 font-medium'
                     : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
@@ -1086,7 +1086,7 @@ const WhatsAppChat: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActiveFilter('waiting')}
-                className={`inline-flex items-center gap-1.5 min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
+                className={`filter-label inline-flex items-center gap-1.5 min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
                   activeFilter === 'waiting'
                     ? 'bg-green-100 border-green-200 text-green-800 font-medium'
                     : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
@@ -1103,14 +1103,14 @@ const WhatsAppChat: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActiveFilter('unread')}
-                className={`inline-flex items-center gap-1.5 min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
+                className={`filter-label inline-flex items-center gap-1.5 min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
                   activeFilter === 'unread'
                     ? 'bg-green-100 border-green-200 text-green-800 font-medium'
                     : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 <span className="inline-flex h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF4D4F' }} />
-                <span>Непрочит.</span>
+                <span>Непр.</span>
                 {unreadCount > 0 && (
                   <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-gray-200 text-[10px] font-medium text-gray-700 ml-0.5">
                     {unreadCount}
