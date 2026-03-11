@@ -75,6 +75,17 @@ body {
   white-space: nowrap;
 }
 
+/* Часы в верхней панели CRM (WhatsApp) */
+.crm-clock {
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: #2f855a;
+  margin-left: 10px;
+  display: flex;
+  align-items: center;
+}
+
 /* Модальное окно для адреса */
 .address-modal-overlay {
   position: fixed;

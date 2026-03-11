@@ -121,6 +121,22 @@ const WhatsAppChat: React.FC = () => {
   const selectionMode = selectedMessageIds.length > 0;
   overlayRef.current = selectionMode || !!contextMenu || !!reactionPickerMessageId || !!actionsSheetMessageId || forwardDialogOpen;
 
+  // Часы в шапке (HH:MM), обновление раз в минуту
+  const [clockTime, setClockTime] = useState(() => {
+    const now = new Date();
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  });
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      setClockTime(
+        `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+      );
+    };
+    const t = setInterval(updateClock, 60000);
+    return () => clearInterval(t);
+  }, []);
+
   // Режим «Инкогнито»: просмотр без отметки о прочтении и без отправки
   const [incognitoMode, setIncognitoMode] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -1000,30 +1016,35 @@ const WhatsAppChat: React.FC = () => {
               <MessageSquare className="w-5 h-5 text-green-600" />
               WhatsApp
             </h1>
-            <button
-              type="button"
-              onClick={() => setIncognitoMode((v) => !v)}
-              className="inline-flex items-center gap-2 text-xs md:text-sm px-2 py-1 rounded-full border transition-colors
-                border-gray-300 bg-gray-50 hover:bg-gray-100
-                data-[active=true]:border-amber-400 data-[active=true]:bg-amber-50"
-              data-active={incognitoMode ? 'true' : 'false'}
-            >
-              <span
-                className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
-                  incognitoMode ? 'bg-amber-400' : 'bg-gray-300'
-                }`}
-                aria-hidden="true"
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setIncognitoMode((v) => !v)}
+                className="inline-flex items-center gap-2 text-xs md:text-sm px-2 py-1 rounded-full border transition-colors
+                  border-gray-300 bg-gray-50 hover:bg-gray-100
+                  data-[active=true]:border-amber-400 data-[active=true]:bg-amber-50"
+                data-active={incognitoMode ? 'true' : 'false'}
               >
                 <span
-                  className={`h-3 w-3 rounded-full bg-white shadow transition-transform ${
-                    incognitoMode ? 'translate-x-3' : 'translate-x-0'
+                  className={`relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${
+                    incognitoMode ? 'bg-amber-400' : 'bg-gray-300'
                   }`}
-                />
-              </span>
-              <span className={incognitoMode ? 'text-amber-700 font-medium' : 'text-gray-600'}>
-                Инкогнито
-              </span>
-            </button>
+                  aria-hidden="true"
+                >
+                  <span
+                    className={`h-3 w-3 rounded-full bg-white shadow transition-transform ${
+                      incognitoMode ? 'translate-x-3' : 'translate-x-0'
+                    }`}
+                  />
+                </span>
+                <span className={incognitoMode ? 'text-amber-700 font-medium' : 'text-gray-600'}>
+                  Инкогнито
+                </span>
+              </button>
+              <div id="crm-clock" className="crm-clock" aria-live="polite">
+                {clockTime}
+              </div>
+            </div>
           </div>
           {incognitoMode && (
             <p className="mt-2 text-[11px] md:text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1 inline-flex items-center gap-1">
