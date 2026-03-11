@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause, User } from 'lucide-react';
 import ChatInput from './ChatInput';
 import { WhatsAppCalculatorDrawer } from './WhatsAppCalculatorDrawer';
@@ -294,10 +294,12 @@ function formatFileSize(bytes: number | undefined): string {
 
 function AudioMessageBubble({ att }: { att: MessageAttachment }) {
   const audioRef = useRef<HTMLAudioElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
   const [duration, setDuration] = useState<number>(0);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     const el = audioRef.current;
@@ -306,7 +308,9 @@ function AudioMessageBubble({ att }: { att: MessageAttachment }) {
       setDuration(el.duration);
       setLoaded(true);
     };
-    const onTimeUpdate = () => setCurrentTime(el.currentTime);
+    const onTimeUpdate = () => {
+      if (!isDragging) setCurrentTime(el.currentTime);
+    };
     const onEnded = () => {
       setIsPlaying(false);
       setCurrentTime(0);
@@ -329,7 +333,7 @@ function AudioMessageBubble({ att }: { att: MessageAttachment }) {
       el.removeEventListener('pause', onPause);
       el.removeEventListener('play', onPlay);
     };
-  }, [att.url]);
+  }, [att.url, isDragging]);
 
   const togglePlay = () => {
     const el = audioRef.current;
@@ -343,15 +347,48 @@ function AudioMessageBubble({ att }: { att: MessageAttachment }) {
     }
   };
 
+  const seekToPercent = useCallback(
+    (percent: number) => {
+      const pct = Math.max(0, Math.min(1, percent));
+      const newTime = duration ? pct * duration : 0;
+      setCurrentTime(newTime);
+      const el = audioRef.current;
+      if (el && Number.isFinite(newTime)) el.currentTime = newTime;
+    },
+    [duration]
+  );
+
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    const el = audioRef.current;
-    if (!el || !duration) return;
+    if (!duration) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const pct = Math.max(0, Math.min(1, x / rect.width));
-    el.currentTime = pct * duration;
-    setCurrentTime(el.currentTime);
+    const pct = (e.clientX - rect.left) / rect.width;
+    seekToPercent(pct);
   };
+
+  const handleProgressMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!duration) return;
+    e.preventDefault();
+    setIsDragging(true);
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    seekToPercent(pct);
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const r = progressBarRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const percent = (moveEvent.clientX - r.left) / r.width;
+      seekToPercent(percent);
+    };
+    const onMouseUp = () => {
+      setIsDragging(false);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  };
+
+  const percent = duration > 0 ? currentTime / duration : 0;
 
   return (
     <div className="mt-1 flex items-center gap-2 min-w-[200px] max-w-[280px]">
@@ -366,16 +403,22 @@ function AudioMessageBubble({ att }: { att: MessageAttachment }) {
       </button>
       <div className="flex-1 min-w-0">
         <div
+          ref={progressBarRef}
           role="progressbar"
-          aria-valuenow={duration ? (currentTime / duration) * 100 : 0}
+          aria-valuenow={duration ? percent * 100 : 0}
           aria-valuemin={0}
           aria-valuemax={100}
-          className="h-1.5 bg-gray-300 rounded-full cursor-pointer overflow-hidden"
+          className="relative h-1.5 bg-gray-300 rounded-full cursor-pointer overflow-visible select-none"
           onClick={handleProgressClick}
+          onMouseDown={handleProgressMouseDown}
         >
           <div
-            className="h-full bg-green-600 rounded-full transition-all duration-100"
-            style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%' }}
+            className="absolute inset-y-0 left-0 bg-green-600 rounded-full pointer-events-none transition-none"
+            style={{ width: `${percent * 100}%` }}
+          />
+          <div
+            className="absolute top-1/2 w-3 h-3 -mt-1.5 -ml-1.5 rounded-full bg-[#25D366] border-2 border-white shadow cursor-grab active:cursor-grabbing pointer-events-none"
+            style={{ left: `${percent * 100}%` }}
           />
         </div>
         <p className="text-xs text-gray-500 mt-0.5 flex justify-between">
