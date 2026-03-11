@@ -6,7 +6,7 @@ import { calculatePrice } from '../../utils/calculatePrice';
 import { loadCalculatorConfig, getConfigSync } from '../../utils/configLoader';
 import { PARTITION_OPTIONS } from '../../utils/calculatorData';
 import { DELIVERY_CITIES } from '../../utils/deliveryData';
-import { formatPriceForForm, unformatPriceFromForm } from '../../utils/calculatorFormatters';
+import { calculatorFormatters } from '../../utils/calculatorFormatters';
 
 interface CalculatorFormProps {
   onCalculationChange: (result: CalculationResult, area: number) => void;
@@ -524,8 +524,8 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
                     <input
                       type="text"
                       placeholder="Стоимость, ₸"
-                      value={formatPriceForForm(work.price)}
-                      onChange={(e) => updateCustomWork(index, 'price', unformatPriceFromForm(e.target.value))}
+                      value={calculatorFormatters.formatPriceForForm(work.price)}
+                      onChange={(e) => updateCustomWork(index, 'price', calculatorFormatters.unformatPriceFromForm(e.target.value))}
                       className="w-32 lg:w-40 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors"
                     />
                     {formData.customWorks.length > 1 && (
@@ -611,8 +611,8 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formatPriceForForm(installmentAmount)}
-                  onChange={(e) => setInstallmentAmount(unformatPriceFromForm(e.target.value))}
+                  value={calculatorFormatters.formatPriceForForm(installmentAmount)}
+                  onChange={(e) => setInstallmentAmount(calculatorFormatters.unformatPriceFromForm(e.target.value))}
                   placeholder="Введите сумму рассрочки"
                   className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors text-sm"
                 />
