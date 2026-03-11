@@ -171,6 +171,13 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
   const [deletingStatus, setDeletingStatus] = useState<{ status: DealStatusRecord; dealCount: number } | null>(null);
   const [deleteStatusLoading, setDeleteStatusLoading] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement>(null);
+  const [managerContextMenu, setManagerContextMenu] = useState<{ x: number; y: number; manager: ChatManagerRecord } | null>(null);
+  const [editingManager, setEditingManager] = useState<ChatManagerRecord | null>(null);
+  const [editManagerName, setEditManagerName] = useState('');
+  const [editManagerColor, setEditManagerColor] = useState('#3B82F6');
+  const [deletingManager, setDeletingManager] = useState<{ manager: ChatManagerRecord; dealCount: number } | null>(null);
+  const [deleteManagerLoading, setDeleteManagerLoading] = useState(false);
+  const managerMenuRef = useRef<HTMLDivElement>(null);
 
   const loadClientAndDeal = React.useCallback(() => {
     if (!phone) return;
@@ -209,6 +216,16 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
     document.addEventListener('click', onDocClick, true);
     return () => document.removeEventListener('click', onDocClick, true);
   }, [statusContextMenu]);
+
+  useEffect(() => {
+    if (!managerContextMenu) return;
+    const close = () => setManagerContextMenu(null);
+    const onDocClick = (e: MouseEvent) => {
+      if (managerMenuRef.current && !managerMenuRef.current.contains(e.target as Node)) close();
+    };
+    document.addEventListener('click', onDocClick, true);
+    return () => document.removeEventListener('click', onDocClick, true);
+  }, [managerContextMenu]);
 
   const handleAIAnalyze = async () => {
     if (!phone || aiLoading) return;
@@ -543,41 +560,61 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
                       <span className="text-sm text-gray-600">Без менеджера</span>
                     </label>
                     {managers.map((mg) => (
-                      <label key={mg.id} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio"
-                          name="manager"
-                          checked={deal?.managerId === mg.id}
-                          onChange={async () => {
-                            if (!phone) return;
-                            setCreatingDeal(true);
-                            try {
-                              if (!deal) {
-                                const newDeal = await createDealForClient(phone, companyId);
-                                await updateDoc(doc(db, COLLECTION_DEALS, newDeal.id), {
-                                  managerId: mg.id,
-                                  updatedAt: serverTimestamp()
-                                });
-                                setDeal({ ...newDeal, managerId: mg.id });
-                              } else {
-                                await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
-                                  managerId: mg.id,
-                                  updatedAt: serverTimestamp()
-                                });
-                                setDeal({ ...deal, managerId: mg.id });
+                      <div
+                        key={mg.id}
+                        className="group flex items-center gap-1 w-full"
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setManagerContextMenu({ x: e.clientX, y: e.clientY, manager: mg });
+                        }}
+                      >
+                        <label className="flex-1 flex items-center gap-2 cursor-pointer min-w-0">
+                          <input
+                            type="radio"
+                            name="manager"
+                            checked={deal?.managerId === mg.id}
+                            onChange={async () => {
+                              if (!phone) return;
+                              setCreatingDeal(true);
+                              try {
+                                if (!deal) {
+                                  const newDeal = await createDealForClient(phone, companyId);
+                                  await updateDoc(doc(db, COLLECTION_DEALS, newDeal.id), {
+                                    managerId: mg.id,
+                                    updatedAt: serverTimestamp()
+                                  });
+                                  setDeal({ ...newDeal, managerId: mg.id });
+                                } else {
+                                  await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
+                                    managerId: mg.id,
+                                    updatedAt: serverTimestamp()
+                                  });
+                                  setDeal({ ...deal, managerId: mg.id });
+                                }
+                              } finally {
+                                setCreatingDeal(false);
                               }
-                            } finally {
-                              setCreatingDeal(false);
-                            }
+                            }}
+                            className="text-green-600"
+                          />
+                          <span
+                            className="inline-flex h-2 w-2 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: mg.color }}
+                          />
+                          <span className="text-sm text-gray-800 truncate">{mg.name}</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setManagerContextMenu({ x: e.clientX, y: e.clientY, manager: mg });
                           }}
-                          className="text-green-600"
-                        />
-                        <span
-                          className="inline-flex h-2 w-2 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: mg.color }}
-                        />
-                        <span className="text-sm text-gray-800">{mg.name}</span>
-                      </label>
+                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-200 text-gray-500 flex-shrink-0"
+                          aria-label="Меню менеджера"
+                        >
+                          <MoreVertical className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     ))}
                     <button
                       type="button"
@@ -817,6 +854,157 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
                 className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
                 {deleteStatusLoading ? 'Удаление…' : 'Удалить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {managerContextMenu && (
+        <div
+          ref={managerMenuRef}
+          className="fixed z-[1300] min-w-[140px] py-1 bg-white rounded-lg shadow-lg border border-gray-200"
+          style={{ left: managerContextMenu.x, top: managerContextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+            onClick={() => {
+              setEditManagerName(managerContextMenu.manager.name);
+              setEditManagerColor(managerContextMenu.manager.color);
+              setEditingManager(managerContextMenu.manager);
+              setManagerContextMenu(null);
+            }}
+          >
+            Редактировать
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+            onClick={async () => {
+              const manager = managerContextMenu.manager;
+              setManagerContextMenu(null);
+              const dealsSnap = await getDocs(
+                query(
+                  collection(db, COLLECTION_DEALS),
+                  where('companyId', '==', companyId),
+                  where('managerId', '==', manager.id)
+                )
+              );
+              setDeletingManager({ manager, dealCount: dealsSnap.size });
+            }}
+          >
+            Удалить
+          </button>
+        </div>
+      )}
+
+      {editingManager && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-xs">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">Редактировать менеджера</h3>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Имя менеджера</label>
+                <input
+                  type="text"
+                  value={editManagerName}
+                  onChange={(e) => setEditManagerName(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Например: Маргарита"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Цвет иконки</label>
+                <input
+                  type="color"
+                  value={editManagerColor}
+                  onChange={(e) => setEditManagerColor(e.target.value)}
+                  className="h-8 w-16 border border-gray-300 rounded"
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setEditingManager(null)}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={!editManagerName.trim()}
+                onClick={async () => {
+                  if (!editManagerName.trim()) return;
+                  await updateDoc(doc(db, COLLECTION_MANAGERS, editingManager.id), {
+                    name: editManagerName.trim(),
+                    color: editManagerColor
+                  });
+                  setEditingManager(null);
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingManager && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-sm">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">
+              Удалить менеджера «{deletingManager.manager.name}»?
+            </h3>
+            {deletingManager.dealCount > 0 && (
+              <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2 mb-3">
+                Этот менеджер назначен в {deletingManager.dealCount} сделках. При удалении у сделок
+                будет установлен вариант «Без менеджера».
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletingManager(null)}
+                disabled={deleteManagerLoading}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={deleteManagerLoading}
+                onClick={async () => {
+                  setDeleteManagerLoading(true);
+                  try {
+                    const { manager } = deletingManager;
+                    const dealsSnap = await getDocs(
+                      query(
+                        collection(db, COLLECTION_DEALS),
+                        where('companyId', '==', companyId),
+                        where('managerId', '==', manager.id)
+                      )
+                    );
+                    const batch = writeBatch(db);
+                    dealsSnap.docs.forEach((d) => {
+                      batch.update(d.ref, { managerId: null, updatedAt: serverTimestamp() });
+                    });
+                    await batch.commit();
+                    await deleteDoc(doc(db, COLLECTION_MANAGERS, manager.id));
+                    if (deal && deal.managerId === manager.id) {
+                      setDeal({ ...deal, managerId: null });
+                    }
+                    setDeletingManager(null);
+                  } finally {
+                    setDeleteManagerLoading(false);
+                  }
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteManagerLoading ? 'Удаление…' : 'Удалить'}
               </button>
             </div>
           </div>
