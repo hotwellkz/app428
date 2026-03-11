@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Input } from './Input';
 import { Dropdown } from './Dropdown';
 import { CalculatorState, CalculationResult, CalculatorInput, CustomWork } from '../../types/calculator';
@@ -12,6 +12,8 @@ interface CalculatorFormProps {
   onOptionsChange?: (options: { isVatIncluded: boolean; isInstallment: boolean; installmentAmount: number; hideFundamentCost: boolean; hideKitCost: boolean; hideAssemblyCost: boolean; hideDeliveryCost: boolean }) => void;
   onParametersChange?: (parameters: any) => void;
   isAdvancedMode?: boolean;
+  /** Начальные значения формы (например из кэша для чата) */
+  initialValues?: Partial<CalculatorState>;
 }
 
 // Получить опции перегородок для определенной высоты
@@ -29,9 +31,11 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
   onCalculationChange, 
   onOptionsChange, 
   onParametersChange, 
-  isAdvancedMode = true 
+  isAdvancedMode = true,
+  initialValues
 }) => {
   const [configLoaded, setConfigLoaded] = useState(false);
+  const appliedInitialRef = useRef(false);
 
   // Загружаем конфигурацию при монтировании компонента
   useEffect(() => {
@@ -65,17 +69,12 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
     deliveryCity: '',
   });
 
-  // Инициализируем значения по умолчанию после загрузки конфигурации
+  // Инициализируем значения по умолчанию после загрузки конфигурации (и из initialValues при наличии)
   useEffect(() => {
     if (configLoaded) {
       const config = getConfigSync();
       setFormData(prev => {
-        // Проверяем, нужно ли обновлять значения (только если они пустые)
-        const needsUpdate = !prev.foundation || !prev.floors || !prev.firstFloorType;
-        if (!needsUpdate) return prev;
-        
-        return {
-          ...prev,
+        const defaults = {
           foundation: prev.foundation || config.FOUNDATION_OPTIONS[0]?.label || '',
           floors: prev.floors || config.FLOORS_OPTIONS[0]?.label || '',
           firstFloorType: prev.firstFloorType || config.FIRST_FLOOR_TYPE_OPTIONS[0]?.label || '',
@@ -93,9 +92,15 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
           additionalWorks: prev.additionalWorks || config.ADDITIONAL_WORKS_OPTIONS[0]?.label || '',
           deliveryCity: prev.deliveryCity || (config.DELIVERY_OPTIONS || DELIVERY_CITIES)[0]?.label || '',
         };
+        const next = { ...prev, ...defaults };
+        if (initialValues && Object.keys(initialValues).length > 0 && !appliedInitialRef.current) {
+          appliedInitialRef.current = true;
+          return { ...next, ...initialValues };
+        }
+        return next;
       });
     }
-  }, [configLoaded]);
+  }, [configLoaded, initialValues]);
 
   const [areaError, setAreaError] = useState<string>('');
   

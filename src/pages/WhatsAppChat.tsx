@@ -684,6 +684,54 @@ const WhatsAppChat: React.FC = () => {
     }
   };
 
+  const handleSendProposalImage = useCallback(
+    async (blob: Blob, caption: string) => {
+      if (incognitoMode) return;
+      const item = listWithDisplayTitle.find((c) => c.id === selectedId);
+      const phone = item?.phone ?? (item as { client?: { phone?: string } })?.client?.phone;
+      if (!phone || phone === '…' || !companyId || !selectedId) {
+        showErrorNotification('Выберите диалог для отправки КП');
+        return;
+      }
+      const file = new File([blob], 'kp.jpg', { type: 'image/jpeg' });
+      setUploadState('uploading');
+      try {
+        const path = `${companyId}/${WHATSAPP_MEDIA_PREFIX}/${selectedId}/${Date.now()}_kp.jpg`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(CLIENTS_BUCKET)
+          .upload(path, file, { upsert: false });
+        if (uploadError) {
+          setSendError('Ошибка загрузки файла.');
+          return;
+        }
+        const { data: urlData } = supabase.storage.from(CLIENTS_BUCKET).getPublicUrl(uploadData.path);
+        const contentUri = urlData.publicUrl;
+        setUploadState('sending');
+        const res = await fetch(SEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId: phone,
+            contentUri,
+            attachmentType: 'image',
+            fileName: 'kp.jpg',
+            text: caption || undefined,
+            companyId: companyId ?? undefined
+          })
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (res.ok) {
+          setSendError(null);
+        } else {
+          setSendError(data?.error ?? 'Не удалось отправить КП.');
+        }
+      } finally {
+        setUploadState('idle');
+      }
+    },
+    [companyId, selectedId, listWithDisplayTitle, incognitoMode]
+  );
+
   const closeSelectionAndOverlays = useCallback(() => {
     setSelectedMessageIds([]);
     setContextMenu(null);
@@ -1179,6 +1227,7 @@ const WhatsAppChat: React.FC = () => {
               incognitoMode={incognitoMode}
               onOpenClientInfo={isMobile ? () => setMobileClientSheetOpen(true) : undefined}
               knowledgeBase={knowledgeBase}
+              onSendProposalImage={incognitoMode ? undefined : handleSendProposalImage}
             />
           )}
         </section>

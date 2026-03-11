@@ -13,7 +13,8 @@ import {
   Smile,
   Sparkles,
   Zap,
-  Target
+  Target,
+  Calculator
 } from 'lucide-react';
 import EmojiPicker, { type EmojiClickData, Categories } from 'emoji-picker-react';
 import { useSpeechToText } from '../../hooks/useSpeechToText';
@@ -68,6 +69,8 @@ interface ChatInputProps {
   aiModeLoading?: 'normal' | 'short' | 'close' | null;
   /** Автофокус на поле при изменении value (для AI-подстановки) */
   autoFocusOnChange?: boolean;
+  /** Открыть калькулятор стоимости (drawer в чате) */
+  onOpenCalculator?: () => void;
 }
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -86,7 +89,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   showCameraButton = false,
   onAiReply,
   aiModeLoading = null,
-  autoFocusOnChange = false
+  autoFocusOnChange = false,
+  onOpenCalculator
 }) => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -273,6 +277,18 @@ const ChatInput: React.FC<ChatInputProps> = ({
             >
               <Smile className="w-5 h-5 md:w-6 md:h-6" />
             </button>
+            {onOpenCalculator && (
+              <button
+                type="button"
+                onClick={onOpenCalculator}
+                disabled={disabled}
+                title="Калькулятор стоимости"
+                className="flex-shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
+                aria-label="Калькулятор стоимости"
+              >
+                <Calculator className="w-5 h-5 md:w-6 md:h-6" />
+              </button>
+            )}
             {isSpeechSupported && (
               <button
                 type="button"

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause, User } from 'lucide-react';
 import ChatInput from './ChatInput';
+import { WhatsAppCalculatorDrawer } from './WhatsAppCalculatorDrawer';
 import MessageBubble from './MessageBubble';
 import { PdfThumbnail } from './PdfThumbnail';
 import { PdfViewer } from './PdfViewer';
@@ -71,6 +72,8 @@ interface ChatWindowProps {
   onOpenClientInfo?: () => void;
   /** Записи базы знаний компании для AI-ответов */
   knowledgeBase?: Array<{ title: string; content: string; category?: string }>;
+  /** Отправить сгенерированное КП (изображение) в чат */
+  onSendProposalImage?: (blob: Blob, caption: string) => Promise<void>;
 }
 
 const CHAT_HEADER_HEIGHT = 56;
@@ -769,7 +772,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   actionsSheetMessageId = null,
   incognitoMode = false,
   onOpenClientInfo,
-  knowledgeBase
+  knowledgeBase,
+  onSendProposalImage
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -798,6 +802,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
   const [aiMode, setAiMode] = useState<'normal' | 'short' | 'close' | null>(null);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
+  const [calculatorDrawerOpen, setCalculatorDrawerOpen] = useState(false);
   const [transcribeErrorId, setTranscribeErrorId] = useState<string | null>(null);
 
   const handleAiReply = async (mode: 'normal' | 'short' | 'close') => {
@@ -1188,7 +1193,16 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           onAiReply={incognitoMode ? undefined : handleAiReply}
           aiModeLoading={aiMode}
           autoFocusOnChange
+          onOpenCalculator={!incognitoMode && onSendProposalImage ? () => setCalculatorDrawerOpen(true) : undefined}
         />
+        {onSendProposalImage && (
+          <WhatsAppCalculatorDrawer
+            open={calculatorDrawerOpen}
+            onClose={() => setCalculatorDrawerOpen(false)}
+            onSendProposalImage={onSendProposalImage}
+            isMobile={isMobile}
+          />
+        )}
       </div>
     </>
   );
