@@ -751,7 +751,9 @@ const WhatsAppChat: React.FC = () => {
         const { data: urlData } = supabase.storage.from(CLIENTS_BUCKET).getPublicUrl(uploadData.path);
         const contentUri = urlData.publicUrl;
         setUploadState('sending');
-        const res = await fetch(SEND_API, {
+
+        // 1) Отправляем только изображение (без caption), чтобы текст гарантированно отображался отдельным сообщением
+        const resImage = await fetch(SEND_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -759,15 +761,33 @@ const WhatsAppChat: React.FC = () => {
             contentUri,
             attachmentType: 'image',
             fileName: 'kp.jpg',
-            text: caption || undefined,
             companyId: companyId ?? undefined
           })
         });
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        if (res.ok) {
-          setSendError(null);
-        } else {
-          setSendError(data?.error ?? 'Не удалось отправить КП.');
+        const dataImage = (await resImage.json().catch(() => ({}))) as { error?: string };
+        if (!resImage.ok) {
+          setSendError(dataImage?.error ?? 'Не удалось отправить КП.');
+          return;
+        }
+        setSendError(null);
+
+        // Небольшая задержка, чтобы WhatsApp корректно показывал порядок сообщений
+        await new Promise((r) => setTimeout(r, 300));
+
+        // 2) Отправляем текст отдельным сообщением
+        const textToSend = (caption || '').trim() || 'Ваше коммерческое предложение по дому из SIP-панелей.\n\nЕсли будут вопросы — напишите 👍';
+        const resText = await fetch(SEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId: phone,
+            text: textToSend,
+            companyId: companyId ?? undefined
+          })
+        });
+        if (!resText.ok) {
+          const dataText = (await resText.json().catch(() => ({}))) as { error?: string };
+          setSendError(dataText?.error ?? 'КП отправлено, но не удалось отправить подпись.');
         }
       } finally {
         setUploadState('idle');
