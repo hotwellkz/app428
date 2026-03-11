@@ -658,6 +658,9 @@ export const approveTransaction = async (transactionId: string): Promise<void> =
     throw new Error('У вас нет прав для одобрения транзакций');
   }
 
+  const currentUser = auth.currentUser;
+  const approvedBy = currentUser?.email ?? currentUser?.uid ?? 'unknown';
+
   await runTransaction(db, async (tx) => {
     const expenseRef = doc(db, 'transactions', transactionId);
     const expenseSnap = await tx.get(expenseRef);
@@ -712,12 +715,12 @@ export const approveTransaction = async (transactionId: string): Promise<void> =
     tx.update(expenseRef, {
       status: 'approved',
       approvedAt: timestamp,
-      approvedBy: currentEmail
+      approvedBy
     });
     tx.update(incomeRef, {
       status: 'approved',
       approvedAt: timestamp,
-      approvedBy: currentEmail
+      approvedBy
     });
   });
 
@@ -776,6 +779,9 @@ export const rejectTransaction = async (transactionId: string): Promise<void> =>
     throw new Error('У вас нет прав для отклонения транзакций');
   }
 
+  const currentUser = auth.currentUser;
+  const rejectedBy = currentUser?.email ?? currentUser?.uid ?? 'unknown';
+
   await runTransaction(db, async (tx) => {
     // 1. READ PHASE: все get до любых write
     const txRef = doc(db, 'transactions', transactionId);
@@ -803,7 +809,7 @@ export const rejectTransaction = async (transactionId: string): Promise<void> =>
     tx.update(txRef, {
       status: 'rejected',
       rejectedAt: timestamp,
-      rejectedBy: currentEmail
+      rejectedBy
     });
 
     if (relatedId && relatedSnap?.exists()) {
@@ -811,7 +817,7 @@ export const rejectTransaction = async (transactionId: string): Promise<void> =>
       tx.update(relatedRef, {
         status: 'rejected',
         rejectedAt: timestamp,
-        rejectedBy: currentEmail
+        rejectedBy
       });
     }
   });
