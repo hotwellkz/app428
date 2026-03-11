@@ -8,8 +8,8 @@ import html2canvas from 'html2canvas';
 const CACHE_KEY = 'whatsapp_calculator_cache';
 const KP_CAPTURE_ID = 'wa-kp-capture';
 const KP_RENDER_ID = 'commercial-offer-render';
-const TARGET_WIDTH = 1080;
-const TARGET_HEIGHT = 1350;
+/** Блок самого документа КП — захват по нему обрезает изображение по границам без белых полей. */
+const KP_DOCUMENT_ID = 'commercial-offer-document';
 const CAPTION =
   'Ваше коммерческое предложение по дому из SIP-панелей.\nЕсли будут вопросы — напишите 👍';
 
@@ -121,9 +121,11 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
     setSendingProposal(true);
     try {
       const node =
-        document.getElementById(KP_RENDER_ID) || document.getElementById(KP_CAPTURE_ID);
+        document.getElementById(KP_DOCUMENT_ID) ||
+        document.getElementById(KP_RENDER_ID) ||
+        document.getElementById(KP_CAPTURE_ID);
       if (!node) {
-        console.error('KP capture: node not found', { KP_RENDER_ID, KP_CAPTURE_ID });
+        console.error('KP capture: node not found', { KP_DOCUMENT_ID, KP_RENDER_ID, KP_CAPTURE_ID });
         throw new Error('Capture container not found');
       }
 
@@ -149,17 +151,25 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
         )
       );
 
+      const rect = node.getBoundingClientRect();
+      const width = Math.ceil(rect.width);
+      const height = Math.ceil(rect.height);
+      if (width <= 0 || height <= 0) {
+        throw new Error('Размер блока КП некорректен');
+      }
       if (import.meta.env.DEV) {
-        const rect = node.getBoundingClientRect();
         console.log('KP capture node', {
           id: node.id,
-          rect: { width: rect.width, height: rect.height },
+          width,
+          height,
           innerHTMLLength: node.innerHTML?.length ?? 0,
           total: finalResult.total
         });
       }
 
       const canvas = await html2canvas(node, {
+        width,
+        height,
         scale: 2,
         useCORS: true,
         logging: false,
@@ -167,25 +177,8 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
         allowTaint: true
       });
 
-      const out = document.createElement('canvas');
-      out.width = TARGET_WIDTH;
-      out.height = TARGET_HEIGHT;
-      const ctx = out.getContext('2d');
-      if (!ctx) throw new Error('Canvas context');
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, TARGET_WIDTH, TARGET_HEIGHT);
-      const scale = Math.min(
-        TARGET_WIDTH / canvas.width,
-        TARGET_HEIGHT / canvas.height
-      );
-      const w = canvas.width * scale;
-      const h = canvas.height * scale;
-      const x = (TARGET_WIDTH - w) / 2;
-      const y = (TARGET_HEIGHT - h) / 2;
-      ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, x, y, w, h);
-
       const blob = await new Promise<Blob>((resolve, reject) => {
-        out.toBlob(
+        canvas.toBlob(
           (b) => (b ? resolve(b) : reject(new Error('toBlob failed'))),
           'image/jpeg',
           0.95
@@ -309,25 +302,28 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
         </div>
       </div>
 
-      {/* Блок для рендера КП вне экрана (без visibility:hidden — иначе html2canvas даёт белый кадр) */}
+      {/* Блок для рендера КП вне экрана (без visibility:hidden — иначе html2canvas даёт белый кадр). Без minHeight — обрезка по контенту. */}
       <div
         id={KP_CAPTURE_ID}
         ref={captureRef}
-        className="fixed top-0 z-[-1] overflow-auto bg-white"
+        className="fixed top-0 z-[-1] overflow-visible bg-white"
         style={{
           left: -10000,
-          width: TARGET_WIDTH,
-          minHeight: TARGET_HEIGHT,
+          width: 1080,
           background: '#ffffff',
-          color: '#111'
+          color: '#111',
+          margin: 0,
+          padding: 0
         }}
       >
         <div
           id={KP_RENDER_ID}
           style={{
-            width: TARGET_WIDTH,
-            minHeight: TARGET_HEIGHT,
-            background: '#ffffff'
+            width: 1080,
+            background: '#ffffff',
+            margin: 0,
+            padding: 0,
+            display: 'inline-block'
           }}
         >
           <CommercialProposal
@@ -335,6 +331,7 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
             parameters={paramsForProposal}
             result={finalResult}
             options={options}
+            captureId={KP_DOCUMENT_ID}
           />
         </div>
       </div>
