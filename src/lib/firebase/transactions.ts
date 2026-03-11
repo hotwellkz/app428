@@ -266,28 +266,49 @@ export const transferFunds = async ({
   }
 };
 
-interface TransactionEditLogPayload {
+export type TransactionEditLogBeforeAfter = {
+  from: string;
+  to: string;
+  amount: number;
+  comment: string;
+  category: string | null;
+  isSalary?: boolean;
+  isCashless?: boolean;
+  needsReview?: boolean;
+};
+
+export interface TransactionEditLogChange {
+  field: string;
+  before: unknown;
+  after: unknown;
+}
+
+export interface TransactionEditLogPayload {
   transactionId: string;
-  before: {
-    from: string;
-    to: string;
-    amount: number;
-    comment: string;
-    category: string | null;
-    isSalary?: boolean;
-    isCashless?: boolean;
-    needsReview?: boolean;
-  };
-  after: {
-    from: string;
-    to: string;
-    amount: number;
-    comment: string;
-    category: string | null;
-    isSalary?: boolean;
-    isCashless?: boolean;
-    needsReview?: boolean;
-  };
+  before: TransactionEditLogBeforeAfter;
+  after: TransactionEditLogBeforeAfter;
+}
+
+/** Сравнивает before/after и возвращает список изменённых полей. Пустой массив — изменений нет. */
+export function buildEditLogChanges(
+  before: TransactionEditLogBeforeAfter,
+  after: TransactionEditLogBeforeAfter
+): TransactionEditLogChange[] {
+  const changes: TransactionEditLogChange[] = [];
+  const keys: (keyof TransactionEditLogBeforeAfter)[] = [
+    'from', 'to', 'amount', 'comment', 'category', 'isSalary', 'isCashless', 'needsReview'
+  ];
+  for (const key of keys) {
+    const b = before[key];
+    const a = after[key];
+    if (key === 'amount') {
+      if (Number(b) === Number(a)) continue;
+    } else if (b === a) {
+      continue;
+    }
+    changes.push({ field: key, before: b, after: a });
+  }
+  return changes;
 }
 
 export const createTransactionEditLog = async ({
@@ -295,13 +316,16 @@ export const createTransactionEditLog = async ({
   before,
   after
 }: TransactionEditLogPayload): Promise<void> => {
+  const changes = buildEditLogChanges(before, after);
+  if (changes.length === 0) return;
   const logsRef = collection(db, 'transaction_edit_logs');
   await addDoc(logsRef, {
     transactionId,
     editedAt: serverTimestamp(),
     editedBy: 'feed-password-mode',
     before,
-    after
+    after,
+    changes
   });
 };
 
@@ -617,15 +641,19 @@ export const editFeedTransaction = async (params: {
     }
     tx.set(doc(db, 'transactions', correctionDepositId), incomeDocData);
 
-    // 4) Audit log (в той же транзакции)
-    const logRef = doc(collection(db, 'transaction_edit_logs'));
-    tx.set(logRef, {
-      transactionId: audit.transactionId,
-      editedAt: timestamp,
-      editedBy: 'feed-password-mode',
-      before: audit.before,
-      after: audit.after
-    });
+    // 4) Audit log — только если есть изменения
+    const editLogChanges = buildEditLogChanges(audit.before, audit.after);
+    if (editLogChanges.length > 0) {
+      const logRef = doc(collection(db, 'transaction_edit_logs'));
+      tx.set(logRef, {
+        transactionId: audit.transactionId,
+        editedAt: timestamp,
+        editedBy: 'feed-password-mode',
+        before: audit.before,
+        after: audit.after,
+        changes: editLogChanges
+      });
+    }
 
     // 5) Обновляем балансы всех затронутых категорий
     for (const [categoryId, delta] of balanceDeltaByCategoryId.entries()) {
