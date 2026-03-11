@@ -108,6 +108,9 @@ const WhatsAppChat: React.FC = () => {
   const [knowledgeBase, setKnowledgeBase] = useState<
     Array<{ id: string; title: string; content: string; category: string }>
   >([]);
+  const [quickReplies, setQuickReplies] = useState<
+    Array<{ id: string; title: string; text: string; keywords: string; category: string }>
+  >([]);
   type SimpleDealStatus = { id: string; name: string; color: string; order: number; isDefault?: boolean };
   type SimpleManager = { id: string; name: string; color: string; order: number };
   const [dealStatuses, setDealStatuses] = useState<SimpleDealStatus[]>([]);
@@ -406,6 +409,34 @@ const WhatsAppChat: React.FC = () => {
         setKnowledgeBase(list);
       },
       () => setKnowledgeBase([])
+    );
+    return () => unsub();
+  }, [companyId]);
+
+  // Подписка на быстрые ответы (шаблоны для поля ввода)
+  useEffect(() => {
+    if (!companyId) {
+      setQuickReplies([]);
+      return;
+    }
+    const col = collection(db, 'quick_replies');
+    const q = query(col, where('companyId', '==', companyId));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            title: (data.title as string) ?? '',
+            text: (data.text as string) ?? '',
+            keywords: (data.keywords as string) ?? '',
+            category: (data.category as string) ?? ''
+          };
+        });
+        setQuickReplies(list);
+      },
+      () => setQuickReplies([])
     );
     return () => unsub();
   }, [companyId]);
@@ -1268,6 +1299,7 @@ const WhatsAppChat: React.FC = () => {
               incognitoMode={incognitoMode}
               onOpenClientInfo={isMobile ? () => setMobileClientSheetOpen(true) : undefined}
               knowledgeBase={knowledgeBase}
+              quickReplies={quickReplies}
               onSendProposalImage={incognitoMode ? undefined : handleSendProposalImage}
             />
           )}

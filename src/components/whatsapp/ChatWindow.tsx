@@ -72,6 +72,8 @@ interface ChatWindowProps {
   onOpenClientInfo?: () => void;
   /** Записи базы знаний компании для AI-ответов */
   knowledgeBase?: Array<{ title: string; content: string; category?: string }>;
+  /** Шаблоны быстрых ответов (поиск по ключевым словам в поле ввода) */
+  quickReplies?: Array<{ id: string; title: string; text: string; keywords: string; category: string }>;
   /** Отправить сгенерированное КП (изображение) в чат */
   onSendProposalImage?: (blob: Blob, caption: string) => Promise<void>;
 }
@@ -773,6 +775,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   incognitoMode = false,
   onOpenClientInfo,
   knowledgeBase,
+  quickReplies = [],
   onSendProposalImage
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -1194,6 +1197,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           aiModeLoading={aiMode}
           autoFocusOnChange
           onOpenCalculator={!incognitoMode && onSendProposalImage ? () => setCalculatorDrawerOpen(true) : undefined}
+          quickReplies={quickReplies}
         />
         {onSendProposalImage && (
           <WhatsAppCalculatorDrawer

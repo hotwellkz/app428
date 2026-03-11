@@ -97,6 +97,7 @@ const CreateContractWithAdditionalWorks = lazy(withChunkErrorRecovery(() => impo
 const FinishingMaterialsManager = lazy(withChunkErrorRecovery(() => import('./components/materials/FinishingMaterialsManager').then(module => ({ default: module.FinishingMaterialsManager }))));
 const DealsPage = lazy(withChunkErrorRecovery(() => import('./pages/DealsPage')));
 const KnowledgeBaseSettings = lazy(withChunkErrorRecovery(() => import('./pages/KnowledgeBaseSettings')));
+const QuickRepliesSettings = lazy(withChunkErrorRecovery(() => import('./pages/QuickRepliesSettings')));
 
 // Fallback компонент для Suspense
 const PageLoader = () => (
@@ -286,6 +287,11 @@ const AppContent: React.FC = () => {
             <Route path="/settings/knowledge" element={
               <ApprovalGuard>
                 <KnowledgeBaseSettings />
+              </ApprovalGuard>
+            } />
+            <Route path="/settings/quick-replies" element={
+              <ApprovalGuard>
+                <QuickRepliesSettings />
               </ApprovalGuard>
             } />
             <Route path="/finishing-materials" element={

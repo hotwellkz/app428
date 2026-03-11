@@ -14,6 +14,7 @@ export type MenuSectionId =
   | 'employees'
   | 'whatsapp'
   | 'knowledgeBase'
+  | 'quickReplies'
   | 'deals';
 
 export interface MenuAccess {
@@ -28,6 +29,7 @@ export interface MenuAccess {
   employees: boolean;
   whatsapp: boolean;
   knowledgeBase: boolean;
+  quickReplies: boolean;
   deals: boolean;
 }
 
@@ -44,6 +46,7 @@ export const DEFAULT_MENU_ACCESS: MenuAccess = {
   employees: true,
   whatsapp: true,
   knowledgeBase: true,
+  quickReplies: true,
   deals: true,
 };
 
@@ -59,8 +62,8 @@ export const MENU_SECTIONS: { id: MenuSectionId; label: string; path: string }[]
   { id: 'products', label: 'Товары и цены', path: '/products' },
   { id: 'employees', label: 'Сотрудники', path: '/employees' },
   { id: 'whatsapp', label: 'WhatsApp', path: '/whatsapp' },
-   // knowledgeBase разделим отдельно, чтобы можно было гибко управлять доступом
   { id: 'knowledgeBase', label: 'AI База знаний', path: '/settings/knowledge' },
+  { id: 'quickReplies', label: 'Быстрые ответы', path: '/settings/quick-replies' },
   { id: 'deals', label: 'Сделки', path: '/deals' },
 ];
 
@@ -76,7 +79,8 @@ export function canAccessSection(
 ): boolean {
   if (!menuAccess) return true;
   const value = menuAccess[section];
-  return value === true;
+  // Разрешаем, если явно true или ключ отсутствует (новые разделы по умолчанию доступны)
+  return value !== false;
 }
 
 /** Определить section по pathname (для guard). */

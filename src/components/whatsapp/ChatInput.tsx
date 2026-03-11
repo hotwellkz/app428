@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import {
   Send,
   Paperclip,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import EmojiPicker, { type EmojiClickData, Categories } from 'emoji-picker-react';
 import { useSpeechToText } from '../../hooks/useSpeechToText';
+import { QuickRepliesPopup, type QuickReplyItem } from './QuickRepliesPopup';
 
 const MAX_ATTACHMENT_MB = 10;
 
@@ -71,7 +72,12 @@ interface ChatInputProps {
   autoFocusOnChange?: boolean;
   /** Открыть калькулятор стоимости (drawer в чате) */
   onOpenCalculator?: () => void;
+  /** Шаблоны быстрых ответов (подсказки по ключевым словам в поле ввода) */
+  quickReplies?: QuickReplyItem[];
 }
+
+const QUICK_REPLIES_MAX = 5;
+const QUICK_REPLIES_MIN_TRIGGER_LEN = 3;
 
 const ChatInput: React.FC<ChatInputProps> = ({
   value,
@@ -90,7 +96,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onAiReply,
   aiModeLoading = null,
   autoFocusOnChange = false,
-  onOpenCalculator
+  onOpenCalculator,
+  quickReplies = []
 }) => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -100,6 +107,51 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [selectedQuickIndex, setSelectedQuickIndex] = useState(0);
+
+  const triggerWord = useMemo(() => {
+    const v = value;
+    const lastSpace = v.lastIndexOf(' ');
+    const word = lastSpace === -1 ? v : v.slice(lastSpace + 1);
+    return word.trim().toLowerCase();
+  }, [value]);
+
+  const filteredQuickReplies = useMemo(() => {
+    if (!quickReplies.length || triggerWord.length < QUICK_REPLIES_MIN_TRIGGER_LEN) return [];
+    const q = triggerWord;
+    return quickReplies
+      .filter((item) => {
+        const titleMatch = (item.title || '').toLowerCase().includes(q);
+        const textMatch = (item.text || '').toLowerCase().includes(q);
+        const keywordsList = (item.keywords || '').split(',').map((k) => k.trim().toLowerCase()).filter(Boolean);
+        const keywordsMatch = keywordsList.some((k) => k.includes(q) || q.includes(k));
+        return titleMatch || textMatch || keywordsMatch;
+      })
+      .slice(0, QUICK_REPLIES_MAX);
+  }, [quickReplies, triggerWord]);
+
+  useEffect(() => {
+    setSelectedQuickIndex(0);
+  }, [filteredQuickReplies.length, triggerWord]);
+
+  const quickRepliesOpen = filteredQuickReplies.length > 0;
+
+  const insertQuickReply = useCallback(
+    (item: QuickReplyItem) => {
+      const v = value;
+      const lastSpace = v.lastIndexOf(' ');
+      const prefix = lastSpace === -1 ? '' : v.slice(0, lastSpace + 1);
+      const newValue = prefix + item.text;
+      onChange(newValue);
+      setSelectedQuickIndex(0);
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus();
+        const len = newValue.length;
+        textareaRef.current?.setSelectionRange(len, len);
+      });
+    },
+    [value, onChange]
+  );
 
   const {
     isSupported: isSpeechSupported,
@@ -169,9 +221,30 @@ const ChatInput: React.FC<ChatInputProps> = ({
   }, [speechTranscript, onChange, resetDictation, value]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (quickRepliesOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedQuickIndex((i) => Math.min(i + 1, filteredQuickReplies.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedQuickIndex((i) => Math.max(0, i - 1));
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const item = filteredQuickReplies[selectedQuickIndex];
+        if (item) insertQuickReply(item);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setSelectedQuickIndex(0);
+        return;
+      }
+    }
     if (e.key !== 'Enter') return;
-    // Enter → отправить сообщение
-    // Shift + Enter → перенос строки
+    // Enter → отправить сообщение; Shift + Enter → перенос строки
     if (!e.shiftKey) {
       e.preventDefault();
       if (showSend && !isBusy) onSend();
@@ -263,8 +336,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
         {/* Порядок как в WhatsApp: [emoji] [поле + скрепка + камера] [зелёная кнопка] */}
         <div className="flex items-end gap-1.5 md:gap-2 max-w-full">
-          {/* Input area (pill): слева emoji, центр textarea, справа скрепка и камера */}
-          <div className="flex-1 min-w-0 flex items-end rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 min-h-[40px]">
+          {/* Input area + панель быстрых ответов над ним */}
+          <div className="flex-1 min-w-0 relative">
+            {quickRepliesOpen && (
+              <QuickRepliesPopup
+                items={filteredQuickReplies}
+                selectedIndex={selectedQuickIndex}
+                onSelect={insertQuickReply}
+              />
+            )}
+            {/* Pill: слева emoji, центр textarea, справа скрепка и камера */}
+          <div className="flex items-end rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 min-h-[40px]">
             <button
               type="button"
               data-emoji-picker-trigger
@@ -343,6 +425,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 <Camera className="w-5 h-5 md:w-6 md:h-6" />
               </button>
             )}
+          </div>
           </div>
 
           <button
