@@ -70,26 +70,40 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
     deliveryCity: '',
   });
 
+  // Стандартные значения при открытии калькулятора (простой и профессиональный режим)
+  const STANDARD_DEFAULTS = {
+    foundation: 'Ж/Б ленточный, Выс 50см',
+    floors: '1 этаж',
+    firstFloorType: 'Полноценный',
+    firstFloorHeight: '2,5 м',
+    firstFloorThickness: 'SIP-163 мм',
+    partitionType: 'Профиль + гипсокартон + мин. вата, толщина 100 мм',
+    ceiling: 'Потолок утеплённый (пенополистирол 145 мм)',
+    roofType: '2-скатная (строп. сист. + металлочерепица)',
+    houseShape: 'Простая форма',
+  };
+
   // Инициализируем значения по умолчанию после загрузки конфигурации (и из initialValues при наличии)
   useEffect(() => {
     if (configLoaded) {
       const config = getConfigSync();
       setFormData(prev => {
         const defaults = {
-          foundation: prev.foundation || config.FOUNDATION_OPTIONS[0]?.label || '',
-          floors: prev.floors || config.FLOORS_OPTIONS[0]?.label || '',
-          firstFloorType: prev.firstFloorType || config.FIRST_FLOOR_TYPE_OPTIONS[0]?.label || '',
+          foundation: prev.foundation || STANDARD_DEFAULTS.foundation,
+          floors: prev.floors || STANDARD_DEFAULTS.floors,
+          firstFloorType: prev.firstFloorType || STANDARD_DEFAULTS.firstFloorType,
           secondFloorType: prev.secondFloorType || config.SECOND_FLOOR_TYPE_OPTIONS[0]?.label || '',
           thirdFloorType: prev.thirdFloorType || config.THIRD_FLOOR_TYPE_OPTIONS[0]?.label || '',
-          firstFloorHeight: prev.firstFloorHeight || config.FLOOR_HEIGHT_OPTIONS[0]?.label || '',
+          firstFloorHeight: prev.firstFloorHeight || STANDARD_DEFAULTS.firstFloorHeight,
           secondFloorHeight: prev.secondFloorHeight || config.FLOOR_HEIGHT_OPTIONS[0]?.label || '',
           thirdFloorHeight: prev.thirdFloorHeight || config.FLOOR_HEIGHT_OPTIONS[0]?.label || '',
-          firstFloorThickness: prev.firstFloorThickness || config.WALL_THICKNESS_OPTIONS[0]?.label || '',
+          firstFloorThickness: prev.firstFloorThickness || STANDARD_DEFAULTS.firstFloorThickness,
           secondFloorThickness: prev.secondFloorThickness || config.WALL_THICKNESS_OPTIONS[0]?.label || '',
           thirdFloorThickness: prev.thirdFloorThickness || config.WALL_THICKNESS_OPTIONS[0]?.label || '',
-          partitionType: prev.partitionType || config.PARTITION_OPTIONS.height_2_5[0]?.label || '',
-          ceiling: prev.ceiling || config.CEILING_OPTIONS[0]?.label || '',
-          houseShape: prev.houseShape || config.HOUSE_SHAPE_OPTIONS[0]?.label || '',
+          partitionType: prev.partitionType || STANDARD_DEFAULTS.partitionType,
+          ceiling: prev.ceiling || STANDARD_DEFAULTS.ceiling,
+          roofType: prev.roofType || STANDARD_DEFAULTS.roofType,
+          houseShape: prev.houseShape || STANDARD_DEFAULTS.houseShape,
           additionalWorks: prev.additionalWorks || config.ADDITIONAL_WORKS_OPTIONS[0]?.label || '',
           deliveryCity: prev.deliveryCity || (config.DELIVERY_OPTIONS || DELIVERY_CITIES)[0]?.label || '',
         };
@@ -408,7 +422,7 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
         {/* Толщина стены первого этажа - только в профессиональном режиме */}
         {isAdvancedMode && (
           <Dropdown
-            label="Толщина стены 1-го этажа"
+            label="Толщина ст. 1-го эт."
             value={formData.firstFloorThickness}
             onChange={(value) => handleFieldChange('firstFloorThickness', value)}
             options={config.WALL_THICKNESS_OPTIONS.map((opt: any) => ({ label: opt.label, value: opt.label }))}
