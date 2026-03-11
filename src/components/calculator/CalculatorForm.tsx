@@ -6,6 +6,7 @@ import { calculatePrice } from '../../utils/calculatePrice';
 import { loadCalculatorConfig, getConfigSync } from '../../utils/configLoader';
 import { PARTITION_OPTIONS } from '../../utils/calculatorData';
 import { DELIVERY_CITIES } from '../../utils/deliveryData';
+import { formatPriceForForm, unformatPriceFromForm } from '../../utils/calculatorFormatters';
 
 interface CalculatorFormProps {
   onCalculationChange: (result: CalculationResult, area: number) => void;
@@ -26,17 +27,6 @@ const getPartitionOptionsForHeight = (height: number) => {
   if (height === 4.0) return PARTITION_OPTIONS.height_4_0;
   return PARTITION_OPTIONS.height_2_5; // fallback
 };
-
-// Форматирование цены и парсинг (на уровне модуля, чтобы избежать "before initialization" при минификации)
-function formatPriceForForm(value: string | number): string {
-  const stringValue = String(value || '');
-  return stringValue
-    .replace(/\D/g, '')
-    .replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-}
-function unformatPriceFromForm(value: string): number {
-  return Number(value.replace(/\s/g, '') || 0);
-}
 
 export const CalculatorForm: React.FC<CalculatorFormProps> = ({ 
   onCalculationChange, 
