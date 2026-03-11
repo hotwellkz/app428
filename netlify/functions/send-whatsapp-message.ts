@@ -13,6 +13,15 @@ const WAZZUP_MESSAGE_URL = 'https://api.wazzup24.com/v3/message';
 
 const LOG_PREFIX = '[send-whatsapp-message]';
 
+/** Преобразует литеральные \n в переносы строк для корректного отображения в WhatsApp. */
+function formatMessageForWhatsApp(message: string): string {
+  if (typeof message !== 'string') return '';
+  return message
+    .replace(/\\n/g, '\n')
+    .replace(/\n\n+/g, '\n\n')
+    .trim();
+}
+
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
@@ -106,7 +115,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       body: JSON.stringify({ error: 'WhatsApp не настроен для этой компании' })
     });
   }
-  const caption = hasText ? (text ?? '').trim() : '';
+  const caption = hasText ? formatMessageForWhatsApp((text ?? '').trim()) : '';
   const isDev = process.env.NODE_ENV !== 'production';
   if (isDev) {
     log('Prepare send payload', {
@@ -212,7 +221,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
     const providerMessageId =
       (resData as { messageId?: string }).messageId ?? (resData as { id?: string }).id ?? null;
-    const msgText = hasMedia ? caption : (text ?? '').trim();
+    const msgText = hasText ? caption : '';
     const attachments = hasMedia
       ? [
           {

@@ -67,6 +67,15 @@ function showNewMessageBrowserNotification() {
 
 const SEND_API = '/.netlify/functions/send-whatsapp-message';
 
+/** Преобразует литеральные \n в переносы строк перед отправкой в WhatsApp. */
+function formatMessageForWhatsApp(message: string): string {
+  if (typeof message !== 'string') return '';
+  return message
+    .replace(/\\n/g, '\n')
+    .replace(/\n\n+/g, '\n\n')
+    .trim();
+}
+
 const MOBILE_BREAKPOINT = 768;
 
 const WhatsAppChat: React.FC = () => {
@@ -668,7 +677,7 @@ const WhatsAppChat: React.FC = () => {
             contentUri,
             attachmentType: getAttachmentType(pendingAttachment!.file),
             fileName: pendingAttachment!.file.name,
-            text: caption || undefined,
+            text: caption ? formatMessageForWhatsApp(caption) : undefined,
             repliedToMessageId: replyToMessage?.id ?? undefined,
             companyId: companyId ?? undefined
           })
@@ -722,7 +731,7 @@ const WhatsAppChat: React.FC = () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chatId: phone,
-          text: caption,
+          text: formatMessageForWhatsApp(caption),
           repliedToMessageId: replyId ?? undefined,
           companyId: companyId ?? undefined
         })
@@ -814,7 +823,7 @@ const WhatsAppChat: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             chatId: phone,
-            text: textToSend,
+            text: formatMessageForWhatsApp(textToSend),
             companyId: companyId ?? undefined
           })
         });
@@ -946,9 +955,9 @@ const WhatsAppChat: React.FC = () => {
               payload.contentUri = msg.attachments[0].url;
               payload.attachmentType = msg.attachments[0].type;
               payload.fileName = msg.attachments[0].fileName;
-              payload.text = msg.text || undefined;
+              payload.text = msg.text ? formatMessageForWhatsApp(msg.text) : undefined;
             } else {
-              payload.text = msg.text || '[медиа]';
+              payload.text = formatMessageForWhatsApp(msg.text || '[медиа]');
             }
             await fetch(SEND_API, {
               method: 'POST',
