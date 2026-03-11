@@ -19,14 +19,29 @@ interface TransactionPhoto {
 
 type TransactionStatus = 'pending' | 'approved' | 'rejected';
 
-const APPROVED_EMAILS: string[] = (import.meta.env.VITE_APPROVED_EMAILS || '')
-  .split(',')
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean);
+/** Роль текущего пользователя из Firestore (users/{uid}.role). */
+const getCurrentUserRole = async (): Promise<string | undefined> => {
+  const currentUser = auth.currentUser;
+  if (!currentUser?.uid) return undefined;
+  try {
+    const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+    if (!userDoc.exists()) return undefined;
+    return userDoc.data()?.role as string | undefined;
+  } catch {
+    return undefined;
+  }
+};
 
-const isEmailApproved = (email?: string | null): boolean => {
-  if (!email) return false;
-  return APPROVED_EMAILS.includes(email.toLowerCase());
+/** Статус новой транзакции: только global_admin получает approved, все остальные — pending (на одобрение). */
+const getTransactionStatusForCurrentUser = async (): Promise<TransactionStatus> => {
+  const role = await getCurrentUserRole();
+  return role === 'global_admin' ? 'approved' : 'pending';
+};
+
+/** Может ли текущий пользователь одобрять/отклонять транзакции (только global_admin). */
+const canApproveRejectTransactions = async (): Promise<boolean> => {
+  const role = await getCurrentUserRole();
+  return role === 'global_admin';
 };
 
 const DELETE_PASSWORD = (import.meta.env.VITE_TRANSACTION_DELETE_PASSWORD || '').trim();
@@ -112,9 +127,7 @@ export const transferFunds = async ({
   }
 
   try {
-    const currentUser = auth.currentUser;
-    const currentEmail = currentUser?.email ?? null;
-    const status: TransactionStatus = isEmailApproved(currentEmail) ? 'approved' : 'pending';
+    const status: TransactionStatus = await getTransactionStatusForCurrentUser();
 
     await runTransaction(db, async (transaction) => {
       const sourceRef = doc(db, 'categories', sourceCategory.id);
@@ -640,9 +653,8 @@ export const editFeedTransaction = async (params: {
 export const approveTransaction = async (transactionId: string): Promise<void> => {
   if (!transactionId) throw new Error('ID транзакции обязателен');
 
-  const currentUser = auth.currentUser;
-  const currentEmail = currentUser?.email ?? null;
-  if (!isEmailApproved(currentEmail)) {
+  const canApprove = await canApproveRejectTransactions();
+  if (!canApprove) {
     throw new Error('У вас нет прав для одобрения транзакций');
   }
 
@@ -759,9 +771,8 @@ export const approveTransaction = async (transactionId: string): Promise<void> =
 export const rejectTransaction = async (transactionId: string): Promise<void> => {
   if (!transactionId) throw new Error('ID транзакции обязателен');
 
-  const currentUser = auth.currentUser;
-  const currentEmail = currentUser?.email ?? null;
-  if (!isEmailApproved(currentEmail)) {
+  const canReject = await canApproveRejectTransactions();
+  if (!canReject) {
     throw new Error('У вас нет прав для отклонения транзакций');
   }
 
