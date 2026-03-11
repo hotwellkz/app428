@@ -77,6 +77,7 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
   const [simpleMode, setSimpleMode] = useState(true);
   const [sendingProposal, setSendingProposal] = useState(false);
   const [initialValues, setInitialValues] = useState<Record<string, unknown> | undefined>(undefined);
+  const [theme, setTheme] = useState<'green' | 'blue' | 'gray'>('green');
   const captureRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -245,7 +246,7 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
           </button>
         </div>
 
-        <div className="flex-none flex items-center gap-2 px-4 py-2 border-b border-gray-100">
+        <div className="flex-none flex flex-wrap items-center gap-2 px-4 py-2 border-b border-gray-100">
           <span className="text-sm text-gray-600">Режим:</span>
           <button
             type="button"
@@ -265,6 +266,17 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
           >
             Профессиональный
           </button>
+          <label htmlFor="themeSelector" className="text-sm text-gray-600 ml-2 mr-1">Тема:</label>
+          <select
+            id="themeSelector"
+            value={theme}
+            onChange={(e) => setTheme(e.target.value as 'green' | 'blue' | 'gray')}
+            className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm bg-white text-gray-800"
+          >
+            <option value="green">Светлая (зелёная)</option>
+            <option value="blue">Светлая (синяя)</option>
+            <option value="gray">Светлая (серая)</option>
+          </select>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -332,6 +344,7 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
             result={finalResult}
             options={options}
             captureId={KP_DOCUMENT_ID}
+            presetTheme={theme}
           />
         </div>
       </div>

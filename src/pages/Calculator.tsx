@@ -53,6 +53,9 @@ export const Calculator: React.FC = () => {
     deliveryCity: '',
   });
 
+  // Тема оформления КП (зелёная / синяя / серая)
+  const [kpTheme, setKpTheme] = useState<'green' | 'blue' | 'gray'>('green');
+
   // Состояние режима калькулятора
   const [isAdvancedMode, setIsAdvancedMode] = useState(() => {
     const saved = localStorage.getItem('calculatorMode');
@@ -358,12 +361,28 @@ export const Calculator: React.FC = () => {
           </div>
         </div>
 
-        {/* Commercial Proposal */}
+        {/* Тема оформления и Commercial Proposal */}
+        {finalResult.total > 0 && (
+          <div className="mt-6 flex flex-wrap items-center gap-2">
+            <label htmlFor="themeSelector" className="text-sm font-medium text-gray-700">Тема оформления:</label>
+            <select
+              id="themeSelector"
+              value={kpTheme}
+              onChange={(e) => setKpTheme(e.target.value as 'green' | 'blue' | 'gray')}
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm bg-white text-gray-800"
+            >
+              <option value="green">Светлая (зелёная)</option>
+              <option value="blue">Светлая (синяя)</option>
+              <option value="gray">Светлая (серая)</option>
+            </select>
+          </div>
+        )}
         <CommercialProposal
           area={area}
           parameters={parameters}
           result={finalResult}
           options={options}
+          presetTheme={kpTheme}
         />
 
         {/* Help Text */}

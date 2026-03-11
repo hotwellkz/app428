@@ -42,16 +42,19 @@ interface CommercialProposalProps {
   };
   /** Опциональный id для блока КП (для захвата в изображение без лишних отступов). */
   captureId?: string;
+  /** Тема оформления для КП (зелёная / синяя / серая) — из селектора в калькуляторе. */
+  presetTheme?: 'green' | 'blue' | 'gray';
 }
 
-type ThemeType = 'light' | 'dark' | 'classic' | 'red-power' | 'luxury-black-gold' | 'eco-natural' | 'marine' | 'tech' | 'hi-tech' | 'construction' | 'mobile';
+type ThemeType = 'light' | 'dark' | 'classic' | 'red-power' | 'luxury-black-gold' | 'eco-natural' | 'marine' | 'tech' | 'hi-tech' | 'construction' | 'mobile' | 'kp-green' | 'kp-blue' | 'kp-gray';
 
 export const CommercialProposal: React.FC<CommercialProposalProps> = ({
   area,
   parameters,
   result,
   options,
-  captureId
+  captureId,
+  presetTheme
 }) => {
   // Функция определения мобильного устройства
   const isMobileDevice = () => {
@@ -63,9 +66,12 @@ export const CommercialProposal: React.FC<CommercialProposalProps> = ({
     return isMobileUserAgent || isMobileWidth;
   };
 
-  // Состояние для выбора темы
+  // Состояние для выбора темы (игнорируется при presetTheme)
   const [currentTheme, setCurrentTheme] = useState<ThemeType>('light');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const effectiveTheme: ThemeType = presetTheme
+    ? (presetTheme === 'green' ? 'kp-green' : presetTheme === 'blue' ? 'kp-blue' : 'kp-gray')
+    : currentTheme;
   
   // Контекст и ref для отслеживания видимости
   const { setMenuVisible } = useMenuVisibility();
@@ -283,7 +289,13 @@ export const CommercialProposal: React.FC<CommercialProposalProps> = ({
 
   // Определение классов для стилей в зависимости от темы
   const getContainerClasses = () => {
-    switch (currentTheme) {
+    switch (effectiveTheme) {
+      case 'kp-green':
+        return 'bg-white rounded-lg shadow-lg border border-emerald-200 overflow-hidden transition-all duration-300 ease-in-out';
+      case 'kp-blue':
+        return 'bg-white rounded-lg shadow-lg border border-blue-200 overflow-hidden transition-all duration-300 ease-in-out';
+      case 'kp-gray':
+        return 'bg-white rounded-lg shadow-lg border border-gray-300 overflow-hidden transition-all duration-300 ease-in-out';
       case 'dark':
         return "bg-[#121212] rounded-lg shadow-lg border border-gray-800 overflow-hidden shadow-[0_0_30px_rgba(0,255,140,0.2)] transition-all duration-300 ease-in-out";
       case 'classic':
@@ -310,7 +322,13 @@ export const CommercialProposal: React.FC<CommercialProposalProps> = ({
   };
 
   const getHeaderClasses = () => {
-    switch (currentTheme) {
+    switch (effectiveTheme) {
+      case 'kp-green':
+        return 'bg-[#1F8F4C] text-white p-6 text-center transition-all duration-300 ease-in-out';
+      case 'kp-blue':
+        return 'bg-[#2F6FE4] text-white p-6 text-center transition-all duration-300 ease-in-out';
+      case 'kp-gray':
+        return 'bg-[#5A5A5A] text-white p-6 text-center transition-all duration-300 ease-in-out';
       case 'dark':
         return "bg-gradient-to-r from-gray-900 to-black text-white p-6 text-center border-b border-[#00FF8C] transition-all duration-300 ease-in-out";
       case 'classic':
@@ -337,7 +355,13 @@ export const CommercialProposal: React.FC<CommercialProposalProps> = ({
   };
 
   const getSectionClasses = () => {
-    switch (currentTheme) {
+    switch (effectiveTheme) {
+      case 'kp-green':
+        return 'bg-gray-50 rounded-lg p-4 border border-emerald-200 transition-all duration-300 ease-in-out';
+      case 'kp-blue':
+        return 'bg-gray-50 rounded-lg p-4 border border-blue-200 transition-all duration-300 ease-in-out';
+      case 'kp-gray':
+        return 'bg-gray-100 rounded-lg p-4 border border-gray-300 transition-all duration-300 ease-in-out';
       case 'dark':
         return "bg-[#1a1a1a] rounded-lg p-4 border border-[#2A2A2A] transition-all duration-300 ease-in-out";
       case 'classic':
@@ -364,7 +388,16 @@ export const CommercialProposal: React.FC<CommercialProposalProps> = ({
   };
 
   const getTextClasses = (variant: 'title' | 'subtitle' | 'body' | 'accent') => {
-    switch (currentTheme) {
+    switch (effectiveTheme) {
+      case 'kp-green':
+        if (variant === 'accent') return 'text-[#1F8F4C] transition-all duration-300 ease-in-out';
+        return variant === 'title' ? 'text-lg font-semibold text-gray-900' : variant === 'subtitle' ? 'font-medium text-gray-800' : 'text-sm text-gray-700 leading-relaxed';
+      case 'kp-blue':
+        if (variant === 'accent') return 'text-[#2F6FE4] transition-all duration-300 ease-in-out';
+        return variant === 'title' ? 'text-lg font-semibold text-gray-900' : variant === 'subtitle' ? 'font-medium text-gray-800' : 'text-sm text-gray-700 leading-relaxed';
+      case 'kp-gray':
+        if (variant === 'accent') return 'text-[#5A5A5A] transition-all duration-300 ease-in-out';
+        return variant === 'title' ? 'text-lg font-semibold text-gray-900' : variant === 'subtitle' ? 'font-medium text-gray-800' : 'text-sm text-gray-700 leading-relaxed';
       case 'dark':
         switch (variant) {
           case 'title': return "text-lg font-semibold text-white tracking-wide transition-all duration-300 ease-in-out";
@@ -552,7 +585,13 @@ export const CommercialProposal: React.FC<CommercialProposalProps> = ({
   };
 
   const getTotalClasses = () => {
-    switch (currentTheme) {
+    switch (effectiveTheme) {
+      case 'kp-green':
+        return 'text-2xl font-bold text-[#1F8F4C] transition-all duration-300 ease-in-out';
+      case 'kp-blue':
+        return 'text-2xl font-bold text-[#2F6FE4] transition-all duration-300 ease-in-out';
+      case 'kp-gray':
+        return 'text-2xl font-bold text-[#5A5A5A] transition-all duration-300 ease-in-out';
       case 'dark':
         return "text-2xl font-bold text-[#00FF8C] transition-all duration-300 ease-in-out";
       case 'classic':
@@ -768,6 +807,9 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
         ref={commercialProposalRef}
         id="commercial-proposal"
         className={`mt-12 max-w-4xl mx-auto ${
+          effectiveTheme === 'kp-green' ? 'bg-white p-6 rounded-lg' :
+          effectiveTheme === 'kp-blue' ? 'bg-white p-6 rounded-lg' :
+          effectiveTheme === 'kp-gray' ? 'bg-gray-50 p-6 rounded-lg' :
           currentTheme === 'classic' ? 'bg-[#F4F4F4] p-6 rounded-lg' : 
           currentTheme === 'red-power' ? 'bg-[#fff5f5] p-6 rounded-lg' :
           currentTheme === 'luxury-black-gold' ? 'bg-[#0f0f0f] p-6 rounded-lg' :
@@ -779,7 +821,8 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
           currentTheme === 'mobile' ? 'bg-white p-1' : ''
         }`}
       >
-        {/* Селектор темы */}
+        {/* Селектор темы (скрыт при выборе темы из калькулятора) */}
+        {!presetTheme && (
         <div className={`${currentTheme === 'mobile' ? 'mb-2' : 'mb-4'} flex justify-end`}>
           <div className="relative">
             <button
@@ -879,6 +922,7 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
             )}
           </div>
         </div>
+        )}
 
         {/* PDF Export Block - без селектора тем */}
         <div 
