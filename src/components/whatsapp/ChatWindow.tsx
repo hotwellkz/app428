@@ -80,12 +80,13 @@ type AttachmentCategory = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'office
 function getAttachmentCategory(att: MessageAttachment): AttachmentCategory {
   const mime = att.mimeType?.toLowerCase() ?? '';
   const name = att.fileName?.toLowerCase() ?? '';
+  const urlPath = att.url ? att.url.split('?')[0].toLowerCase() : '';
 
   if (att.type === 'image' || mime.startsWith('image/')) return 'image';
   if (att.type === 'video' || mime.startsWith('video/')) return 'video';
   if (att.type === 'audio' || mime.startsWith('audio/')) return 'audio';
 
-  if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+  if (mime === 'application/pdf' || name.endsWith('.pdf') || urlPath.endsWith('.pdf')) return 'pdf';
 
   if (
     mime === 'text/plain' ||
@@ -563,14 +564,20 @@ function AttachmentBlock({
   if (isAudio) {
     return <AudioMessageBubble att={att} />;
   }
-  // PDF: карточка с превью первой страницы, название, размер, Открыть, Скачать
+  // PDF: карточка с превью первой страницы, открытие в модалке (не скачивание)
   if (getAttachmentCategory(att) === 'pdf') {
+    const openInModal = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onPreview?.(att);
+    };
     return (
       <div className="mt-1 rounded-lg border border-gray-200 bg-white overflow-hidden max-w-[280px] shadow-sm">
         <button
           type="button"
-          onClick={() => onPreview?.(att)}
+          onClick={openInModal}
           className="block w-full text-left focus:outline-none"
+          aria-label="Открыть PDF"
         >
           <PdfThumbnail url={att.url} className="w-full" />
         </button>
@@ -583,14 +590,14 @@ function AttachmentBlock({
         <div className="flex items-center gap-2 px-2 pb-2">
           <button
             type="button"
-            onClick={() => onPreview?.(att)}
+            onClick={openInModal}
             className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm font-medium"
           >
             Открыть
           </button>
           <a
             href={att.url}
-            download={att.fileName}
+            download={att.fileName ?? undefined}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm"
