@@ -1071,7 +1071,7 @@ const WhatsAppChat: React.FC = () => {
                 aria-label="Поиск по имени или номеру"
               />
             </div>
-            <div className="flex flex-wrap items-center gap-2.5 px-3 pb-2 text-[11px] md:text-xs">
+            <div className="flex flex-nowrap items-center gap-2.5 px-3 pb-2 text-[11px] md:text-xs overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setActiveFilter('all')}
@@ -1110,7 +1110,7 @@ const WhatsAppChat: React.FC = () => {
                 }`}
               >
                 <span className="inline-flex h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF4D4F' }} />
-                <span>Непрочитанные</span>
+                <span>Непрочит.</span>
                 {unreadCount > 0 && (
                   <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-gray-200 text-[10px] font-medium text-gray-700 ml-0.5">
                     {unreadCount}
