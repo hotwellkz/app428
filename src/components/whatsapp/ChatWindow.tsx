@@ -684,11 +684,20 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   knowledgeBase
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  /** Сохранённая позиция скролла при нажатии «Расшифровать» — восстанавливаем после обновления messages */
+  const scrollRestoreRef = useRef<number | null>(null);
   const messagesById = useRef<Map<string, WhatsAppMessage>>(new Map());
   messagesById.current = new Map(messages.map((m) => [m.id, m]));
   const [previewAtt, setPreviewAtt] = useState<MessageAttachment | null>(null);
 
   useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (scrollRestoreRef.current !== null && container) {
+      container.scrollTop = scrollRestoreRef.current;
+      scrollRestoreRef.current = null;
+      return;
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
@@ -826,6 +835,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
 
       {/* Сообщения */}
       <div
+        ref={messagesContainerRef}
         className={`flex-1 min-h-0 overflow-y-auto bg-[#e5ddd5] space-y-2 p-2 md:p-4 ${isMobile ? 'pb-4 pr-16 md:pr-[88px]' : 'pb-4 pr-[88px]'}`}
       >
         {messages.map((msg) => {
@@ -853,6 +863,15 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
                     if (!att.url || transcribingId === m.id) return;
                     // если уже есть расшифровка — повторно не вызываем
                     if (m.transcription && m.transcription.trim().length > 0) return;
+                    const container = messagesContainerRef.current;
+                    const isNearBottom = container
+                      ? container.scrollHeight - container.scrollTop - container.clientHeight < 100
+                      : true;
+                    if (container && !isNearBottom) {
+                      scrollRestoreRef.current = container.scrollTop;
+                    } else {
+                      scrollRestoreRef.current = null;
+                    }
                     setTranscribingId(m.id);
                     setTranscribeErrorId(null);
                     try {
