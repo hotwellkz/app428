@@ -3,7 +3,7 @@ import { ArrowLeft, Calculator as CalcIcon, Home, Ruler, Settings, UserCog, Menu
 import { useMobileSidebar } from '../contexts/MobileSidebarContext';
 import { CalculatorForm } from '../components/calculator/CalculatorForm';
 import { PriceSummary } from '../components/calculator/PriceSummary';
-import { CommercialProposal } from '../components/calculator/CommercialProposal';
+import { CommercialProposal, COMMERCIAL_PROPOSAL_THEMES, type CommercialProposalThemeId } from '../components/calculator/CommercialProposal';
 import { CalculatorAdminPanel } from '../components/calculator/CalculatorAdminPanel';
 import { SupervisorSalaryModal } from '../components/calculator/SupervisorSalaryModal';
 import { CalculationResult } from '../types/calculator';
@@ -53,8 +53,7 @@ export const Calculator: React.FC = () => {
     deliveryCity: '',
   });
 
-  // Тема оформления КП (зелёная / синяя / серая)
-  const [kpTheme, setKpTheme] = useState<'green' | 'blue' | 'gray'>('green');
+  const [kpTheme, setKpTheme] = useState<CommercialProposalThemeId>('light');
 
   // Состояние режима калькулятора
   const [isAdvancedMode, setIsAdvancedMode] = useState(() => {
@@ -364,16 +363,16 @@ export const Calculator: React.FC = () => {
         {/* Тема оформления и Commercial Proposal */}
         {finalResult.total > 0 && (
           <div className="mt-6 flex flex-wrap items-center gap-2">
-            <label htmlFor="themeSelector" className="text-sm font-medium text-gray-700">Тема оформления:</label>
+            <label htmlFor="themeSelector" className="text-sm font-medium text-gray-700 form-label">Тема оформления</label>
             <select
               id="themeSelector"
               value={kpTheme}
-              onChange={(e) => setKpTheme(e.target.value as 'green' | 'blue' | 'gray')}
+              onChange={(e) => setKpTheme(e.target.value as CommercialProposalThemeId)}
               className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm bg-white text-gray-800"
             >
-              <option value="green">Светлая (зелёная)</option>
-              <option value="blue">Светлая (синяя)</option>
-              <option value="gray">Светлая (серая)</option>
+              {COMMERCIAL_PROPOSAL_THEMES.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
             </select>
           </div>
         )}

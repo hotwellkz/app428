@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { CalculatorForm } from '../calculator/CalculatorForm';
-import { CommercialProposal } from '../calculator/CommercialProposal';
+import { CommercialProposal, COMMERCIAL_PROPOSAL_THEMES, type CommercialProposalThemeId } from '../calculator/CommercialProposal';
 import { CalculationResult } from '../../types/calculator';
 import html2canvas from 'html2canvas';
 
@@ -76,7 +76,7 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
   });
   const [simpleMode, setSimpleMode] = useState(true);
   const [sendingProposal, setSendingProposal] = useState(false);
-  const [theme, setTheme] = useState<'green' | 'blue' | 'gray'>('green');
+  const [theme, setTheme] = useState<CommercialProposalThemeId>('light');
   const captureRef = useRef<HTMLDivElement>(null);
 
   // Кэш подставляем при рендере, чтобы форма получила его до первого эффекта и не затирала STANDARD_DEFAULTS
@@ -266,16 +266,16 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
           >
             Профессиональный
           </button>
-          <label htmlFor="themeSelector" className="text-sm text-gray-600 ml-2 mr-1">Тема:</label>
+          <label htmlFor="themeSelector" className="text-sm text-gray-600 ml-2 mr-1 form-label">Тема оформления</label>
           <select
             id="themeSelector"
             value={theme}
-            onChange={(e) => setTheme(e.target.value as 'green' | 'blue' | 'gray')}
+            onChange={(e) => setTheme(e.target.value as CommercialProposalThemeId)}
             className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm bg-white text-gray-800"
           >
-            <option value="green">Светлая (зелёная)</option>
-            <option value="blue">Светлая (синяя)</option>
-            <option value="gray">Светлая (серая)</option>
+            {COMMERCIAL_PROPOSAL_THEMES.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
           </select>
         </div>
 
