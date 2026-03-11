@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { MessageSquare, Search } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
+import { useAuth } from '../hooks/useAuth';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { useMobileWhatsAppChat } from '../contexts/MobileWhatsAppChatContext';
 import {
@@ -70,6 +71,7 @@ const MOBILE_BREAKPOINT = 768;
 
 const WhatsAppChat: React.FC = () => {
   const isMobile = useIsMobile(MOBILE_BREAKPOINT);
+  const { isAdmin } = useAuth();
   const companyId = useCompanyId();
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1301,6 +1303,7 @@ const WhatsAppChat: React.FC = () => {
               knowledgeBase={knowledgeBase}
               quickReplies={quickReplies}
               onSendProposalImage={incognitoMode ? undefined : handleSendProposalImage}
+              showAiDebug={isAdmin}
             />
           )}
         </section>

@@ -72,10 +72,12 @@ interface ChatWindowProps {
   onOpenClientInfo?: () => void;
   /** Записи базы знаний компании для AI-ответов */
   knowledgeBase?: Array<{ title: string; content: string; category?: string }>;
-  /** Шаблоны быстрых ответов (поиск по ключевым словам в поле ввода) */
+  /** Шаблоны быстрых ответов (поиск по ключевым словам в поле ввода + контекст для AI) */
   quickReplies?: Array<{ id: string; title: string; text: string; keywords: string; category: string }>;
   /** Отправить сгенерированное КП (изображение) в чат */
   onSendProposalImage?: (blob: Blob, caption: string) => Promise<void>;
+  /** Показывать блок отладки AI-ответа (найденные шаблоны и база знаний) — для админов */
+  showAiDebug?: boolean;
 }
 
 const CHAT_HEADER_HEIGHT = 56;
@@ -819,7 +821,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onOpenClientInfo,
   knowledgeBase,
   quickReplies = [],
-  onSendProposalImage
+  onSendProposalImage,
+  showAiDebug = false
 }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -828,6 +831,11 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   const messagesById = useRef<Map<string, WhatsAppMessage>>(new Map());
   messagesById.current = new Map(messages.map((m) => [m.id, m]));
   const [previewAtt, setPreviewAtt] = useState<MessageAttachment | null>(null);
+  const [lastAiDebug, setLastAiDebug] = useState<{
+    matchedQuickReplies: Array<{ title: string; score: number; textPreview: string }>;
+    matchedKnowledgeBase: Array<{ title: string; category: string }>;
+    chosenTemplate: string | null;
+  } | null>(null);
 
   useEffect(() => {
     const container = messagesContainerRef.current;
@@ -873,6 +881,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
         mode: 'normal' | 'short' | 'close';
         messages: { role: 'client' | 'manager'; text: string }[];
         knowledgeBase?: { title?: string; content?: string; category?: string | null }[];
+        quickReplies?: Array<{ title: string; text: string; keywords: string; category?: string }>;
       } = {
         mode,
         messages: recent.map((m) => ({
@@ -888,23 +897,42 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           category: k.category ?? ''
         }));
       }
-      // Шаг 3: вызов backend endpoint (Netlify Function)
+      if (quickReplies && quickReplies.length > 0) {
+        payload.quickReplies = quickReplies.map((q) => ({
+          title: q.title,
+          text: q.text,
+          keywords: q.keywords,
+          category: q.category
+        }));
+      }
       const res = await fetch('/.netlify/functions/ai-generate-reply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = (await res.json().catch(() => ({}))) as { reply?: string; error?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        reply?: string;
+        error?: string;
+        debug?: {
+          matchedQuickReplies: Array<{ title: string; score: number; textPreview: string }>;
+          matchedKnowledgeBase: Array<{ title: string; category: string }>;
+          chosenTemplate: string | null;
+        };
+      };
       if (!res.ok || data.error) {
-        // Шаг 7: логируем ошибку вне зависимости от env,
-        // чтобы было видно в console в браузере
         // eslint-disable-next-line no-console
         console.error('[WhatsApp] AI generate reply failed', { mode, status: res.status, data });
         return;
       }
+      if (data.debug) {
+        setLastAiDebug(data.debug);
+        // eslint-disable-next-line no-console
+        console.log('[WhatsApp] AI reply debug', data.debug);
+      } else {
+        setLastAiDebug(null);
+      }
       const reply = typeof data.reply === 'string' ? data.reply.trim() : '';
       if (reply) {
-        // Шаг 5: вставляем текст в поле ввода, НЕ отправляя автоматически
         onInputChange(reply);
       }
     } catch (e) {
@@ -1183,6 +1211,30 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             </button>
           )}
         </div>
+      )}
+      {showAiDebug && lastAiDebug && (
+        <details className="flex-none border-t border-gray-200 bg-amber-50/80 px-2 py-1.5 text-left">
+          <summary className="text-xs font-medium text-amber-900 cursor-pointer">AI: контекст ответа</summary>
+          <div className="mt-1 text-[11px] text-amber-900 space-y-1">
+            {lastAiDebug.matchedQuickReplies.length > 0 && (
+              <p>
+                <strong>Быстрые ответы:</strong>{' '}
+                {lastAiDebug.matchedQuickReplies.map((q) => `${q.title} (${q.score})`).join(', ')}
+              </p>
+            )}
+            {lastAiDebug.chosenTemplate && (
+              <p>
+                <strong>Выбран шаблон:</strong> {lastAiDebug.chosenTemplate}
+              </p>
+            )}
+            {lastAiDebug.matchedKnowledgeBase.length > 0 && (
+              <p>
+                <strong>База знаний:</strong>{' '}
+                {lastAiDebug.matchedKnowledgeBase.map((k) => k.title || k.category).filter(Boolean).join(', ') || '—'}
+              </p>
+            )}
+          </div>
+        </details>
       )}
       {pendingAttachment && (
         <div className="flex-none flex items-center gap-2 px-2 py-1.5 bg-white border-t border-gray-200 rounded-t-lg">

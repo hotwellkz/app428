@@ -25,6 +25,14 @@ interface AiMessage {
   text: string;
 }
 
+interface QuickReplyInput {
+  id?: string;
+  title?: string;
+  text?: string;
+  keywords?: string;
+  category?: string;
+}
+
 interface GenerateReplyBody {
   messages?: AiMessage[];
   mode?: Mode;
@@ -33,6 +41,70 @@ interface GenerateReplyBody {
     content?: string;
     category?: string | null;
   }>;
+  quickReplies?: QuickReplyInput[];
+}
+
+/** Нормализация для сравнения: нижний регистр, лишние пробелы убраны. */
+function normalize(s: string): string {
+  return (s ?? '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Слова из строки (кириллица + латиница + цифры). */
+function getWords(s: string): string[] {
+  return normalize(s)
+    .split(/\s+/)
+    .filter((w) => w.length > 0);
+}
+
+/**
+ * Оценка релевантности быстрого ответа последнему сообщению клиента.
+ * Возвращает 0..1: >0.8 — сильное совпадение, 0.5–0.8 — вспомогательный, <0.5 — не использовать.
+ */
+function scoreQuickReply(clientMessage: string, q: QuickReplyInput): number {
+  const msg = normalize(clientMessage);
+  const msgWords = getWords(msg);
+  if (msgWords.length === 0) return 0;
+
+  const title = normalize((q.title ?? '').trim());
+  const keywordsStr = (q.keywords ?? '').trim();
+  const keywords = keywordsStr
+    .split(/[,;]/)
+    .map((k) => normalize(k.trim()))
+    .filter((k) => k.length > 0);
+  const text = normalize((q.text ?? '').trim());
+
+  let score = 0;
+
+  // Совпадение по названию
+  if (title.length > 0) {
+    if (msg.includes(title) || title.includes(msg)) score += 0.45;
+    else {
+      const titleWords = getWords(title);
+      const matchTitle = titleWords.filter((w) => w.length > 1 && msg.includes(w)).length;
+      if (matchTitle > 0) score += 0.25 * Math.min(matchTitle / Math.max(titleWords.length, 1), 1);
+    }
+  }
+
+  // Совпадение по ключевым словам
+  for (const kw of keywords) {
+    if (kw.length < 2) continue;
+    if (msg.includes(kw) || msgWords.some((w) => w.includes(kw) || kw.includes(w))) {
+      score += 0.35;
+      break;
+    }
+  }
+
+  // Совпадение по тексту шаблона (общие слова)
+  if (text.length > 0) {
+    const textWords = getWords(text);
+    const matchText = msgWords.filter((w) => w.length > 1 && textWords.some((tw) => tw.includes(w) || w.includes(tw))).length;
+    if (matchText > 0) score += 0.2 * Math.min(matchText / Math.min(msgWords.length, 5), 1);
+  }
+
+  return Math.min(score, 1);
 }
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
@@ -77,6 +149,10 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         (k) => k && typeof k.content === 'string' && (k.content ?? '').trim().length > 0
       )
     : [];
+  const quickRepliesRaw = Array.isArray(body.quickReplies) ? body.quickReplies : [];
+  const quickReplies = quickRepliesRaw.filter(
+    (q) => q && typeof (q.title ?? q.text ?? '') === 'string' && ((q.text ?? '').trim().length > 0 || (q.title ?? '').trim().length > 0)
+  );
 
   const messages = rawMessages
     .filter((m) => m && typeof m.text === 'string' && m.text.trim().length > 0)
@@ -90,24 +166,41 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
 
+  const lastClientMessage = messages
+    .filter((m) => m.role === 'client')
+    .map((m) => m.text)
+    .pop();
+  const clientMessageForContext = lastClientMessage ?? messages[messages.length - 1]?.text ?? '';
+
+  type ScoredQuickReply = QuickReplyInput & { _score: number };
+  const scoredQuickReplies: ScoredQuickReply[] = quickReplies.map((q) => ({
+    ...q,
+    _score: scoreQuickReply(clientMessageForContext, q)
+  }));
+  const matchedQuickReplies = scoredQuickReplies
+    .filter((q) => q._score >= 0.5)
+    .sort((a, b) => b._score - a._score)
+    .slice(0, 5);
+
+  const hasStrongQuickMatch = matchedQuickReplies.length > 0 && matchedQuickReplies[0]._score > 0.8;
+
   const systemPrompt =
     'Ты AI-агент компании HotWell — отвечаешь клиентам в чате по строительству домов из SIP-панелей.\n\n' +
-    'ГЛАВНОЕ ПРАВИЛО: ВСЕГДА в первую очередь опирайся на базу знаний. Перед ответом сначала ищи подходящую информацию в базе знаний и только потом формируй ответ. Не придумывай факты, которых нет в базе знаний.\n\n' +
-    'Цель: дать понятный и вежливый ответ, не перегружать клиента, аккуратно довести до бесплатного расчёта дома.\n\n' +
-    'ВОПРОСЫ:\n' +
-    '- НЕ задавай сразу много вопросов подряд. Запрещено отправлять список из 5–6 вопросов.\n' +
-    '- Задавай вопросы ПОЭТАПНО: одно сообщение = один основной вопрос, иногда максимум два коротких вопроса.\n' +
-    '- Поэтапная цепочка: 1) город или наличие участка → 2) площадь дома → 3) этажность → 4) тип крыши → 5) сроки → 6) при необходимости форма дома или высота этажа. Когда данные собраны: "Отлично, спасибо 🙌 На основе этой информации мы можем сделать для вас бесплатный расчёт стоимости дома."\n\n' +
-    'ПЕРВЫЙ ОТВЕТ (если клиент написал "Здравствуйте", "Хотел узнать о строительстве", "Интересует дом" и т.п.):\n' +
-    '- Поздороваться, коротко ответить по теме (мы строим дома из SIP-панелей — быстро, тёпло, надёжно; можем сделать бесплатный расчёт).\n' +
-    '- Задать только 1 вопрос: например "Подскажите, вы из какого города?" или "Скажите, у вас уже есть участок?"\n' +
-    '- Пример: "Здравствуйте! Спасибо за обращение в HotWell 🙌 Мы строим дома из SIP-панелей и можем сделать бесплатный расчёт. Скажите, у вас уже есть участок?"\n\n' +
-    'ЕСЛИ КЛИЕНТ ЗАДАЁТ КОНКРЕТНЫЙ ВОПРОС (цена, что входит, рассрочка и т.д.):\n' +
-    '- Сначала ответь по сути, используя базу знаний.\n' +
-    '- Потом задай один уточняющий вопрос и подведи к расчёту.\n\n' +
-    'СТИЛЬ: вежливо, просто, не длинно, без перегруза, как живой менеджер. Эмодзи умеренно: 🙌 👍 🏡\n\n' +
-    'ЗАПРЕЩЕНО: задавать много вопросов одним сообщением, отвечать без опоры на базу знаний, придумывать информацию, писать длинные полотна, давить на клиента.\n\n' +
-    'Отвечай одним сообщением без кавычек и пояснений.';
+    'ИСТОЧНИКИ ОТВЕТА (в порядке приоритета):\n' +
+    '1) Быстрые ответы (шаблоны) — если подходящий шаблон найден, используй его формулировку как основу. Не переписывай своими словами, если шаблон уже хорошо подходит.\n' +
+    '2) AI-база знаний — факты и уточнения. Используй только то, что есть в базе. Не придумывай.\n' +
+    '3) Общая логика — только если шаблонов и фактов мало: коротко, предложи уточнить у менеджера или задать один вопрос.\n\n' +
+    'ПРАВИЛА:\n' +
+    '- Если в контексте есть подходящий БЫСТРЫЙ ОТВЕТ с высоким совпадением — возьми его текст за основу. Можно слегка адаптировать под вопрос (обращение, одно слово), но не меняй суть.\n' +
+    '- Если подходящих быстрых ответов несколько — выбери один самый релевантный или аккуратно объедини не более двух. Не вставляй длинные простыни.\n' +
+    '- База знаний — только для уточнения фактов (адрес, часы работы, рассрочка, что входит). Не фантазируй.\n' +
+    '- Стиль: коротко, уверенно, доброжелательно, по делу. Как опытный менеджер HotWell. Без лишней воды и без «умных» фраз.\n\n' +
+    'ВОПРОСЫ К КЛИЕНТУ:\n' +
+    '- НЕ задавай много вопросов подряд. Одно сообщение — один основной вопрос (максимум два коротких).\n' +
+    '- Цепочка: город/участок → площадь → этажность → тип крыши → сроки. Потом: "Отлично, спасибо 🙌 Можем сделать бесплатный расчёт."\n\n' +
+    'ПЕРВЫЙ ОТВЕТ ("Здравствуйте", "Интересует дом"): поздороваться, одно предложение о SIP-домах и бесплатном расчёте, один вопрос (город/участок).\n\n' +
+    'ЗАПРЕЩЕНО: придумывать информацию, писать длинные тексты, задавать 5–6 вопросов сразу, давить на клиента.\n\n' +
+    'Ответь одним сообщением. Без кавычек и пояснений.';
 
   const modeInstructions =
     mode === 'short'
@@ -116,34 +209,53 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       ? 'Режим: мягко подтолкни к следующему шагу (расчёт, уточнение параметров, созвон). Один вопрос или одно предложение. Коротко.\n'
       : 'Режим: обычный ответ. Ответь по делу, задай не более одного (максимум двух коротких) уточняющих вопроса. Коротко.\n';
 
-  const kbSection =
-    knowledgeBase.length > 0
-      ? '\n\nБАЗА ЗНАНИЙ (обязательно используй в первую очередь для ответа):\n' +
+  const quickRepliesSection =
+    matchedQuickReplies.length > 0
+      ? '\n\nБЫСТРЫЕ ОТВЕТЫ (шаблоны менеджеров — приоритет над базой знаний). Число после title — релевантность запросу клиента (0.8+ = брать за основу):\n' +
         JSON.stringify(
-          knowledgeBase.map((k) => ({
-            title: k.title ?? '',
-            category: k.category ?? '',
-            content: k.content ?? ''
+          matchedQuickReplies.map((q) => ({
+            title: (q.title ?? '').trim(),
+            score: Math.round(q._score * 100) / 100,
+            text: (q.text ?? '').trim().slice(0, 800)
           })),
           null,
           2
         ) +
-        '\n\nСначала найди в базе знаний ответ на вопрос клиента. Отвечай только на основе этих данных. Если информации нет — честно скажи, что уточнят менеджеры, или предложи связаться.'
-      : '\n\nБаза знаний пуста. Отвечай в рамках общих сведений о строительстве из SIP-панелей и HotWell. Не придумывай конкретные цифры и условия — предлагай уточнить у менеджера.';
+        (hasStrongQuickMatch
+          ? '\n\nВыбран шаблон с высокой релевантностью. Используй его текст как основу ответа; можно слегка адаптировать под вопрос клиента.'
+          : '\n\nИспользуй подходящие шаблоны как вспомогательную формулировку, комбинируй с базой знаний.')
+      : '';
+
+  const kbSection =
+    knowledgeBase.length > 0
+      ? '\n\nБАЗА ЗНАНИЙ (факты для уточнения; не придумывай того, чего нет):\n' +
+        JSON.stringify(
+          knowledgeBase.map((k) => ({
+            title: k.title ?? '',
+            category: k.category ?? '',
+            content: (k.content ?? '').trim().slice(0, 600)
+          })),
+          null,
+          2
+        )
+      : '';
 
   const userPrompt =
-    'Переписка (client = клиент, manager = менеджер):\n\n' +
+    'Последнее сообщение клиента (на него нужно ответить): "' +
+    clientMessageForContext +
+    '"\n\nВся переписка (client = клиент, manager = менеджер):\n' +
     JSON.stringify(
       messages.map((m) => ({ role: m.role, text: m.text })),
       null,
       2
     ) +
+    quickRepliesSection +
     kbSection +
     '\n\nРежим: ' +
     mode +
     '. ' +
     modeInstructions +
-    'Напиши только текст ответа менеджера: вежливо, коротко, с опорой на базу знаний; не более одного основного вопроса в сообщении. Без кавычек и пояснений.';
+    'Напиши только текст ответа менеджера: коротко, по делу, с опорой на быстрые ответы и базу знаний. Без кавычек и пояснений.';
 
   try {
     log('Calling OpenAI generate-reply, messages=', messages.length, 'mode=', mode);
@@ -180,10 +292,23 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const raw = (data.choices?.[0]?.message?.content ?? '') || '';
     const reply = String(raw).trim();
 
+    const debug =
+      matchedQuickReplies.length > 0 || knowledgeBase.length > 0
+        ? {
+            matchedQuickReplies: matchedQuickReplies.map((q) => ({
+              title: (q.title ?? '').trim(),
+              score: Math.round(q._score * 100) / 100,
+              textPreview: ((q.text ?? '').trim().slice(0, 120) + (((q.text ?? '').trim().length > 120 ? '…' : '')))
+            })),
+            matchedKnowledgeBase: knowledgeBase.map((k) => ({ title: (k.title ?? '').trim(), category: (k.category ?? '').trim() })),
+            chosenTemplate: hasStrongQuickMatch && matchedQuickReplies[0] ? (matchedQuickReplies[0].title ?? '').trim() : null
+          }
+        : undefined;
+
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reply })
+      body: JSON.stringify(debug ? { reply, debug } : { reply })
     });
   } catch (e) {
     log('OpenAI request failed:', e);
