@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import React, { useEffect, useState, useRef } from 'react';
+import { collection, query, where, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase/config';
 import { useCompanyId } from '../../contexts/CompanyContext';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, MoreVertical } from 'lucide-react';
 
 const COLLECTION_CLIENTS = 'clients';
 const COLLECTION_DEALS = 'deals';
@@ -164,6 +164,13 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
   const [showManagerModal, setShowManagerModal] = useState(false);
   const [newManagerName, setNewManagerName] = useState('');
   const [newManagerColor, setNewManagerColor] = useState('#3B82F6');
+  const [statusContextMenu, setStatusContextMenu] = useState<{ x: number; y: number; status: DealStatusRecord } | null>(null);
+  const [editingStatus, setEditingStatus] = useState<DealStatusRecord | null>(null);
+  const [editStatusName, setEditStatusName] = useState('');
+  const [editStatusColor, setEditStatusColor] = useState('#6B7280');
+  const [deletingStatus, setDeletingStatus] = useState<{ status: DealStatusRecord; dealCount: number } | null>(null);
+  const [deleteStatusLoading, setDeleteStatusLoading] = useState(false);
+  const statusMenuRef = useRef<HTMLDivElement>(null);
 
   const loadClientAndDeal = React.useCallback(() => {
     if (!phone) return;
@@ -192,6 +199,17 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
     }
     loadClientAndDeal();
   }, [phone, loadClientAndDeal]);
+
+  useEffect(() => {
+    if (!statusContextMenu) return;
+    const close = () => setStatusContextMenu(null);
+    const onDocClick = (e: MouseEvent) => {
+      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) close();
+    };
+    document.addEventListener('click', onDocClick, true);
+    return () => document.removeEventListener('click', onDocClick, true);
+  }, [statusContextMenu]);
+
   const handleAIAnalyze = async () => {
     if (!phone || aiLoading) return;
     const recent = messages
@@ -395,46 +413,64 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
                     })()}
                     <div className="mt-1 space-y-1">
                       {dealStatuses.map((s) => (
-                        <button
+                        <div
                           key={s.id}
-                          type="button"
-                          onClick={async () => {
-                            if (!phone) return;
-                            const normalized = normalizePhone(phone);
-                            setCreatingDeal(true);
-                            try {
-                              if (!deal) {
-                                const newDeal = await createDealForClient(phone, companyId);
-                                await updateDoc(doc(db, COLLECTION_DEALS, newDeal.id), {
-                                  statusId: s.id,
-                                  status: s.id,
-                                  updatedAt: serverTimestamp()
-                                });
-                                setDeal({
-                                  ...newDeal,
-                                  statusId: s.id,
-                                  status: s.id
-                                });
-                              } else {
-                                await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
-                                  statusId: s.id,
-                                  status: s.id,
-                                  updatedAt: serverTimestamp()
-                                });
-                                setDeal({ ...deal, statusId: s.id, status: s.id });
-                              }
-                            } finally {
-                              setCreatingDeal(false);
-                            }
+                          className="group flex items-center gap-1 w-full"
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            setStatusContextMenu({ x: e.clientX, y: e.clientY, status: s });
                           }}
-                          className="w-full text-left px-2 py-1 rounded-md text-xs hover:bg-gray-100 flex items-center gap-2"
                         >
-                          <span
-                            className="inline-flex h-2 w-2 rounded-full"
-                            style={{ backgroundColor: s.color }}
-                          />
-                          <span>{s.name}</span>
-                        </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (!phone) return;
+                              setCreatingDeal(true);
+                              try {
+                                if (!deal) {
+                                  const newDeal = await createDealForClient(phone, companyId);
+                                  await updateDoc(doc(db, COLLECTION_DEALS, newDeal.id), {
+                                    statusId: s.id,
+                                    status: s.id,
+                                    updatedAt: serverTimestamp()
+                                  });
+                                  setDeal({
+                                    ...newDeal,
+                                    statusId: s.id,
+                                    status: s.id
+                                  });
+                                } else {
+                                  await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
+                                    statusId: s.id,
+                                    status: s.id,
+                                    updatedAt: serverTimestamp()
+                                  });
+                                  setDeal({ ...deal, statusId: s.id, status: s.id });
+                                }
+                              } finally {
+                                setCreatingDeal(false);
+                              }
+                            }}
+                            className="flex-1 min-w-0 text-left px-2 py-1 rounded-md text-xs hover:bg-gray-100 flex items-center gap-2"
+                          >
+                            <span
+                              className="inline-flex h-2 w-2 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: s.color }}
+                            />
+                            <span className="truncate">{s.name}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setStatusContextMenu({ x: e.clientX, y: e.clientY, status: s });
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-200 text-gray-500 flex-shrink-0"
+                            aria-label="Меню статуса"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       ))}
                     </div>
                     <button
@@ -634,6 +670,159 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
           )}
         </>
       )}
+      {statusContextMenu && (
+        <div
+          ref={statusMenuRef}
+          className="fixed z-[1300] min-w-[140px] py-1 bg-white rounded-lg shadow-lg border border-gray-200"
+          style={{ left: statusContextMenu.x, top: statusContextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+            onClick={() => {
+              setEditStatusName(statusContextMenu.status.name);
+              setEditStatusColor(statusContextMenu.status.color);
+              setEditingStatus(statusContextMenu.status);
+              setStatusContextMenu(null);
+            }}
+          >
+            Редактировать
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+            onClick={async () => {
+              const status = statusContextMenu.status;
+              setStatusContextMenu(null);
+              const dealsSnap = await getDocs(
+                query(
+                  collection(db, COLLECTION_DEALS),
+                  where('companyId', '==', companyId),
+                  where('statusId', '==', status.id)
+                )
+              );
+              setDeletingStatus({ status, dealCount: dealsSnap.size });
+            }}
+          >
+            Удалить
+          </button>
+        </div>
+      )}
+
+      {editingStatus && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-xs">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">Редактировать статус</h3>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Название статуса</label>
+                <input
+                  type="text"
+                  value={editStatusName}
+                  onChange={(e) => setEditStatusName(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Например: КП выслано"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Цвет статуса</label>
+                <input
+                  type="color"
+                  value={editStatusColor}
+                  onChange={(e) => setEditStatusColor(e.target.value)}
+                  className="h-8 w-16 border border-gray-300 rounded"
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingStatus(null);
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={!editStatusName.trim()}
+                onClick={async () => {
+                  if (!editStatusName.trim()) return;
+                  await updateDoc(doc(db, 'dealStatuses', editingStatus.id), {
+                    name: editStatusName.trim(),
+                    color: editStatusColor
+                  });
+                  setEditingStatus(null);
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingStatus && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-sm">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">
+              Удалить статус «{deletingStatus.status.name}»?
+            </h3>
+            {deletingStatus.dealCount > 0 && (
+              <p className="text-xs text-amber-700 bg-amber-50 rounded-lg p-2 mb-3">
+                Этот статус используется в {deletingStatus.dealCount} сделках. При удалении сделки
+                получат статус «Без статуса».
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletingStatus(null)}
+                disabled={deleteStatusLoading}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={deleteStatusLoading}
+                onClick={async () => {
+                  setDeleteStatusLoading(true);
+                  try {
+                    const { status } = deletingStatus;
+                    const dealsSnap = await getDocs(
+                      query(
+                        collection(db, COLLECTION_DEALS),
+                        where('companyId', '==', companyId),
+                        where('statusId', '==', status.id)
+                      )
+                    );
+                    const batch = writeBatch(db);
+                    dealsSnap.docs.forEach((d) => {
+                      batch.update(d.ref, { statusId: null, status: null, updatedAt: serverTimestamp() });
+                    });
+                    await batch.commit();
+                    await deleteDoc(doc(db, 'dealStatuses', status.id));
+                    if (deal && (deal.statusId === status.id || deal.status === status.id)) {
+                      setDeal({ ...deal, statusId: null, status: null });
+                    }
+                    setDeletingStatus(null);
+                  } finally {
+                    setDeleteStatusLoading(false);
+                  }
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteStatusLoading ? 'Удаление…' : 'Удалить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showStatusModal && (
         <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-xs">
