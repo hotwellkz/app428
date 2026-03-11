@@ -27,6 +27,17 @@ const getPartitionOptionsForHeight = (height: number) => {
   return PARTITION_OPTIONS.height_2_5; // fallback
 };
 
+// Форматирование цены и парсинг (на уровне модуля, чтобы избежать "before initialization" при минификации)
+function formatPriceForForm(value: string | number): string {
+  const stringValue = String(value || '');
+  return stringValue
+    .replace(/\D/g, '')
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+}
+function unformatPriceFromForm(value: string): number {
+  return Number(value.replace(/\s/g, '') || 0);
+}
+
 export const CalculatorForm: React.FC<CalculatorFormProps> = ({ 
   onCalculationChange, 
   onOptionsChange, 
@@ -136,19 +147,6 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
         customWorks: prev.customWorks.filter((_, i) => i !== index)
       }));
     }
-  };
-
-  // Функция форматирования цены с пробелами
-  const formatPrice = (value: string | number): string => {
-    const stringValue = String(value || '');
-    return stringValue
-      .replace(/\D/g, '')                // убрать всё, кроме цифр
-      .replace(/\B(?=(\d{3})+(?!\d))/g, ' ');  // добавить пробелы
-  };
-
-  // Функция для удаления форматирования из цены
-  const unformatPrice = (value: string): number => {
-    return Number(value.replace(/\s/g, '') || 0);
   };
 
   // Валидация площади
@@ -536,8 +534,8 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
                     <input
                       type="text"
                       placeholder="Стоимость, ₸"
-                      value={formatPrice(work.price)}
-                      onChange={(e) => updateCustomWork(index, 'price', unformatPrice(e.target.value))}
+                      value={formatPriceForForm(work.price)}
+                      onChange={(e) => updateCustomWork(index, 'price', unformatPriceFromForm(e.target.value))}
                       className="w-32 lg:w-40 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors"
                     />
                     {formData.customWorks.length > 1 && (
@@ -623,8 +621,8 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formatPrice(installmentAmount)}
-                  onChange={(e) => setInstallmentAmount(unformatPrice(e.target.value))}
+                  value={formatPriceForForm(installmentAmount)}
+                  onChange={(e) => setInstallmentAmount(unformatPriceFromForm(e.target.value))}
                   placeholder="Введите сумму рассрочки"
                   className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition-colors text-sm"
                 />
