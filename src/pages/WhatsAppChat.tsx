@@ -1023,14 +1023,14 @@ const WhatsAppChat: React.FC = () => {
                 aria-label="Поиск по имени или номеру"
               />
             </div>
-            <div className="flex items-center gap-2 px-3 pb-2 text-[11px] md:text-xs">
+            <div className="flex flex-wrap items-center gap-2.5 px-3 pb-2 text-[11px] md:text-xs">
               <button
                 type="button"
                 onClick={() => setActiveFilter('all')}
-                className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-full border ${
+                className={`inline-flex items-center justify-center min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
                   activeFilter === 'all'
-                    ? 'bg-[#E7F5ED] border-transparent text-[#1B8E5A] font-medium'
-                    : 'bg-transparent border-[#E5E7EB] text-[#6B7280] hover:bg-[#F9FAFB]'
+                    ? 'bg-green-100 border-green-200 text-green-800 font-medium'
+                    : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 Все
@@ -1038,30 +1038,36 @@ const WhatsAppChat: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActiveFilter('waiting')}
-                className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-full border ${
+                className={`inline-flex items-center gap-1.5 min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
                   activeFilter === 'waiting'
-                    ? 'bg-[#E7F5ED] border-transparent text-[#1B8E5A] font-medium'
-                    : 'bg-transparent border-[#E5E7EB] text-[#6B7280] hover:bg-[#F9FAFB]'
+                    ? 'bg-green-100 border-green-200 text-green-800 font-medium'
+                    : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                <span className="inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: '#FF9F2F' }} />
-                <span className="whitespace-nowrap">
-                  Ждут{waitingCount > 0 ? ` ${waitingCount}` : ''}
-                </span>
+                <span className="inline-flex h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF9F2F' }} />
+                <span>Ждут</span>
+                {waitingCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-gray-200 text-[10px] font-medium text-gray-700 ml-0.5">
+                    {waitingCount}
+                  </span>
+                )}
               </button>
               <button
                 type="button"
                 onClick={() => setActiveFilter('unread')}
-                className={`inline-flex items-center gap-2 h-7 px-2.5 rounded-full border ${
+                className={`inline-flex items-center gap-1.5 min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
                   activeFilter === 'unread'
-                    ? 'bg-[#E7F5ED] border-transparent text-[#1B8E5A] font-medium'
-                    : 'bg-transparent border-[#E5E7EB] text-[#6B7280] hover:bg-[#F9FAFB]'
+                    ? 'bg-green-100 border-green-200 text-green-800 font-medium'
+                    : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
                 }`}
               >
-                <span className="inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: '#FF4D4F' }} />
-                <span className="whitespace-nowrap">
-                  Непрочитанные{unreadCount > 0 ? ` ${unreadCount}` : ''}
-                </span>
+                <span className="inline-flex h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF4D4F' }} />
+                <span>Непрочитанные</span>
+                {unreadCount > 0 && (
+                  <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-gray-200 text-[10px] font-medium text-gray-700 ml-0.5">
+                    {unreadCount}
+                  </span>
+                )}
               </button>
             </div>
             {dealStatuses.length > 0 && (
