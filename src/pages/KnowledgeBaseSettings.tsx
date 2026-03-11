@@ -3,7 +3,33 @@ import { collection, query, where, onSnapshot, addDoc, updateDoc, deleteDoc, doc
 import { db } from '../lib/firebase/config';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
-import { Plus, Trash2, Edit3 } from 'lucide-react';
+import { Plus, Trash2, Edit3, ChevronRight, ChevronDown } from 'lucide-react';
+
+const SEARCH_DEBOUNCE_MS = 300;
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function highlightMatches(text: string, query: string): React.ReactNode {
+  if (!text || !query.trim()) return text;
+  const escaped = escapeRegex(query.trim());
+  const re = new RegExp(`(${escaped})`, 'gi');
+  const parts = text.split(re);
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <mark key={i} className="bg-yellow-200 rounded px-0.5">
+            {part}
+          </mark>
+        ) : (
+          <React.Fragment key={i}>{part}</React.Fragment>
+        )
+      )}
+    </>
+  );
+}
 
 interface KnowledgeBaseEntry {
   id: string;
@@ -24,6 +50,9 @@ export const KnowledgeBaseSettings: React.FC = () => {
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('');
   const [content, setContent] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [expandedArticleId, setExpandedArticleId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!companyId) {
@@ -66,6 +95,20 @@ export const KnowledgeBaseSettings: React.FC = () => {
     );
     return () => unsub();
   }, [companyId]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  const filteredItems = useMemo(() => {
+    if (!debouncedSearch) return items;
+    const q = debouncedSearch.toLowerCase();
+    return items.filter(
+      (item) =>
+        item.title.toLowerCase().includes(q) || item.content.toLowerCase().includes(q)
+    );
+  }, [items, debouncedSearch]);
 
   const resetForm = () => {
     setEditingId(null);
@@ -216,54 +259,94 @@ export const KnowledgeBaseSettings: React.FC = () => {
         )}
 
         <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-gray-800">Записи базы знаний</h2>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <h2 className="text-sm font-semibold text-gray-800">Записи базы знаний</h2>
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="Поиск по базе знаний..."
+              className="w-full sm:w-64 rounded-lg border border-gray-300 px-3 py-2 text-sm placeholder-gray-400"
+            />
+          </div>
           {loading && <p className="text-sm text-gray-500">Загрузка…</p>}
           {!loading && items.length === 0 && (
             <p className="text-sm text-gray-500">
               Пока нет записей. {canEdit ? 'Добавьте первую запись базы знаний.' : 'Обратитесь к администратору для заполнения базы знаний.'}
             </p>
           )}
-          <div className="space-y-3">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 flex flex-col gap-1"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-800">
-                      {item.title || 'Без названия'}
-                    </h3>
-                    {item.category && (
-                      <p className="text-[11px] text-gray-500">{item.category}</p>
+          {!loading && items.length > 0 && (
+            <p className="text-xs text-gray-500">
+              Найдено: {filteredItems.length} записей
+            </p>
+          )}
+          <div className="space-y-2">
+            {filteredItems.map((item) => {
+              const isExpanded = !!debouncedSearch || expandedArticleId === item.id;
+              return (
+                <div
+                  key={item.id}
+                  className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden"
+                >
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      if (!debouncedSearch) setExpandedArticleId((prev) => (prev === item.id ? null : item.id));
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        if (!debouncedSearch) setExpandedArticleId((prev) => (prev === item.id ? null : item.id));
+                      }
+                    }}
+                    className="flex items-center gap-2 p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                  >
+                    <span className="flex-shrink-0 text-gray-400" aria-hidden>
+                      {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-sm font-semibold text-gray-800">
+                        {debouncedSearch ? highlightMatches(item.title || 'Без названия', debouncedSearch) : (item.title || 'Без названия')}
+                      </h3>
+                      {item.category && (
+                        <p className="text-[11px] text-gray-500 mt-0.5">{item.category}</p>
+                      )}
+                    </div>
+                    {canEdit && (
+                      <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(item)}
+                          className="p-1 rounded-md hover:bg-gray-100 text-gray-500"
+                          title="Редактировать"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDelete(item.id)}
+                          className="p-1 rounded-md hover:bg-red-50 text-red-500"
+                          title="Удалить"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     )}
                   </div>
-                  {canEdit && (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => handleEdit(item)}
-                        className="p-1 rounded-md hover:bg-gray-100 text-gray-500"
-                        title="Редактировать"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(item.id)}
-                        className="p-1 rounded-md hover:bg-red-50 text-red-500"
-                        title="Удалить"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                  <div
+                    className="overflow-hidden transition-[max-height] duration-300 ease-out"
+                    style={{ maxHeight: isExpanded ? 2000 : 0 }}
+                  >
+                    <div className="px-3 pb-3 pt-0 pl-9 border-t border-gray-100">
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                        {debouncedSearch ? highlightMatches(item.content, debouncedSearch) : item.content}
+                      </p>
                     </div>
-                  )}
+                  </div>
                 </div>
-                <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">
-                  {item.content}
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
