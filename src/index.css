@@ -249,9 +249,12 @@ body {
   user-select: none;
 }
 
-/* Улучшаем скролл сообщений WhatsApp на мобильных устройствах */
+/* Улучшаем скролл сообщений WhatsApp на мобильных устройствах; разрешаем выделение текста */
 .message {
   touch-action: pan-y;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
 }
 
 /* Адаптивные стили */
@@ -575,6 +578,9 @@ body {
 .whatsapp-message {
   transition: all 0.2s ease-in-out;
   border: 1px solid rgba(0, 0, 0, 0.05);
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  user-select: text;
 }
 
 .whatsapp-message.outgoing {

@@ -183,7 +183,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
       onTouchCancel={handleTouchEnd}
     >
       <div
-        className={`rounded-lg px-3 py-2 shadow-sm max-w-[80%] md:max-w-[60%] cursor-pointer select-none ${
+        className={`rounded-lg px-3 py-2 shadow-sm max-w-[80%] md:max-w-[60%] cursor-pointer select-text ${
           isOutgoing ? 'bg-[#dcf8c6] text-gray-900' : 'bg-white text-gray-900'
         } ${isSelected ? 'ring-2 ring-green-500 ring-offset-1' : ''}`}
         onClick={onTap ? handleClick : undefined}
@@ -206,7 +206,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           </>
         )}
         <ReactionsStrip message={message} />
-        <p className="text-xs text-gray-500 mt-1 flex items-center justify-end gap-0.5">
+        <p className="message-status text-xs text-gray-500 mt-1 flex items-center justify-end gap-0.5 select-none">
           {formatMessageTime(message.createdAt)}
           <MessageStatusIcon msg={message} />
         </p>

@@ -331,9 +331,10 @@ service cloud.firestore {
       );
     }
 
-    // Быстрые ответы WhatsApp (quick_replies): доступ только по companyId или global_admin
+    // Быстрые ответы WhatsApp (quick_replies): чтение — любой авторизованный (фильтр по companyId в запросе), запись — по companyId
     match /quick_replies/{docId} {
-      allow read, update, delete: if isAuthenticated() && (
+      allow read: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (
         (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) &&
           get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId
             == resource.data.companyId)
