@@ -595,19 +595,100 @@ function AttachmentBlock({
           >
             Открыть
           </button>
-          <a
-            href={att.url}
-            download={att.fileName ?? undefined}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            type="button"
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                const res = await fetch(att.url, { mode: 'cors' });
+                if (!res.ok) throw new Error('Fetch failed');
+                const blob = await res.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = att.fileName ?? 'document.pdf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(blobUrl);
+              } catch {
+                window.open(att.url, '_blank', 'noopener,noreferrer');
+              }
+            }}
             className="inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm"
           >
             Скачать
-          </a>
+          </button>
         </div>
       </div>
     );
   }
+  // Fallback: файл с .pdf в имени или URL — показываем как PDF (открытие в модалке, не window.open)
+  const looksLikePdf =
+    att.type === 'file' &&
+    (att.fileName?.toLowerCase().endsWith('.pdf') ||
+      (att.url && att.url.split('?')[0].toLowerCase().endsWith('.pdf')));
+  if (looksLikePdf && onPreview) {
+    const openInModal = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      onPreview(att);
+    };
+    return (
+      <div className="mt-1 rounded-lg border border-gray-200 bg-white overflow-hidden max-w-[280px] shadow-sm">
+        <button
+          type="button"
+          onClick={openInModal}
+          className="block w-full text-left focus:outline-none"
+          aria-label="Открыть PDF"
+        >
+          <PdfThumbnail url={att.url} className="w-full" />
+        </button>
+        <div className="p-2 border-t border-gray-100">
+          <p className="text-sm font-medium text-gray-800 truncate">{att.fileName || 'Документ.pdf'}</p>
+          {att.size != null && (
+            <p className="text-xs text-gray-500">{formatFileSize(att.size)}</p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 px-2 pb-2">
+          <button
+            type="button"
+            onClick={openInModal}
+            className="flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-md bg-green-600 hover:bg-green-700 text-white text-sm font-medium"
+          >
+            Открыть
+          </button>
+          <button
+            type="button"
+            onClick={async (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                const res = await fetch(att.url, { mode: 'cors' });
+                if (!res.ok) throw new Error('Fetch failed');
+                const blob = await res.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = att.fileName ?? 'document.pdf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(blobUrl);
+              } catch {
+                window.open(att.url, '_blank', 'noopener,noreferrer');
+              }
+            }}
+            className="inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-md border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm"
+          >
+            Скачать
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mt-1 p-2 rounded bg-gray-100 border border-gray-200">
       {att.type === 'file' ? (
@@ -818,6 +899,22 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
             title="Профиль клиента"
           >
             <User className="w-5 h-5" />
+          </button>
+        )}
+        {import.meta.env.DEV && (
+          <button
+            type="button"
+            onClick={() =>
+              setPreviewAtt({
+                type: 'file',
+                url: 'https://mozilla.github.io/pdf.js/web/compressed.tracemonkey-pldi-09.pdf',
+                fileName: 'test.pdf',
+                mimeType: 'application/pdf'
+              })
+            }
+            className="flex-shrink-0 px-2 py-1 rounded text-xs bg-amber-100 text-amber-800 hover:bg-amber-200"
+          >
+            Test PDF
           </button>
         )}
       </div>

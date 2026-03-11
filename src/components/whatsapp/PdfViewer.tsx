@@ -43,6 +43,10 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({
     setError(null);
     try {
       const res = await fetch(url, { mode: 'cors' });
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.log('[PdfViewer] fetch', { url: url.slice(0, 80), status: res.status, contentType: res.headers.get('Content-Type'), disposition: res.headers.get('Content-Disposition') });
+      }
       if (!res.ok) throw new Error('Не удалось загрузить PDF');
       const buf = await res.arrayBuffer();
       const loadingTask = pdfjs.getDocument({ data: buf });
