@@ -48,7 +48,10 @@ const ACCEPT_DOCUMENT = '.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.zip,.txt,applica
 const ACCEPT_AUDIO = 'audio/*';
 
 const TEXTAREA_MIN_ROWS = 1;
-const TEXTAREA_MAX_HEIGHT_PX = 120;
+const TEXTAREA_MIN_HEIGHT_MOBILE = 60;
+const TEXTAREA_MAX_HEIGHT_MOBILE = 160;
+const TEXTAREA_MIN_HEIGHT_DESKTOP = 80;
+const TEXTAREA_MAX_HEIGHT_DESKTOP = 220;
 
 interface ChatInputProps {
   value: string;
@@ -328,14 +331,27 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   };
 
+  const getTextareaMaxHeight = () =>
+    typeof window !== 'undefined' && window.innerWidth <= 768
+      ? TEXTAREA_MAX_HEIGHT_MOBILE
+      : TEXTAREA_MAX_HEIGHT_DESKTOP;
+
+  const updateTextareaHeight = useCallback(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const maxH = getTextareaMaxHeight();
+    const newHeight = Math.min(el.scrollHeight, maxH);
+    el.style.height = `${newHeight}px`;
+  }, []);
+
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = 'auto';
-    const newHeight = Math.min(el.scrollHeight, TEXTAREA_MAX_HEIGHT_PX);
+    const maxH = getTextareaMaxHeight();
+    const newHeight = Math.min(el.scrollHeight, maxH);
     el.style.height = `${newHeight}px`;
-    // Важно: не сбрасываем каретку в конец, если пользователь уже редактирует текст
-    // (textarea в фокусе) — иначе ломается редактирование в середине строки.
     if (
       autoFocusOnChange &&
       !disabled &&
@@ -347,6 +363,20 @@ const ChatInput: React.FC<ChatInputProps> = ({
       el.setSelectionRange(len, len);
     }
   }, [value, autoFocusOnChange, disabled]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const onInput = () => updateTextareaHeight();
+    el.addEventListener('input', onInput);
+    return () => el.removeEventListener('input', onInput);
+  }, [updateTextareaHeight]);
+
+  useEffect(() => {
+    const onResize = () => updateTextareaHeight();
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [updateTextareaHeight]);
 
   const handleActionClick = (e?: React.MouseEvent) => {
     if (voicePointerUsedRef.current) {
@@ -444,7 +474,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
               />
             )}
             {/* Pill: слева emoji, центр textarea, справа скрепка и камера */}
-          <div className="flex items-end rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 min-h-[40px]">
+          <div className="chat-input flex items-end rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 min-h-[60px] md:min-h-[80px]">
             <button
               type="button"
               data-emoji-picker-trigger
@@ -497,7 +527,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
               onFocus={() => setShowEmojiPicker(false)}
               placeholder={hasAttachment ? 'Подпись к файлу (необязательно)' : 'Сообщение...'}
               rows={TEXTAREA_MIN_ROWS}
-              className="flex-1 min-w-0 resize-none bg-transparent border-0 px-3 py-2.5 text-sm leading-[1.4] outline-none min-h-[40px] max-h-[120px] overflow-y-auto rounded-none"
+              className="flex-1 min-w-0 resize-none bg-transparent border-0 outline-none rounded-none min-h-[60px] max-h-[160px] md:min-h-[80px] md:max-h-[220px] overflow-y-auto py-2.5 px-3 leading-[1.5] text-base md:text-sm"
             />
             {onFileSelect && (
               <button

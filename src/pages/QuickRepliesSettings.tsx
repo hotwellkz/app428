@@ -412,17 +412,27 @@ export const QuickRepliesSettings: React.FC = () => {
 
     const col = collection(db, 'quick_replies');
     const uid = auth.currentUser?.uid ?? '';
-    const payload = {
+    const filesForFirestore = finalFiles.map((f) => ({
+      id: f.id,
+      url: f.url,
+      name: f.name,
+      type: f.type,
+      ...(f.size != null ? { size: f.size } : {})
+    }));
+    const rawPayload: Record<string, unknown> = {
       title: trimmedTitle,
       text: trimmedText,
       keywords: keywords.trim(),
       category: category.trim(),
-      files: finalFiles,
+      files: filesForFirestore,
       attachmentUrl: null,
       attachmentType: null,
       attachmentFileName: null,
       updatedAt: serverTimestamp()
     };
+    const payload = Object.fromEntries(
+      Object.entries(rawPayload).filter(([, v]) => v !== undefined)
+    ) as Record<string, unknown>;
 
     if (editingId) {
       await updateDoc(doc(col, editingId), payload);
