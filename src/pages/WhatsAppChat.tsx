@@ -28,6 +28,7 @@ import ForwardDialog from '../components/whatsapp/ForwardDialog';
 import { supabase, CLIENTS_BUCKET } from '../lib/supabase/config';
 import { MAX_ATTACHMENT_MB } from '../components/whatsapp/ChatInput';
 import { compressImage, validateVideoFile } from '../utils/mediaUtils';
+import { createVoiceRecorder } from '../utils/voiceRecording';
 
 const NEW_MESSAGE_SOUND_PATH = '/sounds/new-message.mp3';
 
@@ -94,8 +95,10 @@ const WhatsAppChat: React.FC = () => {
   type ChatFilter = 'all' | 'waiting' | 'unread';
   const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
+  const voiceRecorderRef = useRef<{ start: () => void; stop: () => void } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const voiceCancelledRef = useRef(false);
 
   const prevConversationsRef = useRef<ConversationListItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
@@ -606,36 +609,98 @@ const WhatsAppChat: React.FC = () => {
     []
   );
 
+  const sendVoiceBlobRef = useRef<(blob: Blob) => void>(() => {});
+
   const startVoiceRecording = useCallback(async () => {
     setSendError(null);
+    voiceCancelledRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
-      const recorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      const chunks: BlobPart[] = [];
-      recorder.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
-      recorder.onstop = () => {
+      const recorder = await createVoiceRecorder(stream, (blob) => {
+        if (voiceCancelledRef.current) return;
+        sendVoiceBlobRef.current(blob);
+      });
+      if (!recorder) {
         stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunks, { type: mime });
-        const file = new File([blob], 'voice.webm', { type: blob.type });
-        handleFileSelect(file);
-      };
-      recorder.start(200);
+        setSendError('Запись голоса не поддерживается.');
+        return;
+      }
+      voiceRecorderRef.current = recorder;
+      recorder.start();
+      setRecordingStartedAt(Date.now());
       setIsRecordingVoice(true);
     } catch (err) {
       console.error('Voice recording error:', err);
       setSendError('Нет доступа к микрофону.');
     }
-  }, [handleFileSelect]);
+  }, []);
 
   const stopVoiceRecording = useCallback(() => {
-    const rec = mediaRecorderRef.current;
-    if (rec && rec.state !== 'inactive') rec.stop();
-    mediaRecorderRef.current = null;
+    const rec = voiceRecorderRef.current;
+    if (rec) rec.stop();
+    voiceRecorderRef.current = null;
+    setRecordingStartedAt(null);
     setIsRecordingVoice(false);
   }, []);
+
+  const cancelVoiceRecording = useCallback(() => {
+    voiceCancelledRef.current = true;
+    stopVoiceRecording();
+  }, [stopVoiceRecording]);
+
+  const sendVoiceBlob = useCallback(
+    async (blob: Blob) => {
+      const phone = selectedItem?.phone ?? selectedItem?.client?.phone;
+      if (!phone || phone === '…' || !companyId || !selectedId) {
+        setSendError('Выберите чат для отправки голосового.');
+        return;
+      }
+      const isOgg = blob.type.includes('ogg');
+      const fileName = isOgg ? 'voice.ogg' : 'voice.webm';
+      const file = new File([blob], fileName, { type: blob.type });
+      setUploadState('uploading');
+      try {
+        const path = `${companyId}/${WHATSAPP_MEDIA_PREFIX}/${selectedId}/${Date.now()}_${fileName}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(CLIENTS_BUCKET)
+          .upload(path, file, { upsert: false });
+        if (uploadError) {
+          setSendError('Ошибка загрузки голосового.');
+          return;
+        }
+        const { data: urlData } = supabase.storage.from(CLIENTS_BUCKET).getPublicUrl(uploadData.path);
+        setUploadState('sending');
+        const res = await fetch(SEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId: phone,
+            contentUri: urlData.publicUrl,
+            attachmentType: 'voice',
+            fileName,
+            repliedToMessageId: replyToMessage?.id ?? undefined,
+            companyId
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setSendError(null);
+          setReplyToMessage(null);
+        } else {
+          const d = data as { error?: string };
+          setSendError(d?.error ?? 'Не удалось отправить голосовое.');
+        }
+      } finally {
+        setUploadState('idle');
+      }
+    },
+    [selectedItem, companyId, selectedId, replyToMessage]
+  );
+
+  useEffect(() => {
+    sendVoiceBlobRef.current = sendVoiceBlob;
+  }, [sendVoiceBlob]);
 
   useEffect(() => () => {
     if (pendingAttachment?.preview) URL.revokeObjectURL(pendingAttachment.preview);
@@ -1283,6 +1348,8 @@ const WhatsAppChat: React.FC = () => {
               onStartVoice={startVoiceRecording}
               onStopVoice={stopVoiceRecording}
               isRecordingVoice={isRecordingVoice}
+              recordingStartedAt={recordingStartedAt}
+              onVoiceRecordCancel={cancelVoiceRecording}
               onCameraCapture={handleCameraCapture}
               showCameraButton={isMobile}
               selectedMessageIds={selectedMessageIds}

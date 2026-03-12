@@ -105,6 +105,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const audioInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  const voicePointerUsedRef = useRef(false);
   const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [selectedQuickIndex, setSelectedQuickIndex] = useState(0);
@@ -271,10 +272,24 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [value, autoFocusOnChange, disabled]);
 
-  const handleActionClick = () => {
+  const handleActionClick = (e?: React.MouseEvent) => {
+    if (voicePointerUsedRef.current) {
+      voicePointerUsedRef.current = false;
+      e?.preventDefault();
+      return;
+    }
     if (isRecordingVoice && onStopVoice) onStopVoice();
     else if (showSend && !isBusy) onSend();
     else if (!showSend && onStartVoice && !hasAttachment) onStartVoice();
+  };
+
+  const handleVoicePointerDown = () => {
+    if (!onStartVoice || hasAttachment) return;
+    voicePointerUsedRef.current = true;
+    onStartVoice();
+  };
+  const handleVoicePointerUp = () => {
+    if (onStopVoice && isRecordingVoice) onStopVoice();
   };
 
   const handleEmojiClick = useCallback(
@@ -430,20 +445,23 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
           <button
             type="button"
-            onClick={handleActionClick}
+            onClick={(e) => handleActionClick(e)}
+            onPointerDown={!showSend && onStartVoice && !hasAttachment ? handleVoicePointerDown : undefined}
+            onPointerUp={onStopVoice && isRecordingVoice ? handleVoicePointerUp : undefined}
+            onPointerLeave={onStopVoice && isRecordingVoice ? handleVoicePointerUp : undefined}
             disabled={
               disabled ||
               (isRecordingVoice ? false : showSend ? isBusy : !(onStartVoice && !hasAttachment))
             }
             title={
-              isRecordingVoice ? 'Остановить запись' : showSend ? 'Отправить' : 'Голосовое сообщение'
+              isRecordingVoice ? 'Отпустите для отправки' : showSend ? 'Отправить' : 'Удерживайте для записи голосового'
             }
             className={`flex-shrink-0 w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center transition-[background-color,opacity,transform] duration-150 ease-out active:scale-95 ${
               isRecordingVoice
                 ? 'bg-red-500 text-white hover:bg-red-600 disabled:opacity-70'
                 : 'bg-[#25D366] text-white hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed'
             }`}
-            aria-label={isRecordingVoice ? 'Остановить' : showSend ? 'Отправить' : 'Микрофон'}
+            aria-label={isRecordingVoice ? 'Отпустите для отправки' : showSend ? 'Отправить' : 'Микрофон'}
           >
             <span className="inline-flex items-center justify-center transition-opacity duration-150">
               {isBusy && showSend && !isRecordingVoice ? (

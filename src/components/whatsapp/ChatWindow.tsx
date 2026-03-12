@@ -41,6 +41,9 @@ interface ChatWindowProps {
   onStartVoice?: () => void;
   onStopVoice?: () => void;
   isRecordingVoice?: boolean;
+  /** Время начала записи (Date.now()) для таймера */
+  recordingStartedAt?: number | null;
+  onVoiceRecordCancel?: () => void;
   onCameraCapture?: (file: File) => void;
   showCameraButton?: boolean;
   /** Режим выбора сообщений */
@@ -81,6 +84,40 @@ interface ChatWindowProps {
 }
 
 const CHAT_HEADER_HEIGHT = 56;
+
+function VoiceRecordingStrip({
+  recordingStartedAt,
+  onCancel
+}: {
+  recordingStartedAt: number;
+  onCancel?: () => void;
+}) {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const update = () => setSeconds(Math.floor((Date.now() - recordingStartedAt) / 1000));
+    update();
+    const t = setInterval(update, 1000);
+    return () => clearInterval(t);
+  }, [recordingStartedAt]);
+  return (
+    <div className="flex-none flex items-center gap-3 px-3 py-2 bg-red-50 border-t border-red-200 rounded-t-lg">
+      <span className="flex items-center gap-1.5 text-red-700 font-mono text-sm tabular-nums">
+        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" aria-hidden />
+        {seconds} с
+      </span>
+      <span className="flex-1 text-xs text-red-600">Свайп влево для отмены</span>
+      {onCancel && (
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-xs font-medium text-red-700 hover:underline"
+        >
+          Отмена
+        </button>
+      )}
+    </div>
+  );
+}
 
 type AttachmentCategory = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'office' | 'unknown';
 
@@ -797,6 +834,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onStartVoice,
   onStopVoice,
   isRecordingVoice = false,
+  recordingStartedAt = null,
+  onVoiceRecordCancel,
   onCameraCapture,
   showCameraButton = false,
   selectedMessageIds = [],
@@ -1236,6 +1275,12 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           </div>
         </details>
       )}
+      {isRecordingVoice && recordingStartedAt != null && (
+        <VoiceRecordingStrip
+          recordingStartedAt={recordingStartedAt}
+          onCancel={onVoiceRecordCancel}
+        />
+      )}
       {pendingAttachment && (
         <div className="flex-none flex items-center gap-2 px-2 py-1.5 bg-white border-t border-gray-200 rounded-t-lg">
           {pendingAttachment.preview ? (
@@ -1286,6 +1331,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           onStartVoice={onStartVoice}
           onStopVoice={onStopVoice}
           isRecordingVoice={isRecordingVoice}
+          recordingStartedAt={recordingStartedAt}
+          onVoiceRecordCancel={onVoiceRecordCancel}
           onCameraCapture={onCameraCapture}
           showCameraButton={showCameraButton}
           onAiReply={incognitoMode ? undefined : handleAiReply}
