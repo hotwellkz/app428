@@ -376,6 +376,13 @@ service cloud.firestore {
       );
     }
 
+    // Лог действий админа (удаление клиента WhatsApp и т.п.): только запись для авторизованных
+    match /admin_log/{logId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update, delete: if false;
+    }
+
     // Приглашения в компанию: только своя компания (create/read/update по companyId)
     match /company_invites/{inviteId} {
       allow read: if isAuthenticated() && (

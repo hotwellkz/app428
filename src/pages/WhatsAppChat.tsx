@@ -15,6 +15,7 @@ import {
   toggleStarMessage,
   addReactionToMessage,
   getConversationAttentionState,
+  deleteClientWithConversation,
   type ConversationListItem
 } from '../lib/firebase/whatsappDb';
 import { showErrorNotification } from '../utils/notifications';
@@ -25,6 +26,7 @@ import ConversationList from '../components/whatsapp/ConversationList';
 import ChatWindow from '../components/whatsapp/ChatWindow';
 import ClientInfoPanel from '../components/whatsapp/ClientInfoPanel';
 import ForwardDialog from '../components/whatsapp/ForwardDialog';
+import DeleteClientConfirmModal from '../components/whatsapp/DeleteClientConfirmModal';
 import { supabase, CLIENTS_BUCKET } from '../lib/supabase/config';
 import { MAX_ATTACHMENT_MB } from '../components/whatsapp/ChatInput';
 import { compressImage, validateVideoFile } from '../utils/mediaUtils';
@@ -95,7 +97,7 @@ const MOBILE_BREAKPOINT = 768;
 
 const WhatsAppChat: React.FC = () => {
   const isMobile = useIsMobile(MOBILE_BREAKPOINT);
-  const { isAdmin } = useAuth();
+  const { isAdmin, user } = useAuth();
   const companyId = useCompanyId();
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -193,6 +195,8 @@ const WhatsAppChat: React.FC = () => {
 
   type ConversationMenuState = { id: string; x: number; y: number; source: 'desktop' | 'mobile' } | null;
   const [conversationMenu, setConversationMenu] = useState<ConversationMenuState>(null);
+  const [deleteClientConversationId, setDeleteClientConversationId] = useState<string | null>(null);
+  const [deleteClientLoading, setDeleteClientLoading] = useState(false);
 
   // Закрытие контекстного меню по ESC
   useEffect(() => {
@@ -1612,9 +1616,19 @@ const WhatsAppChat: React.FC = () => {
                     onClick={handleMarkUnread}
                     className="w-full text-left px-3 py-2 rounded-lg text-sm text-blue-700 hover:bg-blue-50"
                   >
-                    Вернуть в непрочитанные
+                    Пометить как непрочитанное
                   </button>
                 )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (conv) setDeleteClientConversationId(conv.id);
+                    setConversationMenu(null);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50"
+                >
+                  🗑 Удалить клиента
+                </button>
                 <button
                   type="button"
                   onClick={() => setConversationMenu(null)}
@@ -1669,13 +1683,48 @@ const WhatsAppChat: React.FC = () => {
                   onClick={handleMarkUnread}
                   className="w-full text-left px-3 py-1.5 hover:bg-blue-50 text-blue-700"
                 >
-                  Вернуть в непрочитанные
+                  Пометить как непрочитанное
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (conv) setDeleteClientConversationId(conv.id);
+                  setConversationMenu(null);
+                }}
+                className="w-full text-left px-3 py-1.5 hover:bg-red-50 text-red-600"
+              >
+                🗑 Удалить клиента
+              </button>
             </div>
           </div>
         );
       })()}
+
+      <DeleteClientConfirmModal
+        open={deleteClientConversationId !== null}
+        onClose={() => setDeleteClientConversationId(null)}
+        onConfirm={async () => {
+          if (!deleteClientConversationId) return;
+          const convId = deleteClientConversationId;
+          setDeleteClientLoading(true);
+          try {
+            const deletedBy = user?.email ?? user?.uid ?? 'unknown';
+            await deleteClientWithConversation(convId, deletedBy);
+            setDeleteClientConversationId(null);
+            if (selectedId === convId) {
+              const remaining = listWithDisplayTitle.filter((c) => c.id !== convId);
+              setSelectedId(remaining[0]?.id ?? null);
+            }
+          } catch (err) {
+            if (import.meta.env.DEV) console.error('[WhatsApp] deleteClientWithConversation failed', err);
+            showErrorNotification('Не удалось удалить клиента');
+          } finally {
+            setDeleteClientLoading(false);
+          }
+        }}
+        loading={deleteClientLoading}
+      />
     </div>
   );
 };

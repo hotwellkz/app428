@@ -5,12 +5,14 @@ import {
   getDoc,
   doc,
   updateDoc,
+  deleteDoc,
   query,
   where,
   orderBy,
   onSnapshot,
   serverTimestamp,
   arrayUnion,
+  writeBatch,
   type Unsubscribe
 } from 'firebase/firestore';
 import { db } from './config';
@@ -523,5 +525,57 @@ export async function addReactionToMessage(
   };
   await updateDoc(ref, {
     reactions: arrayUnion(reaction)
+  });
+}
+
+const BATCH_SIZE = 500;
+
+/**
+ * Полное удаление клиента WhatsApp: все сообщения диалога, диалог, контакт.
+ * Каскадное удаление. Логирует действие в admin_log (кто, когда, номер).
+ */
+export async function deleteClientWithConversation(
+  conversationId: string,
+  deletedBy: string
+): Promise<void> {
+  const convRef = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
+  const convSnap = await getDoc(convRef);
+  if (!convSnap.exists()) {
+    throw new Error('Conversation not found');
+  }
+  const convData = convSnap.data() as { clientId: string; companyId?: string; phone?: string };
+  const clientId = convData.clientId;
+  const companyId = convData.companyId ?? '';
+  const phone = convData.phone ?? '';
+
+  const messagesRef = collection(db, COLLECTIONS.MESSAGES);
+  const messagesQuery = query(
+    messagesRef,
+    where('conversationId', '==', conversationId)
+  );
+  let snapshot = await getDocs(messagesQuery);
+  while (!snapshot.empty) {
+    const batch = writeBatch(db);
+    const toDelete = snapshot.docs.slice(0, BATCH_SIZE);
+    toDelete.forEach((d) => {
+      batch.delete(doc(db, COLLECTIONS.MESSAGES, d.id));
+    });
+    await batch.commit();
+    if (toDelete.length < BATCH_SIZE) break;
+    snapshot = await getDocs(messagesQuery);
+  }
+
+  await deleteDoc(convRef);
+  await deleteDoc(doc(db, COLLECTIONS.CLIENTS, clientId));
+
+  const adminLogRef = collection(db, 'admin_log');
+  await addDoc(adminLogRef, {
+    action: 'whatsapp_client_deleted',
+    conversationId,
+    clientId,
+    phone,
+    companyId,
+    deletedBy,
+    deletedAt: serverTimestamp()
   });
 }
