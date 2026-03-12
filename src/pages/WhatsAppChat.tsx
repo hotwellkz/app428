@@ -1719,6 +1719,7 @@ const WhatsAppChat: React.FC = () => {
               reactionPickerMessageId={reactionPickerMessageId}
               actionsSheetMessageId={actionsSheetMessageId}
               incognitoMode={incognitoMode}
+              onToggleIncognito={isMobile ? () => setIncognitoMode((v) => !v) : undefined}
               onOpenClientInfo={isMobile ? () => setMobileClientSheetOpen(true) : undefined}
               knowledgeBase={knowledgeBase}
               quickReplies={quickReplies}

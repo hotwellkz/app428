@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause, User } from 'lucide-react';
+import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause, User, Shield } from 'lucide-react';
 import ChatInput from './ChatInput';
 import { WhatsAppCalculatorDrawer } from './WhatsAppCalculatorDrawer';
 import MessageBubble from './MessageBubble';
@@ -71,6 +71,8 @@ interface ChatWindowProps {
   actionsSheetMessageId?: string | null;
   /** Режим инкогнито: просмотр без отметки о прочтении и без отправки */
   incognitoMode?: boolean;
+  /** Переключение режима инкогнито (для кнопки в шапке на мобильном) */
+  onToggleIncognito?: () => void;
   /** Открытие карточки клиента (mobile bottom sheet) */
   onOpenClientInfo?: () => void;
   /** Записи базы знаний компании для AI-ответов */
@@ -884,6 +886,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     reactionPickerMessageId = null,
     actionsSheetMessageId = null,
     incognitoMode = false,
+    onToggleIncognito,
     onOpenClientInfo,
     knowledgeBase,
     quickReplies = [],
@@ -1057,7 +1060,39 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
             <span className="chat-phone truncate text-xs text-gray-500">{phone}</span>
           )}
         </div>
-        {isMobile && onOpenClientInfo && (
+        {isMobile && (
+          <div className="header-actions flex flex-shrink-0 items-center gap-2.5">
+            {onToggleIncognito && (
+              <button
+                type="button"
+                id="incognitoToggle"
+                onClick={onToggleIncognito}
+                className={`incognito-toggle flex h-[34px] w-[34px] items-center justify-center rounded-lg border-0 bg-gray-100 transition-colors hover:bg-gray-200 md:h-8 md:w-8 ${
+                  incognitoMode ? 'active bg-amber-100 hover:bg-amber-200' : ''
+                }`}
+                aria-label={incognitoMode ? 'Выключить режим инкогнито' : 'Включить режим инкогнито'}
+                title={incognitoMode ? 'Инкогнито вкл' : 'Инкогнито выкл'}
+              >
+                <Shield
+                  className={`incognito-icon h-[18px] w-[18px] ${incognitoMode ? 'fill-amber-500 text-amber-500' : 'fill-gray-500 text-gray-500'}`}
+                  aria-hidden
+                />
+              </button>
+            )}
+            {onOpenClientInfo && (
+              <button
+                type="button"
+                onClick={onOpenClientInfo}
+                className="profile-button flex-shrink-0 rounded-lg p-2 text-gray-600 hover:bg-gray-100"
+                aria-label="Профиль клиента"
+                title="Профиль клиента"
+              >
+                <User className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        )}
+        {!isMobile && onOpenClientInfo && (
           <button
             type="button"
             onClick={onOpenClientInfo}
