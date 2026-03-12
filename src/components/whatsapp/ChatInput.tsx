@@ -19,6 +19,8 @@ import {
 import EmojiPicker, { type EmojiClickData, Categories } from 'emoji-picker-react';
 import { useSpeechToText } from '../../hooks/useSpeechToText';
 import { QuickRepliesPopup, type QuickReplyItem } from './QuickRepliesPopup';
+import { MediaQuickRepliesPopup } from './MediaQuickRepliesPopup';
+import type { MediaQuickReply } from '../../types/mediaQuickReplies';
 
 const MAX_ATTACHMENT_MB = 10;
 
@@ -76,6 +78,10 @@ interface ChatInputProps {
   quickReplies?: QuickReplyItem[];
   /** При выборе шаблона с вложением — отправить текст и файл (вместо вставки в поле) */
   onQuickReplySelect?: (item: QuickReplyItem) => void;
+  /** Медиа-шаблоны (вызов по команде / в поле ввода) */
+  mediaQuickReplies?: MediaQuickReply[];
+  /** При выборе медиа-шаблона — отправить все изображения подряд */
+  onMediaQuickReplySelect?: (reply: MediaQuickReply) => void;
 }
 
 const QUICK_REPLIES_MAX = 5;
@@ -100,7 +106,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
   autoFocusOnChange = false,
   onOpenCalculator,
   quickReplies = [],
-  onQuickReplySelect
+  onQuickReplySelect,
+  mediaQuickReplies = [],
+  onMediaQuickReplySelect
 }) => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -120,7 +128,14 @@ const ChatInput: React.FC<ChatInputProps> = ({
     return word.trim().toLowerCase();
   }, [value]);
 
+  const slashQuery = useMemo(() => {
+    const v = value.trim();
+    if (!v.startsWith('/')) return null;
+    return v.slice(1).trim().toLowerCase();
+  }, [value]);
+
   const filteredQuickReplies = useMemo(() => {
+    if (slashQuery !== null) return [];
     if (!quickReplies.length || triggerWord.length < QUICK_REPLIES_MIN_TRIGGER_LEN) return [];
     const q = triggerWord;
     return quickReplies
@@ -132,13 +147,35 @@ const ChatInput: React.FC<ChatInputProps> = ({
         return titleMatch || textMatch || keywordsMatch;
       })
       .slice(0, QUICK_REPLIES_MAX);
-  }, [quickReplies, triggerWord]);
+  }, [quickReplies, triggerWord, slashQuery]);
+
+  const filteredMediaQuickReplies = useMemo(() => {
+    if (!value.trim().startsWith('/')) return [];
+    if (!mediaQuickReplies.length) return [];
+    const q = slashQuery ?? '';
+    if (!q) return mediaQuickReplies.slice(0, QUICK_REPLIES_MAX);
+    return mediaQuickReplies
+      .filter((item) => {
+        const titleMatch = (item.title || '').toLowerCase().includes(q);
+        const keywordsList = (item.keywords || '').split(',').map((k) => k.trim().toLowerCase()).filter(Boolean);
+        const keywordsMatch = keywordsList.some((k) => k.includes(q) || q.includes(k));
+        return titleMatch || keywordsMatch;
+      })
+      .slice(0, QUICK_REPLIES_MAX);
+  }, [mediaQuickReplies, slashQuery, value]);
+
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
 
   useEffect(() => {
     setSelectedQuickIndex(0);
   }, [filteredQuickReplies.length, triggerWord]);
 
+  useEffect(() => {
+    setSelectedMediaIndex(0);
+  }, [filteredMediaQuickReplies.length, slashQuery]);
+
   const quickRepliesOpen = filteredQuickReplies.length > 0;
+  const mediaQuickRepliesOpen = filteredMediaQuickReplies.length > 0;
 
   const insertQuickReply = useCallback(
     (item: QuickReplyItem) => {
@@ -160,6 +197,15 @@ const ChatInput: React.FC<ChatInputProps> = ({
       });
     },
     [value, onChange, onQuickReplySelect]
+  );
+
+  const selectMediaQuickReply = useCallback(
+    (reply: MediaQuickReply) => {
+      if (onMediaQuickReplySelect) onMediaQuickReplySelect(reply);
+      onChange('');
+      setSelectedMediaIndex(0);
+    },
+    [onMediaQuickReplySelect, onChange]
   );
 
   const {
@@ -230,6 +276,28 @@ const ChatInput: React.FC<ChatInputProps> = ({
   }, [speechTranscript, onChange, resetDictation, value]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mediaQuickRepliesOpen) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSelectedMediaIndex((i) => Math.min(i + 1, filteredMediaQuickReplies.length - 1));
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSelectedMediaIndex((i) => Math.max(0, i - 1));
+        return;
+      }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        const item = filteredMediaQuickReplies[selectedMediaIndex];
+        if (item) selectMediaQuickReply(item);
+        return;
+      }
+      if (e.key === 'Escape') {
+        setSelectedMediaIndex(0);
+        return;
+      }
+    }
     if (quickRepliesOpen) {
       if (e.key === 'ArrowDown') {
         e.preventDefault();
@@ -361,7 +429,14 @@ const ChatInput: React.FC<ChatInputProps> = ({
         <div className="flex items-end gap-1.5 md:gap-2 max-w-full">
           {/* Input area + панель быстрых ответов над ним */}
           <div className="flex-1 min-w-0 relative">
-            {quickRepliesOpen && (
+            {mediaQuickRepliesOpen && (
+              <MediaQuickRepliesPopup
+                items={filteredMediaQuickReplies}
+                selectedIndex={selectedMediaIndex}
+                onSelect={selectMediaQuickReply}
+              />
+            )}
+            {quickRepliesOpen && !mediaQuickRepliesOpen && (
               <QuickRepliesPopup
                 items={filteredQuickReplies}
                 selectedIndex={selectedQuickIndex}

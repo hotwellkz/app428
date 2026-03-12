@@ -97,6 +97,10 @@ interface ChatWindowProps {
     attachmentType?: 'image' | 'video' | 'file' | 'audio';
     attachmentFileName?: string;
   }) => void;
+  /** Медиа-шаблоны (вызов по / в поле ввода) */
+  mediaQuickReplies?: Array<{ id: string; title: string; keywords: string; files: Array<{ url: string; order: number; fileName?: string }> }>;
+  /** При выборе медиа-шаблона — отправить все изображения подряд */
+  onMediaQuickReplySelect?: (reply: { id: string; title: string; keywords: string; files: Array<{ url: string; order: number; fileName?: string }> }) => void;
   /** Отправить сгенерированное КП (изображение) в чат */
   onSendProposalImage?: (blob: Blob, caption: string) => Promise<void>;
   /** Показывать блок отладки AI-ответа (найденные шаблоны и база знаний) — для админов */
@@ -880,6 +884,9 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
   onOpenClientInfo,
   knowledgeBase,
   quickReplies = [],
+  onQuickReplySelect,
+  mediaQuickReplies = [],
+  onMediaQuickReplySelect,
   onSendProposalImage,
   showAiDebug = false
 }) => {
@@ -1362,6 +1369,8 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           onOpenCalculator={!incognitoMode && onSendProposalImage ? () => setCalculatorDrawerOpen(true) : undefined}
           quickReplies={quickReplies}
           onQuickReplySelect={incognitoMode ? undefined : onQuickReplySelect}
+          mediaQuickReplies={mediaQuickReplies}
+          onMediaQuickReplySelect={incognitoMode ? undefined : onMediaQuickReplySelect}
         />
         {onSendProposalImage && (
           <WhatsAppCalculatorDrawer

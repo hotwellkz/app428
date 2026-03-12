@@ -354,6 +354,29 @@ service cloud.firestore {
       );
     }
 
+    // Медиа-шаблоны быстрых ответов (набор изображений по /)
+    match /media_quick_replies/{docId} {
+      allow read: if isAuthenticated();
+      allow update, delete: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId
+            == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
+            == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId
+            == request.resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
+            == request.resource.data.companyId)
+        || isGlobalAdmin()
+      );
+    }
+
     // AI База знаний (knowledgeBase): доступ только по companyId пользователя или global_admin
     match /knowledgeBase/{docId} {
       allow read, update, delete: if isAuthenticated() && (

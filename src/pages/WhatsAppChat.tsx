@@ -22,6 +22,7 @@ import { showErrorNotification } from '../utils/notifications';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase/config';
 import type { WhatsAppMessage } from '../types/whatsappDb';
+import type { MediaQuickReply } from '../types/mediaQuickReplies';
 import ConversationList from '../components/whatsapp/ConversationList';
 import ChatWindow from '../components/whatsapp/ChatWindow';
 import ClientInfoPanel from '../components/whatsapp/ClientInfoPanel';
@@ -150,6 +151,7 @@ const WhatsAppChat: React.FC = () => {
       attachmentFileName?: string;
     }>
   >([]);
+  const [mediaQuickReplies, setMediaQuickReplies] = useState<MediaQuickReply[]>([]);
   type SimpleDealStatus = { id: string; name: string; color: string; order: number; isDefault?: boolean };
   type SimpleManager = { id: string; name: string; color: string; order: number };
   const [dealStatuses, setDealStatuses] = useState<SimpleDealStatus[]>([]);
@@ -481,6 +483,39 @@ const WhatsAppChat: React.FC = () => {
         setQuickReplies(list);
       },
       () => setQuickReplies([])
+    );
+    return () => unsub();
+  }, [companyId]);
+
+  // Подписка на медиа-шаблоны (команда / в поле ввода)
+  useEffect(() => {
+    if (!companyId) {
+      setMediaQuickReplies([]);
+      return;
+    }
+    const col = collection(db, 'media_quick_replies');
+    const q = query(col, where('companyId', '==', companyId));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list: MediaQuickReply[] = snap.docs.map((d) => {
+          const data = d.data() as Record<string, unknown>;
+          const rawFiles = (data.files as Array<{ url?: string; order?: number; fileName?: string }>) ?? [];
+          return {
+            id: d.id,
+            title: (data.title as string) ?? '',
+            keywords: (data.keywords as string) ?? '',
+            files: rawFiles
+              .filter((f) => f?.url)
+              .map((f, i) => ({ url: f.url!, order: f.order ?? i, fileName: f.fileName })),
+            companyId: data.companyId as string | undefined,
+            createdAt: data.createdAt,
+            updatedAt: data.updatedAt
+          };
+        });
+        setMediaQuickReplies(list);
+      },
+      () => setMediaQuickReplies([])
     );
     return () => unsub();
   }, [companyId]);
@@ -1092,6 +1127,47 @@ const WhatsAppChat: React.FC = () => {
     [selectedId, companyId, conversations]
   );
 
+  const MEDIA_SEND_DELAY_MS = 400;
+
+  const handleMediaQuickReplySelect = useCallback(
+    async (reply: MediaQuickReply) => {
+      if (!selectedId || !companyId) return;
+      const conv = conversations.find((c) => c.id === selectedId);
+      const phone = conv?.phone ?? conv?.client?.phone;
+      if (!phone || phone === '…') return;
+      const chatId = normalizePhone(phone);
+      const files = [...(reply.files ?? [])].sort((a, b) => a.order - b.order);
+      if (files.length === 0) return;
+      setSending(true);
+      try {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const res = await fetch(SEND_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chatId,
+              contentUri: file.url,
+              attachmentType: 'image' as const,
+              fileName: file.fileName ?? undefined,
+              companyId
+            })
+          });
+          if (!res.ok) throw new Error('Send failed');
+          if (i < files.length - 1) {
+            await new Promise((r) => setTimeout(r, MEDIA_SEND_DELAY_MS));
+          }
+        }
+      } catch (err) {
+        if (import.meta.env.DEV) console.error('[WhatsApp] media quick reply send failed', err);
+        showErrorNotification('Не удалось отправить изображения');
+      } finally {
+        setSending(false);
+      }
+    },
+    [selectedId, companyId, conversations]
+  );
+
   const handleSelectionMore = useCallback(() => {
     if (selectedMessageIds[0]) setActionsSheetMessageId(selectedMessageIds[0]);
   }, [selectedMessageIds]);
@@ -1514,6 +1590,8 @@ const WhatsAppChat: React.FC = () => {
               knowledgeBase={knowledgeBase}
               quickReplies={quickReplies}
               onQuickReplySelect={handleQuickReplySelect}
+              mediaQuickReplies={mediaQuickReplies}
+              onMediaQuickReplySelect={incognitoMode ? undefined : handleMediaQuickReplySelect}
               onSendProposalImage={incognitoMode ? undefined : handleSendProposalImage}
               showAiDebug={isAdmin}
             />
