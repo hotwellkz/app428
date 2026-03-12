@@ -1033,35 +1033,35 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
 
   const content = (
     <>
-      {/* Header: на мобильных — кнопка Назад + имя/номер */}
+      {/* Шапка чата: липкая на мобильном, не прокручивается с сообщениями */}
       <div
-        className="flex-none flex items-center gap-2 px-3 py-2 bg-white border-b min-h-[52px] md:min-h-0 md:px-4 md:py-2"
+        className="chat-header sticky top-0 z-50 flex flex-none items-center justify-between gap-2 border-b border-gray-200 bg-white px-3 py-2.5 min-h-[52px] md:min-h-0 md:px-4 md:py-2"
         style={isMobile ? { minHeight: CHAT_HEADER_HEIGHT } : undefined}
       >
         {isMobile && onBack && (
           <button
             type="button"
             onClick={onBack}
-            className="flex-shrink-0 p-2 -ml-1 rounded-lg hover:bg-gray-100 flex items-center gap-1 text-gray-700"
+            className="back-button flex flex-shrink-0 items-center gap-1 rounded-lg p-2 -ml-1 text-gray-700 hover:bg-gray-100"
             aria-label="Назад к списку"
           >
             <ArrowLeft className="w-5 h-5" />
             <span className="text-sm font-medium">Назад</span>
           </button>
         )}
-        <div className="flex-1 min-w-0 flex flex-col truncate">
-          <p className="font-medium text-gray-800 truncate text-sm md:text-base">
+        <div className="chat-user flex flex-1 min-w-0 flex-col truncate">
+          <span className="chat-name font-medium text-gray-800 truncate text-sm md:text-base">
             {title}
-          </p>
+          </span>
           {displayTitle?.trim() && phone && (
-            <p className="text-xs text-gray-500 truncate">{phone}</p>
+            <span className="chat-phone truncate text-xs text-gray-500">{phone}</span>
           )}
         </div>
         {isMobile && onOpenClientInfo && (
           <button
             type="button"
             onClick={onOpenClientInfo}
-            className="flex-shrink-0 p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+            className="profile-button flex-shrink-0 rounded-lg p-2 text-gray-600 hover:bg-gray-100"
             aria-label="Профиль клиента"
             title="Профиль клиента"
           >

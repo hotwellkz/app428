@@ -26,6 +26,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useMenuVisibility } from '../contexts/MenuVisibilityContext';
 import { useMobileSidebar } from '../contexts/MobileSidebarContext';
+import { useMobileWhatsAppChat } from '../contexts/MobileWhatsAppChatContext';
 import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
 import type { MenuSectionId } from '../types/menuAccess';
 
@@ -93,6 +94,9 @@ const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item, onClick, co
 
 export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) => {
   const { isOpen: isMobileMenuOpen, close: setMobileMenuOpenFalse, toggle: toggleMobileMenu } = useMobileSidebar();
+  const mobileWhatsApp = useMobileWhatsAppChat();
+  /** В мобильной версии внутри открытого чата WhatsApp бургер не показываем — не перекрывает кнопку «Назад» */
+  const hideBurgerInChat = location.pathname === '/whatsapp' && (mobileWhatsApp?.isMobileWhatsAppChatOpen ?? false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isApprovedEmail, setIsApprovedEmail] = useState(false);
@@ -169,12 +173,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
 
   return (
     <>
-      {/* Кнопка ☰: показывать при ширине < 1280px (sidebar скрыт), на всех страницах включая WhatsApp */}
+      {/* Кнопка ☰: при ширине < 1280px; скрыта внутри открытого чата WhatsApp на мобильном */}
       <button
         onClick={toggleMobileMenu}
-        className={`fixed top-4 left-4 z-[60] xl:hidden bg-white p-2 rounded-lg shadow-lg mt-2 hover:bg-gray-50 transition-all duration-200 border border-gray-200 ${
-          !isMenuVisible ? 'opacity-0 pointer-events-none' : 'opacity-100'
-        }`}
+        className={`menu-toggle fixed top-4 left-4 z-[60] xl:hidden bg-white p-2 rounded-lg shadow-lg mt-2 hover:bg-gray-50 transition-all duration-200 border border-gray-200 ${
+          !isMenuVisible || hideBurgerInChat ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        } ${hideBurgerInChat ? 'invisible' : ''}`}
         aria-label="Открыть меню"
       >
         {isMobileMenuOpen ? (
@@ -184,16 +188,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
         )}
       </button>
 
-      {/* Подложка при открытом меню */}
-      {isMobileMenuOpen && (
+      {/* Подложка при открытом меню (в чате WhatsApp на мобильном не показываем) */}
+      {isMobileMenuOpen && !hideBurgerInChat && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-[45] xl:hidden backdrop-blur-sm transition-opacity duration-300"
           onClick={setMobileMenuOpenFalse}
         />
       )}
 
-      {/* Боковое меню (overlay при < 1280px) */}
-      {isMobileMenuOpen && (
+      {/* Боковое меню (overlay при < 1280px; в открытом чате скрыто) */}
+      {isMobileMenuOpen && !hideBurgerInChat && (
         <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-xl z-[50] transform transition-all duration-300 ease-in-out xl:hidden border-r border-gray-100">
           <div className="flex flex-col h-full">
             <div className="h-20" />
