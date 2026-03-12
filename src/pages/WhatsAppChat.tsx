@@ -167,6 +167,10 @@ const WhatsAppChat: React.FC = () => {
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [forwardLoading, setForwardLoading] = useState(false);
   const [mobileClientSheetOpen, setMobileClientSheetOpen] = useState(false);
+  /** Позиция bottom sheet карточки клиента: peek = 60% экрана, open = полностью */
+  const [clientSheetPosition, setClientSheetPosition] = useState<'peek' | 'open'>('peek');
+  const clientSheetTouchStartY = useRef<number>(0);
+  const clientSheetDragStartPosition = useRef<'peek' | 'open'>('peek');
   const [knowledgeBase, setKnowledgeBase] = useState<
     Array<{ id: string; title: string; content: string; category: string }>
   >([]);
@@ -255,6 +259,11 @@ const WhatsAppChat: React.FC = () => {
 
   const mobileChatContext = useMobileWhatsAppChat();
   const selectedItem = conversations.find((c) => c.id === selectedId);
+
+  // При открытии карточки клиента на mobile — начальная позиция 60% (peek)
+  useEffect(() => {
+    if (mobileClientSheetOpen) setClientSheetPosition('peek');
+  }, [mobileClientSheetOpen]);
 
   // Синхронизация с контекстом: на mobile при открытом чате скрываем плавающие кнопки
   useEffect(() => {
@@ -1764,7 +1773,7 @@ const WhatsAppChat: React.FC = () => {
         loading={forwardLoading}
         isMobile={isMobile}
       />
-      {/* Mobile: bottom sheet с карточкой клиента */}
+      {/* Mobile: draggable bottom sheet с карточкой клиента */}
       {isMobile && mobileClientSheetOpen && selectedItem && (
         <div
           className="fixed inset-0 z-[1100] flex flex-col justify-end"
@@ -1774,16 +1783,36 @@ const WhatsAppChat: React.FC = () => {
         >
           <button
             type="button"
-            className="absolute inset-0 bg-black/40"
+            className="absolute inset-0 bg-black/40 transition-opacity"
             onClick={() => setMobileClientSheetOpen(false)}
             aria-label="Закрыть карточку клиента"
           />
           <div
-            className="relative bg-white rounded-t-2xl shadow-xl max-h-[80vh] pb-[env(safe-area-inset-bottom)] pt-2"
-            style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))' }}
+            id="clientSheet"
+            className="bottom-sheet relative flex flex-col rounded-t-2xl bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.1)] transition-[transform] duration-250 ease-out max-h-[90vh]"
+            style={{
+              transform: clientSheetPosition === 'open' ? 'translateY(0)' : 'translateY(40%)',
+              paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))'
+            }}
           >
-            <div className="w-10 h-1 rounded-full bg-gray-300 mx-auto mb-3" aria-hidden />
-            <div className="px-3 pb-3 overflow-y-auto">
+            <button
+              type="button"
+              className="sheet-handle h-1.5 w-10 shrink-0 rounded-full bg-gray-300 mx-auto mt-2.5 mb-1 cursor-grab touch-none border-0 p-0"
+              aria-label={clientSheetPosition === 'open' ? 'Свернуть' : 'Развернуть'}
+              onClick={() => setClientSheetPosition((p) => (p === 'open' ? 'peek' : 'open'))}
+              onTouchStart={(e) => {
+                clientSheetTouchStartY.current = e.touches[0].clientY;
+                clientSheetDragStartPosition.current = clientSheetPosition;
+              }}
+              onTouchMove={(e) => {
+                const currentY = e.touches[0].clientY;
+                const deltaY = currentY - clientSheetTouchStartY.current;
+                if (deltaY > 120) setMobileClientSheetOpen(false);
+                else if (deltaY < -80 && clientSheetDragStartPosition.current === 'peek') setClientSheetPosition('open');
+                else if (deltaY > 80 && clientSheetDragStartPosition.current === 'open') setClientSheetPosition('peek');
+              }}
+            />
+            <div className="sheet-content min-h-0 flex-1 overflow-y-auto px-4 pb-4" style={{ maxHeight: 'calc(90vh - 52px)' }}>
               <ClientInfoPanel
                 phone={
                   selectedItem.phone && selectedItem.phone !== '…'

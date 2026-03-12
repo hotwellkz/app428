@@ -86,6 +86,11 @@ body {
   display: none;
 }
 
+/* Bottom sheet карточки клиента (мобильный): плавная прокрутка контента */
+.sheet-content {
+  -webkit-overflow-scrolling: touch;
+}
+
 /* Часы в верхней панели CRM (WhatsApp) */
 .crm-clock {
   font-family: monospace;
