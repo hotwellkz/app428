@@ -179,7 +179,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   const insertQuickReply = useCallback(
     (item: QuickReplyItem) => {
-      if (item.attachmentUrl && onQuickReplySelect) {
+      if ((item.files?.length > 0 || item.attachmentUrl) && onQuickReplySelect) {
         onQuickReplySelect(item);
         setSelectedQuickIndex(0);
         return;

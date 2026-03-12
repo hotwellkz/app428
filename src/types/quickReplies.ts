@@ -1,3 +1,12 @@
+/** Один файл в шаблоне быстрого ответа. */
+export interface QuickReplyFile {
+  id: string;
+  url: string;
+  name: string;
+  type: 'image' | 'video' | 'file' | 'audio';
+  size?: number;
+}
+
 /** Запись быстрого ответа (шаблон для WhatsApp CRM). */
 export interface QuickReply {
   id: string;
@@ -6,11 +15,13 @@ export interface QuickReply {
   /** Ключевые слова через запятую для поиска (например: "черновая,черно,чернов"). */
   keywords: string;
   category: string;
-  /** Публичный URL вложения (Supabase Storage). */
+  /** Массив прикреплённых файлов (до 10). */
+  files?: QuickReplyFile[];
+  /** @deprecated Используйте files[]. Один файл — для обратной совместимости со старыми шаблонами. */
   attachmentUrl?: string | null;
-  /** Тип вложения для WhatsApp API: image | video | file | audio */
+  /** @deprecated Используйте files[]. */
   attachmentType?: 'image' | 'video' | 'file' | 'audio' | null;
-  /** Имя файла для отображения. */
+  /** @deprecated Используйте files[]. */
   attachmentFileName?: string | null;
   createdBy?: string;
   createdAt?: unknown;

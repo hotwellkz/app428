@@ -146,6 +146,7 @@ const WhatsAppChat: React.FC = () => {
       text: string;
       keywords: string;
       category: string;
+      files?: Array<{ id: string; url: string; name: string; type: string; size?: number }>;
       attachmentUrl?: string;
       attachmentType?: 'image' | 'video' | 'file' | 'audio';
       attachmentFileName?: string;
@@ -469,12 +470,23 @@ const WhatsAppChat: React.FC = () => {
       (snap) => {
         const list = snap.docs.map((d) => {
           const data = d.data() as Record<string, unknown>;
+          const rawFiles = data.files as Array<{ id?: string; url?: string; name?: string; type?: string; size?: number }> | undefined;
+          const files = rawFiles?.length
+            ? rawFiles.filter((f) => f?.url).map((f) => ({
+                id: (f.id ?? `f-${d.id}-${Math.random().toString(36).slice(2)}`) as string,
+                url: f.url!,
+                name: (f.name ?? 'Файл') as string,
+                type: (f.type ?? 'file') as string,
+                size: f.size
+              }))
+            : undefined;
           return {
             id: d.id,
             title: (data.title as string) ?? '',
             text: (data.text as string) ?? '',
             keywords: (data.keywords as string) ?? '',
             category: (data.category as string) ?? '',
+            files,
             attachmentUrl: (data.attachmentUrl as string) || undefined,
             attachmentType: (data.attachmentType as 'image' | 'video' | 'file' | 'audio') || undefined,
             attachmentFileName: (data.attachmentFileName as string) || undefined
@@ -1088,13 +1100,24 @@ const WhatsAppChat: React.FC = () => {
     []
   );
 
+  const QUICK_REPLY_FILES_DELAY_MS = 400;
+
   const handleQuickReplySelect = useCallback(
-    async (item: { text: string; attachmentUrl?: string; attachmentType?: 'image' | 'video' | 'file' | 'audio'; attachmentFileName?: string }) => {
+    async (item: {
+      text: string;
+      files?: Array<{ id: string; url: string; name: string; type: string; size?: number }>;
+      attachmentUrl?: string;
+      attachmentType?: 'image' | 'video' | 'file' | 'audio';
+      attachmentFileName?: string;
+    }) => {
       if (!selectedId || !companyId) return;
       const conv = conversations.find((c) => c.id === selectedId);
       const phone = conv?.phone ?? conv?.client?.phone;
       if (!phone || phone === '…') return;
       const chatId = normalizePhone(phone);
+      const fileList = (item.files?.length ? item.files : item.attachmentUrl
+        ? [{ url: item.attachmentUrl, type: item.attachmentType || 'file', name: item.attachmentFileName ?? 'Файл', id: 'legacy' }]
+        : []) as Array<{ id: string; url: string; name: string; type: string }>;
       setSending(true);
       try {
         const textPayload = formatMessageForWhatsApp(item.text || '');
@@ -1103,16 +1126,16 @@ const WhatsAppChat: React.FC = () => {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ chatId, text: textPayload, companyId })
         });
-        if (item.attachmentUrl) {
-          await new Promise((r) => setTimeout(r, 300));
+        for (let i = 0; i < fileList.length; i++) {
+          await new Promise((r) => setTimeout(r, i === 0 ? 300 : QUICK_REPLY_FILES_DELAY_MS));
           await fetch(SEND_API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               chatId,
-              contentUri: item.attachmentUrl,
-              attachmentType: item.attachmentType || 'file',
-              fileName: item.attachmentFileName ?? undefined,
+              contentUri: fileList[i].url,
+              attachmentType: fileList[i].type as 'image' | 'video' | 'file' | 'audio',
+              fileName: fileList[i].name,
               companyId
             })
           });

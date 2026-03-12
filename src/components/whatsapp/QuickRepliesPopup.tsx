@@ -2,12 +2,21 @@ import React from 'react';
 
 const MAX_PREVIEW_LEN = 80;
 
+export interface QuickReplyFileItem {
+  id: string;
+  url: string;
+  name: string;
+  type: string;
+  size?: number;
+}
+
 export interface QuickReplyItem {
   id: string;
   title: string;
   text: string;
   keywords: string;
   category: string;
+  files?: QuickReplyFileItem[];
   attachmentUrl?: string;
   attachmentType?: 'image' | 'video' | 'file' | 'audio';
   attachmentFileName?: string;
@@ -59,7 +68,7 @@ export const QuickRepliesPopup: React.FC<QuickRepliesPopupProps> = ({
           >
             <div className="text-sm font-medium truncate">
               {item.title || 'Без названия'}
-              {item.attachmentUrl && <span className="ml-1 text-gray-500">📎</span>}
+              {((item.files?.length ?? 0) > 0 || item.attachmentUrl) && <span className="ml-1 text-gray-500">📎</span>}
             </div>
             <div className="text-xs text-gray-600 truncate mt-0.5">{preview}</div>
           </button>

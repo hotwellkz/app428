@@ -15,10 +15,11 @@ import { supabase } from '../lib/supabase/config';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
 import { Plus, Trash2, Edit3, Paperclip, X, ImageIcon, GripVertical } from 'lucide-react';
-import type { QuickReply } from '../types/quickReplies';
+import type { QuickReply, QuickReplyFile } from '../types/quickReplies';
 import type { MediaQuickReply } from '../types/mediaQuickReplies';
 
-const QUICK_REPLY_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024; // 20MB
+const QUICK_REPLY_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024; // 20MB per file
+const MAX_QUICK_REPLY_FILES = 10;
 const MEDIA_IMAGE_MAX_BYTES = 10 * 1024 * 1024; // 10MB per image
 const MEDIA_IMAGE_MAX_COUNT = 10;
 const MEDIA_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp';
@@ -45,11 +46,8 @@ export const QuickRepliesSettings: React.FC = () => {
   const [text, setText] = useState('');
   const [keywords, setKeywords] = useState('');
   const [category, setCategory] = useState('');
-  const [attachmentFile, setAttachmentFile] = useState<File | null>(null);
-  const [attachmentUrl, setAttachmentUrl] = useState<string>('');
-  const [attachmentFileName, setAttachmentFileName] = useState<string>('');
-  const [attachmentType, setAttachmentType] = useState<QuickReply['attachmentType']>(null);
-  const [attachmentRemoveRequested, setAttachmentRemoveRequested] = useState(false);
+  type AttachedFileItem = QuickReplyFile | { file: File; id: string };
+  const [attachedFiles, setAttachedFiles] = useState<AttachedFileItem[]>([]);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
 
   const [mediaItems, setMediaItems] = useState<MediaQuickReply[]>([]);
@@ -74,12 +72,36 @@ export const QuickRepliesSettings: React.FC = () => {
       (snap) => {
         const list: QuickReply[] = snap.docs.map((d) => {
           const data = d.data() as Record<string, unknown>;
+          const rawFiles = data.files as Array<{ id?: string; url?: string; name?: string; type?: string; size?: number }> | undefined;
+          let files: QuickReply['files'];
+          if (rawFiles?.length) {
+            files = rawFiles
+              .filter((f) => f?.url)
+              .map((f) => ({
+                id: (f.id ?? `f-${d.id}-${Math.random().toString(36).slice(2)}`) as string,
+                url: f.url!,
+                name: f.name ?? 'Файл',
+                type: (f.type ?? 'file') as QuickReplyFile['type'],
+                size: f.size
+              }));
+          } else if (data.attachmentUrl) {
+            files = [{
+              id: 'legacy',
+              url: data.attachmentUrl as string,
+              name: (data.attachmentFileName as string) || 'Файл',
+              type: ((data.attachmentType as string) || 'file') as QuickReplyFile['type'],
+              size: undefined
+            }];
+          } else {
+            files = undefined;
+          }
           return {
             id: d.id,
             title: (data.title as string) ?? '',
             text: (data.text as string) ?? '',
             keywords: (data.keywords as string) ?? '',
             category: (data.category as string) ?? '',
+            files,
             attachmentUrl: (data.attachmentUrl as string) ?? undefined,
             attachmentType: (data.attachmentType as QuickReply['attachmentType']) ?? undefined,
             attachmentFileName: (data.attachmentFileName as string) ?? undefined,
@@ -161,11 +183,7 @@ export const QuickRepliesSettings: React.FC = () => {
     setText('');
     setKeywords('');
     setCategory('');
-    setAttachmentFile(null);
-    setAttachmentUrl('');
-    setAttachmentFileName('');
-    setAttachmentType(null);
-    setAttachmentRemoveRequested(false);
+    setAttachedFiles([]);
   };
 
   const handleEdit = (entry: QuickReply) => {
@@ -174,39 +192,60 @@ export const QuickRepliesSettings: React.FC = () => {
     setText(entry.text);
     setKeywords(entry.keywords);
     setCategory(entry.category);
-    setAttachmentFile(null);
-    setAttachmentUrl(entry.attachmentUrl ?? '');
-    setAttachmentFileName(entry.attachmentFileName ?? '');
-    setAttachmentType(entry.attachmentType ?? null);
-    setAttachmentRemoveRequested(false);
+    if (entry.files?.length) {
+      setAttachedFiles([...entry.files]);
+    } else if (entry.attachmentUrl) {
+      setAttachedFiles([{
+        id: 'legacy',
+        url: entry.attachmentUrl,
+        name: entry.attachmentFileName ?? 'Файл',
+        type: (entry.attachmentType ?? 'file') as QuickReplyFile['type'],
+        size: undefined
+      }]);
+    } else {
+      setAttachedFiles([]);
+    }
+  };
+
+  const addFilesFromInput = (fileList: FileList | null) => {
+    if (!fileList?.length) return;
+    const next: AttachedFileItem[] = [...attachedFiles];
+    for (let i = 0; i < fileList.length; i++) {
+      if (next.length >= MAX_QUICK_REPLY_FILES) break;
+      const file = fileList[i];
+      const mime = file.type?.toLowerCase();
+      const type = ALLOWED_ATTACHMENT_TYPES[mime];
+      if (!type) {
+        window.alert(`Файл "${file.name}": допустимы только JPG, PNG, WEBP, PDF, DOCX, XLSX, MP4.`);
+        continue;
+      }
+      if (file.size > QUICK_REPLY_ATTACHMENT_MAX_BYTES) {
+        window.alert(`Файл "${file.name}" больше 20 МБ.`);
+        continue;
+      }
+      next.push({ file, id: crypto.randomUUID?.() ?? `p-${Date.now()}-${i}` });
+    }
+    setAttachedFiles(next.slice(0, MAX_QUICK_REPLY_FILES));
   };
 
   const handleAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    addFilesFromInput(e.target.files);
     e.target.value = '';
-    if (!file) return;
-    const mime = file.type?.toLowerCase();
-    if (!ALLOWED_ATTACHMENT_TYPES[mime]) {
-      window.alert('Недопустимый формат. Разрешены: JPG, PNG, WEBP, PDF, DOCX, XLSX, MP4.');
-      return;
-    }
-    if (file.size > QUICK_REPLY_ATTACHMENT_MAX_BYTES) {
-      window.alert(`Максимальный размер файла: 20 МБ.`);
-      return;
-    }
-    setAttachmentFile(file);
-    setAttachmentFileName(file.name);
-    setAttachmentType(ALLOWED_ATTACHMENT_TYPES[mime] ?? 'file');
-    setAttachmentUrl('');
-    setAttachmentRemoveRequested(false);
   };
 
-  const handleRemoveAttachment = () => {
-    setAttachmentFile(null);
-    setAttachmentUrl('');
-    setAttachmentFileName('');
-    setAttachmentType(null);
-    setAttachmentRemoveRequested(true);
+  const handleRemoveAttachedFile = (index: number) => {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    addFilesFromInput(e.dataTransfer.files);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
   };
 
   const resetMediaForm = () => {
@@ -331,69 +370,68 @@ export const QuickRepliesSettings: React.FC = () => {
     const trimmedText = text.trim();
     if (!trimmedTitle || !trimmedText) return;
 
-    let finalAttachmentUrl: string | null = null;
-    let finalAttachmentType: QuickReply['attachmentType'] = null;
-    let finalAttachmentFileName: string | null = null;
-
-    if (attachmentRemoveRequested) {
-      finalAttachmentUrl = null;
-      finalAttachmentType = null;
-      finalAttachmentFileName = null;
-    } else if (attachmentFile) {
+    const bucket = 'clients';
+    const pathPrefix = `quick_replies/${companyId}/${editingId ?? `new-${Date.now()}`}`;
+    const finalFiles: QuickReplyFile[] = [];
+    const hasPending = attachedFiles.some((item) => 'file' in item);
+    if (hasPending) {
       setAttachmentUploading(true);
       try {
-        const ext = attachmentFile.name.replace(/^.*\./, '') || 'bin';
-        const safeName = attachmentFile.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
-        const path = `quick_replies/${companyId}/${editingId || `new-${Date.now()}`}_${safeName}`;
-        const { data, error } = await supabase.storage
-          .from('clients')
-          .upload(path, attachmentFile, { cacheControl: '3600', upsert: true });
-        if (error) throw error;
-        const { data: urlData } = supabase.storage.from('clients').getPublicUrl(data.path);
-        finalAttachmentUrl = urlData.publicUrl;
-        finalAttachmentType = attachmentType ?? 'file';
-        finalAttachmentFileName = attachmentFileName || attachmentFile.name;
+        for (const item of attachedFiles) {
+          if ('file' in item) {
+            const safeName = item.file.name.replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 80);
+            const path = `${pathPrefix}_${item.id}_${safeName}`;
+            const { data, error } = await supabase.storage.from(bucket).upload(path, item.file, { cacheControl: '3600', upsert: true });
+            if (error) throw error;
+            const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(data.path);
+            const mime = item.file.type?.toLowerCase();
+            const type = ALLOWED_ATTACHMENT_TYPES[mime] ?? 'file';
+            finalFiles.push({
+              id: item.id,
+              url: urlData.publicUrl,
+              name: item.file.name,
+              type,
+              size: item.file.size
+            });
+          } else {
+            finalFiles.push(item);
+          }
+        }
       } catch (err) {
-        console.error('Quick reply attachment upload failed', err);
-        window.alert('Не удалось загрузить файл. Попробуйте снова.');
+        console.error('Quick reply files upload failed', err);
+        window.alert('Не удалось загрузить файлы. Попробуйте снова.');
         setAttachmentUploading(false);
         return;
       }
       setAttachmentUploading(false);
-    } else if (attachmentUrl) {
-      finalAttachmentUrl = attachmentUrl;
-      finalAttachmentType = attachmentType ?? 'file';
-      finalAttachmentFileName = attachmentFileName || null;
+    } else {
+      attachedFiles.forEach((item) => {
+        if (!('file' in item)) finalFiles.push(item);
+      });
     }
 
     const col = collection(db, 'quick_replies');
     const uid = auth.currentUser?.uid ?? '';
+    const payload = {
+      title: trimmedTitle,
+      text: trimmedText,
+      keywords: keywords.trim(),
+      category: category.trim(),
+      files: finalFiles,
+      attachmentUrl: null,
+      attachmentType: null,
+      attachmentFileName: null,
+      updatedAt: serverTimestamp()
+    };
 
     if (editingId) {
-      const ref = doc(col, editingId);
-      await updateDoc(ref, {
-        title: trimmedTitle,
-        text: trimmedText,
-        keywords: keywords.trim(),
-        category: category.trim(),
-        attachmentUrl: finalAttachmentUrl,
-        attachmentType: finalAttachmentType,
-        attachmentFileName: finalAttachmentFileName,
-        updatedAt: serverTimestamp()
-      });
+      await updateDoc(doc(col, editingId), payload);
     } else {
       await addDoc(col, {
-        title: trimmedTitle,
-        text: trimmedText,
-        keywords: keywords.trim(),
-        category: category.trim(),
-        attachmentUrl: finalAttachmentUrl,
-        attachmentType: finalAttachmentType,
-        attachmentFileName: finalAttachmentFileName,
+        ...payload,
         companyId,
         createdBy: uid,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        createdAt: serverTimestamp()
       });
     }
     resetForm();
@@ -464,39 +502,49 @@ export const QuickRepliesSettings: React.FC = () => {
                 />
               </div>
               <div>
-                <label className="block text-xs text-gray-500 mb-1">Прикрепить файл</label>
+                <label className="block text-xs text-gray-500 mb-1">Прикрепить файлы (до {MAX_QUICK_REPLY_FILES})</label>
                 <p className="text-[11px] text-gray-400 mb-1">
-                  JPG, PNG, WEBP, PDF, DOCX, XLSX, MP4. Максимум 20 МБ.
+                  JPG, PNG, WEBP, PDF, DOCX, XLSX, MP4. Максимум 20 МБ на файл.
                 </p>
                 <input
                   type="file"
                   accept={ACCEPT_ATTACHMENT}
+                  multiple
                   onChange={handleAttachmentChange}
                   className="hidden"
                   id="quick-reply-attachment"
                 />
-                {!(attachmentFile || attachmentUrl) && (
+                <div
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  className="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50/50 p-3 text-center"
+                >
                   <label
                     htmlFor="quick-reply-attachment"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 cursor-pointer"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 cursor-pointer"
                   >
                     <Paperclip className="w-4 h-4" />
-                    Загрузить файл
+                    Добавить файл
                   </label>
-                )}
-                {(attachmentFile || attachmentUrl) && !attachmentRemoveRequested && (
-                  <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
-                    <span className="truncate" title={attachmentFileName}>
-                      📎 {attachmentFileName || 'Файл'}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={handleRemoveAttachment}
-                      className="text-red-600 hover:text-red-700 text-xs whitespace-nowrap"
-                    >
-                      удалить файл
-                    </button>
-                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1">или перетащите файлы сюда</p>
+                </div>
+                {attachedFiles.length > 0 && (
+                  <ul className="mt-2 space-y-1.5">
+                    {attachedFiles.map((item, index) => (
+                      <li key={'file' in item ? item.id : item.id} className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm">
+                        <span className="truncate flex-1" title={'file' in item ? item.file.name : item.name}>
+                          📎 {'file' in item ? item.file.name : item.name}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveAttachedFile(index)}
+                          className="text-red-600 hover:text-red-700 text-xs whitespace-nowrap"
+                        >
+                          Удалить
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
               <div>
@@ -550,7 +598,7 @@ export const QuickRepliesSettings: React.FC = () => {
                 <div className="min-w-0 flex-1">
                   <h3 className="text-sm font-semibold text-gray-800">
                     {item.title || 'Без названия'}
-                    {item.attachmentUrl && <span className="ml-1 text-gray-500" title="Есть вложение">📎</span>}
+                    {((item.files?.length ?? 0) > 0 || item.attachmentUrl) && <span className="ml-1 text-gray-500" title="Есть вложения">📎</span>}
                   </h3>
                   {item.category && <p className="text-[11px] text-gray-500 mt-0.5">{item.category}</p>}
                   <p className="text-xs text-gray-600 mt-1 line-clamp-2">{item.text}</p>
