@@ -295,6 +295,13 @@ const WhatsAppChat: React.FC = () => {
     return () => mobileChatContext.setMobileWhatsAppChatOpen(false);
   }, [isMobile, selectedId, mobileChatContext]);
 
+  // Мобильный чат: блокируем прокрутку body (убираем белую область и overscroll)
+  useEffect(() => {
+    if (!isMobile || !selectedId) return;
+    document.body.classList.add('whatsapp-chat-mobile-open');
+    return () => document.body.classList.remove('whatsapp-chat-mobile-open');
+  }, [isMobile, selectedId]);
+
   // Mobile: кнопка «Назад» — сначала закрываем selection/меню/диалог, потом чат
   useEffect(() => {
     if (!isMobile) return;
@@ -1702,12 +1709,12 @@ const WhatsAppChat: React.FC = () => {
           />
         </aside>
 
-        {/* Центр: чат. На mobile — высота по visualViewport (клавиатура не скрывает шапку и инпут) */}
+        {/* Центр: чат. На mobile — высота по visualViewport, overflow hidden, только .chat-messages скроллится */}
         <section
           ref={isMobile ? chatPageRef : undefined}
           className={`
             flex flex-col min-w-0 bg-[#e5ddd5]
-            ${isMobile ? 'w-full absolute inset-x-0 top-0 bottom-0 min-h-0' : 'flex-1 h-full'}
+            ${isMobile ? 'w-full absolute inset-x-0 top-0 bottom-0 min-h-0 overflow-hidden' : 'flex-1 h-full'}
             ${showListOnly ? 'hidden' : ''}
           `}
           style={isMobile ? { height: chatPageHeight } : undefined}
@@ -1717,7 +1724,7 @@ const WhatsAppChat: React.FC = () => {
               Выберите диалог
             </div>
           ) : (
-            <div className={isMobile ? 'chat-page flex flex-col flex-1 min-h-0 overflow-hidden' : 'flex flex-col flex-1 min-h-0'}>
+            <div className={isMobile ? 'chat-layout chat-page flex flex-col flex-1 min-h-0 overflow-hidden' : 'flex flex-col flex-1 min-h-0'}>
             <ChatWindow
               selectedItem={displayItem}
               displayTitle={displayItem ? (crmNamesByPhone.get(normalizePhone(displayItem.phone))?.trim() || displayItem.phone || null) : null}
