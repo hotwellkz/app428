@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { collection, query, where, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase/config';
 import { useCompanyId } from '../../contexts/CompanyContext';
-import { Sparkles, MoreVertical } from 'lucide-react';
+import { Sparkles, MoreVertical, X } from 'lucide-react';
 
 const COLLECTION_CLIENTS = 'clients';
 const COLLECTION_DEALS = 'deals';
@@ -206,6 +206,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [editSource, setEditSource] = useState('');
   const [editComment, setEditComment] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const aiRunGuardRef = useRef(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [newStatusName, setNewStatusName] = useState('');
   const [newStatusColor, setNewStatusColor] = useState('#6B7280');
@@ -220,6 +222,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [deleteStatusLoading, setDeleteStatusLoading] = useState(false);
   const statusMenuRef = useRef<HTMLDivElement>(null);
   const [managerContextMenu, setManagerContextMenu] = useState<{ x: number; y: number; manager: ChatManagerRecord } | null>(null);
+  const [mobileStatusPickerOpen, setMobileStatusPickerOpen] = useState(false);
+  const [mobileManagerPickerOpen, setMobileManagerPickerOpen] = useState(false);
   const [editingManager, setEditingManager] = useState<ChatManagerRecord | null>(null);
   const [editManagerName, setEditManagerName] = useState('');
   const [editManagerColor, setEditManagerColor] = useState('#3B82F6');
@@ -277,6 +281,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
 
   const handleAIAnalyze = async () => {
     if (!phone || aiLoading) return;
+    if (aiRunGuardRef.current) return;
     const recent = messages
       .map((m) => ({
         ...m,
@@ -284,8 +289,13 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       }))
       .filter((m) => m._content.length > 0 && !m.deleted)
       .slice(-30);
-    if (recent.length === 0) return;
+    if (recent.length === 0) {
+      setAiError('Нет сообщений для анализа.');
+      return;
+    }
 
+    aiRunGuardRef.current = true;
+    setAiError(null);
     setAiLoading(true);
     try {
       const payload = {
@@ -307,10 +317,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
         error?: string;
       };
       if (!res.ok || data.error) {
-        if (import.meta.env.DEV) {
-          // eslint-disable-next-line no-console
-          console.error('[ClientInfoPanel] AI analyze client failed', { status: res.status, data });
-        }
+        const msg = typeof data.error === 'string' ? data.error : 'Не удалось выполнить AI-анализ. Попробуйте ещё раз.';
+        setAiError('Не удалось выполнить AI-анализ. Попробуйте ещё раз.');
+        console.error('[ClientInfoPanel] AI analyze client failed', { status: res.status, data });
         return;
       }
       const rawName =
@@ -332,17 +341,15 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       const baseName = nextName && nextName.length > 0 ? nextName : AI_NAME_FALLBACKS[0];
       const uniqueName = companyId ? await generateUniqueName(baseName, companyId) : baseName;
       setEditName(uniqueName);
-
-      if (nextComment && nextComment.length > 0) {
+      if (nextComment != null && nextComment.length > 0) {
         setEditComment(nextComment);
       }
     } catch (e) {
-      if (import.meta.env.DEV) {
-        // eslint-disable-next-line no-console
-        console.error('[ClientInfoPanel] AI analyze client error', e);
-      }
+      setAiError('Не удалось выполнить AI-анализ. Попробуйте ещё раз.');
+      console.error('[ClientInfoPanel] AI analyze client error', e);
     } finally {
       setAiLoading(false);
+      aiRunGuardRef.current = false;
     }
   };
 
@@ -460,7 +467,47 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
 
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">Сделка</h3>
-                {dealStatuses && dealStatuses.length > 0 ? (
+                {embeddedInSheet ? (
+                  <>
+                    <p className="text-sm text-gray-600 mb-1">
+                      Текущий статус:{' '}
+                      {(() => {
+                        const currentStatusId = deal?.statusId ?? deal?.status ?? null;
+                        const current =
+                          (currentStatusId && dealStatuses?.find((s) => s.id === currentStatusId)) ?? null;
+                        return <span className="font-medium text-gray-900">{current?.name ?? 'Без статуса'}</span>;
+                      })()}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!deal && phone) {
+                          setCreatingDeal(true);
+                          createDealForClient(phone, companyId).then((newDeal) => {
+                            setDeal(newDeal);
+                            setCreatingDeal(false);
+                            setMobileStatusPickerOpen(true);
+                          }).catch(() => setCreatingDeal(false));
+                        } else {
+                          setMobileStatusPickerOpen(true);
+                        }
+                      }}
+                      disabled={creatingDeal || (dealStatuses?.length === 0)}
+                      className="w-full py-2 text-sm font-medium text-green-600 border border-green-500 rounded-lg hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {creatingDeal ? '…' : 'Изменить статус'}
+                    </button>
+                    {dealStatuses?.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowStatusModal(true)}
+                        className="mt-1 text-[11px] text-green-600 hover:text-green-700"
+                      >
+                        + Добавить статус
+                      </button>
+                    )}
+                  </>
+                ) : dealStatuses && dealStatuses.length > 0 ? (
                   <div className="space-y-2">
                     {(() => {
                       const currentStatusId = deal?.statusId ?? deal?.status ?? null;
@@ -482,7 +529,6 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                       );
                     })()}
                     <div className="mt-1 space-y-1">
-                      {/* Без статуса */}
                       <div className="group flex items-center gap-1 w-full">
                         <button
                           type="button"
@@ -531,11 +577,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                                     status: s.id,
                                     updatedAt: serverTimestamp()
                                   });
-                                  setDeal({
-                                    ...newDeal,
-                                    statusId: s.id,
-                                    status: s.id
-                                  });
+                                  setDeal({ ...newDeal, statusId: s.id, status: s.id });
                                 } else {
                                   await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
                                     statusId: s.id,
@@ -583,9 +625,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <p className="text-sm text-gray-500">
-                      Статусы сделок ещё не настроены.
-                    </p>
+                    <p className="text-sm text-gray-500">Статусы сделок ещё не настроены.</p>
                     <button
                       type="button"
                       onClick={() => setShowStatusModal(true)}
@@ -618,7 +658,46 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
 
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">Ответственный менеджер</h3>
-                {managers.length > 0 ? (
+                {embeddedInSheet ? (
+                  <>
+                    <p className="text-sm text-gray-600 mb-1">
+                      Текущий менеджер:{' '}
+                      <span className="font-medium text-gray-900">
+                        {deal?.managerId
+                          ? managers.find((m) => m.id === deal.managerId)?.name ?? '—'
+                          : 'Без менеджера'}
+                      </span>
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!deal && phone) {
+                          setCreatingDeal(true);
+                          createDealForClient(phone, companyId).then((newDeal) => {
+                            setDeal(newDeal);
+                            setCreatingDeal(false);
+                            setMobileManagerPickerOpen(true);
+                          }).catch(() => setCreatingDeal(false));
+                        } else {
+                          setMobileManagerPickerOpen(true);
+                        }
+                      }}
+                      disabled={creatingDeal}
+                      className="w-full py-2 text-sm font-medium text-green-600 border border-green-500 rounded-lg hover:bg-green-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {creatingDeal ? '…' : 'Изменить менеджера'}
+                    </button>
+                    {managers.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setShowManagerModal(true)}
+                        className="mt-1 text-[11px] text-green-600 hover:text-green-700"
+                      >
+                        + Добавить менеджера
+                      </button>
+                    )}
+                  </>
+                ) : managers.length > 0 ? (
                   <div className="space-y-1">
                     <label className="flex items-center gap-2 cursor-pointer w-full min-w-0">
                       <input
@@ -730,22 +809,33 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
           ) : (
             <div className="mt-4 space-y-3">
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs text-gray-500">Имя</label>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <label className="block text-xs text-gray-500 shrink-0">Имя</label>
                   <button
                     type="button"
                     onClick={handleAIAnalyze}
+                    onTouchEnd={(e) => {
+                      e.preventDefault();
+                      if (!aiLoading && messages.length > 0) handleAIAnalyze();
+                    }}
                     disabled={aiLoading || messages.length === 0}
-                    className="inline-flex items-center gap-1 rounded-full border border-dashed border-amber-300 px-2 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                    className="inline-flex min-h-[44px] min-w-[44px] touch-manipulation cursor-pointer items-center justify-center gap-1 rounded-full border border-dashed border-amber-300 px-3 py-2 text-[11px] font-medium text-amber-700 hover:bg-amber-50 active:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:bg-transparent"
+                    style={{ touchAction: 'manipulation' }}
                     title="AI анализ переписки: определить имя и комментарий"
+                    aria-label="AI анализ переписки"
                   >
                     <Sparkles
                       size={14}
-                      className={aiLoading ? 'animate-spin' : ''}
+                      className={aiLoading ? 'animate-spin shrink-0' : 'shrink-0'}
                     />
-                    <span className="hidden md:inline">AI анализ</span>
+                    <span>{aiLoading ? '…' : 'AI анализ'}</span>
                   </button>
                 </div>
+                {aiError && (
+                  <p className="mt-1.5 rounded-lg bg-red-50 px-2 py-1.5 text-xs text-red-700" role="alert">
+                    {aiError}
+                  </p>
+                )}
                 <input
                   type="text"
                   value={editName}
@@ -796,6 +886,218 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
           )}
         </>
       )}
+      {/* Мобильный выбор статуса: fullscreen modal со списком */}
+      {embeddedInSheet && mobileStatusPickerOpen && (
+        <div className="fixed inset-0 z-[1400] flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="Выбор статуса сделки">
+          <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3">
+            <h2 className="text-lg font-semibold text-gray-800">Статус сделки</h2>
+            <button
+              type="button"
+              onClick={() => setMobileStatusPickerOpen(false)}
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
+              aria-label="Закрыть"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3" style={{ paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))' }}>
+            {dealStatuses && dealStatuses.length > 0 ? (
+              <ul className="space-y-1">
+                <li>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!phone || !deal) return;
+                      setCreatingDeal(true);
+                      try {
+                        await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
+                          statusId: null,
+                          status: null,
+                          updatedAt: serverTimestamp()
+                        });
+                        setDeal({ ...deal, statusId: null, status: null });
+                        setMobileStatusPickerOpen(false);
+                      } finally {
+                        setCreatingDeal(false);
+                      }
+                    }}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left ${
+                      (deal?.statusId == null && deal?.status == null) ? 'bg-green-50 ring-1 ring-green-200' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="h-3 w-3 shrink-0 rounded-full bg-gray-300" />
+                    <span className="flex-1 font-medium text-gray-900">Без статуса</span>
+                    {dealStatusCounts != null && (
+                      <span className={COUNT_BADGE_CLASS}>{dealStatusCounts.none}</span>
+                    )}
+                  </button>
+                </li>
+                {dealStatuses.map((s) => {
+                  const isActive = (deal?.statusId === s.id || deal?.status === s.id);
+                  return (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!phone) return;
+                          setCreatingDeal(true);
+                          try {
+                            if (!deal) {
+                              const newDeal = await createDealForClient(phone, companyId);
+                              await updateDoc(doc(db, COLLECTION_DEALS, newDeal.id), {
+                                statusId: s.id,
+                                status: s.id,
+                                updatedAt: serverTimestamp()
+                              });
+                              setDeal({ ...newDeal, statusId: s.id, status: s.id });
+                            } else {
+                              await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
+                                statusId: s.id,
+                                status: s.id,
+                                updatedAt: serverTimestamp()
+                              });
+                              setDeal({ ...deal, statusId: s.id, status: s.id });
+                            }
+                            setMobileStatusPickerOpen(false);
+                          } finally {
+                            setCreatingDeal(false);
+                          }
+                        }}
+                        className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left ${
+                          isActive ? 'bg-green-50 ring-1 ring-green-200' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <span
+                          className="h-3 w-3 shrink-0 rounded-full"
+                          style={{ backgroundColor: s.color }}
+                        />
+                        <span className="flex-1 font-medium text-gray-900">{s.name}</span>
+                        {dealStatusCounts != null && (
+                          <span className={COUNT_BADGE_CLASS}>{dealStatusCounts.byId[s.id] ?? 0}</span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">Нет статусов. Добавьте в настройках.</p>
+            )}
+          </div>
+          <div className="shrink-0 border-t border-gray-200 px-4 py-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}>
+            <button
+              type="button"
+              onClick={() => setMobileStatusPickerOpen(false)}
+              className="w-full py-3 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200"
+            >
+              Закрыть
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Мобильный выбор менеджера: fullscreen modal со списком */}
+      {embeddedInSheet && mobileManagerPickerOpen && (
+        <div className="fixed inset-0 z-[1400] flex flex-col bg-white" role="dialog" aria-modal="true" aria-label="Выбор менеджера">
+          <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3">
+            <h2 className="text-lg font-semibold text-gray-800">Ответственный менеджер</h2>
+            <button
+              type="button"
+              onClick={() => setMobileManagerPickerOpen(false)}
+              className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100"
+              aria-label="Закрыть"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3" style={{ paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))' }}>
+            {managers.length > 0 ? (
+              <ul className="space-y-1">
+                <li>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!phone || !deal) return;
+                      setCreatingDeal(true);
+                      try {
+                        await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
+                          managerId: null,
+                          updatedAt: serverTimestamp()
+                        });
+                        setDeal({ ...deal, managerId: null });
+                        setMobileManagerPickerOpen(false);
+                      } finally {
+                        setCreatingDeal(false);
+                      }
+                    }}
+                    className={`flex w-full items-center justify-between rounded-lg px-3 py-3 text-left ${
+                      !deal?.managerId ? 'bg-green-50 ring-1 ring-green-200' : 'hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="font-medium text-gray-900">Без менеджера</span>
+                    {managerCounts != null && (
+                      <span className={COUNT_BADGE_CLASS}>{managerCounts.none}</span>
+                    )}
+                  </button>
+                </li>
+                {managers.map((mg) => {
+                  const isActive = deal?.managerId === mg.id;
+                  return (
+                    <li key={mg.id}>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!phone) return;
+                          setCreatingDeal(true);
+                          try {
+                            if (!deal) {
+                              const newDeal = await createDealForClient(phone, companyId);
+                              await updateDoc(doc(db, COLLECTION_DEALS, newDeal.id), {
+                                managerId: mg.id,
+                                updatedAt: serverTimestamp()
+                              });
+                              setDeal({ ...newDeal, managerId: mg.id });
+                            } else {
+                              await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
+                                managerId: mg.id,
+                                updatedAt: serverTimestamp()
+                              });
+                              setDeal({ ...deal, managerId: mg.id });
+                            }
+                            setMobileManagerPickerOpen(false);
+                          } finally {
+                            setCreatingDeal(false);
+                          }
+                        }}
+                        className={`flex w-full items-center justify-between rounded-lg px-3 py-3 text-left ${
+                          isActive ? 'bg-green-50 ring-1 ring-green-200' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="font-medium text-gray-900">{mg.name}</span>
+                        {managerCounts != null && (
+                          <span className={COUNT_BADGE_CLASS}>{managerCounts.byId[mg.id] ?? 0}</span>
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-sm text-gray-500">Нет менеджеров. Добавьте в настройках.</p>
+            )}
+          </div>
+          <div className="shrink-0 border-t border-gray-200 px-4 py-3" style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 0px))' }}>
+            <button
+              type="button"
+              onClick={() => setMobileManagerPickerOpen(false)}
+              className="w-full py-3 text-sm font-medium text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200"
+            >
+              Закрыть
+            </button>
+          </div>
+        </div>
+      )}
+
       {statusContextMenu && (
         <div
           ref={statusMenuRef}
