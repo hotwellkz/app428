@@ -1070,6 +1070,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
               message={msg}
               repliedToMessage={repliedTo ?? null}
               isSelected={selectedMessageIds.includes(msg.id)}
+              showCheckbox={selectionMode}
               onLongPress={onLongPressMessage}
               onContextMenu={onContextMenuMessage}
               onTap={selectionMode ? onToggleSelectMessage : undefined}

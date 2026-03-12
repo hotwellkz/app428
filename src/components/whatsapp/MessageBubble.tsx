@@ -11,6 +11,8 @@ export interface MessageBubbleProps {
   /** Сообщение, на которое отвечают (для отображения цитаты) */
   repliedToMessage?: WhatsAppMessage | null;
   isSelected?: boolean;
+  /** Показывать чекбокс слева (режим выбора для пересылки) */
+  showCheckbox?: boolean;
   onLongPress?: (messageId: string) => void;
   onContextMenu?: (e: React.MouseEvent, messageId: string) => void;
   onTap?: (messageId: string) => void;
@@ -98,6 +100,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   message,
   repliedToMessage,
   isSelected,
+  showCheckbox = false,
   onLongPress,
   onContextMenu,
   onTap,
@@ -176,12 +179,17 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   return (
     <div
-      className={`message flex ${isOutgoing ? 'justify-end' : 'justify-start'}`}
+      className={`message flex gap-2 ${isOutgoing ? 'justify-end' : 'justify-start'} ${showCheckbox ? 'items-start' : ''}`}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       onTouchCancel={handleTouchEnd}
     >
+      {showCheckbox && (
+        <span className="flex-shrink-0 mt-1.5 w-5 h-5 rounded border-2 flex items-center justify-center bg-white border-gray-300">
+          {isSelected && <span className="text-emerald-600 text-xs font-bold">✓</span>}
+        </span>
+      )}
       <div
         className={`rounded-lg px-3 py-2 shadow-sm max-w-[80%] md:max-w-[60%] cursor-pointer select-text ${
           isOutgoing ? 'bg-[#dcf8c6] text-gray-900' : 'bg-white text-gray-900'

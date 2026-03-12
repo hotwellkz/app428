@@ -35,6 +35,20 @@ const NEW_MESSAGE_SOUND_PATH = '/sounds/new-message.mp3';
 const WHATSAPP_MEDIA_PREFIX = 'whatsapp/media';
 const MAX_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
 
+/** Превью последнего сообщения для списка чатов в пересылке */
+function getLastMessagePreview(msg: WhatsAppMessage | null): string {
+  if (!msg || msg.deleted) return '';
+  const att = msg.attachments?.[0];
+  if (att) {
+    if (att.type === 'image') return 'Фото';
+    if (att.type === 'video') return 'Видео';
+    if (att.type === 'audio') return 'Аудио';
+    return 'Файл';
+  }
+  const text = (msg.text ?? '').trim();
+  return text ? (text.length > 50 ? text.slice(0, 50) + '…' : text) : '';
+}
+
 function getAttachmentType(file: File): 'image' | 'file' | 'audio' | 'voice' | 'video' {
   const name = file.name.toLowerCase();
   if (name.startsWith('voice.') || file.type === 'audio/webm' || file.type === 'audio/ogg') return 'voice';
@@ -524,6 +538,35 @@ const WhatsAppChat: React.FC = () => {
       if (markReadDebounceRef.current) clearTimeout(markReadDebounceRef.current);
     };
   }, [selectedId, messages, companyId, incognitoMode]);
+
+  /** Краткое описание пересылаемого: "1 изображение, 2 сообщения" и т.п. */
+  const forwardPreviewSummary = useMemo(() => {
+    const toSend = messages.filter((m) => selectedMessageIds.includes(m.id) && !m.deleted);
+    if (toSend.length === 0) return '';
+    const parts: string[] = [];
+    let images = 0;
+    let videos = 0;
+    let voice = 0;
+    let files = 0;
+    let textOnly = 0;
+    for (const m of toSend) {
+      const att = m.attachments?.[0];
+      if (att) {
+        if (att.type === 'image') images += 1;
+        else if (att.type === 'video') videos += 1;
+        else if (att.type === 'audio' || att.type === 'voice') voice += 1;
+        else files += 1;
+      } else {
+        textOnly += 1;
+      }
+    }
+    if (images) parts.push(images === 1 ? '1 изображение' : `${images} изображения`);
+    if (videos) parts.push(videos === 1 ? '1 видео' : `${videos} видео`);
+    if (voice) parts.push(voice === 1 ? '1 голосовое' : `${voice} голосовых`);
+    if (files) parts.push(files === 1 ? '1 файл' : `${files} файла`);
+    if (textOnly) parts.push(textOnly === 1 ? '1 сообщение' : `${textOnly} сообщения`);
+    return parts.join(', ') || `${toSend.length} сообщений`;
+  }, [messages, selectedMessageIds]);
 
   const listWithDisplayTitle = useMemo(() => {
     return conversations.map((c) => {
@@ -1399,14 +1442,19 @@ const WhatsAppChat: React.FC = () => {
         open={forwardDialogOpen}
         targets={listWithDisplayTitle.map((c) => ({
           id: c.id,
-          phone: c.phone,
-          displayTitle: c.displayTitle ?? c.phone
+          phone: c.phone ?? '',
+          displayTitle: c.displayTitle ?? c.phone ?? '—',
+          lastMessagePreview: getLastMessagePreview(c.lastMessage) || undefined,
+          dealStatusName: c.dealStatusName ?? undefined,
+          avatarUrl: c.client?.avatarUrl ?? undefined
         }))}
         excludeConversationId={selectedId}
         selectedCount={selectedMessageIds.length}
+        forwardPreviewSummary={forwardPreviewSummary}
         onClose={() => setForwardDialogOpen(false)}
         onForward={handleForwardConfirm}
         loading={forwardLoading}
+        isMobile={isMobile}
       />
       {/* Mobile: bottom sheet с карточкой клиента */}
       {isMobile && mobileClientSheetOpen && selectedItem && (

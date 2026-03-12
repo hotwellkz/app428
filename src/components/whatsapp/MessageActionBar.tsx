@@ -40,7 +40,7 @@ const MessageActionBar: React.FC<MessageActionBarProps> = ({
         {isMobile && <span className="text-sm font-medium">Отмена</span>}
       </button>
       <span className="text-sm font-medium text-gray-700 flex-1 text-center">
-        {selectedCount} {selectedCount === 1 ? 'сообщение' : selectedCount < 5 ? 'сообщения' : 'сообщений'}
+        Выбрано: {selectedCount}
       </span>
       <div className="flex items-center gap-0.5">
         {showReply && onReply && (
@@ -75,11 +75,12 @@ const MessageActionBar: React.FC<MessageActionBarProps> = ({
         <button
           type="button"
           onClick={onForward}
-          className="p-2 rounded-lg hover:bg-gray-100 text-gray-700"
+          className="p-2 rounded-lg hover:bg-gray-100 text-gray-700 inline-flex items-center gap-1"
           aria-label="Переслать"
           title="Переслать"
         >
           <Forward className="w-5 h-5" />
+          {!isMobile && <span className="text-xs font-medium">Переслать</span>}
         </button>
         <button
           type="button"
