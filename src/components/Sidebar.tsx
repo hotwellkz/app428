@@ -95,6 +95,8 @@ const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item, onClick, co
 export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) => {
   const { isOpen: isMobileMenuOpen, close: setMobileMenuOpenFalse, toggle: toggleMobileMenu } = useMobileSidebar();
   const mobileWhatsApp = useMobileWhatsAppChat();
+  const navigate = useNavigate();
+  const location = useLocation();
   /** В мобильной версии внутри открытого чата WhatsApp бургер не показываем — не перекрывает кнопку «Назад» */
   const hideBurgerInChat = location.pathname === '/whatsapp' && (mobileWhatsApp?.isMobileWhatsAppChatOpen ?? false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -104,9 +106,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
     return localStorage.getItem('sidebar-collapsed') === 'true';
   });
   const { canAccess } = useCurrentCompanyUser();
-  
-  const navigate = useNavigate();
-  const location = useLocation();
   const unapprovedCount = useUnapprovedCount();
   const { isMenuVisible } = useMenuVisibility();
 
