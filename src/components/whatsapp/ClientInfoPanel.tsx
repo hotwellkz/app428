@@ -180,6 +180,8 @@ interface ClientInfoPanelProps {
   dealStatusCounts?: { none: number; byId: Record<string, number> };
   /** Количество клиентов по менеджерам (для бейджей в карточке) */
   managerCounts?: { none: number; byId: Record<string, number> };
+  /** Встроен в bottom sheet (мобильный): не создавать свой scroll, чтобы скроллил только контейнер шторки */
+  embeddedInSheet?: boolean;
 }
 
 const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 py-0 rounded-[10px] text-[11px] font-medium bg-[#f1f3f5] text-[#555] flex-shrink-0';
@@ -190,7 +192,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   dealStatuses,
   managers = [],
   dealStatusCounts,
-  managerCounts
+  managerCounts,
+  embeddedInSheet = false
 }) => {
   const companyId = useCompanyId();
   const [client, setClient] = useState<WhatsAppClientCard | null>(null);
@@ -398,9 +401,13 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     setEditing(false);
   };
 
+  const asideClass = embeddedInSheet
+    ? 'w-full max-w-[320px] mx-auto bg-transparent border-0 p-0'
+    : 'w-[320px] flex-shrink-0 bg-white border-l border-[#eee] p-4 overflow-y-auto';
+
   if (!phone) {
     return (
-      <aside className="w-[320px] flex-shrink-0 bg-white border-l border-[#eee] p-4 overflow-y-auto">
+      <aside className={asideClass}>
         <h2 className="text-sm font-semibold text-gray-500">Клиент</h2>
         <p className="mt-2 text-sm text-gray-400">Выберите диалог</p>
       </aside>
@@ -408,7 +415,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   }
 
   return (
-    <aside className="w-[320px] flex-shrink-0 bg-white border-l border-[#eee] p-4 overflow-y-auto">
+    <aside className={asideClass}>
       <h2 className="text-sm font-semibold text-gray-700">Клиент</h2>
 
       {loading ? (

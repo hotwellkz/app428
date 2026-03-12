@@ -86,9 +86,15 @@ body {
   display: none;
 }
 
-/* Bottom sheet карточки клиента (мобильный): плавная прокрутка контента */
-.sheet-content {
+/* Bottom sheet карточки клиента (мобильный): один скролл-контейнер, плавная прокрутка до последнего элемента */
+.sheet-scroll {
   -webkit-overflow-scrolling: touch;
+}
+.sheet-scroll.touch-auto {
+  touch-action: auto;
+}
+.bottom-sheet.touch-pan-y {
+  touch-action: pan-y;
 }
 
 /* Часы в верхней панели CRM (WhatsApp) */

@@ -1813,30 +1813,36 @@ const WhatsAppChat: React.FC = () => {
           />
           <div
             id="clientSheet"
-            className="bottom-sheet relative flex flex-col rounded-t-2xl bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.1)] transition-[transform] duration-250 ease-out max-h-[90vh]"
+            className="bottom-sheet relative flex h-[90vh] flex-col rounded-t-2xl bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.1)] transition-[transform] duration-250 ease-out touch-pan-y"
             style={{
-              transform: clientSheetPosition === 'open' ? 'translateY(0)' : 'translateY(40%)',
-              paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0px))'
+              transform: clientSheetPosition === 'open' ? 'translateY(0)' : 'translateY(40%)'
             }}
           >
-            <button
-              type="button"
-              className="sheet-handle h-1.5 w-10 shrink-0 rounded-full bg-gray-300 mx-auto mt-2.5 mb-1 cursor-grab touch-none border-0 p-0"
-              aria-label={clientSheetPosition === 'open' ? 'Свернуть' : 'Развернуть'}
-              onClick={() => setClientSheetPosition((p) => (p === 'open' ? 'peek' : 'open'))}
-              onTouchStart={(e) => {
-                clientSheetTouchStartY.current = e.touches[0].clientY;
-                clientSheetDragStartPosition.current = clientSheetPosition;
+            <div className="sheet-header flex shrink-0 flex-col">
+              <button
+                type="button"
+                className="sheet-handle h-1.5 w-10 shrink-0 rounded-full bg-gray-300 mx-auto mt-2.5 mb-1 cursor-grab touch-none border-0 p-0"
+                aria-label={clientSheetPosition === 'open' ? 'Свернуть' : 'Развернуть'}
+                onClick={() => setClientSheetPosition((p) => (p === 'open' ? 'peek' : 'open'))}
+                onTouchStart={(e) => {
+                  clientSheetTouchStartY.current = e.touches[0].clientY;
+                  clientSheetDragStartPosition.current = clientSheetPosition;
+                }}
+                onTouchMove={(e) => {
+                  const currentY = e.touches[0].clientY;
+                  const deltaY = currentY - clientSheetTouchStartY.current;
+                  if (deltaY > 120) setMobileClientSheetOpen(false);
+                  else if (deltaY < -80 && clientSheetDragStartPosition.current === 'peek') setClientSheetPosition('open');
+                  else if (deltaY > 80 && clientSheetDragStartPosition.current === 'open') setClientSheetPosition('peek');
+                }}
+              />
+            </div>
+            <div
+              className="sheet-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden touch-auto px-4"
+              style={{
+                paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))'
               }}
-              onTouchMove={(e) => {
-                const currentY = e.touches[0].clientY;
-                const deltaY = currentY - clientSheetTouchStartY.current;
-                if (deltaY > 120) setMobileClientSheetOpen(false);
-                else if (deltaY < -80 && clientSheetDragStartPosition.current === 'peek') setClientSheetPosition('open');
-                else if (deltaY > 80 && clientSheetDragStartPosition.current === 'open') setClientSheetPosition('peek');
-              }}
-            />
-            <div className="sheet-content min-h-0 flex-1 overflow-y-auto px-4 pb-4" style={{ maxHeight: 'calc(90vh - 52px)' }}>
+            >
               <ClientInfoPanel
                 phone={
                   selectedItem.phone && selectedItem.phone !== '…'
@@ -1848,6 +1854,7 @@ const WhatsAppChat: React.FC = () => {
                 managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
                 dealStatusCounts={dealStatusCounts}
                 managerCounts={managerCounts}
+                embeddedInSheet
               />
             </div>
           </div>
