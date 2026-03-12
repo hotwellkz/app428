@@ -171,6 +171,11 @@ const WhatsAppChat: React.FC = () => {
   const [clientSheetPosition, setClientSheetPosition] = useState<'peek' | 'open'>('peek');
   const clientSheetTouchStartY = useRef<number>(0);
   const clientSheetDragStartPosition = useRef<'peek' | 'open'>('peek');
+  /** Высота области чата на мобильном (visualViewport) — чтобы шапка и инпут не пропадали при открытой клавиатуре */
+  const [chatPageHeight, setChatPageHeight] = useState<number>(() =>
+    typeof window !== 'undefined' ? (window.visualViewport?.height ?? window.innerHeight) : 600
+  );
+  const chatPageRef = useRef<HTMLDivElement>(null);
   const [knowledgeBase, setKnowledgeBase] = useState<
     Array<{ id: string; title: string; content: string; category: string }>
   >([]);
@@ -264,6 +269,21 @@ const WhatsAppChat: React.FC = () => {
   useEffect(() => {
     if (mobileClientSheetOpen) setClientSheetPosition('peek');
   }, [mobileClientSheetOpen]);
+
+  // Мобильный чат: высота секции по visualViewport (при открытой клавиатуре шапка и инпут остаются на месте)
+  useEffect(() => {
+    if (!isMobile) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const updateHeight = () => setChatPageHeight(vv.height);
+    updateHeight();
+    vv.addEventListener('resize', updateHeight);
+    vv.addEventListener('scroll', updateHeight);
+    return () => {
+      vv.removeEventListener('resize', updateHeight);
+      vv.removeEventListener('scroll', updateHeight);
+    };
+  }, [isMobile]);
 
   // Синхронизация с контекстом: на mobile при открытом чате скрываем плавающие кнопки
   useEffect(() => {
@@ -1669,19 +1689,22 @@ const WhatsAppChat: React.FC = () => {
           />
         </aside>
 
-        {/* Центр: чат. На mobile — полноэкранная колонка с flex, composer внизу в потоке */}
+        {/* Центр: чат. На mobile — высота по visualViewport (клавиатура не скрывает шапку и инпут) */}
         <section
+          ref={isMobile ? chatPageRef : undefined}
           className={`
             flex flex-col min-w-0 bg-[#e5ddd5]
-            ${isMobile ? 'w-full h-full absolute inset-0 min-h-0' : 'flex-1'}
+            ${isMobile ? 'w-full absolute inset-x-0 top-0 bottom-0 min-h-0' : 'flex-1 h-full'}
             ${showListOnly ? 'hidden' : ''}
           `}
+          style={isMobile ? { height: chatPageHeight } : undefined}
         >
           {!displayItem ? (
             <div className="flex-1 flex items-center justify-center text-gray-500 p-4">
               Выберите диалог
             </div>
           ) : (
+            <div className={isMobile ? 'chat-page flex flex-col flex-1 min-h-0 overflow-hidden' : 'flex flex-col flex-1 min-h-0'}>
             <ChatWindow
               selectedItem={displayItem}
               displayTitle={displayItem ? (crmNamesByPhone.get(normalizePhone(displayItem.phone))?.trim() || displayItem.phone || null) : null}
@@ -1739,6 +1762,7 @@ const WhatsAppChat: React.FC = () => {
               showAiDebug={isAdmin}
               onFilesDrop={incognitoMode ? undefined : handleFilesDrop}
             />
+            </div>
           )}
         </section>
 

@@ -1396,7 +1396,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
         </div>
       )}
       <div
-        className="flex-none"
+        className={`chat-input flex-none bg-white ${isMobile ? 'sticky bottom-0 z-50' : ''}`}
         style={isMobile ? { paddingBottom: 'max(0.25rem, env(safe-area-inset-bottom, 0px))' } : undefined}
       >
         {incognitoMode && (
