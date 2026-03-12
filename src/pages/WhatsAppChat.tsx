@@ -1214,10 +1214,6 @@ const WhatsAppChat: React.FC = () => {
     return { all: total, none, byId };
   }, [listWithDisplayTitle]);
 
-  const countBadgeStatus = 'min-w-[22px] h-[18px] inline-flex items-center justify-center px-1.5 py-0.5 rounded-[10px] text-xs font-semibold bg-[#F3F4F6] text-[#374151]';
-  const countBadgeManager = 'min-w-[22px] h-[18px] inline-flex items-center justify-center px-1.5 py-0.5 rounded-[10px] text-xs font-semibold bg-[#EEF2FF] text-[#4338CA]';
-  const countBadgeZero = 'min-w-[22px] h-[18px] inline-flex items-center justify-center px-1.5 py-0.5 rounded-[10px] text-xs font-semibold bg-gray-200 text-gray-500';
-
   return (
     <div
       className={`flex flex-col h-full bg-gray-50 ${isMobileChatView ? 'overflow-hidden' : ''}`}
@@ -1355,95 +1351,40 @@ const WhatsAppChat: React.FC = () => {
             </div>
             {dealStatuses.length > 0 && (
               <div className="px-3 pb-2">
-                <p className="text-[11px] font-semibold text-gray-600 mb-1.5">Сделка</p>
-                <div className="space-y-0.5">
-                  <button
-                    type="button"
-                    onClick={() => setDealStatusFilter('all')}
-                    className={`w-full flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg text-left text-[11px] md:text-xs whitespace-nowrap ${
-                      dealStatusFilter === 'all' ? 'bg-green-50 text-green-800 font-medium' : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <span><span className="text-gray-400 mr-1">●</span> Все сделки</span>
-                    <span className={dealStatusCounts.all === 0 ? countBadgeZero : countBadgeStatus}>
-                      {dealStatusCounts.all}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDealStatusFilter('none')}
-                    className={`w-full flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg text-left text-[11px] md:text-xs whitespace-nowrap ${
-                      dealStatusFilter === 'none' ? 'bg-green-50 text-green-800 font-medium' : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <span><span className="text-gray-400 mr-1">●</span> Без статуса</span>
-                    <span className={dealStatusCounts.none === 0 ? countBadgeZero : countBadgeStatus}>
-                      {dealStatusCounts.none}
-                    </span>
-                  </button>
-                  {dealStatuses.map((s) => {
-                    const n = dealStatusCounts.byId[s.id] ?? 0;
-                    return (
-                      <button
-                        key={s.id}
-                        type="button"
-                        onClick={() => setDealStatusFilter(s.id)}
-                        className={`w-full flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg text-left text-[11px] md:text-xs whitespace-nowrap ${
-                          dealStatusFilter === s.id ? 'bg-green-50 text-green-800 font-medium' : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        <span><span className="text-gray-400 mr-1">●</span> {s.name}</span>
-                        <span className={n === 0 ? countBadgeZero : countBadgeStatus}>{n}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <select
+                  value={dealStatusFilter}
+                  onChange={(e) =>
+                    setDealStatusFilter(e.target.value === 'all' ? 'all' : e.target.value)
+                  }
+                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
+                >
+                  <option value="all">Все сделки</option>
+                  <option value="none">Без статуса</option>
+                  {dealStatuses.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             )}
             <div className="px-3 pb-2">
-              <p className="text-[11px] font-semibold text-gray-600 mb-1.5">Ответственный менеджер</p>
-              <div className="space-y-0.5">
-                <button
-                  type="button"
-                  onClick={() => setManagerFilter('all')}
-                  className={`w-full flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg text-left text-[11px] md:text-xs whitespace-nowrap ${
-                    managerFilter === 'all' ? 'bg-green-50 text-green-800 font-medium' : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <span><span className="text-gray-400 mr-1">○</span> Все менеджеры</span>
-                  <span className={managerCounts.all === 0 ? countBadgeZero : countBadgeManager}>
-                    {managerCounts.all}
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setManagerFilter('none')}
-                  className={`w-full flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg text-left text-[11px] md:text-xs whitespace-nowrap ${
-                    managerFilter === 'none' ? 'bg-green-50 text-green-800 font-medium' : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <span><span className="text-gray-400 mr-1">○</span> Без менеджера</span>
-                  <span className={managerCounts.none === 0 ? countBadgeZero : countBadgeManager}>
-                    {managerCounts.none}
-                  </span>
-                </button>
-                {managers.map((m) => {
-                  const n = managerCounts.byId[m.id] ?? 0;
-                  return (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => setManagerFilter(m.id)}
-                      className={`w-full flex items-center justify-between gap-2 py-1.5 px-2 rounded-lg text-left text-[11px] md:text-xs whitespace-nowrap ${
-                        managerFilter === m.id ? 'bg-green-50 text-green-800 font-medium' : 'text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      <span><span className="text-gray-400 mr-1">○</span> {m.name}</span>
-                      <span className={n === 0 ? countBadgeZero : countBadgeManager}>{n}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <select
+                value={managerFilter}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setManagerFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
+                }}
+                className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
+              >
+                <option value="all">Все менеджеры</option>
+                <option value="none">Без менеджера</option>
+                {managers.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
           <ConversationList
@@ -1534,6 +1475,8 @@ const WhatsAppChat: React.FC = () => {
             messages={messages}
             dealStatuses={dealStatuses}
             managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
+            dealStatusCounts={dealStatusCounts}
+            managerCounts={managerCounts}
           />
         )}
       </div>
@@ -1585,6 +1528,8 @@ const WhatsAppChat: React.FC = () => {
                 messages={messages}
                 dealStatuses={dealStatuses}
                 managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
+                dealStatusCounts={dealStatusCounts}
+                managerCounts={managerCounts}
               />
             </div>
           </div>

@@ -144,9 +144,22 @@ interface ClientInfoPanelProps {
   dealStatuses?: DealStatusRecord[];
   /** Справочник менеджеров для назначения на клиента */
   managers?: ChatManagerRecord[];
+  /** Количество клиентов по статусам (для бейджей в карточке) */
+  dealStatusCounts?: { none: number; byId: Record<string, number> };
+  /** Количество клиентов по менеджерам (для бейджей в карточке) */
+  managerCounts?: { none: number; byId: Record<string, number> };
 }
 
-const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [], dealStatuses, managers = [] }) => {
+const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 py-0 rounded-[10px] text-[11px] font-medium bg-[#f1f3f5] text-[#555] flex-shrink-0';
+
+const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
+  phone,
+  messages = [],
+  dealStatuses,
+  managers = [],
+  dealStatusCounts,
+  managerCounts
+}) => {
   const companyId = useCompanyId();
   const [client, setClient] = useState<WhatsAppClientCard | null>(null);
   const [deal, setDeal] = useState<DealCard | null>(null);
@@ -429,6 +442,33 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
                       );
                     })()}
                     <div className="mt-1 space-y-1">
+                      {/* Без статуса */}
+                      <div className="group flex items-center gap-1 w-full">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (!phone || !deal) return;
+                            setCreatingDeal(true);
+                            try {
+                              await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
+                                statusId: null,
+                                status: null,
+                                updatedAt: serverTimestamp()
+                              });
+                              setDeal({ ...deal, statusId: null, status: null });
+                            } finally {
+                              setCreatingDeal(false);
+                            }
+                          }}
+                          className="flex-1 min-w-0 text-left px-2 py-1 rounded-md text-xs hover:bg-gray-100 flex items-center gap-2"
+                        >
+                          <span className="inline-flex h-2 w-2 rounded-full flex-shrink-0 bg-gray-300" />
+                          <span className="truncate">Без статуса</span>
+                        </button>
+                        {dealStatusCounts != null && (
+                          <span className={COUNT_BADGE_CLASS}>{dealStatusCounts.none}</span>
+                        )}
+                      </div>
                       {dealStatuses.map((s) => (
                         <div
                           key={s.id}
@@ -476,6 +516,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
                             />
                             <span className="truncate">{s.name}</span>
                           </button>
+                          {dealStatusCounts != null && (
+                            <span className={COUNT_BADGE_CLASS}>{dealStatusCounts.byId[s.id] ?? 0}</span>
+                          )}
                           <button
                             type="button"
                             onClick={(e) => {
@@ -537,7 +580,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
                 <h3 className="text-sm font-semibold text-gray-700 mb-2">Ответственный менеджер</h3>
                 {managers.length > 0 ? (
                   <div className="space-y-1">
-                    <label className="flex items-center gap-2 cursor-pointer">
+                    <label className="flex items-center gap-2 cursor-pointer w-full min-w-0">
                       <input
                         type="radio"
                         name="manager"
@@ -557,7 +600,10 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
                         }}
                         className="text-green-600"
                       />
-                      <span className="text-sm text-gray-600">Без менеджера</span>
+                      <span className="text-sm text-gray-600 truncate">Без менеджера</span>
+                      {managerCounts != null && (
+                        <span className={COUNT_BADGE_CLASS + ' ml-auto'}>{managerCounts.none}</span>
+                      )}
                     </label>
                     {managers.map((mg) => (
                       <div
@@ -603,6 +649,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({ phone, messages = [],
                           />
                           <span className="text-sm text-gray-800 truncate">{mg.name}</span>
                         </label>
+                        {managerCounts != null && (
+                          <span className={COUNT_BADGE_CLASS}>{managerCounts.byId[mg.id] ?? 0}</span>
+                        )}
                         <button
                           type="button"
                           onClick={(e) => {
