@@ -907,6 +907,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     chosenTemplate: string | null;
   } | null>(null);
 
+  /** Скролл к последнему сообщению: после загрузки сообщений и после отправки */
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (scrollRestoreRef.current !== null && container) {
@@ -914,8 +915,23 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
       scrollRestoreRef.current = null;
       return;
     }
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
+    }
   }, [messages]);
+
+  /** При открытии чата (смена выбранного) — прокрутить вниз после отрисовки (важно для мобильной версии) */
+  const chatKey = selectedItem?.id ?? selectedItem?.clientId ?? '';
+  useEffect(() => {
+    if (!chatKey) return;
+    const t = setTimeout(() => {
+      const container = messagesContainerRef.current;
+      if (container) container.scrollTop = container.scrollHeight;
+    }, 100);
+    return () => clearTimeout(t);
+  }, [chatKey]);
 
   const phone = selectedItem.phone ?? selectedItem.client?.phone ?? selectedItem.clientId ?? '—';
   const title = displayTitle?.trim() || phone;
@@ -1091,7 +1107,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
       {/* Сообщения */}
       <div
         ref={messagesContainerRef}
-        className={`flex-1 min-h-0 overflow-y-auto bg-[#e5ddd5] space-y-2 p-2 md:p-4 ${isMobile ? 'pb-4 pr-16 md:pr-[88px]' : 'pb-4 pr-[88px]'}`}
+        className={`chat-messages flex-1 min-h-0 overflow-y-auto bg-[#e5ddd5] space-y-2 p-2 md:p-4 ${isMobile ? 'pb-4 pr-16 md:pr-[88px]' : 'pb-4 pr-[88px]'}`}
       >
         {messages.map((msg) => {
           const repliedTo = msg.repliedToMessageId

@@ -480,7 +480,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
               />
             )}
             {/* Мобильный: 2 строки (textarea | иконки). Десктоп: 1 строка (иконки | textarea | иконки) */}
-            <div className="chat-input flex flex-col md:flex-row md:items-end gap-1.5 md:gap-2 p-1.5 md:py-2 md:px-3 rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 min-h-0 md:min-h-[42px]">
+            <div className="chat-input flex flex-col md:flex-row md:items-end gap-1.5 md:gap-2 p-1.5 px-2 md:py-2 md:px-3 rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 min-h-0 md:min-h-[42px]">
               <div className="chat-input-text order-1 md:order-2 w-full md:flex-1 md:min-w-0 flex flex-col">
                 <textarea
                   ref={textareaRef}
@@ -490,18 +490,18 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   onFocus={() => setShowEmojiPicker(false)}
                   placeholder={hasAttachment ? 'Подпись к файлу (необязательно)' : 'Сообщение...'}
                   rows={TEXTAREA_MIN_ROWS}
-                  className="message-input chat-textarea w-full min-h-[40px] max-h-[140px] md:min-h-[42px] md:max-h-[160px] resize-none bg-transparent border-0 outline-none rounded-2xl py-2.5 px-3 leading-[1.4] text-base md:text-sm overflow-y-auto"
+                  className="message-input chat-textarea w-full min-h-[40px] max-h-[140px] md:min-h-[42px] md:max-h-[160px] resize-none bg-transparent border-0 outline-none rounded-2xl py-2 px-2.5 md:py-2.5 md:px-3 leading-[1.4] text-base md:text-sm overflow-y-auto"
                 />
               </div>
-              <div className="chat-input-actions order-2 flex items-center justify-between gap-2 md:contents">
-                <div className="left-icons flex items-center gap-2 md:order-1 md:flex-shrink-0 md:gap-1.5">
+              <div className="chat-actions chat-input-actions order-2 flex min-w-0 items-center justify-between gap-1.5 md:contents">
+                <div className="left-icons flex flex-shrink-0 items-center gap-1.5">
                   <button
                     type="button"
                     data-emoji-picker-trigger
                     onClick={() => setShowEmojiPicker((v) => !v)}
                     disabled={disabled}
                     title="Эмодзи"
-                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                    className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 md:h-auto md:w-auto md:p-2"
                     aria-label="Эмодзи"
                     aria-pressed={showEmojiPicker}
                   >
@@ -513,7 +513,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                       onClick={onOpenCalculator}
                       disabled={disabled}
                       title="Калькулятор стоимости"
-                      className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                      className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 md:h-auto md:w-auto md:p-2"
                       aria-label="Калькулятор стоимости"
                     >
                       <Calculator className="w-5 h-5 md:w-6 md:h-6" />
@@ -528,7 +528,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                       }}
                       disabled={disabled || isRecordingVoice}
                       title="Голосовая диктовка"
-                      className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                      className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 md:h-auto md:w-auto md:p-2"
                       aria-label="Голосовая диктовка"
                       aria-pressed={isDictating}
                     >
@@ -541,7 +541,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   )}
                 </div>
                 {onAiReply && (
-                  <div className="ai-buttons flex flex-1 justify-center items-center gap-1.5 md:order-3 md:flex-shrink-0">
+                  <div className="ai-tools ai-buttons flex min-w-0 flex-1 justify-center gap-1 md:order-3 md:flex-shrink-0 md:gap-1.5">
                     <button
                       type="button"
                       onClick={() => onAiReply('normal')}
@@ -583,14 +583,14 @@ const ChatInput: React.FC<ChatInputProps> = ({
                     </button>
                   </div>
                 )}
-                <div className="right-icons flex items-center gap-2 md:order-4 md:gap-1 md:flex-shrink-0">
+                <div className="right-icons flex flex-shrink-0 items-center gap-1.5 md:order-4 md:gap-1">
                   {onFileSelect && (
                     <button
                       type="button"
                       onClick={() => setShowAttachmentSheet(true)}
                       disabled={disabled || isRecordingVoice}
                       title="Прикрепить"
-                      className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                      className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 md:h-auto md:w-auto md:p-2"
                       aria-label="Прикрепить"
                     >
                       <Paperclip className="w-5 h-5 md:w-6 md:h-6" />
@@ -602,7 +602,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                       onClick={() => cameraInputRef.current?.click()}
                       disabled={disabled || isRecordingVoice}
                       title="Камера"
-                      className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                      className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 md:h-auto md:w-auto md:p-2"
                       aria-label="Камера"
                     >
                       <Camera className="w-5 h-5 md:w-6 md:h-6" />
@@ -621,7 +621,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                     title={
                       isRecordingVoice ? 'Отпустите для отправки' : showSend ? 'Отправить' : 'Удерживайте для записи голосового'
                     }
-                    className={`flex-shrink-0 w-9 h-9 md:w-11 md:h-11 rounded-full flex items-center justify-center transition-[background-color,opacity,transform] duration-150 ease-out active:scale-95 ${
+                    className={`flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-full transition-[background-color,opacity,transform] duration-150 ease-out active:scale-95 md:h-11 md:w-11 ${
                       isRecordingVoice
                         ? 'bg-red-500 text-white hover:bg-red-600 disabled:opacity-70'
                         : 'bg-[#25D366] text-white hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed'

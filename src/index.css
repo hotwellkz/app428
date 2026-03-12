@@ -76,6 +76,16 @@ body {
   white-space: nowrap;
 }
 
+/* Скрытый скроллбар в поле ввода чата WhatsApp — скролл работает, индикатор не виден */
+.chat-textarea,
+.message-input {
+  scrollbar-width: none;
+}
+.chat-textarea::-webkit-scrollbar,
+.message-input::-webkit-scrollbar {
+  display: none;
+}
+
 /* Часы в верхней панели CRM (WhatsApp) */
 .crm-clock {
   font-family: monospace;
