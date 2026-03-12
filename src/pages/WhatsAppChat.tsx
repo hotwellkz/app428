@@ -38,6 +38,31 @@ const NEW_MESSAGE_SOUND_PATH = '/sounds/new-message.mp3';
 const WHATSAPP_MEDIA_PREFIX = 'whatsapp/media';
 const MAX_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
 
+/** Максимальный размер файла при отправке через Drag & Drop (задача: 20 МБ) */
+const DROP_ZONE_MAX_MB = 20;
+const DROP_ZONE_MAX_BYTES = DROP_ZONE_MAX_MB * 1024 * 1024;
+
+const DROP_ALLOWED_EXT = new Set(
+  ['jpg', 'jpeg', 'png', 'webp', 'pdf', 'docx', 'xlsx', 'mp4']
+);
+const DROP_ALLOWED_MIMES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'video/mp4'
+]);
+
+function isDropAllowedFile(file: File): boolean {
+  if (file.size > DROP_ZONE_MAX_BYTES) return false;
+  const ext = file.name.split('.').pop()?.toLowerCase();
+  if (ext && DROP_ALLOWED_EXT.has(ext)) return true;
+  if (DROP_ALLOWED_MIMES.has(file.type)) return true;
+  return false;
+}
+
 /** Превью последнего сообщения для списка чатов в пересылке */
 function getLastMessagePreview(msg: WhatsAppMessage | null): string {
   if (!msg || msg.deleted) return '';
@@ -676,6 +701,72 @@ const WhatsAppChat: React.FC = () => {
       return null;
     });
   }, []);
+
+  const handleFilesDrop = useCallback(
+    async (files: File[]) => {
+      if (incognitoMode || !selectedId || !companyId || sending || uploadState !== 'idle') return;
+      const phone = selectedItem?.phone ?? selectedItem?.client?.phone;
+      if (!phone || phone === '…') return;
+      const chatId = normalizePhone(phone);
+      const valid = Array.from(files).filter(isDropAllowedFile);
+      const rejected = Array.from(files).filter((f) => !isDropAllowedFile(f));
+      if (rejected.length > 0) {
+        const first = rejected[0];
+        const msg =
+          first.size > DROP_ZONE_MAX_BYTES
+            ? `Файл «${first.name}» превышает ${DROP_ZONE_MAX_MB} МБ.`
+            : `Тип файла не поддерживается: ${first.name}. Разрешены: jpg, png, webp, pdf, docx, xlsx, mp4.`;
+        setSendError(msg);
+      }
+      if (valid.length === 0) return;
+      setSendError(null);
+      setUploadState('uploading');
+      try {
+        for (let i = 0; i < valid.length; i++) {
+          if (i > 0) await new Promise((r) => setTimeout(r, 300));
+          const file = valid[i];
+          const path = `${companyId}/${WHATSAPP_MEDIA_PREFIX}/${selectedId}/${Date.now()}_${sanitizeFileName(file.name)}`;
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from(CLIENTS_BUCKET)
+            .upload(path, file, { upsert: false });
+          if (uploadError) {
+            setSendError(`Ошибка загрузки: ${file.name}. Попробуйте ещё раз.`);
+            break;
+          }
+          const { data: urlData } = supabase.storage.from(CLIENTS_BUCKET).getPublicUrl(uploadData.path);
+          setUploadState('sending');
+          const res = await fetch(SEND_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chatId,
+              contentUri: urlData.publicUrl,
+              attachmentType: getAttachmentType(file),
+              fileName: file.name,
+              companyId
+            })
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            const d = data as { error?: string; detail?: unknown };
+            setSendError(d?.error ? String(d.error) : `Не удалось отправить: ${file.name}`);
+            break;
+          }
+        }
+      } finally {
+        setUploadState('idle');
+      }
+    },
+    [
+      incognitoMode,
+      selectedId,
+      companyId,
+      sending,
+      uploadState,
+      selectedItem?.phone,
+      selectedItem?.client?.phone
+    ]
+  );
 
   const handleCameraCapture = useCallback(
     async (file: File) => {
@@ -1617,6 +1708,7 @@ const WhatsAppChat: React.FC = () => {
               onMediaQuickReplySelect={incognitoMode ? undefined : handleMediaQuickReplySelect}
               onSendProposalImage={incognitoMode ? undefined : handleSendProposalImage}
               showAiDebug={isAdmin}
+              onFilesDrop={incognitoMode ? undefined : handleFilesDrop}
             />
           )}
         </section>

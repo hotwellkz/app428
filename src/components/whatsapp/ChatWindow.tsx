@@ -105,6 +105,8 @@ interface ChatWindowProps {
   onSendProposalImage?: (blob: Blob, caption: string) => Promise<void>;
   /** Показывать блок отладки AI-ответа (найденные шаблоны и база знаний) — для админов */
   showAiDebug?: boolean;
+  /** При перетаскивании файлов в чат (только desktop) — отправить файлы */
+  onFilesDrop?: (files: File[]) => void;
 }
 
 const CHAT_HEADER_HEIGHT = 56;
@@ -886,7 +888,8 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     knowledgeBase,
     quickReplies = [],
     onSendProposalImage,
-    showAiDebug = false
+    showAiDebug = false,
+    onFilesDrop
   } = props;
   const onQuickReplySelect = props.onQuickReplySelect;
   const mediaQuickReplies = props.mediaQuickReplies ?? [];
@@ -925,6 +928,8 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
   const [calculatorDrawerOpen, setCalculatorDrawerOpen] = useState(false);
   const [transcribeErrorId, setTranscribeErrorId] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
 
   const handleAiReply = async (mode: 'normal' | 'short' | 'close') => {
     // Шаг 6: базовый debug-лог на клик
@@ -1385,6 +1390,40 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     </>
   );
 
+  let output: React.ReactNode = content;
+  if (!isMobile && onFilesDrop) {
+    output = (
+      <div
+        ref={dropZoneRef}
+        className={`chat-container flex flex-col flex-1 min-h-0 relative ${isDragOver ? 'drag-active' : ''}`}
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragOver(true);
+        }}
+        onDragLeave={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsDragOver(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragOver(false);
+          const files = e.dataTransfer?.files;
+          if (files?.length) onFilesDrop(Array.from(files));
+        }}
+      >
+        {content}
+        {isDragOver && (
+          <div
+            className="absolute inset-0 flex items-center justify-center text-lg pointer-events-none z-10 bg-black/5 border-2 border-dashed border-[#27ae60] text-[#27ae60]"
+            aria-hidden
+          >
+            Отпустите файл чтобы отправить
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (isMobile) {
     return (
       <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
@@ -1392,7 +1431,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
       </div>
     );
   }
-  return content;
+  return output;
 };
 
 export default ChatWindow;
