@@ -493,7 +493,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   className="message-input chat-textarea w-full min-h-[40px] max-h-[140px] md:min-h-[42px] md:max-h-[160px] resize-none bg-transparent border-0 outline-none rounded-2xl py-2.5 px-3 leading-[1.4] text-base md:text-sm overflow-y-auto"
                 />
               </div>
-              <div className="chat-input-actions order-2 flex justify-between items-center md:contents">
+              <div className="chat-input-actions order-2 flex items-center justify-between gap-2 md:contents">
                 <div className="left-icons flex items-center gap-2 md:order-1 md:flex-shrink-0 md:gap-1.5">
                   <button
                     type="button"
@@ -540,7 +540,50 @@ const ChatInput: React.FC<ChatInputProps> = ({
                     </button>
                   )}
                 </div>
-                <div className="right-icons flex items-center gap-2 md:order-3 md:gap-1 md:flex-shrink-0">
+                {onAiReply && (
+                  <div className="ai-buttons flex flex-1 justify-center items-center gap-1.5 md:order-3 md:flex-shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onAiReply('normal')}
+                      disabled={disabled || !!aiModeLoading}
+                      className="ai-generate rounded-[14px] px-2 py-1 text-sm border border-dashed border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
+                      title="AI сгенерировать ответ"
+                    >
+                      {aiModeLoading === 'normal' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onAiReply('short')}
+                      disabled={disabled || !!aiModeLoading}
+                      className="ai-fast rounded-[14px] px-2 py-1 text-sm border border-dashed border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
+                      title="AI: очень коротко"
+                    >
+                      {aiModeLoading === 'short' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Zap className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onAiReply('close')}
+                      disabled={disabled || !!aiModeLoading}
+                      className="ai-target rounded-[14px] px-2 py-1 text-sm border border-dashed border-amber-300 bg-white text-amber-700 hover:bg-amber-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
+                      title="AI: продвинуть сделку"
+                    >
+                      {aiModeLoading === 'close' ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Target className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  </div>
+                )}
+                <div className="right-icons flex items-center gap-2 md:order-4 md:gap-1 md:flex-shrink-0">
                   {onFileSelect && (
                     <button
                       type="button"
@@ -602,53 +645,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
             </div>
           </div>
         </div>
-
-        {onAiReply && (
-          <div className="mt-1 flex justify-end gap-1.5 md:gap-2 px-1">
-            <button
-              type="button"
-              onClick={() => onAiReply('normal')}
-              disabled={disabled || !!aiModeLoading}
-              className="inline-flex items-center gap-1 rounded-full border border-dashed border-emerald-300 bg-white px-2 py-0.5 text-[11px] md:text-xs text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
-              title="AI сгенерировать ответ"
-            >
-              {aiModeLoading === 'normal' ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Sparkles className="w-3 h-3" />
-              )}
-              <span className="hidden md:inline">Ответ</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onAiReply('short')}
-              disabled={disabled || !!aiModeLoading}
-              className="inline-flex items-center gap-1 rounded-full border border-dashed border-indigo-300 bg-white px-2 py-0.5 text-[11px] md:text-xs text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
-              title="AI: очень коротко"
-            >
-              {aiModeLoading === 'short' ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Zap className="w-3 h-3" />
-              )}
-              <span className="hidden md:inline">Кратко</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => onAiReply('close')}
-              disabled={disabled || !!aiModeLoading}
-              className="inline-flex items-center gap-1 rounded-full border border-dashed border-amber-300 bg-white px-2 py-0.5 text-[11px] md:text-xs text-amber-700 hover:bg-amber-50 disabled:opacity-50"
-              title="AI: продвинуть сделку"
-            >
-              {aiModeLoading === 'close' ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <Target className="w-3 h-3" />
-              )}
-              <span className="hidden md:inline">Закрыть</span>
-            </button>
-          </div>
-        )}
 
         {/* Emoji picker: над панелью ввода */}
       {showEmojiPicker && (
