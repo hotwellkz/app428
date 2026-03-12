@@ -108,6 +108,38 @@ async function getDealByClientPhone(phone: string, companyId: string): Promise<D
   };
 }
 
+const AI_NAME_FALLBACKS = ['Дом SIP', 'Клиент SIP', 'Домокомплект', 'Консультация по дому'];
+
+/** Имена, совпадающие с baseName или baseName-NNN; возвращает уникальное имя для нового клиента */
+async function generateUniqueName(baseName: string, companyId: string): Promise<string> {
+  const trimmed = baseName.trim();
+  if (!trimmed) return AI_NAME_FALLBACKS[0];
+  const q = query(
+    collection(db, COLLECTION_CLIENTS),
+    where('companyId', '==', companyId),
+    where('name', '>=', trimmed),
+    where('name', '<=', trimmed + '\uf8ff')
+  );
+  const snapshot = await getDocs(q);
+  let maxNumber = 0;
+  const suffixRegex = /^(.+)-(\d+)$/;
+  snapshot.docs.forEach((d) => {
+    const name = (d.data().name as string) ?? '';
+    if (name === trimmed) {
+      maxNumber = Math.max(maxNumber, 0);
+      return;
+    }
+    const m = name.match(suffixRegex);
+    if (m && m[1].trim() === trimmed) {
+      const num = parseInt(m[2], 10);
+      if (!Number.isNaN(num)) maxNumber = Math.max(maxNumber, num);
+    }
+  });
+  if (snapshot.empty) return trimmed;
+  const nextNumber = maxNumber + 1;
+  return `${trimmed}-${String(nextNumber).padStart(3, '0')}`;
+}
+
 async function createDealForClient(phone: string, companyId: string): Promise<DealCard> {
   const normalized = normalizePhone(phone);
   const ref = await addDoc(collection(db, COLLECTION_DEALS), {
@@ -294,9 +326,10 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
           ? null
           : null;
 
-      if (nextName && nextName.length > 0) {
-        setEditName(nextName);
-      }
+      const baseName = nextName && nextName.length > 0 ? nextName : AI_NAME_FALLBACKS[0];
+      const uniqueName = companyId ? await generateUniqueName(baseName, companyId) : baseName;
+      setEditName(uniqueName);
+
       if (nextComment && nextComment.length > 0) {
         setEditComment(nextComment);
       }
