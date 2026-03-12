@@ -120,9 +120,11 @@ function formatMessageForWhatsApp(message: string): string {
 }
 
 const MOBILE_BREAKPOINT = 768;
+const WIDE_LAYOUT_BREAKPOINT = 1200;
 
 const WhatsAppChat: React.FC = () => {
   const isMobile = useIsMobile(MOBILE_BREAKPOINT);
+  const isWideLayout = !useIsMobile(WIDE_LAYOUT_BREAKPOINT);
   const { isAdmin, user } = useAuth();
   const companyId = useCompanyId();
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
@@ -1474,7 +1476,7 @@ const WhatsAppChat: React.FC = () => {
 
   return (
     <div
-      className={`flex flex-col h-full bg-gray-50 ${isMobileChatView ? 'overflow-hidden' : ''}`}
+      className={`flex flex-col h-full min-w-0 bg-gray-50 overflow-x-hidden ${isMobileChatView ? 'overflow-hidden' : ''}`}
     >
       {/* Заголовок: на мобильном в чате не показываем (есть свой header в ChatWindow) */}
       {(!isMobile || !selectedId) && (
@@ -1537,8 +1539,8 @@ const WhatsAppChat: React.FC = () => {
         </div>
       )}
 
-      {/* Desktop: три колонки (300px | flex | 320px). Mobile: один экран — список ИЛИ чат */}
-      <div className="flex-1 flex min-h-0 relative">
+      {/* Desktop ≥1200: три колонки. 768–1200: список + чат. <768: список ИЛИ чат */}
+      <div className="flex-1 flex min-h-0 min-w-0 relative overflow-hidden">
         {/* Левая колонка: список диалогов (desktop 300px) */}
         <aside
           className={`
@@ -1730,8 +1732,8 @@ const WhatsAppChat: React.FC = () => {
           )}
         </section>
 
-        {/* Правая колонка: карточка клиента (только desktop, 320px) */}
-        {!isMobile && (
+        {/* Правая колонка: карточка клиента (только при ширине ≥ 1200px) */}
+        {isWideLayout && (
           <ClientInfoPanel
             phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null}
             messages={messages}

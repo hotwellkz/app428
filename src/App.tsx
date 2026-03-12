@@ -159,14 +159,14 @@ const AppContent: React.FC = () => {
       <Sidebar onPageChange={setCurrentPage} currentPage={currentPage} />
       
       {/* Основной контент */}
-      <main className="flex-1 flex flex-col min-w-0 transition-all duration-300">
+      <main className="flex-1 flex flex-col min-w-0 min-h-0 overflow-x-hidden transition-all duration-300">
         <Header 
           onPageChange={(page) => {
             navigate(`/${page}`);
             setCurrentPage(page as Page);
           }} 
         />
-        <div className="flex-1 overflow-auto min-h-0">
+        <div className="flex-1 overflow-auto overflow-x-hidden min-h-0 min-w-0">
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <MenuAccessGuard>

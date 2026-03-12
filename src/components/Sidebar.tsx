@@ -167,37 +167,34 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
     setMobileMenuOpenFalse();
   };
 
-    const isPageWithInlineHeader = location.pathname === '/feed' || location.pathname === '/profile' || location.pathname === '/clients' || location.pathname === '/client-files' || location.pathname === '/templates' || location.pathname === '/products' || location.pathname === '/employees' || location.pathname === '/calculator' || location.pathname === '/warehouse' || location.pathname === '/whatsapp' || location.pathname === '/deals' || location.pathname === '/settings/knowledge' || location.pathname === '/settings/quick-replies' || location.pathname.startsWith('/warehouse/') || location.pathname.startsWith('/transactions/history') || location.pathname.startsWith('/transaction-history/');
-
   return (
     <>
-      {/* Мобильная кнопка бургера: не показывать на страницах с встроенным header (feed, clients, client-files) */}
-      {!isPageWithInlineHeader && (
-        <button
-          onClick={toggleMobileMenu}
-          className={`fixed top-4 left-4 z-[60] lg:hidden bg-white p-2 rounded-lg shadow-lg mt-2 hover:bg-gray-50 transition-all duration-200 ${
-            !isMenuVisible ? 'opacity-0 pointer-events-none' : 'opacity-100'
-          }`}
-        >
-          {isMobileMenuOpen ? (
-            <X className="w-6 h-6 text-gray-600" />
-          ) : (
-            <Menu className="w-6 h-6 text-gray-600" />
-          )}
-        </button>
-      )}
+      {/* Кнопка ☰: показывать при ширине < 1280px (sidebar скрыт), на всех страницах включая WhatsApp */}
+      <button
+        onClick={toggleMobileMenu}
+        className={`fixed top-4 left-4 z-[60] xl:hidden bg-white p-2 rounded-lg shadow-lg mt-2 hover:bg-gray-50 transition-all duration-200 border border-gray-200 ${
+          !isMenuVisible ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        }`}
+        aria-label="Открыть меню"
+      >
+        {isMobileMenuOpen ? (
+          <X className="w-6 h-6 text-gray-600" />
+        ) : (
+          <Menu className="w-6 h-6 text-gray-600" />
+        )}
+      </button>
 
-      {/* Мобильная подложка */}
+      {/* Подложка при открытом меню */}
       {isMobileMenuOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-[45] lg:hidden backdrop-blur-sm transition-opacity duration-300"
+          className="fixed inset-0 bg-black bg-opacity-50 z-[45] xl:hidden backdrop-blur-sm transition-opacity duration-300"
           onClick={setMobileMenuOpenFalse}
         />
       )}
 
-      {/* Мобильный Sidebar */}
+      {/* Боковое меню (overlay при < 1280px) */}
       {isMobileMenuOpen && (
-        <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-xl z-[50] transform transition-all duration-300 ease-in-out lg:hidden border-r border-gray-100">
+        <div className="fixed inset-y-0 left-0 w-64 bg-white shadow-xl z-[50] transform transition-all duration-300 ease-in-out xl:hidden border-r border-gray-100">
           <div className="flex flex-col h-full">
             <div className="h-20" />
             {userEmail && (
@@ -271,9 +268,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
         </div>
       )}
 
-      {/* Десктопный Sidebar */}
+      {/* Десктопный Sidebar: только при ширине ≥ 1280px */}
       <aside
-        className={`hidden lg:flex flex-col bg-white shadow-xl border-r border-gray-100 transition-all duration-300 ease-in-out ${
+        className={`hidden xl:flex flex-col bg-white shadow-xl border-r border-gray-100 transition-all duration-300 ease-in-out ${
           collapsed ? 'w-16' : 'w-64'
         }`}
       >
