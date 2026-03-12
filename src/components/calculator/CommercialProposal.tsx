@@ -886,22 +886,31 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
         </div>
         )}
 
-        {/* PDF Export Block - без селектора тем */}
+        {/* PDF Export Block - без селектора тем. При captureId (WhatsApp) — структура #offer-image с логотипом и стилями для скриншота. */}
         <div 
           ref={pdfExportRef}
-          id={captureId}
+          id={captureId ? 'offer-image' : undefined}
+          {...(captureId ? { 'data-capture-id': captureId } : {})}
           className={getContainerClasses()}
           style={{ backgroundColor: currentTheme === 'dark' || currentTheme === 'hi-tech' || currentTheme === 'tech' || currentTheme === 'luxury-black-gold' ? '#ffffff' : undefined }}
         >
-          {/* Заголовок */}
-          <div className={getHeaderClasses()}>
+          {captureId && (
+            <style>{`
+              .offer-header { background: #1E8E5A; color: white; text-align: center; padding: 30px; }
+              .offer-logo { height: 50px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto; object-fit: contain; }
+              .offer-title { font-size: 32px; font-weight: 700; letter-spacing: 1px; white-space: normal; margin: 0 0 8px 0; }
+              .offer-subtitle { margin: 0; font-size: 14px; opacity: 0.95; }
+            `}</style>
+          )}
+          {/* Заголовок: при captureId — фиксированная шапка с локальным логотипом и пробелом в заголовке */}
+          <div className={captureId ? 'offer-header' : getHeaderClasses()}>
             <div className="flex flex-col items-center justify-center">
-              {/* Логотип */}
+              {/* Логотип: при captureId — локальный /logo/hotwell-logo.png для гарантированной загрузки в скриншот */}
               <div className={`${currentTheme === 'mobile' ? 'mb-2' : 'mb-4'}`}>
                 <img 
-                  src="https://hotwell.kz/wp-content/uploads/2021/01/Logotip-hotwell.kz_.png" 
+                  src={captureId ? '/logo/hotwell-logo.png' : 'https://hotwell.kz/wp-content/uploads/2021/01/Logotip-hotwell.kz_.png'} 
                   alt="HotWell.kz Логотип"
-                  className={`${currentTheme === 'mobile' ? 'max-h-[60px]' : 'max-h-[120px] md:max-h-[150px]'} w-auto object-contain ${
+                  className={captureId ? 'offer-logo' : `${currentTheme === 'mobile' ? 'max-h-[60px]' : 'max-h-[120px] md:max-h-[150px]'} w-auto object-contain ${
                     currentTheme === 'dark' ? 'filter invert brightness-0 contrast-100' : 
                     currentTheme === 'classic' ? 'filter grayscale(0.3) contrast(1.1)' : 
                     currentTheme === 'red-power' ? 'filter invert brightness-0 contrast-100' :
@@ -913,29 +922,41 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
                     currentTheme === 'construction' ? 'filter contrast-1.2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]' : ''
                   }`}
                   onError={(e) => {
-                    e.currentTarget.style.display = 'none';
+                    const el = e.currentTarget;
+                    if (captureId && el.src.endsWith('/logo/hotwell-logo.png')) {
+                      el.src = 'https://hotwell.kz/wp-content/uploads/2021/01/Logotip-hotwell.kz_.png';
+                      el.onerror = () => { el.style.display = 'none'; };
+                    } else {
+                      el.style.display = 'none';
+                    }
                   }}
                 />
               </div>
               
-              {/* Заголовок предложения */}
-              <h2 className={`${currentTheme === 'mobile' ? 'text-sm font-medium mb-1' : 'text-xl md:text-2xl font-semibold mb-2'} ${
-                currentTheme === 'dark' ? 'text-[#00FF8C] tracking-wide text-2xl md:text-3xl' : 
-                currentTheme === 'classic' ? 'text-[#333333] font-serif text-2xl md:text-3xl' : 
-                currentTheme === 'red-power' ? 'text-white font-bold tracking-wide text-2xl md:text-3xl' :
-                currentTheme === 'luxury-black-gold' ? 'text-[#FFD700] font-bold tracking-wide text-2xl md:text-3xl uppercase' :
-                currentTheme === 'eco-natural' ? 'text-[#2d572c] font-bold tracking-wide text-2xl md:text-3xl' :
-                currentTheme === 'marine' ? 'text-white font-bold tracking-wide text-2xl md:text-3xl' :
-                currentTheme === 'tech' ? 'text-[#00F0FF] font-bold tracking-wider text-2xl md:text-3xl font-mono uppercase' :
-                currentTheme === 'hi-tech' ? 'text-[#FFFFFF] font-bold tracking-widest text-3xl md:text-4xl uppercase animate-pulse' : 
-                currentTheme === 'construction' ? 'text-[#000000] font-mono font-bold tracking-widest text-3xl md:text-4xl uppercase' :
-                currentTheme === 'mobile' ? 'text-white' : ''
-              }`}>
-                КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ
-              </h2>
+              {/* Заголовок предложения: при captureId — h1.offer-title, пробел между словами сохраняется */}
+              {captureId ? (
+                <h1 className="offer-title">
+                  КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ
+                </h1>
+              ) : (
+                <h2 className={`${currentTheme === 'mobile' ? 'text-sm font-medium mb-1' : 'text-xl md:text-2xl font-semibold mb-2'} ${
+                  currentTheme === 'dark' ? 'text-[#00FF8C] tracking-wide text-2xl md:text-3xl' : 
+                  currentTheme === 'classic' ? 'text-[#333333] font-serif text-2xl md:text-3xl' : 
+                  currentTheme === 'red-power' ? 'text-white font-bold tracking-wide text-2xl md:text-3xl' :
+                  currentTheme === 'luxury-black-gold' ? 'text-[#FFD700] font-bold tracking-wide text-2xl md:text-3xl uppercase' :
+                  currentTheme === 'eco-natural' ? 'text-[#2d572c] font-bold tracking-wide text-2xl md:text-3xl' :
+                  currentTheme === 'marine' ? 'text-white font-bold tracking-wide text-2xl md:text-3xl' :
+                  currentTheme === 'tech' ? 'text-[#00F0FF] font-bold tracking-wider text-2xl md:text-3xl font-mono uppercase' :
+                  currentTheme === 'hi-tech' ? 'text-[#FFFFFF] font-bold tracking-widest text-3xl md:text-4xl uppercase animate-pulse' : 
+                  currentTheme === 'construction' ? 'text-[#000000] font-mono font-bold tracking-widest text-3xl md:text-4xl uppercase' :
+                  currentTheme === 'mobile' ? 'text-white' : ''
+                }`}>
+                  КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ
+                </h2>
+              )}
               
               {/* Подзаголовок */}
-              <p className={`${currentTheme === 'mobile' ? 'text-xs max-w-xs' : 'text-sm md:text-base max-w-md'} ${
+              <p className={captureId ? 'offer-subtitle' : `${currentTheme === 'mobile' ? 'text-xs max-w-xs' : 'text-sm md:text-base max-w-md'} ${
                 currentTheme === 'dark' ? 'text-[#CCCCCC] leading-relaxed text-base md:text-lg' : 
                 currentTheme === 'classic' ? 'text-[#666666] leading-relaxed text-base md:text-lg font-serif' :
                 currentTheme === 'red-power' ? 'text-[#ffe4e6] leading-relaxed text-base md:text-lg' :
@@ -953,7 +974,7 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
           </div>
 
           {/* Контент */}
-          <div className={`${currentTheme === 'mobile' ? 'p-2 space-y-3' : 'p-6 space-y-6'} ${
+          <div className={`offer-content ${currentTheme === 'mobile' ? 'p-2 space-y-3' : 'p-6 space-y-6'} ${
             currentTheme === 'dark' ? 'bg-[#121212]' : 
             currentTheme === 'classic' ? 'bg-white' : 
             currentTheme === 'red-power' ? 'bg-white' :

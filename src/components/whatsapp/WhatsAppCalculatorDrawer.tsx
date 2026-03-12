@@ -8,7 +8,9 @@ import html2canvas from 'html2canvas';
 const CACHE_KEY = 'whatsapp_calculator_cache';
 const KP_CAPTURE_ID = 'wa-kp-capture';
 const KP_RENDER_ID = 'commercial-offer-render';
-/** Блок самого документа КП — захват по нему обрезает изображение по границам без белых полей. */
+/** Блок документа КП с логотипом и заголовком для скриншота (CommercialProposal рендерит его при captureId). */
+const KP_OFFER_IMAGE_ID = 'offer-image';
+/** Fallback: блок документа без обёртки offer-image. */
 const KP_DOCUMENT_ID = 'commercial-offer-document';
 const CAPTION =
   'Ваше коммерческое предложение по дому из SIP-панелей.\nЕсли будут вопросы — напишите 👍';
@@ -122,11 +124,12 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
     setSendingProposal(true);
     try {
       const node =
+        document.getElementById(KP_OFFER_IMAGE_ID) ||
         document.getElementById(KP_DOCUMENT_ID) ||
         document.getElementById(KP_RENDER_ID) ||
         document.getElementById(KP_CAPTURE_ID);
       if (!node) {
-        console.error('KP capture: node not found', { KP_DOCUMENT_ID, KP_RENDER_ID, KP_CAPTURE_ID });
+        console.error('KP capture: node not found', { KP_OFFER_IMAGE_ID, KP_DOCUMENT_ID, KP_RENDER_ID, KP_CAPTURE_ID });
         throw new Error('Capture container not found');
       }
 
