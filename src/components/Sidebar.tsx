@@ -97,7 +97,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
   const mobileWhatsApp = useMobileWhatsAppChat();
   const navigate = useNavigate();
   const location = useLocation();
-  /** В мобильной версии внутри открытого чата WhatsApp бургер не показываем — не перекрывает кнопку «Назад» */
+  /** На странице WhatsApp бургер перенесён в шапку страницы — плавающую кнопку не показываем */
+  const hideFloatingBurgerOnWhatsApp = location.pathname === '/whatsapp';
   const hideBurgerInChat = location.pathname === '/whatsapp' && (mobileWhatsApp?.isMobileWhatsAppChatOpen ?? false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -172,12 +173,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
 
   return (
     <>
-      {/* Кнопка ☰: при ширине < 1280px; скрыта внутри открытого чата WhatsApp на мобильном */}
+      {/* Кнопка ☰: при ширине < 1280px; на странице WhatsApp скрыта (бургер в шапке страницы) */}
       <button
         onClick={toggleMobileMenu}
         className={`menu-toggle fixed top-4 left-4 z-[60] xl:hidden bg-white p-2 rounded-lg shadow-lg mt-2 hover:bg-gray-50 transition-all duration-200 border border-gray-200 ${
-          !isMenuVisible || hideBurgerInChat ? 'opacity-0 pointer-events-none' : 'opacity-100'
-        } ${hideBurgerInChat ? 'invisible' : ''}`}
+          !isMenuVisible || hideBurgerInChat || hideFloatingBurgerOnWhatsApp ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        } ${hideBurgerInChat || hideFloatingBurgerOnWhatsApp ? 'invisible' : ''}`}
         aria-label="Открыть меню"
       >
         {isMobileMenuOpen ? (
@@ -187,7 +188,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
         )}
       </button>
 
-      {/* Подложка при открытом меню (в чате WhatsApp на мобильном не показываем) */}
+      {/* Подложка при открытом меню (на WhatsApp странице бургер в шапке, overlay всё равно нужен при открытии) */}
       {isMobileMenuOpen && !hideBurgerInChat && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-[45] xl:hidden backdrop-blur-sm transition-opacity duration-300"

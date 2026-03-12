@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import { MessageSquare, Search } from 'lucide-react';
+import { MessageSquare, Menu, Search } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useAuth } from '../hooks/useAuth';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { useMobileWhatsAppChat } from '../contexts/MobileWhatsAppChatContext';
+import { useMobileSidebar } from '../contexts/MobileSidebarContext';
 import {
   subscribeConversationsList,
   subscribeMessages,
@@ -263,6 +264,7 @@ const WhatsAppChat: React.FC = () => {
   }, [conversationMenu]);
 
   const mobileChatContext = useMobileWhatsAppChat();
+  const { toggle: toggleMobileSidebar } = useMobileSidebar();
   const selectedItem = conversations.find((c) => c.id === selectedId);
 
   // При открытии карточки клиента на mobile — начальная позиция 60% (peek)
@@ -1507,20 +1509,29 @@ const WhatsAppChat: React.FC = () => {
     <div
       className={`flex flex-col h-full min-w-0 bg-gray-50 overflow-x-hidden ${isMobileChatView ? 'overflow-hidden' : ''}`}
     >
-      {/* Заголовок: на мобильном в чате не показываем (есть свой header в ChatWindow) */}
+      {/* Заголовок: на мобильном в чате не показываем (есть свой header в ChatWindow). Бургер в шапке на мобильном. */}
       {(!isMobile || !selectedId) && (
-        <div className="flex-none px-4 py-3 border-b bg-white">
-          <div className="flex items-center justify-between gap-4">
-            <h1 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-green-600" />
-              WhatsApp
-            </h1>
-            <div className="flex items-center gap-2">
+        <div className="whatsapp-header sticky top-0 z-50 flex-none border-b border-gray-200 bg-white px-3 py-2.5 md:px-4 md:py-3">
+          <div className="flex flex-1 items-center justify-between gap-2">
+            {isMobile && (
+              <button
+                type="button"
+                className="header-menu flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-xl text-gray-700 hover:bg-gray-100"
+                onClick={toggleMobileSidebar}
+                aria-label="Открыть меню"
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+            )}
+            <div className="header-title flex min-w-0 flex-1 items-center gap-2 md:flex-initial">
+              <MessageSquare className="h-5 w-5 shrink-0 text-green-600" />
+              <h1 className="truncate text-lg font-semibold text-gray-800">WhatsApp</h1>
+            </div>
+            <div className="header-right flex shrink-0 items-center gap-2 md:gap-2.5">
               <button
                 type="button"
                 onClick={() => setIncognitoMode((v) => !v)}
-                className="inline-flex items-center gap-2 text-xs md:text-sm px-2 py-1 rounded-full border transition-colors
-                  border-gray-300 bg-gray-50 hover:bg-gray-100
+                className="incognito-toggle inline-flex items-center gap-1.5 rounded-full border border-gray-300 bg-gray-50 px-2 py-1 text-xs transition-colors hover:bg-gray-100 md:gap-2 md:text-sm
                   data-[active=true]:border-amber-400 data-[active=true]:bg-amber-50"
                 data-active={incognitoMode ? 'true' : 'false'}
               >
@@ -1540,14 +1551,16 @@ const WhatsAppChat: React.FC = () => {
                   Инкогнито
                 </span>
               </button>
-              <div id="crm-clock" className="crm-clock" aria-live="polite">
+              <div id="crm-clock" className="header-time crm-clock shrink-0" aria-live="polite">
                 {clockTime}
               </div>
             </div>
           </div>
           {incognitoMode && (
-            <p className="mt-2 text-[11px] md:text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded px-2 py-1 inline-flex items-center gap-1">
-              Просмотр без отметки о прочтении и без отправки сообщений.
+            <p className="mt-2 text-[11px] text-amber-800 md:text-xs">
+              <span className="inline-flex rounded border border-amber-100 bg-amber-50 px-2 py-1">
+                Просмотр без отметки о прочтении и без отправки сообщений.
+              </span>
             </p>
           )}
         </div>
