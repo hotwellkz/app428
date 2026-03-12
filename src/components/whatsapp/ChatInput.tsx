@@ -49,7 +49,7 @@ const ACCEPT_AUDIO = 'audio/*';
 
 const TEXTAREA_MIN_ROWS = 1;
 const TEXTAREA_MIN_HEIGHT_MOBILE = 38;
-const TEXTAREA_MAX_HEIGHT_MOBILE = 120;
+const TEXTAREA_MAX_HEIGHT_MOBILE = 140;
 const TEXTAREA_MIN_HEIGHT_DESKTOP = 42;
 const TEXTAREA_MAX_HEIGHT_DESKTOP = 160;
 
@@ -462,10 +462,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
           <input ref={cameraInputRef} type="file" accept={ACCEPT_CAMERA} capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onCameraCapture(f); e.target.value = ''; }} aria-label="Камера" />
         )}
 
-        {/* Порядок как в WhatsApp: [emoji] [поле + скрепка + камера] [зелёная кнопка] */}
-        <div className="flex items-end gap-1.5 md:gap-2 max-w-full">
-          {/* Input area + панель быстрых ответов над ним */}
-          <div className="flex-1 min-w-0 relative">
+        {/* Контейнер ввода: [слева иконки] [textarea на всю ширину] [справа иконки + отправить] */}
+        <div className="flex items-end gap-1.5 md:gap-2 max-w-full min-w-0">
+          <div className="flex-1 min-w-0 relative flex flex-col">
             {mediaQuickRepliesOpen && (
               <MediaQuickRepliesPopup
                 items={filteredMediaQuickReplies}
@@ -480,121 +479,123 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 onSelect={insertQuickReply}
               />
             )}
-            {/* Pill: слева emoji, центр textarea, справа скрепка и камера */}
-          <div className="chat-input flex items-end rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 min-h-[38px] md:min-h-[42px]">
-            <button
-              type="button"
-              data-emoji-picker-trigger
-              onClick={() => setShowEmojiPicker((v) => !v)}
-              disabled={disabled}
-              title="Эмодзи"
-              className="flex-shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-l-2xl transition-colors disabled:opacity-50"
-              aria-label="Эмодзи"
-              aria-pressed={showEmojiPicker}
-            >
-              <Smile className="w-5 h-5 md:w-6 md:h-6" />
-            </button>
-            {onOpenCalculator && (
-              <button
-                type="button"
-                onClick={onOpenCalculator}
-                disabled={disabled}
-                title="Калькулятор стоимости"
-                className="flex-shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
-                aria-label="Калькулятор стоимости"
-              >
-                <Calculator className="w-5 h-5 md:w-6 md:h-6" />
-              </button>
-            )}
-            {isSpeechSupported && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (isDictating) stopDictation();
-                  else startDictation();
-                }}
-                disabled={disabled || isRecordingVoice}
-                title="Голосовая диктовка"
-                className="flex-shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50"
-                aria-label="Голосовая диктовка"
-                aria-pressed={isDictating}
-              >
-                {isDictating ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Mic className="w-4 h-4" />
+            <div className="chat-input-container chat-input flex items-end gap-1.5 md:gap-2 p-1.5 md:py-2 md:px-3 rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 min-h-[38px] md:min-h-[42px]">
+              <div className="chat-tools-left flex items-center gap-1 md:gap-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  data-emoji-picker-trigger
+                  onClick={() => setShowEmojiPicker((v) => !v)}
+                  disabled={disabled}
+                  title="Эмодзи"
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                  aria-label="Эмодзи"
+                  aria-pressed={showEmojiPicker}
+                >
+                  <Smile className="w-5 h-5 md:w-6 md:h-6" />
+                </button>
+                {onOpenCalculator && (
+                  <button
+                    type="button"
+                    onClick={onOpenCalculator}
+                    disabled={disabled}
+                    title="Калькулятор стоимости"
+                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                    aria-label="Калькулятор стоимости"
+                  >
+                    <Calculator className="w-5 h-5 md:w-6 md:h-6" />
+                  </button>
                 )}
-              </button>
-            )}
-            <textarea
-              ref={textareaRef}
-              value={value}
-              onChange={(e) => onChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => setShowEmojiPicker(false)}
-              placeholder={hasAttachment ? 'Подпись к файлу (необязательно)' : 'Сообщение...'}
-              rows={TEXTAREA_MIN_ROWS}
-              className="flex-1 min-w-0 resize-none bg-transparent border-0 outline-none rounded-none min-h-[38px] max-h-[120px] md:min-h-[42px] md:max-h-[160px] overflow-y-auto py-2 px-3 leading-[1.4] text-base md:text-sm"
-            />
-            {onFileSelect && (
-              <button
-                type="button"
-                onClick={() => setShowAttachmentSheet(true)}
-                disabled={disabled || isRecordingVoice}
-                title="Прикрепить"
-                className={`flex-shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition-colors disabled:opacity-50 ${onCameraCapture && showCameraButton ? 'rounded-r-none' : 'rounded-r-2xl'}`}
-                aria-label="Прикрепить"
-              >
-                <Paperclip className="w-5 h-5 md:w-6 md:h-6" />
-              </button>
-            )}
-            {onCameraCapture && showCameraButton && (
-              <button
-                type="button"
-                onClick={() => cameraInputRef.current?.click()}
-                disabled={disabled || isRecordingVoice}
-                title="Камера"
-                className="flex-shrink-0 p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-r-2xl transition-colors disabled:opacity-50"
-                aria-label="Камера"
-              >
-                <Camera className="w-5 h-5 md:w-6 md:h-6" />
-              </button>
-            )}
+                {isSpeechSupported && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isDictating) stopDictation();
+                      else startDictation();
+                    }}
+                    disabled={disabled || isRecordingVoice}
+                    title="Голосовая диктовка"
+                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                    aria-label="Голосовая диктовка"
+                    aria-pressed={isDictating}
+                  >
+                    {isDictating ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Mic className="w-4 h-4" />
+                    )}
+                  </button>
+                )}
+              </div>
+              <textarea
+                ref={textareaRef}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onFocus={() => setShowEmojiPicker(false)}
+                placeholder={hasAttachment ? 'Подпись к файлу (необязательно)' : 'Сообщение...'}
+                rows={TEXTAREA_MIN_ROWS}
+                className="chat-textarea flex-1 min-w-0 w-full resize-none bg-transparent border-0 outline-none rounded-[18px] min-h-[38px] max-h-[140px] md:min-h-[42px] md:max-h-[160px] overflow-y-auto py-2 px-3 leading-[1.4] text-base md:text-sm"
+              />
+              <div className="chat-tools-right flex items-center gap-0.5 md:gap-1 flex-shrink-0">
+                {onFileSelect && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAttachmentSheet(true)}
+                    disabled={disabled || isRecordingVoice}
+                    title="Прикрепить"
+                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                    aria-label="Прикрепить"
+                  >
+                    <Paperclip className="w-5 h-5 md:w-6 md:h-6" />
+                  </button>
+                )}
+                {onCameraCapture && showCameraButton && (
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    disabled={disabled || isRecordingVoice}
+                    title="Камера"
+                    className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+                    aria-label="Камера"
+                  >
+                    <Camera className="w-5 h-5 md:w-6 md:h-6" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={(e) => handleActionClick(e)}
+                  onPointerDown={!showSend && onStartVoice && !hasAttachment ? handleVoicePointerDown : undefined}
+                  onPointerUp={onStopVoice && isRecordingVoice ? handleVoicePointerUp : undefined}
+                  onPointerLeave={onStopVoice && isRecordingVoice ? handleVoicePointerUp : undefined}
+                  disabled={
+                    disabled ||
+                    (isRecordingVoice ? false : showSend ? isBusy : !(onStartVoice && !hasAttachment))
+                  }
+                  title={
+                    isRecordingVoice ? 'Отпустите для отправки' : showSend ? 'Отправить' : 'Удерживайте для записи голосового'
+                  }
+                  className={`flex-shrink-0 w-9 h-9 md:w-11 md:h-11 rounded-full flex items-center justify-center transition-[background-color,opacity,transform] duration-150 ease-out active:scale-95 ${
+                    isRecordingVoice
+                      ? 'bg-red-500 text-white hover:bg-red-600 disabled:opacity-70'
+                      : 'bg-[#25D366] text-white hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed'
+                  }`}
+                  aria-label={isRecordingVoice ? 'Отпустите для отправки' : showSend ? 'Отправить' : 'Микрофон'}
+                >
+                  <span className="inline-flex items-center justify-center transition-opacity duration-150">
+                    {isBusy && showSend && !isRecordingVoice ? (
+                      <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" />
+                    ) : isRecordingVoice ? (
+                      <Square className="w-5 h-5 md:w-6 md:h-6 fill-current" />
+                    ) : showSend ? (
+                      <Send className="w-5 h-5 md:w-6 md:h-6" />
+                    ) : (
+                      <Mic className="w-5 h-5 md:w-6 md:h-6" />
+                    )}
+                  </span>
+                </button>
+              </div>
+            </div>
           </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={(e) => handleActionClick(e)}
-            onPointerDown={!showSend && onStartVoice && !hasAttachment ? handleVoicePointerDown : undefined}
-            onPointerUp={onStopVoice && isRecordingVoice ? handleVoicePointerUp : undefined}
-            onPointerLeave={onStopVoice && isRecordingVoice ? handleVoicePointerUp : undefined}
-            disabled={
-              disabled ||
-              (isRecordingVoice ? false : showSend ? isBusy : !(onStartVoice && !hasAttachment))
-            }
-            title={
-              isRecordingVoice ? 'Отпустите для отправки' : showSend ? 'Отправить' : 'Удерживайте для записи голосового'
-            }
-            className={`flex-shrink-0 w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center transition-[background-color,opacity,transform] duration-150 ease-out active:scale-95 ${
-              isRecordingVoice
-                ? 'bg-red-500 text-white hover:bg-red-600 disabled:opacity-70'
-                : 'bg-[#25D366] text-white hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed'
-            }`}
-            aria-label={isRecordingVoice ? 'Отпустите для отправки' : showSend ? 'Отправить' : 'Микрофон'}
-          >
-            <span className="inline-flex items-center justify-center transition-opacity duration-150">
-              {isBusy && showSend && !isRecordingVoice ? (
-                <Loader2 className="w-5 h-5 md:w-6 md:h-6 animate-spin" />
-              ) : isRecordingVoice ? (
-                <Square className="w-5 h-5 md:w-6 md:h-6 fill-current" />
-              ) : showSend ? (
-                <Send className="w-5 h-5 md:w-6 md:h-6" />
-              ) : (
-                <Mic className="w-5 h-5 md:w-6 md:h-6" />
-              )}
-            </span>
-          </button>
         </div>
 
         {onAiReply && (
