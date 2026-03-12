@@ -1358,11 +1358,11 @@ const WhatsAppChat: React.FC = () => {
                   }
                   className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
                 >
-                  <option value="all">Все сделки</option>
-                  <option value="none">Без статуса</option>
+                  <option value="all">Все сделки ({dealStatusCounts.all})</option>
+                  <option value="none">Без статуса ({dealStatusCounts.none})</option>
                   {dealStatuses.map((s) => (
                     <option key={s.id} value={s.id}>
-                      {s.name}
+                      {s.name} ({dealStatusCounts.byId[s.id] ?? 0})
                     </option>
                   ))}
                 </select>
