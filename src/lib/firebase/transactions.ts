@@ -435,6 +435,7 @@ export const editFeedTransaction = async (params: {
   newToCategory: CategoryCardType;
   newAmount: number;
   newDescription: string;
+  newExpenseCategoryId?: string;
   newIsSalary?: boolean;
   newIsCashless?: boolean;
   newNeedsReview?: boolean;
@@ -446,6 +447,7 @@ export const editFeedTransaction = async (params: {
     newToCategory,
     newAmount,
     newDescription,
+    newExpenseCategoryId,
     newIsSalary,
     newIsCashless,
     newNeedsReview,
@@ -593,15 +595,18 @@ export const editFeedTransaction = async (params: {
 
     const fromCategoryId = getCanonicalCategoryId(newFromCategory);
     const toCategoryId = getCanonicalCategoryId(newToCategory);
-    // Расход: categoryId = счёт «откуда» — попадёт в историю операций счёта newFromCategory
-    tx.set(doc(db, 'transactions', correctionWithdrawalId), {
+    const withdrawalPayload: Record<string, unknown> = {
       ...correctionBase,
       categoryId: fromCategoryId,
       amount: -newAmount,
       type: 'expense',
       relatedTransactionId: correctionDepositId,
       attachments: []
-    });
+    };
+    if (newExpenseCategoryId) {
+      withdrawalPayload.expenseCategoryId = newExpenseCategoryId;
+    }
+    tx.set(doc(db, 'transactions', correctionWithdrawalId), withdrawalPayload);
     // Приход: categoryId = счёт «куда» — попадёт в историю операций счёта newToCategory (/transactions/history/:id)
     const incomeDocData = {
       ...correctionBase,

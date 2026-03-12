@@ -1359,6 +1359,7 @@ export const Feed: React.FC = () => {
             transaction={editingTransaction}
             peopleAccounts={employeeCategories}
             objectAccounts={visibleCategories}
+            expenseCategories={expenseCategories}
             isSaving={isSavingEdit}
             onClose={() => {
               if (isSavingEdit) return;
@@ -1398,6 +1399,7 @@ export const Feed: React.FC = () => {
                   newToCategory,
                   newAmount: updated.amount,
                   newDescription: updated.comment,
+                  newExpenseCategoryId: updated.expenseCategoryId ?? undefined,
                   newIsSalary: updated.isSalary,
                   newIsCashless: updated.isCashless,
                   newNeedsReview: updated.needsReview,
@@ -1607,6 +1609,7 @@ interface EditTransactionModalProps {
   transaction: Transaction;
   peopleAccounts: CategoryCardType[];
   objectAccounts: CategoryCardType[];
+  expenseCategories: Array<{ id: string; name: string }>;
   isSaving: boolean;
   onClose: () => void;
   onSave: (data: {
@@ -1615,16 +1618,20 @@ interface EditTransactionModalProps {
     amount: number;
     comment: string;
     auditCategoryId: string | null;
+    expenseCategoryId: string | null;
     isSalary: boolean;
     isCashless: boolean;
     needsReview: boolean;
   }) => void;
 }
 
+const EXPENSE_ACCOUNT_TITLES = ['Общ Расх', 'Расходы', 'Прочие расходы'];
+
 const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
   transaction,
   peopleAccounts,
   objectAccounts,
+  expenseCategories,
   isSaving,
   onClose,
   onSave
@@ -1646,6 +1653,7 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     const match = peopleAccounts.find(c => c.title === transaction.fromUser);
     return match?.id ?? '';
   });
+  const [expenseCategoryId, setExpenseCategoryId] = useState<string>(() => transaction.expenseCategoryId ?? '');
   const [error, setError] = useState<string>('');
   const [toAccountSearch, setToAccountSearch] = useState<string>('');
   const filteredObjectAccounts = useMemo(() => {
@@ -1654,11 +1662,23 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
     return objectAccounts.filter((c) => c.title.toLowerCase().includes(q));
   }, [objectAccounts, toAccountSearch]);
 
+  const selectedToCategory = objectAccounts.find((c) => c.id === toCategoryId);
+  const isToExpenseAccount =
+    selectedToCategory &&
+    (selectedToCategory.type === 'general_expense' ||
+      EXPENSE_ACCOUNT_TITLES.includes(selectedToCategory.title));
+  const showExpenseCategory = !!isToExpenseAccount;
+
   const handleSubmit = () => {
     setError('');
 
     if (!fromCategoryId || !toCategoryId) {
       setError('Выберите счета "Откуда" и "Куда"');
+      return;
+    }
+
+    if (showExpenseCategory && !expenseCategoryId) {
+      setError('Выберите категорию расхода');
       return;
     }
 
@@ -1679,6 +1699,7 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
       amount: numericAmount,
       comment: comment.trim(),
       auditCategoryId: auditCategoryId || null,
+      expenseCategoryId: showExpenseCategory ? expenseCategoryId || null : null,
       isSalary,
       isCashless,
       needsReview
@@ -1760,6 +1781,27 @@ const EditTransactionModal: React.FC<EditTransactionModalProps> = ({
               </select>
             </div>
           </div>
+
+          {showExpenseCategory && (
+            <div id="expenseCategoryBlock">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Категория расхода
+              </label>
+              <select
+                id="expenseCategory"
+                value={expenseCategoryId}
+                onChange={(e) => setExpenseCategoryId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+              >
+                <option value="">Выберите категорию</option>
+                {expenseCategories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
