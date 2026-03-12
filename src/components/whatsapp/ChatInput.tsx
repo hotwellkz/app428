@@ -74,6 +74,8 @@ interface ChatInputProps {
   onOpenCalculator?: () => void;
   /** Шаблоны быстрых ответов (подсказки по ключевым словам в поле ввода) */
   quickReplies?: QuickReplyItem[];
+  /** При выборе шаблона с вложением — отправить текст и файл (вместо вставки в поле) */
+  onQuickReplySelect?: (item: QuickReplyItem) => void;
 }
 
 const QUICK_REPLIES_MAX = 5;
@@ -97,7 +99,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   aiModeLoading = null,
   autoFocusOnChange = false,
   onOpenCalculator,
-  quickReplies = []
+  quickReplies = [],
+  onQuickReplySelect
 }) => {
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -139,6 +142,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   const insertQuickReply = useCallback(
     (item: QuickReplyItem) => {
+      if (item.attachmentUrl && onQuickReplySelect) {
+        onQuickReplySelect(item);
+        setSelectedQuickIndex(0);
+        return;
+      }
       const v = value;
       const lastSpace = v.lastIndexOf(' ');
       const prefix = lastSpace === -1 ? '' : v.slice(0, lastSpace + 1);
@@ -151,7 +159,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
         textareaRef.current?.setSelectionRange(len, len);
       });
     },
-    [value, onChange]
+    [value, onChange, onQuickReplySelect]
   );
 
   const {

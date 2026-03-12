@@ -76,7 +76,27 @@ interface ChatWindowProps {
   /** Записи базы знаний компании для AI-ответов */
   knowledgeBase?: Array<{ title: string; content: string; category?: string }>;
   /** Шаблоны быстрых ответов (поиск по ключевым словам в поле ввода + контекст для AI) */
-  quickReplies?: Array<{ id: string; title: string; text: string; keywords: string; category: string }>;
+  quickReplies?: Array<{
+    id: string;
+    title: string;
+    text: string;
+    keywords: string;
+    category: string;
+    attachmentUrl?: string;
+    attachmentType?: 'image' | 'video' | 'file' | 'audio';
+    attachmentFileName?: string;
+  }>;
+  /** При выборе шаблона с вложением — отправить текст и файл в чат */
+  onQuickReplySelect?: (item: {
+    id: string;
+    title: string;
+    text: string;
+    keywords: string;
+    category: string;
+    attachmentUrl?: string;
+    attachmentType?: 'image' | 'video' | 'file' | 'audio';
+    attachmentFileName?: string;
+  }) => void;
   /** Отправить сгенерированное КП (изображение) в чат */
   onSendProposalImage?: (blob: Blob, caption: string) => Promise<void>;
   /** Показывать блок отладки AI-ответа (найденные шаблоны и база знаний) — для админов */
@@ -1341,6 +1361,7 @@ const ChatWindow: React.FC<ChatWindowProps> = ({
           autoFocusOnChange
           onOpenCalculator={!incognitoMode && onSendProposalImage ? () => setCalculatorDrawerOpen(true) : undefined}
           quickReplies={quickReplies}
+          onQuickReplySelect={incognitoMode ? undefined : onQuickReplySelect}
         />
         {onSendProposalImage && (
           <WhatsAppCalculatorDrawer

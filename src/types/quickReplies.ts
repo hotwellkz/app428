@@ -6,6 +6,12 @@ export interface QuickReply {
   /** Ключевые слова через запятую для поиска (например: "черновая,черно,чернов"). */
   keywords: string;
   category: string;
+  /** Публичный URL вложения (Supabase Storage). */
+  attachmentUrl?: string | null;
+  /** Тип вложения для WhatsApp API: image | video | file | audio */
+  attachmentType?: 'image' | 'video' | 'file' | 'audio' | null;
+  /** Имя файла для отображения. */
+  attachmentFileName?: string | null;
   createdBy?: string;
   createdAt?: unknown;
   updatedAt?: unknown;

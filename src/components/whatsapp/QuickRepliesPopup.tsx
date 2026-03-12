@@ -8,6 +8,9 @@ export interface QuickReplyItem {
   text: string;
   keywords: string;
   category: string;
+  attachmentUrl?: string;
+  attachmentType?: 'image' | 'video' | 'file' | 'audio';
+  attachmentFileName?: string;
 }
 
 interface QuickRepliesPopupProps {
@@ -54,7 +57,10 @@ export const QuickRepliesPopup: React.FC<QuickRepliesPopupProps> = ({
             }`}
             onClick={() => onSelect(item)}
           >
-            <div className="text-sm font-medium truncate">{item.title || 'Без названия'}</div>
+            <div className="text-sm font-medium truncate">
+              {item.title || 'Без названия'}
+              {item.attachmentUrl && <span className="ml-1 text-gray-500">📎</span>}
+            </div>
             <div className="text-xs text-gray-600 truncate mt-0.5">{preview}</div>
           </button>
         );

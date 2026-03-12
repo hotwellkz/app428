@@ -139,7 +139,16 @@ const WhatsAppChat: React.FC = () => {
     Array<{ id: string; title: string; content: string; category: string }>
   >([]);
   const [quickReplies, setQuickReplies] = useState<
-    Array<{ id: string; title: string; text: string; keywords: string; category: string }>
+    Array<{
+      id: string;
+      title: string;
+      text: string;
+      keywords: string;
+      category: string;
+      attachmentUrl?: string;
+      attachmentType?: 'image' | 'video' | 'file' | 'audio';
+      attachmentFileName?: string;
+    }>
   >([]);
   type SimpleDealStatus = { id: string; name: string; color: string; order: number; isDefault?: boolean };
   type SimpleManager = { id: string; name: string; color: string; order: number };
@@ -457,13 +466,16 @@ const WhatsAppChat: React.FC = () => {
       q,
       (snap) => {
         const list = snap.docs.map((d) => {
-          const data = d.data() as any;
+          const data = d.data() as Record<string, unknown>;
           return {
             id: d.id,
             title: (data.title as string) ?? '',
             text: (data.text as string) ?? '',
             keywords: (data.keywords as string) ?? '',
-            category: (data.category as string) ?? ''
+            category: (data.category as string) ?? '',
+            attachmentUrl: (data.attachmentUrl as string) || undefined,
+            attachmentType: (data.attachmentType as 'image' | 'video' | 'file' | 'audio') || undefined,
+            attachmentFileName: (data.attachmentFileName as string) || undefined
           };
         });
         setQuickReplies(list);
@@ -1041,6 +1053,45 @@ const WhatsAppChat: React.FC = () => {
     []
   );
 
+  const handleQuickReplySelect = useCallback(
+    async (item: { text: string; attachmentUrl?: string; attachmentType?: 'image' | 'video' | 'file' | 'audio'; attachmentFileName?: string }) => {
+      if (!selectedId || !companyId) return;
+      const conv = conversations.find((c) => c.id === selectedId);
+      const phone = conv?.phone ?? conv?.client?.phone;
+      if (!phone || phone === '…') return;
+      const chatId = normalizePhone(phone);
+      setSending(true);
+      try {
+        const textPayload = formatMessageForWhatsApp(item.text || '');
+        await fetch(SEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ chatId, text: textPayload, companyId })
+        });
+        if (item.attachmentUrl) {
+          await new Promise((r) => setTimeout(r, 300));
+          await fetch(SEND_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chatId,
+              contentUri: item.attachmentUrl,
+              attachmentType: item.attachmentType || 'file',
+              fileName: item.attachmentFileName ?? undefined,
+              companyId
+            })
+          });
+        }
+      } catch (err) {
+        if (import.meta.env.DEV) console.error('[WhatsApp] quick reply send failed', err);
+        showErrorNotification('Не удалось отправить шаблон');
+      } finally {
+        setSending(false);
+      }
+    },
+    [selectedId, companyId, conversations]
+  );
+
   const handleSelectionMore = useCallback(() => {
     if (selectedMessageIds[0]) setActionsSheetMessageId(selectedMessageIds[0]);
   }, [selectedMessageIds]);
@@ -1462,6 +1513,7 @@ const WhatsAppChat: React.FC = () => {
               onOpenClientInfo={isMobile ? () => setMobileClientSheetOpen(true) : undefined}
               knowledgeBase={knowledgeBase}
               quickReplies={quickReplies}
+              onQuickReplySelect={handleQuickReplySelect}
               onSendProposalImage={incognitoMode ? undefined : handleSendProposalImage}
               showAiDebug={isAdmin}
             />
