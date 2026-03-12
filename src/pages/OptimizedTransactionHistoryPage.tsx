@@ -11,7 +11,7 @@ import { Transaction } from '../components/transactions/types';
 import { TransactionHeader } from '../components/transactions/TransactionHeader';
 import { TransactionStats } from '../components/transactions/TransactionStats';
 import { TransferModal } from '../components/transactions/transfer/TransferModal';
-import { ChevronDown, ChevronUp, Calendar, Filter, ArrowLeft, BarChart2, Download, Menu, Search } from 'lucide-react';
+import { ChevronDown, ChevronUp, Calendar, Filter, ArrowLeft, BarChart2, Download, Menu, Search, X } from 'lucide-react';
 import { useMobileSidebar } from '../contexts/MobileSidebarContext';
 import { HeaderSearchBar } from '../components/HeaderSearchBar';
 import clsx from 'clsx';
@@ -31,7 +31,11 @@ import { AttachmentViewerModal } from '../components/AttachmentViewerModal';
 import { exportTransactionsReport } from '../utils/exportTransactionsReport';
 import { TransactionExportModal, TransactionExportFilters } from '../components/transactions/TransactionExportModal';
 
-// Мемоизированный компонент фильтров
+const CHIP_MAX_VISIBLE = 3;
+const FILTER_CHIP_STYLE = 'h-8 max-h-8 px-2.5 rounded-2xl text-[13px] font-medium border shrink-0 flex items-center gap-1';
+const FILTER_CHIP_ACTIVE = `${FILTER_CHIP_STYLE} bg-[#E6F7EE] border-[#BFEAD4] text-emerald-800`;
+
+// Мемоизированный компонент фильтров: компактная полоса chips + панель редактирования
 const TransactionFilters = memo(({
   showAllFilters,
   setShowAllFilters,
@@ -49,48 +53,112 @@ const TransactionFilters = memo(({
   showYearFilter,
   setShowYearFilter,
   showDateRangeFilter,
-  setShowDateRangeFilter
-}: any) => (
-  <div className="space-y-2 mt-2">
-    {showAllFilters && (
-      <>
-        {/* Чекбоксы ЗП и Безнал */}
-        <div className="bg-white rounded-lg shadow mb-2">
-          <div className="px-4 py-3">
-            <div className="flex flex-wrap gap-4">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="salaryFilter"
-                  checked={filterSalary}
-                  onChange={(e) => setFilterSalary(e.target.checked)}
-                  className="w-4 h-4 text-emerald-500 rounded border-gray-300 focus:ring-emerald-500"
-                />
-                <label htmlFor="salaryFilter" className="text-sm text-gray-600">
-                  Зарплата
-                </label>
-              </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="cashlessFilter"
-                  checked={filterCashless}
-                  onChange={(e) => setFilterCashless(e.target.checked)}
-                  className="w-4 h-4 text-emerald-500 rounded border-gray-300 focus:ring-emerald-500"
-                />
-                <label htmlFor="cashlessFilter" className="text-sm text-gray-600">
-                  Безнал
-                </label>
-              </div>
+  setShowDateRangeFilter,
+  activeFiltersList,
+  activeCount,
+  onResetFilters,
+  showFiltersSheet,
+  setShowFiltersSheet
+}: any) => {
+  const visibleChips = activeFiltersList.slice(0, CHIP_MAX_VISIBLE);
+  const restCount = activeCount - CHIP_MAX_VISIBLE;
+  const hasActive = activeCount > 0;
+
+  return (
+    <div className="mt-2 max-h-12 flex flex-col">
+      {/* Компактная строка chips: одна линия, горизонтальный скролл */}
+      {hasActive && (
+        <div className="flex items-center gap-1.5 overflow-x-auto overflow-y-hidden py-1.5 min-h-0 flex-shrink-0" style={{ maxHeight: 48 }}>
+          <div className="flex items-center gap-1.5 shrink-0" style={{ whiteSpace: 'nowrap' }}>
+            {visibleChips.map((f: { id: string; label: string }) => (
+              <span key={f.id} className={FILTER_CHIP_ACTIVE}>
+                {f.label}
+              </span>
+            ))}
+            {restCount > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowFiltersSheet(true)}
+                className={FILTER_CHIP_ACTIVE + ' cursor-pointer hover:opacity-90'}
+              >
+                +{restCount}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onResetFilters}
+              className="flex items-center gap-1 px-2.5 h-8 rounded-2xl text-[13px] font-medium border border-[#E5E7EB] bg-white text-gray-600 hover:bg-gray-50 shrink-0"
+            >
+              <X className="w-3.5 h-3.5" />
+              Сбросить
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Панель редактирования фильтров (при раскрытии) */}
+      {showAllFilters && (
+        <div className="bg-white rounded-lg shadow mt-2 p-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="salaryFilter"
+                checked={filterSalary}
+                onChange={(e) => setFilterSalary(e.target.checked)}
+                className="w-4 h-4 text-emerald-500 rounded border-gray-300 focus:ring-emerald-500"
+              />
+              <label htmlFor="salaryFilter" className="text-sm text-gray-600">Зарплата</label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="cashlessFilter"
+                checked={filterCashless}
+                onChange={(e) => setFilterCashless(e.target.checked)}
+                className="w-4 h-4 text-emerald-500 rounded border-gray-300 focus:ring-emerald-500"
+              />
+              <label htmlFor="cashlessFilter" className="text-sm text-gray-600">Безнал</label>
             </div>
           </div>
         </div>
+      )}
 
-        {/* Остальные фильтры аналогично оригиналу... */}
-      </>
-    )}
-  </div>
-));
+      {/* Bottom sheet: активные фильтры */}
+      {showFiltersSheet && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-40" onClick={() => setShowFiltersSheet(false)} aria-hidden />
+          <div className="fixed left-0 right-0 bottom-0 z-50 bg-white rounded-t-2xl shadow-xl p-4 max-h-[70vh] overflow-auto" style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom, 0px))' }}>
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">Активные фильтры</h3>
+            <ul className="space-y-2 mb-4">
+              {activeFiltersList.map((f: { id: string; label: string }) => (
+                <li key={f.id} className="text-sm text-gray-700">
+                  • {f.label}
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { onResetFilters(); setShowFiltersSheet(false); }}
+                className="flex-1 py-2.5 px-4 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-50"
+              >
+                Сбросить
+              </button>
+              <button
+                type="button"
+                onClick={() => { setShowFiltersSheet(false); setShowAllFilters(true); }}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-emerald-500 text-white font-medium hover:bg-emerald-600"
+              >
+                Изменить
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+});
 
 TransactionFilters.displayName = 'TransactionFilters';
 
@@ -120,6 +188,7 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
   const [endDate, setEndDate] = useState<string>('');
   const [filterSalary, setFilterSalary] = useState(false);
   const [filterCashless, setFilterCashless] = useState(false);
+  const [showFiltersSheet, setShowFiltersSheet] = useState(false);
   const [showStats, setShowStats] = useState(() => {
     const saved = localStorage.getItem('showTransactionStats');
     return saved !== null ? JSON.parse(saved) : false;
@@ -239,6 +308,30 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
     );
     return Array.from(years).sort((a, b) => b - a);
   }, [transactions]);
+
+  // Список активных фильтров для chips и bottom sheet
+  const activeFiltersList = useMemo(() => {
+    const list: { id: string; label: string }[] = [];
+    if (filterSalary) list.push({ id: 'salary', label: 'ЗП' });
+    if (filterCashless) list.push({ id: 'cashless', label: 'Безнал' });
+    if (selectedYear !== null) list.push({ id: 'year', label: String(selectedYear) });
+    if (startDate || endDate) {
+      const from = startDate ? new Date(startDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '…';
+      const to = endDate ? new Date(endDate).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '…';
+      list.push({ id: 'dateRange', label: `${from} — ${to}` });
+    }
+    return list;
+  }, [filterSalary, filterCashless, selectedYear, startDate, endDate]);
+  const activeFiltersCount = activeFiltersList.length;
+
+  const handleResetFilters = useCallback(() => {
+    setFilterSalary(false);
+    setFilterCashless(false);
+    setSelectedYear(null);
+    setStartDate('');
+    setEndDate('');
+    setShowFiltersSheet(false);
+  }, []);
 
   // Группировка и плоский список для виртуализации
   const groupedByDate = useMemo(
@@ -520,13 +613,18 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
             <button
               onClick={() => setShowAllFilters(!showAllFilters)}
               className={clsx(
-                'flex items-center justify-center w-10 h-10 rounded-[10px] md:rounded-lg transition-colors',
-                showAllFilters ? 'bg-emerald-50 text-emerald-600' : 'hover:bg-gray-100'
+                'relative flex items-center justify-center w-10 h-10 rounded-[10px] md:rounded-lg transition-colors',
+                (showAllFilters || activeFiltersCount > 0) ? 'bg-emerald-50 text-emerald-600' : 'hover:bg-gray-100'
               )}
-              style={!showAllFilters ? { color: '#374151' } : undefined}
+              style={!(showAllFilters || activeFiltersCount > 0) ? { color: '#374151' } : undefined}
               title="Фильтры"
             >
               <Filter className="w-5 h-5" style={{ width: 24, height: 24 }} />
+              {activeFiltersCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] flex items-center justify-center rounded-full bg-emerald-500 text-white text-[11px] font-semibold px-1">
+                  {activeFiltersCount}
+                </span>
+              )}
             </button>
             <button
               onClick={() => setShowStats(!showStats)}
@@ -585,6 +683,11 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
           setShowYearFilter={setShowYearFilter}
           showDateRangeFilter={showDateRangeFilter}
           setShowDateRangeFilter={setShowDateRangeFilter}
+          activeFiltersList={activeFiltersList}
+          activeCount={activeFiltersCount}
+          onResetFilters={handleResetFilters}
+          showFiltersSheet={showFiltersSheet}
+          setShowFiltersSheet={setShowFiltersSheet}
         />
       </div>
 
