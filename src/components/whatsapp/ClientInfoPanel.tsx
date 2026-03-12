@@ -279,6 +279,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     return () => document.removeEventListener('click', onDocClick, true);
   }, [managerContextMenu]);
 
+  const AI_ANALYZE_ENDPOINT = '/api/ai/analyze-client';
+
   const handleAIAnalyze = async () => {
     if (!phone || aiLoading) return;
     if (aiRunGuardRef.current) return;
@@ -297,31 +299,40 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     aiRunGuardRef.current = true;
     setAiError(null);
     setAiLoading(true);
+    const payload = {
+      chatId: normalizePhone(phone),
+      messages: recent.map((m) => ({
+        role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
+        text: m._content.replace(/<[^>]*>/g, '').trim(),
+      })),
+    };
+    console.log('AI request', { url: AI_ANALYZE_ENDPOINT, chatId: payload.chatId, messagesCount: payload.messages.length });
     try {
-      const payload = {
-        chatId: normalizePhone(phone),
-        messages: recent.map((m) => ({
-          role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
-          text: m._content.replace(/<[^>]*>/g, '').trim(),
-        })),
-      };
-      const res = await fetch('/.netlify/functions/ai-analyze-client', {
+      const res = await fetch(AI_ANALYZE_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      const data = (await res.json().catch(() => ({}))) as {
-        name?: string | null;
-        leadTitle?: string | null;
-        comment?: string | null;
-        error?: string;
-      };
-      if (!res.ok || data.error) {
-        const msg = typeof data.error === 'string' ? data.error : 'Не удалось выполнить AI-анализ. Попробуйте ещё раз.';
-        setAiError('Не удалось выполнить AI-анализ. Попробуйте ещё раз.');
-        console.error('[ClientInfoPanel] AI analyze client failed', { status: res.status, data });
+      const rawBody = await res.text();
+      let data: { name?: string | null; leadTitle?: string | null; comment?: string | null; error?: string } = {};
+      try {
+        data = rawBody ? (JSON.parse(rawBody) as typeof data) : {};
+      } catch {
+        console.error('AI response', 'invalid JSON', rawBody?.slice(0, 200));
+      }
+      console.log('AI response', res.status, data);
+
+      if (!res.ok) {
+        setAiError('Ошибка AI анализа. Попробуйте позже.');
+        console.error('AI error', { status: res.status, body: data, raw: rawBody?.slice(0, 300) });
         return;
       }
+      if (data.error) {
+        setAiError('Ошибка AI анализа. Попробуйте позже.');
+        console.error('AI error', data.error, data);
+        return;
+      }
+
       const rawName =
         typeof data.name === 'string' ? data.name.trim() : data.name === null ? null : null;
       const rawLeadTitle =
@@ -345,8 +356,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
         setEditComment(nextComment);
       }
     } catch (e) {
-      setAiError('Не удалось выполнить AI-анализ. Попробуйте ещё раз.');
-      console.error('[ClientInfoPanel] AI analyze client error', e);
+      setAiError('Ошибка AI анализа. Попробуйте позже.');
+      console.error('AI error', e);
     } finally {
       setAiLoading(false);
       aiRunGuardRef.current = false;

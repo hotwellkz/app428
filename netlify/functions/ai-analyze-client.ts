@@ -139,27 +139,43 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       }),
     });
 
+    const responseText = await response.text();
+
     if (!response.ok) {
-      const text = await response.text();
-      log('OpenAI API error:', response.status, text);
+      log('OpenAI API error:', response.status, responseText.slice(0, 500));
       return withCors({
         statusCode: 502,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ error: 'OpenAI API error', status: response.status }),
+        body: JSON.stringify({
+          error: 'OpenAI API error',
+          status: response.status,
+          detail: responseText.slice(0, 200),
+        }),
       });
     }
 
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
+    let data: { choices?: Array<{ message?: { content?: string } }> };
+    try {
+      data = JSON.parse(responseText) as typeof data;
+    } catch (e) {
+      log('OpenAI response not JSON:', e);
+      return withCors({
+        statusCode: 200,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: null, leadTitle: null, comment: null }),
+      });
+    }
+
     const content = data.choices?.[0]?.message?.content ?? '';
     let parsed: { name?: string | null; leadTitle?: string | null; comment?: string | null } = {
       name: null,
       leadTitle: null,
-      comment: null
+      comment: null,
     };
     try {
-      parsed = JSON.parse(content);
+      if (content.trim()) {
+        parsed = JSON.parse(content) as typeof parsed;
+      }
     } catch (e) {
       log('Failed to parse OpenAI JSON content, returning nulls:', e);
     }
@@ -168,23 +184,24 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       typeof parsed.name === 'string'
         ? parsed.name.trim() || null
         : parsed.name === null
-        ? null
-        : null;
+          ? null
+          : null;
 
     const leadTitle =
       typeof parsed.leadTitle === 'string'
         ? parsed.leadTitle.trim() || null
         : parsed.leadTitle === null
-        ? null
-        : null;
+          ? null
+          : null;
 
     const comment =
       typeof parsed.comment === 'string'
         ? parsed.comment.trim() || null
         : parsed.comment === null
-        ? null
-        : null;
+          ? null
+          : null;
 
+    log('Success:', { name, leadTitle, comment });
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -195,7 +212,10 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     return withCors({
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Failed to analyze client', detail: String(e) }),
+      body: JSON.stringify({
+        error: 'Failed to analyze client',
+        detail: String(e),
+      }),
     });
   }
 };
