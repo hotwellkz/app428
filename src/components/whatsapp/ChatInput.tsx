@@ -182,21 +182,23 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   const insertQuickReply = useCallback(
     (item: QuickReplyItem) => {
-      if ((item.files?.length > 0 || item.attachmentUrl) && onQuickReplySelect) {
-        onQuickReplySelect(item);
-        setSelectedQuickIndex(0);
-        return;
-      }
       const v = value;
       const lastSpace = v.lastIndexOf(' ');
       const prefix = lastSpace === -1 ? '' : v.slice(0, lastSpace + 1);
-      const newValue = prefix + item.text;
+      const newValue = prefix + (item.text ?? '');
       onChange(newValue);
       setSelectedQuickIndex(0);
+      if (item.files?.length > 0 || item.attachmentUrl) {
+        onQuickReplySelect?.(item);
+      }
       requestAnimationFrame(() => {
-        textareaRef.current?.focus();
-        const len = newValue.length;
-        textareaRef.current?.setSelectionRange(len, len);
+        const el = textareaRef.current;
+        if (el) {
+          el.focus();
+          const len = newValue.length;
+          el.setSelectionRange(len, len);
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
       });
     },
     [value, onChange, onQuickReplySelect]

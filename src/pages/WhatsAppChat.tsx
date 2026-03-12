@@ -132,6 +132,10 @@ const WhatsAppChat: React.FC = () => {
   const [sending, setSending] = useState(false);
   const [indexBuilding, setIndexBuilding] = useState(false);
   const [pendingAttachment, setPendingAttachment] = useState<{ file: File; preview?: string } | null>(null);
+  /** Файлы из быстрого ответа: отправляются по нажатию «Отправить» вместе с текстом из поля */
+  const [pendingQuickReplyFiles, setPendingQuickReplyFiles] = useState<
+    Array<{ id: string; url: string; name: string; type: string }> | null
+  >(null);
   const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'sending'>('idle');
   const [sendError, setSendError] = useState<string | null>(null);
   type ChatFilter = 'all' | 'waiting' | 'unread';
@@ -903,6 +907,10 @@ const WhatsAppChat: React.FC = () => {
     if (pendingAttachment?.preview) URL.revokeObjectURL(pendingAttachment.preview);
   }, [pendingAttachment]);
 
+  useEffect(() => {
+    setPendingQuickReplyFiles(null);
+  }, [selectedId]);
+
   const handleSend = async () => {
     if (incognitoMode) {
       // В режиме инкогнито отправка отключена (просмотр-only).
@@ -983,51 +991,82 @@ const WhatsAppChat: React.FC = () => {
       return;
     }
 
-    if (!caption) return;
+    const hasQueuedFiles = (pendingQuickReplyFiles?.length ?? 0) > 0;
+    if (!caption && !hasQueuedFiles) return;
+
+    const chatId = normalizePhone(phone);
+    const replyId = replyToMessage?.id;
+    const filesToSend = pendingQuickReplyFiles ?? [];
     setSending(true);
     setInputText('');
-    const replyId = replyToMessage?.id;
+    setPendingQuickReplyFiles(null);
     try {
-      const res = await fetch(SEND_API, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatId: phone,
-          text: formatMessageForWhatsApp(caption),
-          repliedToMessageId: replyId ?? undefined,
-          companyId: companyId ?? undefined
-        })
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const d = data as { error?: string; status?: number; detail?: any };
-        let message = 'Сообщение не отправлено: проверьте номер, текст или вложение.';
-        if (d?.error === 'Wazzup API error') {
-          const detail = d.detail as any;
-          let providerMsg = '';
-          if (detail && typeof detail === 'object') {
-            const firstData =
-              Array.isArray((detail as any).data) && (detail as any).data.length > 0
-                ? (detail as any).data[0]
-                : null;
-            const code = firstData?.code || (detail as any).error;
-            const desc = firstData?.description || (detail as any).description;
-            if (code && desc) providerMsg = `${code}: ${desc}`;
-            else providerMsg = desc || code || (detail as any).message || (detail as any).raw || '';
+      if (caption) {
+        setUploadState('sending');
+        const res = await fetch(SEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId,
+            text: formatMessageForWhatsApp(caption),
+            repliedToMessageId: replyId ?? undefined,
+            companyId: companyId ?? undefined
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const d = data as { error?: string; status?: number; detail?: any };
+          let message = 'Сообщение не отправлено: проверьте номер, текст или вложение.';
+          if (d?.error === 'Wazzup API error') {
+            const detail = d.detail as any;
+            let providerMsg = '';
+            if (detail && typeof detail === 'object') {
+              const firstData =
+                Array.isArray((detail as any).data) && (detail as any).data.length > 0
+                  ? (detail as any).data[0]
+                  : null;
+              const code = firstData?.code || (detail as any).error;
+              const desc = firstData?.description || (detail as any).description;
+              if (code && desc) providerMsg = `${code}: ${desc}`;
+              else providerMsg = desc || code || (detail as any).message || (detail as any).raw || '';
+            }
+            if (providerMsg) {
+              message = `Wazzup: ${providerMsg}`;
+            }
+          } else if (d?.error) {
+            message = d.error;
           }
-          if (providerMsg) {
-            message = `Wazzup: ${providerMsg}`;
-          }
-        } else if (d?.error) {
-          message = d.error;
+          setInputText(caption);
+          setSendError(message);
+          setSending(false);
+          return;
         }
-        setInputText(caption);
-        setSendError(message);
-      } else {
         setSendError(null);
         setReplyToMessage(null);
       }
+
+      for (let i = 0; i < filesToSend.length; i++) {
+        setUploadState('sending');
+        await new Promise((r) => setTimeout(r, i === 0 ? 300 : QUICK_REPLY_FILES_DELAY_MS));
+        const res = await fetch(SEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId,
+            contentUri: filesToSend[i].url,
+            attachmentType: filesToSend[i].type as 'image' | 'video' | 'file' | 'audio',
+            fileName: filesToSend[i].name,
+            companyId: companyId ?? undefined
+          })
+        });
+        if (!res.ok) {
+          setSendError('Не удалось отправить один из файлов шаблона.');
+          setSending(false);
+          return;
+        }
+      }
     } finally {
+      setUploadState('idle');
       setSending(false);
     }
   };
@@ -1193,52 +1232,30 @@ const WhatsAppChat: React.FC = () => {
 
   const QUICK_REPLY_FILES_DELAY_MS = 400;
 
+  /** При выборе шаблона с файлами — ставим файлы в очередь; отправка по кнопке «Отправить» */
   const handleQuickReplySelect = useCallback(
-    async (item: {
+    (item: {
       text: string;
       files?: Array<{ id: string; url: string; name: string; type: string; size?: number }>;
       attachmentUrl?: string;
       attachmentType?: 'image' | 'video' | 'file' | 'audio';
       attachmentFileName?: string;
     }) => {
-      if (!selectedId || !companyId) return;
-      const conv = conversations.find((c) => c.id === selectedId);
-      const phone = conv?.phone ?? conv?.client?.phone;
-      if (!phone || phone === '…') return;
-      const chatId = normalizePhone(phone);
-      const fileList = (item.files?.length ? item.files : item.attachmentUrl
-        ? [{ url: item.attachmentUrl, type: item.attachmentType || 'file', name: item.attachmentFileName ?? 'Файл', id: 'legacy' }]
-        : []) as Array<{ id: string; url: string; name: string; type: string }>;
-      setSending(true);
-      try {
-        const textPayload = formatMessageForWhatsApp(item.text || '');
-        await fetch(SEND_API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ chatId, text: textPayload, companyId })
-        });
-        for (let i = 0; i < fileList.length; i++) {
-          await new Promise((r) => setTimeout(r, i === 0 ? 300 : QUICK_REPLY_FILES_DELAY_MS));
-          await fetch(SEND_API, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chatId,
-              contentUri: fileList[i].url,
-              attachmentType: fileList[i].type as 'image' | 'video' | 'file' | 'audio',
-              fileName: fileList[i].name,
-              companyId
-            })
-          });
-        }
-      } catch (err) {
-        if (import.meta.env.DEV) console.error('[WhatsApp] quick reply send failed', err);
-        showErrorNotification('Не удалось отправить шаблон');
-      } finally {
-        setSending(false);
-      }
+      const fileList = (item.files?.length
+        ? item.files
+        : item.attachmentUrl
+          ? [
+              {
+                url: item.attachmentUrl,
+                type: item.attachmentType || 'file',
+                name: item.attachmentFileName ?? 'Файл',
+                id: 'legacy'
+              }
+            ]
+          : []) as Array<{ id: string; url: string; name: string; type: string }>;
+      setPendingQuickReplyFiles(fileList.length > 0 ? fileList : null);
     },
-    [selectedId, companyId, conversations]
+    []
   );
 
   const MEDIA_SEND_DELAY_MS = 400;
