@@ -60,8 +60,6 @@ import {
   Radio,
   LayoutDashboard,
   Clock,
-  Wrench,
-  X,
   Building2,
   Package,
   Wallet,
@@ -161,7 +159,8 @@ export const AnalyticsPage: React.FC = () => {
   const [salesTarget, setSalesTarget] = useState(() =>
     Number(localStorage.getItem(STORAGE_TARGET) || '0')
   );
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  /** Мобильный аккордеон фильтров (по умолчанию свёрнут) */
+  const [filtersAccordionOpen, setFiltersAccordionOpen] = useState(false);
   const defaultDateRange = useCallback(() => {
     const d = new Date();
     d.setDate(d.getDate() - 29);
@@ -195,13 +194,17 @@ export const AnalyticsPage: React.FC = () => {
     };
   }, []);
 
-  const openFilterSheet = useCallback(() => {
-    setDraftFrom(dateFrom);
-    setDraftTo(dateTo);
-    setDraftManager(managerId);
-    setDraftSource(sourceFilter);
-    setDraftChannel(channelFilter);
-    setMobileFiltersOpen(true);
+  const toggleFiltersAccordion = useCallback(() => {
+    setFiltersAccordionOpen((o) => {
+      if (!o) {
+        setDraftFrom(dateFrom);
+        setDraftTo(dateTo);
+        setDraftManager(managerId);
+        setDraftSource(sourceFilter);
+        setDraftChannel(channelFilter);
+      }
+      return !o;
+    });
   }, [dateFrom, dateTo, managerId, sourceFilter, channelFilter]);
 
   const applyFilterSheet = useCallback(() => {
@@ -210,7 +213,7 @@ export const AnalyticsPage: React.FC = () => {
     setManagerId(draftManager);
     setSourceFilter(draftSource);
     setChannelFilter(draftChannel);
-    setMobileFiltersOpen(false);
+    setFiltersAccordionOpen(false);
   }, [draftFrom, draftTo, draftManager, draftSource, draftChannel]);
 
   const resetFilterSheet = useCallback(() => {
@@ -225,8 +228,18 @@ export const AnalyticsPage: React.FC = () => {
     setManagerId('all');
     setSourceFilter('all');
     setChannelFilter('all');
-    setMobileFiltersOpen(false);
+    setFiltersAccordionOpen(false);
   }, [defaultDateRange]);
+
+  const activeFiltersCount = useMemo(() => {
+    const { from, to } = defaultDateRange();
+    let n = 0;
+    if (dateFrom !== from || dateTo !== to) n++;
+    if (managerId !== 'all') n++;
+    if (sourceFilter !== 'all') n++;
+    if (channelFilter !== 'all') n++;
+    return n;
+  }, [dateFrom, dateTo, managerId, sourceFilter, channelFilter, defaultDateRange]);
 
   const filterChips = useMemo(() => {
     const chips: { key: string; text: string }[] = [];
@@ -759,6 +772,22 @@ export const AnalyticsPage: React.FC = () => {
     { id: 'finance', label: t.navFinance },
     { id: 'live', label: t.navLive }
   ];
+  /** Мобильная навигация: две колонки (лев / прав) */
+  const navSectionsLeft: { id: SectionId; label: string }[] = [
+    { id: 'director', label: t.navDirector },
+    { id: 'construction', label: t.navConstruction },
+    { id: 'warehouse', label: t.navWarehouse },
+    { id: 'messaging', label: t.navWhatsapp },
+    { id: 'sources', label: t.navSources },
+    { id: 'live', label: t.navLive }
+  ];
+  const navSectionsRight: { id: SectionId; label: string }[] = [
+    { id: 'ops', label: t.opsAnalytics },
+    { id: 'txfinance', label: t.navTxFinance },
+    { id: 'leads', label: t.navLeads },
+    { id: 'managers', label: t.navManagers },
+    { id: 'finance', label: t.navFinance }
+  ];
 
   const clientsInPeriod = useMemo(
     () => clientsRows.filter((c) => c.createdAt >= fromMs && c.createdAt <= toMs),
@@ -1007,14 +1036,6 @@ export const AnalyticsPage: React.FC = () => {
           </button>
           <button
             type="button"
-            onClick={openFilterSheet}
-            className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 shrink-0"
-            aria-label={t.filtersButton}
-          >
-            <Filter className="w-4 h-4" />
-          </button>
-          <button
-            type="button"
             onClick={exportCsv}
             className="hidden sm:inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
           >
@@ -1030,53 +1051,110 @@ export const AnalyticsPage: React.FC = () => {
             <span className="hidden min-[360px]:inline">PDF</span>
           </button>
         </div>
-        {/* Мобильные фильтры — всегда в шапке (липко вместе с фикс-блоком), без горизонтального скролла */}
-        <div className="md:hidden grid grid-cols-2 min-[480px]:grid-cols-4 gap-1.5 px-2 py-2 bg-gray-50 border-b border-gray-100 max-w-full">
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="min-w-0 rounded-md px-1.5 py-1.5 text-[11px] border border-gray-200 bg-white text-gray-900"
-          />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="min-w-0 rounded-md px-1.5 py-1.5 text-[11px] border border-gray-200 bg-white text-gray-900"
-          />
-          <select
-            value={managerId}
-            onChange={(e) => setManagerId(e.target.value)}
-            className="min-w-0 rounded-md px-1 py-1.5 text-[11px] border border-gray-200 bg-white text-gray-900 col-span-2 min-[480px]:col-span-1"
+        {/* Мобильные фильтры: одна строка + сворачиваемый блок */}
+        <div className="md:hidden border-b border-gray-100 bg-gray-50 max-w-full">
+          <button
+            type="button"
+            onClick={toggleFiltersAccordion}
+            className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-gray-800 active:bg-gray-100 transition-colors"
+            aria-expanded={filtersAccordionOpen}
           >
-            <option value="all">{t.allManagers}</option>
-            <option value="none">{t.noManager}</option>
-            {managersList.map((m) => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
-          </select>
-          <select
-            value={sourceFilter}
-            onChange={(e) => setSourceFilter(e.target.value)}
-            className="min-w-0 rounded-md px-1 py-1.5 text-[11px] border border-gray-200 bg-white text-gray-900 col-span-2 min-[480px]:col-span-1"
+            <span className="flex items-center gap-2 min-w-0">
+              <Filter className="w-4 h-4 shrink-0 text-emerald-600" />
+              <span>
+                Фильтры {filtersAccordionOpen ? '🔼' : '🔽'}
+              </span>
+              {activeFiltersCount > 0 && (
+                <span className="shrink-0 rounded-full bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 min-w-[1.25rem] text-center">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </span>
+          </button>
+          <div
+            className={`filters-container ${filtersAccordionOpen ? 'open' : ''}`}
           >
-            <option value="all">{t.sourceAll}</option>
-            <option value="WhatsApp">WhatsApp</option>
-            <option value="Instagram">Instagram</option>
-            <option value="Google">Google</option>
-            <option value="Звонок">Звонок</option>
-            <option value="Сайт">Сайт</option>
-          </select>
-          <select
-            value={channelFilter}
-            onChange={(e) => setChannelFilter(e.target.value)}
-            className="min-w-0 rounded-md px-1 py-1.5 text-[11px] border border-gray-200 bg-white text-gray-900 col-span-2 min-[480px]:col-span-2"
-          >
-            <option value="all">{t.channelAll}</option>
-            <option value="whatsapp">WhatsApp</option>
-            <option value="instagram">{t.channelInstagram}</option>
-            <option value="other">{t.channelOther}</option>
-          </select>
+            <div className="px-3 pb-3 pt-0 space-y-2 overflow-y-auto max-h-[380px] border-t border-gray-100 bg-white">
+              <div className="grid grid-cols-2 gap-2">
+                <label className="block col-span-1">
+                  <span className="text-[10px] font-semibold text-gray-500 uppercase">{t.periodLabel} от</span>
+                  <input
+                    type="date"
+                    value={draftFrom}
+                    onChange={(e) => setDraftFrom(e.target.value)}
+                    className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs"
+                  />
+                </label>
+                <label className="block col-span-1">
+                  <span className="text-[10px] font-semibold text-gray-500 uppercase">до</span>
+                  <input
+                    type="date"
+                    value={draftTo}
+                    onChange={(e) => setDraftTo(e.target.value)}
+                    className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs"
+                  />
+                </label>
+              </div>
+              <label className="block">
+                <span className="text-[10px] font-semibold text-gray-500 uppercase">{t.managerLabel}</span>
+                <select
+                  value={draftManager}
+                  onChange={(e) => setDraftManager(e.target.value)}
+                  className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs"
+                >
+                  <option value="all">{t.allManagers}</option>
+                  <option value="none">{t.noManager}</option>
+                  {managersList.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-[10px] font-semibold text-gray-500 uppercase">{t.sourceLabel}</span>
+                <select
+                  value={draftSource}
+                  onChange={(e) => setDraftSource(e.target.value)}
+                  className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs"
+                >
+                  <option value="all">{t.sourceAll}</option>
+                  <option value="WhatsApp">WhatsApp</option>
+                  <option value="Instagram">Instagram</option>
+                  <option value="Google">Google</option>
+                  <option value="Звонок">Звонок</option>
+                  <option value="Сайт">Сайт</option>
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-[10px] font-semibold text-gray-500 uppercase">{t.channelLabel}</span>
+                <select
+                  value={draftChannel}
+                  onChange={(e) => setDraftChannel(e.target.value)}
+                  className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs"
+                >
+                  <option value="all">{t.channelAll}</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="instagram">{t.channelInstagram}</option>
+                  <option value="other">{t.channelOther}</option>
+                </select>
+              </label>
+              <div className="flex gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={applyFilterSheet}
+                  className="flex-1 rounded-lg bg-emerald-500 py-2 text-xs font-bold text-white shadow-sm active:scale-[0.99]"
+                >
+                  {t.applyFilters}
+                </button>
+                <button
+                  type="button"
+                  onClick={resetFilterSheet}
+                  className="flex-1 rounded-lg border border-gray-300 bg-white py-2 text-xs font-semibold text-gray-700"
+                >
+                  {t.resetFilters}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
         <div className="hidden md:flex flex-wrap items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 max-w-full">
           <input
@@ -1128,7 +1206,8 @@ export const AnalyticsPage: React.FC = () => {
             <option value="other">{t.channelOther}</option>
           </select>
         </div>
-        <nav className="grid grid-cols-2 min-[480px]:grid-cols-3 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 p-2 bg-white max-w-full overflow-x-hidden">
+        {/* Мобилка / планшет: 2 колонки; десктоп md+: 3 колонки; gap 10px */}
+        <nav className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-2.5 p-2 bg-white max-w-full overflow-x-hidden">
           {sections.map((s) => (
             <button
               key={s.id}
@@ -1147,68 +1226,47 @@ export const AnalyticsPage: React.FC = () => {
             </button>
           ))}
         </nav>
-      </div>
-
-      {mobileFiltersOpen && (
-        <div className="fixed inset-0 z-[60] flex flex-col justify-end md:hidden" role="dialog" aria-modal="true">
-          <button type="button" className="absolute inset-0 bg-black/40" aria-label="Закрыть" onClick={() => setMobileFiltersOpen(false)} />
-          <div className="relative rounded-t-2xl shadow-xl max-h-[88vh] overflow-hidden flex flex-col bg-white border-t border-gray-200">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white shrink-0">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-emerald-600" />
-                {t.filtersTitle}
-              </h2>
-              <button type="button" onClick={() => setMobileFiltersOpen(false)} className="p-2 rounded-full hover:bg-gray-100 text-gray-500" aria-label="Закрыть">
-                <X className="w-6 h-6" />
+        <nav className="grid grid-cols-2 gap-2.5 p-2 bg-white max-w-full md:hidden">
+          <div className="flex flex-col gap-2.5 min-w-0">
+            {navSectionsLeft.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  setActiveSection(s.id);
+                  document.getElementById(`sec-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className={`min-h-9 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors text-center leading-tight ${
+                  activeSection === s.id
+                    ? 'bg-emerald-500 text-white shadow-sm'
+                    : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                }`}
+              >
+                {s.label}
               </button>
-            </div>
-            <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4 min-h-0 bg-white">
-              <div>
-                <label className="block text-xs font-semibold mb-1 text-gray-500">{t.periodLabel}</label>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} className="flex-1 min-w-[140px] rounded-lg px-3 py-2.5 text-sm border border-gray-200 bg-gray-50" />
-                  <span className="text-gray-400">—</span>
-                  <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} className="flex-1 min-w-[140px] rounded-lg px-3 py-2.5 text-sm border border-gray-200 bg-gray-50" />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1 text-gray-500">{t.managerLabel}</label>
-                <select value={draftManager} onChange={(e) => setDraftManager(e.target.value)} className="w-full rounded-lg px-3 py-2.5 text-sm border border-gray-200 bg-gray-50 text-gray-900">
-                  <option value="all">{t.allManagers}</option>
-                  <option value="none">{t.noManager}</option>
-                  {managersList.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1 text-gray-500">{t.sourceLabel}</label>
-                <select value={draftSource} onChange={(e) => setDraftSource(e.target.value)} className="w-full rounded-lg px-3 py-2.5 text-sm border border-gray-200 bg-gray-50 text-gray-900">
-                  <option value="all">{t.sourceAll}</option>
-                  <option value="WhatsApp">WhatsApp</option>
-                  <option value="Instagram">Instagram</option>
-                  <option value="Google">Google</option>
-                  <option value="Звонок">Звонок</option>
-                  <option value="Сайт">Сайт</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold mb-1 text-gray-500">{t.channelLabel}</label>
-                <select value={draftChannel} onChange={(e) => setDraftChannel(e.target.value)} className="w-full rounded-lg px-3 py-2.5 text-sm border border-gray-200 bg-gray-50 text-gray-900">
-                  <option value="all">{t.channelAll}</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="instagram">{t.channelInstagram}</option>
-                  <option value="other">{t.channelOther}</option>
-                </select>
-              </div>
-            </div>
-            <div className="p-4 pt-2 border-t border-gray-200 space-y-2 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gray-50">
-              <button type="button" onClick={applyFilterSheet} className="w-full py-3 rounded-xl bg-emerald-500 text-white font-semibold text-base shadow-sm hover:bg-emerald-600">{t.applyFilters}</button>
-              <button type="button" onClick={resetFilterSheet} className="w-full py-2.5 rounded-xl text-sm font-medium border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">{t.resetFilters}</button>
-            </div>
+            ))}
           </div>
-        </div>
-      )}
+          <div className="flex flex-col gap-2.5 min-w-0">
+            {navSectionsRight.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  setActiveSection(s.id);
+                  document.getElementById(`sec-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className={`min-h-9 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors text-center leading-tight ${
+                  activeSection === s.id
+                    ? 'bg-emerald-500 text-white shadow-sm'
+                    : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </nav>
+      </div>
 
       {loading && !deals.length ? (
         <div className="flex justify-center items-center min-h-[50vh] pt-32 sm:pl-64 bg-gray-100">
