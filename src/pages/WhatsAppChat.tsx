@@ -31,7 +31,7 @@ import ForwardDialog from '../components/whatsapp/ForwardDialog';
 import DeleteClientConfirmModal from '../components/whatsapp/DeleteClientConfirmModal';
 import { supabase, CLIENTS_BUCKET } from '../lib/supabase/config';
 import { MAX_ATTACHMENT_MB } from '../components/whatsapp/ChatInput';
-import { compressImage, validateVideoFile } from '../utils/mediaUtils';
+import { compressImage, validateVideoForChat, isLargeVideo } from '../utils/mediaUtils';
 import { acquireVoiceStream, createVoiceRecorder } from '../utils/voiceRecording';
 
 const NEW_MESSAGE_SOUND_PATH = '/sounds/new-message.mp3';
@@ -141,6 +141,7 @@ const WhatsAppChat: React.FC = () => {
   >(null);
   const [uploadState, setUploadState] = useState<'idle' | 'uploading' | 'sending'>('idle');
   const [sendError, setSendError] = useState<string | null>(null);
+  const [mediaPreparing, setMediaPreparing] = useState(false);
   type ChatFilter = 'all' | 'waiting' | 'unread';
   const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
@@ -732,14 +733,45 @@ const WhatsAppChat: React.FC = () => {
     });
   }, [conversations, locallyReadChatIds, crmNamesByPhone, dealStatusByPhone, dealStatuses, managerByPhone, managers]);
 
-  const handleFileSelect = useCallback((file: File) => {
+  const handleFileSelect = useCallback(async (file: File) => {
     setSendError(null);
     if (file.size > MAX_BYTES) {
       setSendError(`Файл слишком большой. Максимум ${MAX_ATTACHMENT_MB} МБ.`);
       return;
     }
-    const preview = file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined;
-    setPendingAttachment({ file, preview });
+    if (file.type.startsWith('video/')) {
+      setMediaPreparing(true);
+      try {
+        const v = await validateVideoForChat(file, MAX_BYTES);
+        if (!v.ok) {
+          setSendError(v.error);
+          return;
+        }
+        if (isLargeVideo(file)) {
+          setSendError(null);
+        }
+      } finally {
+        setMediaPreparing(false);
+      }
+      setPendingAttachment({ file, preview: undefined });
+      return;
+    }
+    if (file.type.startsWith('image/')) {
+      setMediaPreparing(true);
+      try {
+        const compressed = await compressImage(file);
+        const preview = URL.createObjectURL(compressed);
+        setPendingAttachment({ file: compressed, preview });
+      } catch (e) {
+        console.error(e);
+        const preview = URL.createObjectURL(file);
+        setPendingAttachment({ file, preview });
+      } finally {
+        setMediaPreparing(false);
+      }
+      return;
+    }
+    setPendingAttachment({ file, preview: undefined });
   }, []);
 
   const handleClearAttachment = useCallback(() => {
@@ -768,11 +800,28 @@ const WhatsAppChat: React.FC = () => {
       }
       if (valid.length === 0) return;
       setSendError(null);
+      setMediaPreparing(true);
+      const prepared: File[] = [];
+      try {
+        for (const file of valid) {
+          if (file.type.startsWith('image/')) {
+            try {
+              prepared.push(await compressImage(file));
+            } catch {
+              prepared.push(file);
+            }
+          } else {
+            prepared.push(file);
+          }
+        }
+      } finally {
+        setMediaPreparing(false);
+      }
       setUploadState('uploading');
       try {
-        for (let i = 0; i < valid.length; i++) {
+        for (let i = 0; i < prepared.length; i++) {
           if (i > 0) await new Promise((r) => setTimeout(r, 300));
-          const file = valid[i];
+          const file = prepared[i];
           const path = `${companyId}/${WHATSAPP_MEDIA_PREFIX}/${selectedId}/${Date.now()}_${sanitizeFileName(file.name)}`;
           const { data: uploadData, error: uploadError } = await supabase.storage
             .from(CLIENTS_BUCKET)
@@ -829,6 +878,7 @@ const WhatsAppChat: React.FC = () => {
       const isVideo = file.type.startsWith('video/');
 
       if (isImage) {
+        setMediaPreparing(true);
         setUploadState('uploading');
         try {
           uploadFile = await compressImage(file);
@@ -842,12 +892,19 @@ const WhatsAppChat: React.FC = () => {
           setSendError('Не удалось обработать фото.');
           setUploadState('idle');
           return;
+        } finally {
+          setMediaPreparing(false);
         }
       } else if (isVideo) {
-        const validation = validateVideoFile(file, MAX_BYTES);
-        if (!validation.ok) {
-          setSendError(validation.error ?? 'Видео не подходит.');
-          return;
+        setMediaPreparing(true);
+        try {
+          const v = await validateVideoForChat(file, MAX_BYTES);
+          if (!v.ok) {
+            setSendError(v.error);
+            return;
+          }
+        } finally {
+          setMediaPreparing(false);
         }
       } else {
         setSendError('Выберите фото или видео.');
@@ -1040,12 +1097,23 @@ const WhatsAppChat: React.FC = () => {
     const hasAttachment = !!pendingAttachment;
 
     if (hasAttachment && companyId && selectedId) {
+      let uploadFile = pendingAttachment!.file;
+      if (uploadFile.type.startsWith('image/')) {
+        setMediaPreparing(true);
+        try {
+          uploadFile = await compressImage(uploadFile);
+        } catch {
+          /* */
+        } finally {
+          setMediaPreparing(false);
+        }
+      }
       setUploadState('uploading');
       try {
-        const path = `${companyId}/${WHATSAPP_MEDIA_PREFIX}/${selectedId}/${Date.now()}_${sanitizeFileName(pendingAttachment!.file.name)}`;
+        const path = `${companyId}/${WHATSAPP_MEDIA_PREFIX}/${selectedId}/${Date.now()}_${sanitizeFileName(uploadFile.name)}`;
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from(CLIENTS_BUCKET)
-          .upload(path, pendingAttachment!.file, { upsert: false });
+          .upload(path, uploadFile, { upsert: false });
 
         if (uploadError) {
           setSendError('Ошибка загрузки файла. Попробуйте ещё раз.');
@@ -1062,8 +1130,8 @@ const WhatsAppChat: React.FC = () => {
           body: JSON.stringify({
             chatId: phone,
             contentUri,
-            attachmentType: getAttachmentType(pendingAttachment!.file),
-            fileName: pendingAttachment!.file.name,
+            attachmentType: getAttachmentType(uploadFile),
+            fileName: uploadFile.name,
             text: caption ? formatMessageForWhatsApp(caption) : undefined,
             repliedToMessageId: replyToMessage?.id ?? undefined,
             companyId: companyId ?? undefined
@@ -1817,6 +1885,7 @@ const WhatsAppChat: React.FC = () => {
               onClearAttachment={handleClearAttachment}
               uploadState={uploadState}
               sendError={sendError}
+              mediaPreparing={mediaPreparing}
               onDismissError={() => setSendError(null)}
               onStartVoice={startVoiceRecording}
               onStopVoice={stopVoiceRecording}

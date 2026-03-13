@@ -37,6 +37,8 @@ interface ChatWindowProps {
   /** 'uploading' | 'sending' — блокировать кнопку отправки */
   uploadState?: 'idle' | 'uploading' | 'sending';
   sendError?: string | null;
+  /** Подготовка медиа (сжатие) перед загрузкой */
+  mediaPreparing?: boolean;
   onDismissError?: () => void;
   onStartVoice?: () => void;
   onStopVoice?: () => void;
@@ -911,6 +913,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     onClearAttachment,
     uploadState = 'idle',
     sendError = null,
+    mediaPreparing = false,
     onDismissError,
     onStartVoice,
     onStopVoice,
@@ -1375,6 +1378,12 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
         />
       )}
 
+      {mediaPreparing && (
+        <div className="flex-none px-3 py-2 bg-sky-50 border-t border-sky-200 flex items-center gap-2 text-sky-900 text-sm">
+          <span className="inline-block h-4 w-4 shrink-0 rounded-full border-2 border-sky-500 border-t-transparent animate-spin" aria-hidden />
+          Подготовка медиа…
+        </div>
+      )}
       {sendError && (
         <div className="flex-none px-2 py-1.5 bg-red-50 border-t border-red-200 flex items-center justify-between gap-2">
           <p className="text-sm text-red-700 flex-1">{sendError}</p>
