@@ -286,6 +286,29 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // История сделок (перемещения, создание) — запись при создании сделки / смене этапа
+    match /deal_history/{entryId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId
+            == request.resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
+            == request.resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow update, delete: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId
+            == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId
+            == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+    }
+
     // Менеджеры чатов (WhatsApp CRM): чтение — любой авторизованный (фильтр по companyId в запросе), запись — по companyId
     match /chatManagers/{docId} {
       allow read: if isAuthenticated();

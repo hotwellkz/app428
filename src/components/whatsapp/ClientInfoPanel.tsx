@@ -358,6 +358,13 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       });
       setPipelineDeal(deal);
       setPipelineStages(stages.map((s) => ({ id: s.id, name: s.name, color: s.color })));
+    } catch (e) {
+      console.error('[ClientInfoPanel] create pipeline deal', e);
+      alert(
+        e && typeof e === 'object' && 'code' in e && (e as { code?: string }).code === 'permission-denied'
+          ? 'Нет прав (Firestore). Админ: задеплойте правила с коллекцией deal_history.'
+          : 'Не удалось создать сделку. Проверьте права Firestore.'
+      );
     } finally {
       setCreatingPipelineDeal(false);
     }
