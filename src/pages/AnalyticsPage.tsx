@@ -18,9 +18,13 @@ import {
   fetchDealsForCompany,
   fetchConversationsForCompany,
   fetchMessagesSince,
+  fetchRecentMessages,
+  fetchChatManagers,
+  invalidateAnalyticsCache,
   type DealRow,
   type MessageRow,
-  type ConversationRow
+  type ConversationRow,
+  type ManagerRow
 } from '../lib/firebase/analyticsDashboard';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { listPipelines, listStages } from '../lib/firebase/deals';
@@ -30,14 +34,26 @@ import {
   Download,
   FileSpreadsheet,
   RefreshCw,
-  Target
+  Target,
+  TrendingUp,
+  Users,
+  MessageCircle,
+  DollarSign,
+  Percent,
+  PieChart as PieIcon,
+  Activity,
+  Moon,
+  Sun,
+  Zap,
+  Radio
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 const MS_DAY = 86400000;
-const COLORS_PIE = ['#ec4899', '#3b82f6', '#22c55e', '#a855f7', '#f59e0b', '#94a3b8'];
+const MS_MIN = 60000;
+const COLORS_PIE = ['#e11d48', '#2563eb', '#16a34a', '#9333ea', '#d97706', '#64748b'];
 const STORAGE_TARGET = 'analytics_sales_target_monthly';
 
 function startOfDay(d: Date): number {
@@ -45,27 +61,41 @@ function startOfDay(d: Date): number {
   x.setHours(0, 0, 0, 0);
   return x.getTime();
 }
-
 function startOfMonth(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth(), 1).getTime();
 }
-
 function endOfMonth(d: Date): number {
   return new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999).getTime();
 }
-
 function fmtDate(ms: number): string {
   return new Date(ms).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' });
 }
+function fmtTime(ms: number): string {
+  return new Date(ms).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+type SectionId =
+  | 'overview'
+  | 'sales'
+  | 'messaging'
+  | 'managers'
+  | 'sources'
+  | 'finance'
+  | 'live';
 
 export const AnalyticsPage: React.FC = () => {
   const companyId = useCompanyId();
   const reportRef = useRef<HTMLDivElement>(null);
+  const [dark, setDark] = useState(() => localStorage.getItem('analytics_dark') === '1');
   const [loading, setLoading] = useState(true);
   const [deals, setDeals] = useState<DealRow[]>([]);
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [messages, setMessages] = useState<MessageRow[]>([]);
-  const [stageNames, setStageNames] = useState<{ id: string; name: string }[]>([]);
+  const [managersList, setManagersList] = useState<ManagerRow[]>([]);
+  const [stageMeta, setStageMeta] = useState<{ id: string; name: string; type: string }[]>([]);
+  const [liveFeed, setLiveFeed] = useState<MessageRow[]>([]);
+  const [activeSection, setActiveSection] = useState<SectionId>('overview');
+
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 29);
@@ -80,50 +110,105 @@ export const AnalyticsPage: React.FC = () => {
     Number(localStorage.getItem(STORAGE_TARGET) || '0')
   );
 
-  const load = useCallback(async () => {
-    if (!companyId) return;
-    setLoading(true);
-    try {
-      const [d, c, pipelines] = await Promise.all([
-        fetchDealsForCompany(companyId),
-        fetchConversationsForCompany(companyId),
-        listPipelines(companyId)
-      ]);
-      setDeals(d);
-      setConversations(c);
-      const pid = pipelines[0]?.id;
-      if (pid) {
-        const stages = await listStages(companyId, pid);
-        setStageNames(stages.map((s) => ({ id: s.id, name: s.name })));
-      } else setStageNames([]);
-      const since = Date.now() - 400 * MS_DAY;
-      const msg = await fetchMessagesSince(companyId, since);
-      setMessages(msg);
-      if (msg.length === 0 && d.length > 0) {
-        toast('Сообщения WhatsApp за период не загружены (нужен индекс Firestore: whatsappMessages companyId + createdAt)', {
-          duration: 6000
-        });
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark);
+    localStorage.setItem('analytics_dark', dark ? '1' : '0');
+  }, [dark]);
+
+  const load = useCallback(
+    async (force = false) => {
+      if (!companyId) return;
+      if (force) invalidateAnalyticsCache();
+      setLoading(true);
+      try {
+        const [d, c, mgr, pipelines] = await Promise.all([
+          fetchDealsForCompany(companyId, !force),
+          fetchConversationsForCompany(companyId, !force),
+          fetchChatManagers(companyId),
+          listPipelines(companyId)
+        ]);
+        setDeals(d);
+        setConversations(c);
+        setManagersList(mgr);
+        const pid = pipelines[0]?.id;
+        if (pid) {
+          const stages = await listStages(companyId, pid);
+          setStageMeta(stages.map((s) => ({ id: s.id, name: s.name, type: s.type })));
+        } else setStageMeta([]);
+        const since = Date.now() - 400 * MS_DAY;
+        const msg = await fetchMessagesSince(companyId, since, 8000, !force);
+        setMessages(msg);
+        if (msg.length === 0 && d.length > 0) {
+          toast('Для графиков WhatsApp создайте индекс: whatsappMessages (companyId + createdAt)', {
+            duration: 5000
+          });
+        }
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : 'Ошибка загрузки');
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Ошибка загрузки');
-    } finally {
-      setLoading(false);
-    }
-  }, [companyId]);
+    },
+    [companyId]
+  );
 
   useEffect(() => {
-    load();
+    load(false);
   }, [load]);
+
+  useEffect(() => {
+    if (!companyId) return;
+    let cancelled = false;
+    const tick = async () => {
+      const since = Date.now() - 10 * MS_MIN;
+      const recent = await fetchRecentMessages(companyId, since, 80);
+      if (!cancelled) setLiveFeed(recent);
+    };
+    tick();
+    const id = setInterval(tick, 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, [companyId]);
+
+  const wonStageIds = useMemo(
+    () => new Set(stageMeta.filter((s) => s.type === 'won').map((s) => s.id)),
+    [stageMeta]
+  );
+  const managerName = useCallback(
+    (id: string | null) => {
+      if (!id) return '—';
+      return managersList.find((m) => m.id === id)?.name ?? id.slice(0, 8) + '…';
+    },
+    [managersList]
+  );
 
   const fromMs = useMemo(() => new Date(dateFrom).getTime(), [dateFrom]);
   const toMs = useMemo(() => new Date(dateTo).getTime() + MS_DAY - 1, [dateTo]);
+  const now = Date.now();
+  const todayStart = startOfDay(new Date());
+  const monthStart = startOfMonth(new Date());
+  const monthEnd = endOfMonth(new Date());
 
-  const dealsActive = useMemo(
-    () => deals.filter((x) => !x.deletedAt),
-    [deals]
-  );
+  const dealsActive = useMemo(() => deals.filter((x) => !x.deletedAt), [deals]);
 
   const dealsFiltered = useMemo(() => {
+    return dealsActive.filter((d) => {
+      if (d.createdAt < fromMs || d.createdAt > toMs) return false;
+      if (managerId !== 'all') {
+        if (managerId === 'none' && d.responsibleUserId) return false;
+        if (managerId !== 'none' && d.responsibleUserId !== managerId) return false;
+      }
+      if (sourceFilter !== 'all' && (d.source || 'Ручной') !== sourceFilter) return false;
+      if (channelFilter === 'whatsapp' && !d.whatsappConversationId) return false;
+      if (channelFilter === 'instagram' && !(d.source || '').toLowerCase().includes('insta')) return false;
+      if (channelFilter === 'other' && d.whatsappConversationId) return false;
+      return true;
+    });
+  }, [dealsActive, fromMs, toMs, managerId, sourceFilter, channelFilter]);
+
+  const dealsAllTimeFiltered = useMemo(() => {
     return dealsActive.filter((d) => {
       if (managerId !== 'all') {
         if (managerId === 'none' && d.responsibleUserId) return false;
@@ -131,49 +216,37 @@ export const AnalyticsPage: React.FC = () => {
       }
       if (sourceFilter !== 'all' && (d.source || 'Ручной') !== sourceFilter) return false;
       if (channelFilter === 'whatsapp' && !d.whatsappConversationId) return false;
+      if (channelFilter === 'instagram' && !(d.source || '').toLowerCase().includes('insta')) return false;
       if (channelFilter === 'other' && d.whatsappConversationId) return false;
       return true;
     });
   }, [dealsActive, managerId, sourceFilter, channelFilter]);
 
-  const managers = useMemo(() => {
-    const m = new Map<string, number>();
-    dealsActive.forEach((d) => {
-      if (d.responsibleUserId) m.set(d.responsibleUserId, (m.get(d.responsibleUserId) || 0) + 1);
-    });
-    return Array.from(m.keys());
-  }, [dealsActive]);
-
-  const now = Date.now();
-  const todayStart = startOfDay(new Date());
-  const monthStart = startOfMonth(new Date());
-  const monthEnd = endOfMonth(new Date());
+  const messagesInRange = useMemo(
+    () => messages.filter((m) => !m.system && m.createdAt >= fromMs && m.createdAt <= toMs),
+    [messages, fromMs, toMs]
+  );
 
   const kpi = useMemo(() => {
-    const leadsToday = dealsFiltered.filter(
-      (d) => d.createdAt >= todayStart && d.createdAt <= now
-    ).length;
-    const leadsMonth = dealsFiltered.filter(
+    const leadsToday = dealsAllTimeFiltered.filter((d) => d.createdAt >= todayStart).length;
+    const leadsMonth = dealsAllTimeFiltered.filter(
       (d) => d.createdAt >= monthStart && d.createdAt <= monthEnd
     ).length;
-    const dealsMonth = dealsFiltered.filter(
+    const dealsMonth = dealsAllTimeFiltered.filter(
       (d) => d.createdAt >= monthStart && d.createdAt <= monthEnd
     ).length;
-    const revenueMonth = dealsFiltered
+    const revenueMonth = dealsAllTimeFiltered
       .filter((d) => d.createdAt >= monthStart && d.createdAt <= monthEnd)
       .reduce((s, d) => s + d.amount, 0);
-    const wonStages = stageNames.length;
-    const firstStageId = stageNames[0]?.id;
-    const wonApprox =
-      dealsFiltered.filter((d) => stageNames.some((s, i) => i >= stageNames.length - 2 && d.stageId === s.id))
-        .length || dealsFiltered.filter((d) => d.amount > 0).length;
-    const created = dealsFiltered.length;
-    const conversion = created ? Math.min(100, Math.round((wonApprox / Math.max(1, created)) * 100)) : 0;
+    const wonCount = dealsAllTimeFiltered.filter((d) => wonStageIds.has(d.stageId)).length;
+    const conversion =
+      dealsAllTimeFiltered.length > 0
+        ? Math.min(100, Math.round((wonCount / dealsAllTimeFiltered.length) * 100))
+        : 0;
+    const withAmount = dealsAllTimeFiltered.filter((d) => d.amount > 0);
     const avgDeal =
-      dealsFiltered.length > 0
-        ? Math.round(
-            dealsFiltered.reduce((s, d) => s + d.amount, 0) / dealsFiltered.length
-          )
+      withAmount.length > 0
+        ? Math.round(withAmount.reduce((s, d) => s + d.amount, 0) / withAmount.length)
         : 0;
     return {
       leadsToday,
@@ -181,31 +254,33 @@ export const AnalyticsPage: React.FC = () => {
       dealsMonth,
       revenueMonth,
       conversion,
-      avgDeal,
-      firstStageId
+      avgDeal
     };
-  }, [dealsFiltered, stageNames, todayStart, monthStart, monthEnd]);
+  }, [dealsAllTimeFiltered, todayStart, monthStart, monthEnd, wonStageIds]);
 
   const funnelData = useMemo(() => {
-    if (!stageNames.length) {
+    const stages = stageMeta.filter((s) => s.type === 'open' || s.type === 'won' || s.type === 'lost');
+    const list = stages.length ? stages : stageMeta;
+    if (!list.length) {
       return [
-        { name: 'Новый лид', value: 0, rate: 100 },
-        { name: 'Контакт', value: 0, rate: 0 },
-        { name: 'Замер', value: 0, rate: 0 },
-        { name: 'Смета', value: 0, rate: 0 },
-        { name: 'Договор', value: 0, rate: 0 },
-        { name: 'Оплата', value: 0, rate: 0 }
+        { name: 'Новый лид', value: 0, fill: '#0ea5e9', pctFromPrev: 100 },
+        { name: 'Контакт', value: 0, fill: '#6366f1', pctFromPrev: 0 },
+        { name: 'Замер', value: 0, fill: '#8b5cf6', pctFromPrev: 0 },
+        { name: 'Смета', value: 0, fill: '#a855f7', pctFromPrev: 0 },
+        { name: 'Договор', value: 0, fill: '#d946ef', pctFromPrev: 0 },
+        { name: 'Оплата', value: 0, fill: '#ec4899', pctFromPrev: 0 }
       ];
     }
-    const base = dealsFiltered.filter((d) => d.createdAt >= fromMs && d.createdAt <= toMs).length;
-    let prev = Math.max(1, base);
-    return stageNames.slice(0, 8).map((s, i) => {
-      const count = dealsFiltered.filter((d) => d.stageId === s.id).length;
-      const rate = i === 0 ? 100 : Math.round((count / prev) * 100);
-      prev = Math.max(1, count);
-      return { name: s.name, value: count, rate };
+    let prev = 0;
+    return list.slice(0, 8).map((s, i) => {
+      const value = dealsAllTimeFiltered.filter((d) => d.stageId === s.id).length;
+      const pctFromPrev =
+        i === 0 ? 100 : prev > 0 ? Math.round((value / prev) * 100) : value > 0 ? 100 : 0;
+      prev = Math.max(value, 1);
+      const fills = ['#0ea5e9', '#6366f1', '#8b5cf6', '#a855f7', '#d946ef', '#ec4899', '#f43f5e', '#10b981'];
+      return { name: s.name, value, fill: fills[i % fills.length], pctFromPrev };
     });
-  }, [stageNames, dealsFiltered, fromMs, toMs]);
+  }, [stageMeta, dealsAllTimeFiltered]);
 
   const leadsDays = useMemo(() => {
     const days =
@@ -221,35 +296,28 @@ export const AnalyticsPage: React.FC = () => {
     const start = Date.now() - days * MS_DAY;
     const map = new Map<string, number>();
     for (let i = 0; i < days; i++) {
-      const t = start + i * MS_DAY;
-      map.set(startOfDay(new Date(t)).toString(), 0);
+      map.set(startOfDay(new Date(start + i * MS_DAY)).toString(), 0);
     }
-    dealsFiltered.forEach((d) => {
+    dealsAllTimeFiltered.forEach((d) => {
       if (d.createdAt < start || d.createdAt > now) return;
       const key = startOfDay(new Date(d.createdAt)).toString();
-      map.set(key, (map.get(key) || 0) + 1);
+      if (map.has(key)) map.set(key, (map.get(key) || 0) + 1);
     });
     return Array.from(map.entries())
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([k, v]) => ({ date: fmtDate(Number(k)), leads: v }));
-  }, [dealsFiltered, leadsRange, now]);
-
-  const messagesInRange = useMemo(
-    () => messages.filter((m) => !m.system && m.createdAt >= fromMs && m.createdAt <= toMs),
-    [messages, fromMs, toMs]
-  );
+  }, [dealsAllTimeFiltered, leadsRange, now]);
 
   const waKpi = useMemo(() => {
     const incomingToday = messages.filter(
       (m) => m.direction === 'incoming' && !m.system && m.createdAt >= todayStart
     ).length;
     const convToday = new Set(
-      messages
-        .filter((m) => m.createdAt >= todayStart)
-        .map((m) => m.conversationId)
+      messages.filter((m) => m.createdAt >= todayStart).map((m) => m.conversationId)
     ).size;
-    const replies = messages.filter((m) => m.direction === 'outgoing' && !m.system && m.createdAt >= todayStart)
-      .length;
+    const replies = messages.filter(
+      (m) => m.direction === 'outgoing' && !m.system && m.createdAt >= todayStart
+    ).length;
     const unread = conversations.reduce((s, c) => s + c.unreadCount, 0);
     const pairs: number[] = [];
     const byConv = new Map<string, MessageRow[]>();
@@ -267,28 +335,18 @@ export const AnalyticsPage: React.FC = () => {
         }
       }
     });
-    const avgMs =
-      pairs.length > 0 ? pairs.reduce((a, b) => a + b, 0) / pairs.length : 0;
-    const avgMin = Math.round(avgMs / 60000);
-    return {
-      incomingToday,
-      convToday,
-      replies,
-      unread,
-      avgMin
-    };
+    const avgMin =
+      pairs.length > 0 ? Math.round(pairs.reduce((a, b) => a + b, 0) / pairs.length / MS_MIN) : 0;
+    return { incomingToday, convToday, replies, unread, avgMin };
   }, [messages, conversations, todayStart]);
 
   const messagesPerDay = useMemo(() => {
     const days = 30;
     const start = Date.now() - days * MS_DAY;
     const map = new Map<string, number>();
-    for (let i = 0; i < days; i++) {
-      map.set(startOfDay(new Date(start + i * MS_DAY)).toString(), 0);
-    }
+    for (let i = 0; i < days; i++) map.set(startOfDay(new Date(start + i * MS_DAY)).toString(), 0);
     messages.forEach((m) => {
-      if (m.system || m.direction !== 'incoming') return;
-      if (m.createdAt < start) return;
+      if (m.system || m.direction !== 'incoming' || m.createdAt < start) return;
       const key = startOfDay(new Date(m.createdAt)).toString();
       map.set(key, (map.get(key) || 0) + 1);
     });
@@ -298,67 +356,115 @@ export const AnalyticsPage: React.FC = () => {
   }, [messages]);
 
   const convMetrics = useMemo(() => {
-    const newConv = conversations.filter((c) => c.createdAt >= todayStart).length;
-    const active = conversations.filter((c) => c.status === 'active').length;
-    const closed = conversations.filter((c) => c.status === 'closed' || c.status === 'archived').length;
-    return { newConv, active, closed };
+    return {
+      newConv: conversations.filter((c) => c.createdAt >= todayStart).length,
+      active: conversations.filter((c) => c.status === 'active').length,
+      closed: conversations.filter((c) => c.status === 'closed' || c.status === 'archived').length
+    };
   }, [conversations, todayStart]);
-
-  const managerTable = useMemo(() => {
-    const rows: Record<
-      string,
-      { handled: number; replies: number; times: number[] }
-    > = {};
-    messagesInRange.forEach((m) => {
-      const key = m.conversationId;
-      if (!rows[key]) rows[key] = { handled: 0, replies: 0, times: [] };
-      if (m.direction === 'incoming') rows[key].handled++;
-      if (m.direction === 'outgoing') rows[key].replies++;
-    });
-    const byMgr = new Map<string, { messages: number; replies: number; times: number[] }>();
-    dealsFiltered.forEach((d) => {
-      const id = d.responsibleUserId || '—';
-      if (!byMgr.has(id)) byMgr.set(id, { messages: 0, replies: 0, times: [] });
-    });
-    messagesInRange.forEach((m) => {
-      const conv = conversations.find((c) => c.id === m.conversationId);
-      const deal = dealsFiltered.find((d) => d.whatsappConversationId === m.conversationId);
-      const mgr = deal?.responsibleUserId || '—';
-      const row = byMgr.get(mgr) || { messages: 0, replies: 0, times: [] };
-      if (m.direction === 'incoming') row.messages++;
-      if (m.direction === 'outgoing') row.replies++;
-      byMgr.set(mgr, row);
-    });
-    const arr = Array.from(byMgr.entries()).map(([id, v]) => ({
-      manager: id === '—' ? 'Не назначен' : id.slice(0, 8) + '…',
-      handled: v.messages,
-      replies: v.replies,
-      avgMin:
-        v.times.length > 0
-          ? Math.round(v.times.reduce((a, b) => a + b, 0) / v.times.length / 60000)
-          : waKpi.avgMin
-    }));
-    return arr.length ? arr : [{ manager: '—', handled: 0, replies: 0, avgMin: waKpi.avgMin }];
-  }, [messagesInRange, dealsFiltered, conversations, waKpi.avgMin]);
 
   const msgDealConversion = useMemo(() => {
     const incoming = messagesInRange.filter((m) => m.direction === 'incoming').length;
-    const withDeal = new Set(
-      dealsFiltered.filter((d) => d.whatsappConversationId).map((d) => d.whatsappConversationId)
-    ).size;
-    const dealsFromWa = dealsFiltered.filter((d) => d.whatsappConversationId).length;
-    const rate = incoming > 0 ? Math.round((dealsFromWa / Math.max(1, conversations.length)) * 100) : 0;
-    return { incoming, dealsFromWa, rate, withDeal };
+    const dealsWa = dealsFiltered.filter((d) => d.whatsappConversationId).length;
+    const rate =
+      incoming > 0 ? Math.min(100, Math.round((dealsWa / Math.max(1, conversations.length)) * 100)) : 0;
+    return { incoming, dealsWa, rate };
   }, [messagesInRange, dealsFiltered, conversations.length]);
 
+  const managerPerf = useMemo(() => {
+    const convToManager = new Map<string, string | null>();
+    dealsAllTimeFiltered.forEach((d) => {
+      if (d.whatsappConversationId)
+        convToManager.set(d.whatsappConversationId, d.responsibleUserId);
+    });
+    const rows: Record<
+      string,
+      { leads: number; closed: number; revenue: number; msgIn: number; msgOut: number; times: number[] }
+    > = {};
+    const ensure = (id: string) => {
+      if (!rows[id]) rows[id] = { leads: 0, closed: 0, revenue: 0, msgIn: 0, msgOut: 0, times: [] };
+      return rows[id];
+    };
+    dealsAllTimeFiltered.forEach((d) => {
+      const id = d.responsibleUserId || '__none__';
+      const r = ensure(id);
+      if (d.createdAt >= fromMs && d.createdAt <= toMs) r.leads++;
+      if (wonStageIds.has(d.stageId) && d.createdAt >= fromMs && d.createdAt <= toMs) {
+        r.closed++;
+        r.revenue += d.amount;
+      }
+    });
+    messagesInRange.forEach((m) => {
+      if (m.system) return;
+      const mgr =
+        convToManager.get(m.conversationId) ||
+        dealsAllTimeFiltered.find((d) => d.whatsappConversationId === m.conversationId)
+          ?.responsibleUserId ||
+        '__none__';
+      const id = mgr || '__none__';
+      const r = ensure(id);
+      if (m.direction === 'incoming') r.msgIn++;
+      else r.msgOut++;
+    });
+    const byConv: Record<string, MessageRow[]> = {};
+    messagesInRange.forEach((m) => {
+      if (m.system) return;
+      (byConv[m.conversationId] = byConv[m.conversationId] || []).push(m);
+    });
+    Object.values(byConv).forEach((arr) => {
+      arr.sort((a, b) => a.createdAt - b.createdAt);
+      const mgr =
+        convToManager.get(arr[0]?.conversationId) ||
+        '__none__';
+      for (let i = 0; i < arr.length - 1; i++) {
+        if (arr[i].direction === 'incoming' && arr[i + 1].direction === 'outgoing') {
+          ensure(mgr).times.push(arr[i + 1].createdAt - arr[i].createdAt);
+        }
+      }
+    });
+    return Object.entries(rows).map(([id, v]) => ({
+      manager: id === '__none__' ? 'Не назначен' : managerName(id),
+      leads: v.leads,
+      closed: v.closed,
+      revenue: v.revenue,
+      msgHandled: v.msgIn + v.msgOut,
+      avgMin:
+        v.times.length > 0 ? Math.round(v.times.reduce((a, b) => a + b, 0) / v.times.length / MS_MIN) : waKpi.avgMin
+    }));
+  }, [
+    dealsAllTimeFiltered,
+    messagesInRange,
+    fromMs,
+    toMs,
+    wonStageIds,
+    managerName,
+    waKpi.avgMin
+  ]);
+
+  const sourcePie = useMemo(() => {
+    const map = new Map<string, number>();
+    dealsFiltered.forEach((d) => {
+      const s = (d.source || 'Другое').toLowerCase();
+      let key = 'Другое';
+      if (s.includes('whatsapp') || s.includes('wa')) key = 'WhatsApp';
+      else if (s.includes('google')) key = 'Google';
+      else if (s.includes('insta')) key = 'Instagram';
+      else if (s.includes('refer') || s.includes('рекоменд')) key = 'Referral';
+      else if (s.includes('kaspi')) key = 'Kaspi';
+      else if (d.source && d.source.length < 24) key = d.source;
+      map.set(key, (map.get(key) || 0) + 1);
+    });
+    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+  }, [dealsFiltered]);
+
   const unreadAlerts = useMemo(() => {
-    const nowT = Date.now();
+    const t = Date.now();
     let u30 = 0;
     let u60 = 0;
     conversations.forEach((c) => {
       if (c.unreadCount <= 0) return;
       const lastIn = c.lastIncomingAt || c.createdAt;
-      const ageMin = (nowT - lastIn) / 60000;
+      const ageMin = (t - lastIn) / MS_MIN;
       if (ageMin > 30) u30 += c.unreadCount;
       if (ageMin > 60) u60 += c.unreadCount;
     });
@@ -369,22 +475,21 @@ export const AnalyticsPage: React.FC = () => {
     };
   }, [conversations]);
 
-  const sourcePie = useMemo(() => {
-    const map = new Map<string, number>();
-    const labels = ['Instagram', 'Google', 'WhatsApp', 'Referral', 'Kaspi', 'Другое'];
-    dealsFiltered.forEach((d) => {
-      const s = (d.source || 'Другое').toLowerCase();
-      let key = 'Другое';
-      if (s.includes('whatsapp') || s.includes('wa')) key = 'WhatsApp';
-      else if (s.includes('google')) key = 'Google';
-      else if (s.includes('insta')) key = 'Instagram';
-      else if (s.includes('refer') || s.includes('рекоменд')) key = 'Referral';
-      else if (s.includes('kaspi')) key = 'Kaspi';
-      else if (d.source && labels.includes(d.source)) key = d.source;
-      map.set(key, (map.get(key) || 0) + 1);
-    });
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
-  }, [dealsFiltered]);
+  const liveMetrics = useMemo(() => {
+    const tenMin = now - 10 * MS_MIN;
+    const hourAgo = now - 60 * MS_MIN;
+    const msg10 = liveFeed.filter((m) => m.createdAt >= tenMin && !m.system).length;
+    const activeConv = conversations.filter((c) => c.status === 'active').length;
+    const unreadConv = conversations.filter((c) => c.unreadCount > 0).length;
+    const leadsHour = dealsAllTimeFiltered.filter((d) => d.createdAt >= hourAgo).length;
+    return { msg10, activeConv, unreadConv, leadsHour };
+  }, [liveFeed, conversations, dealsAllTimeFiltered, now]);
+
+  const convById = useMemo(() => {
+    const m = new Map<string, ConversationRow>();
+    conversations.forEach((c) => m.set(c.id, c));
+    return m;
+  }, [conversations]);
 
   const saveTarget = () => {
     localStorage.setItem(STORAGE_TARGET, String(salesTarget));
@@ -393,343 +498,515 @@ export const AnalyticsPage: React.FC = () => {
 
   const exportCsv = () => {
     const lines = [
-      ['Метрика', 'Значение'],
+      ['Показатель', 'Значение'],
       ['Лиды сегодня', String(kpi.leadsToday)],
-      ['Лиды месяц', String(kpi.leadsMonth)],
       ['Выручка месяц', String(kpi.revenueMonth)],
       ['Входящие WA сегодня', String(waKpi.incomingToday)],
       ['Непрочитано', String(waKpi.unread)]
     ];
-    const blob = new Blob([lines.map((r) => r.join(',')).join('\n')], {
+    const blob = new Blob(['\ufeff' + lines.map((r) => r.join(',')).join('\n')], {
       type: 'text/csv;charset=utf-8'
     });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `analytics-${companyId}-${dateFrom}.csv`;
     a.click();
-    toast.success('CSV скачан');
+    toast.success('CSV');
   };
 
   const exportPdf = async () => {
     if (!reportRef.current) return;
     toast.loading('PDF…', { id: 'pdf' });
     try {
-      const canvas = await html2canvas(reportRef.current, { scale: 1.2, useCORS: true });
+      const canvas = await html2canvas(reportRef.current, { scale: 1.15, useCORS: true });
       const pdf = new jsPDF('p', 'mm', 'a4');
       const w = pdf.internal.pageSize.getWidth();
       const h = (canvas.height * w) / canvas.width;
-      let y = 0;
-      let left = 0;
-      if (h > pdf.internal.pageSize.getHeight()) {
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, w, h);
-      } else {
-        pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, w, h);
-      }
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, w, Math.min(h, 280));
       pdf.save(`analytics-${dateFrom}.pdf`);
-      toast.success('PDF готов', { id: 'pdf' });
+      toast.success('Готово', { id: 'pdf' });
     } catch {
-      toast.error('PDF ошибка', { id: 'pdf' });
+      toast.error('Ошибка PDF', { id: 'pdf' });
     }
   };
 
+  const sections: { id: SectionId; label: string }[] = [
+    { id: 'overview', label: 'Обзор' },
+    { id: 'sales', label: 'Продажи' },
+    { id: 'messaging', label: 'Сообщения' },
+    { id: 'managers', label: 'Менеджеры' },
+    { id: 'sources', label: 'Источники' },
+    { id: 'finance', label: 'Финансы' },
+    { id: 'live', label: 'Live' }
+  ];
+
+  const shell = (child: React.ReactNode) => (
+    <div
+      className={`min-h-full transition-colors ${
+        dark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'
+      }`}
+    >
+      {child}
+    </div>
+  );
+
   if (!companyId) {
-    return <div className="p-4 text-slate-500">Компания не выбрана</div>;
+    return shell(<div className="p-6 text-slate-500">Компания не выбрана</div>);
   }
 
-  return (
-    <div className="min-h-full bg-slate-100 pb-8">
-      <div className="sticky top-0 z-20 bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-[1600px] mx-auto px-3 sm:px-4 py-3 flex flex-wrap items-center gap-2">
-          <BarChart3 className="w-6 h-6 text-emerald-600 shrink-0" />
-          <h1 className="text-lg font-bold text-slate-900">Аналитика CRM</h1>
-          <button
-            type="button"
-            onClick={load}
-            className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50"
-            aria-label="Обновить"
+  return shell(
+    <>
+      <header
+        className={`sticky top-0 z-30 border-b backdrop-blur-md ${
+          dark ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'
+        }`}
+      >
+        <div className="max-w-[1680px] mx-auto px-3 sm:px-5 py-3 flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg">
+                <BarChart3 className="w-6 h-6" />
+              </div>
+              <div>
+                <h1 className="text-lg font-bold tracking-tight">Аналитика CRM</h1>
+                <p className={`text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Продажи + WhatsApp · обновление данных кэшем ~45 с
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDark(!dark)}
+              className={`p-2 rounded-xl border ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}
+            >
+              {dark ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => load(true)}
+              className={`p-2 rounded-xl border ${dark ? 'border-slate-700' : 'border-slate-200'}`}
+            >
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <div className="flex flex-wrap gap-2 ml-auto">
+              <button
+                type="button"
+                onClick={exportCsv}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold border ${
+                  dark ? 'border-slate-600 bg-slate-800' : 'border-slate-200 bg-white'
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4" /> CSV
+              </button>
+              <button
+                type="button"
+                onClick={exportPdf}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md"
+              >
+                <Download className="w-4 h-4" /> PDF
+              </button>
+            </div>
+          </div>
+          <div
+            className={`flex flex-wrap gap-2 p-2 rounded-xl ${dark ? 'bg-slate-800/80' : 'bg-slate-50'}`}
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <div className="flex flex-wrap gap-2 ml-auto items-center">
             <input
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              className="border rounded-lg px-2 py-1.5 text-sm"
+              className={`rounded-lg px-2 py-1.5 text-sm border ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-200'}`}
             />
-            <span className="text-slate-400">—</span>
+            <span className="self-center text-slate-500">—</span>
             <input
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              className="border rounded-lg px-2 py-1.5 text-sm"
+              className={`rounded-lg px-2 py-1.5 text-sm border ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-200'}`}
             />
             <select
               value={managerId}
               onChange={(e) => setManagerId(e.target.value)}
-              className="border rounded-lg px-2 py-1.5 text-sm max-w-[140px]"
+              className={`rounded-lg px-2 py-1.5 text-sm border max-w-[160px] ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white'}`}
             >
               <option value="all">Все менеджеры</option>
               <option value="none">Без менеджера</option>
-              {managers.map((id) => (
-                <option key={id} value={id}>
-                  {id.slice(0, 10)}…
+              {managersList.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
                 </option>
               ))}
             </select>
             <select
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value)}
-              className="border rounded-lg px-2 py-1.5 text-sm"
+              className={`rounded-lg px-2 py-1.5 text-sm border ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white'}`}
             >
-              <option value="all">Все источники</option>
+              <option value="all">Источник: все</option>
               <option value="WhatsApp">WhatsApp</option>
+              <option value="Instagram">Instagram</option>
+              <option value="Google">Google</option>
               <option value="Звонок">Звонок</option>
               <option value="Сайт">Сайт</option>
-              <option value="Ручной">Ручной</option>
             </select>
             <select
               value={channelFilter}
               onChange={(e) => setChannelFilter(e.target.value)}
-              className="border rounded-lg px-2 py-1.5 text-sm"
+              className={`rounded-lg px-2 py-1.5 text-sm border ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white'}`}
             >
-              <option value="all">Все каналы</option>
+              <option value="all">Канал: все</option>
               <option value="whatsapp">WhatsApp</option>
+              <option value="instagram">Instagram (по источнику)</option>
               <option value="other">Без WA</option>
             </select>
-            <button
-              type="button"
-              onClick={exportCsv}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-slate-200 text-sm font-medium"
-            >
-              <FileSpreadsheet className="w-4 h-4" />
-              CSV
-            </button>
-            <button
-              type="button"
-              onClick={exportPdf}
-              className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm font-medium"
-            >
-              <Download className="w-4 h-4" />
-              PDF
-            </button>
           </div>
+          <nav className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+            {sections.map((s) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => {
+                  setActiveSection(s.id);
+                  document.getElementById(`sec-${s.id}`)?.scrollIntoView({ behavior: 'smooth' });
+                }}
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                  activeSection === s.id
+                    ? 'bg-violet-600 text-white'
+                    : dark
+                      ? 'text-slate-400 hover:bg-slate-800'
+                      : 'text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </nav>
         </div>
-      </div>
+      </header>
 
       {loading && !deals.length ? (
-        <div className="flex justify-center py-24">
+        <div className="flex justify-center py-32">
           <LoadingSpinner />
         </div>
       ) : (
-        <div ref={reportRef} className="max-w-[1600px] mx-auto px-3 sm:px-4 py-4 space-y-8">
-          {/* KPI */}
-          <section>
-            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">
-              Обзор KPI
+        <div
+          ref={reportRef}
+          className="max-w-[1680px] mx-auto px-3 sm:px-5 py-6 space-y-10 pb-24"
+        >
+          {/* 1 Overview KPI */}
+          <section id="sec-overview">
+            <h2
+              className={`text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${
+                dark ? 'text-violet-400' : 'text-violet-600'
+              }`}
+            >
+              <Zap className="w-4 h-4" /> Обзор KPI
             </h2>
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-thin -mx-1 px-1">
+            <div className="flex gap-4 overflow-x-auto pb-2 snap-x scrollbar-thin -mx-1 px-1">
               {[
-                { label: 'Лиды сегодня', value: kpi.leadsToday, tone: 'bg-emerald-50 border-emerald-200' },
-                { label: 'Лиды за месяц', value: kpi.leadsMonth, tone: 'bg-white border-slate-200' },
-                { label: 'Сделок за месяц', value: kpi.dealsMonth, tone: 'bg-white border-slate-200' },
+                {
+                  label: 'Лиды сегодня',
+                  value: kpi.leadsToday,
+                  icon: Users,
+                  grad: 'from-cyan-500 to-blue-600'
+                },
+                {
+                  label: 'Лиды за месяц',
+                  value: kpi.leadsMonth,
+                  icon: TrendingUp,
+                  grad: 'from-blue-500 to-indigo-600'
+                },
+                {
+                  label: 'Сделок за месяц',
+                  value: kpi.dealsMonth,
+                  icon: BarChart3,
+                  grad: 'from-indigo-500 to-violet-600'
+                },
                 {
                   label: 'Выручка за месяц',
-                  value: `${kpi.revenueMonth.toLocaleString('ru-RU')} ₸`,
-                  tone: 'bg-amber-50 border-amber-200'
+                  value: `${(kpi.revenueMonth / 1000).toFixed(0)}k ₸`,
+                  sub: kpi.revenueMonth.toLocaleString('ru-RU') + ' ₸',
+                  icon: DollarSign,
+                  grad: 'from-emerald-500 to-teal-600'
                 },
-                { label: 'Конверсия %', value: kpi.conversion, tone: 'bg-violet-50 border-violet-200' },
+                {
+                  label: 'Конверсия',
+                  value: `${kpi.conversion}%`,
+                  icon: Percent,
+                  grad: 'from-amber-500 to-orange-600'
+                },
                 {
                   label: 'Средний чек',
-                  value: `${kpi.avgDeal.toLocaleString('ru-RU')} ₸`,
-                  tone: 'bg-white border-slate-200'
+                  value: `${(kpi.avgDeal / 1000).toFixed(0)}k ₸`,
+                  icon: Target,
+                  grad: 'from-rose-500 to-pink-600'
                 }
               ].map((c) => (
                 <div
                   key={c.label}
-                  className={`min-w-[140px] sm:min-w-[160px] snap-start rounded-xl border p-4 shadow-sm ${c.tone}`}
+                  className={`min-w-[158px] sm:min-w-[180px] snap-start rounded-2xl p-4 text-white shadow-xl bg-gradient-to-br ${c.grad}`}
                 >
-                  <p className="text-[11px] font-semibold text-slate-500 uppercase">{c.label}</p>
-                  <p className="text-xl font-bold text-slate-900 mt-1 tabular-nums">{c.value}</p>
+                  <c.icon className="w-8 h-8 opacity-90 mb-3" />
+                  <p className="text-[11px] font-semibold uppercase tracking-wide opacity-90">{c.label}</p>
+                  <p className="text-2xl sm:text-3xl font-black tabular-nums mt-1">{c.value}</p>
+                  {'sub' in c && c.sub && (
+                    <p className="text-[10px] opacity-80 mt-0.5 truncate max-w-full">{c.sub}</p>
+                  )}
                 </div>
               ))}
             </div>
           </section>
 
-          {/* Funnel + Leads chart */}
-          <div className="grid lg:grid-cols-2 gap-6">
-            <section className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-slate-800 mb-4">Воронка продаж</h2>
-              <div className="h-72 w-full min-w-0">
+          {/* Unread alerts */}
+          <section
+            className={`rounded-2xl border p-4 ${
+              dark ? 'bg-red-950/40 border-red-900' : 'bg-red-50 border-red-200'
+            }`}
+          >
+            <h3 className={`text-sm font-bold mb-3 ${dark ? 'text-red-300' : 'text-red-800'}`}>
+              Непрочитанные (важно)
+            </h3>
+            <div className="grid sm:grid-cols-3 gap-3">
+              {[
+                { label: 'Сейчас непрочитано', v: unreadAlerts.now, tone: 'bg-red-600 text-white' },
+                { label: '> 30 мин с входящего', v: unreadAlerts.u30, tone: 'bg-red-700 text-white' },
+                { label: '> 1 час', v: unreadAlerts.u60, tone: 'bg-red-900 text-white' }
+              ].map((x) => (
+                <div
+                  key={x.label}
+                  className={`rounded-xl px-4 py-3 ${x.tone} shadow-lg`}
+                >
+                  <p className="text-xs font-semibold opacity-90">{x.label}</p>
+                  <p className="text-3xl font-black mt-1 tabular-nums">{x.v}</p>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* 2 Sales funnel + 3 Leads graph */}
+          <section id="sec-sales" className="grid lg:grid-cols-2 gap-6">
+            <div
+              className={`rounded-2xl border p-5 shadow-sm ${
+                dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+              }`}
+            >
+              <h2 className="text-base font-bold mb-1">Воронка продаж</h2>
+              <p className={`text-xs mb-4 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Число сделок по этапу · % от предыдущего этапа
+              </p>
+              <div className="h-80 w-full min-w-0">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={funnelData} layout="vertical" margin={{ left: 8, right: 16 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" />
-                    <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} />
-                    <Tooltip formatter={(v: number, n: string, p: { payload: { rate: number } }) => [`${v} (${p.payload.rate}%)`, 'Сделок']} />
-                    <Bar dataKey="value" fill="#10b981" radius={[0, 4, 4, 0]} name="Сделок" />
+                  <BarChart data={funnelData} layout="vertical" margin={{ left: 4, right: 24 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
+                    <XAxis type="number" tick={{ fill: dark ? '#94a3b8' : '#64748b', fontSize: 11 }} />
+                    <YAxis
+                      dataKey="name"
+                      type="category"
+                      width={88}
+                      tick={{ fill: dark ? '#94a3b8' : '#64748b', fontSize: 10 }}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        background: dark ? '#1e293b' : '#fff',
+                        border: dark ? '1px solid #334155' : '1px solid #e2e8f0'
+                      }}
+                      formatter={(v: number, _n: string, p: { payload: { pctFromPrev: number } }) => [
+                        `${v} сделок · ${p.payload.pctFromPrev}% от пред.`,
+                        'Этап'
+                      ]}
+                    />
+                    <Bar dataKey="value" radius={[0, 8, 8, 0]} name="Сделок">
+                      {funnelData.map((e, i) => (
+                        <Cell key={i} fill={e.fill} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </section>
-            <section className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+            </div>
+            <div
+              className={`rounded-2xl border p-5 shadow-sm ${
+                dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+              }`}
+            >
               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                <h2 className="text-sm font-bold text-slate-800">Лиды по дням</h2>
+                <h2 className="text-base font-bold">Лиды по дням</h2>
                 <div className="flex gap-1 flex-wrap">
                   {(['1', '7', '30', '90', '365'] as const).map((d) => (
                     <button
                       key={d}
                       type="button"
                       onClick={() => setLeadsRange(d)}
-                      className={`px-2 py-1 rounded-lg text-xs font-semibold ${
-                        leadsRange === d ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
+                        leadsRange === d
+                          ? 'bg-violet-600 text-white'
+                          : dark
+                            ? 'bg-slate-800 text-slate-300'
+                            : 'bg-slate-100 text-slate-600'
                       }`}
                     >
-                      {d === '1' ? 'Сегодня' : d === '365' ? 'Год' : `${d} дн.`}
+                      {d === '1' ? 'Сегодня' : d === '365' ? 'Год' : `${d}д`}
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="h-72 w-full min-w-0">
+              <div className="h-80 w-full min-w-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={leadsDays}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="leads" stroke="#059669" strokeWidth={2} dot={false} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <YAxis tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <Tooltip
+                      contentStyle={{
+                        background: dark ? '#1e293b' : '#fff',
+                        border: dark ? '1px solid #334155' : '1px solid #e2e8f0'
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="leads"
+                      stroke="#7c3aed"
+                      strokeWidth={2}
+                      dot={false}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-            </section>
-          </div>
+            </div>
+          </section>
 
-          {/* WhatsApp KPI */}
-          <section>
-            <h2 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3">
-              WhatsApp
+          {/* 4–6 Messaging */}
+          <section id="sec-messaging">
+            <h2
+              className={`text-xs font-bold uppercase tracking-widest mb-4 ${
+                dark ? 'text-emerald-400' : 'text-emerald-600'
+              }`}
+            >
+              Сообщения WhatsApp
             </h2>
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x -mx-1 px-1">
+            <div className="flex gap-3 overflow-x-auto pb-2 snap-x mb-6">
               {[
-                { label: 'Входящие сегодня', value: waKpi.incomingToday },
-                { label: 'Диалогов сегодня', value: waKpi.convToday },
-                { label: 'Ответов менеджеров', value: waKpi.replies },
-                { label: 'Непрочитано', value: waKpi.unread },
-                { label: 'Ср. время ответа (мин)', value: waKpi.avgMin }
-              ].map((c) => (
+                { label: 'Входящие сегодня', v: waKpi.incomingToday, icon: MessageCircle },
+                { label: 'Диалогов сегодня', v: waKpi.convToday, icon: Users },
+                { label: 'Ответов менеджеров', v: waKpi.replies, icon: Activity },
+                { label: 'Непрочитано', v: waKpi.unread, icon: Radio },
+                { label: 'Ср. ответ (мин)', v: waKpi.avgMin, icon: Zap }
+              ].map((x) => (
                 <div
-                  key={c.label}
-                  className="min-w-[130px] snap-start rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                  key={x.label}
+                  className={`min-w-[140px] snap-start rounded-2xl border p-4 ${
+                    dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'
+                  }`}
                 >
-                  <p className="text-[10px] font-semibold text-slate-500 uppercase leading-tight">{c.label}</p>
-                  <p className="text-lg font-bold text-slate-900 mt-1">{c.value}</p>
+                  <x.icon className={`w-6 h-6 mb-2 ${dark ? 'text-emerald-400' : 'text-emerald-600'}`} />
+                  <p className={`text-[10px] font-bold uppercase ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {x.label}
+                  </p>
+                  <p className="text-xl font-black mt-1 tabular-nums">{x.v}</p>
                 </div>
               ))}
             </div>
-          </section>
-
-          <div className="grid lg:grid-cols-2 gap-6">
-            <section className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-slate-800 mb-4">Входящие сообщения / день</h2>
-              <div className="h-64 w-full min-w-0">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={messagesPerDay}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 9 }} />
-                    <YAxis tick={{ fontSize: 10 }} />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="incoming" stroke="#25D366" strokeWidth={2} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
-            <section className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-slate-800 mb-4">Диалоги</h2>
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="rounded-xl bg-emerald-50 p-4 border border-emerald-100">
-                  <p className="text-2xl font-bold text-emerald-800">{convMetrics.newConv}</p>
-                  <p className="text-xs text-emerald-700 font-medium">Новые сегодня</p>
-                </div>
-                <div className="rounded-xl bg-sky-50 p-4 border border-sky-100">
-                  <p className="text-2xl font-bold text-sky-800">{convMetrics.active}</p>
-                  <p className="text-xs text-sky-700 font-medium">Активные</p>
-                </div>
-                <div className="rounded-xl bg-slate-100 p-4 border border-slate-200">
-                  <p className="text-2xl font-bold text-slate-700">{convMetrics.closed}</p>
-                  <p className="text-xs text-slate-600 font-medium">Закрытые</p>
+            <div className="grid lg:grid-cols-2 gap-6">
+              <div
+                className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+              >
+                <h3 className="font-bold mb-4">Входящие сообщения / день</h3>
+                <div className="h-64 w-full min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={messagesPerDay}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
+                      <XAxis dataKey="date" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
+                      <YAxis tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
+                      <Tooltip />
+                      <Line type="monotone" dataKey="incoming" stroke="#22c55e" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
-            </section>
-          </div>
-
-          {/* Manager table */}
-          <section className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm overflow-hidden">
-            <h2 className="text-sm font-bold text-slate-800 mb-4">Ответы менеджеров</h2>
-            <div className="overflow-x-auto -mx-4 px-4">
-              <table className="w-full text-sm min-w-[500px]">
-                <thead>
-                  <tr className="border-b border-slate-200 text-left text-slate-500 text-xs uppercase">
-                    <th className="py-2 pr-4">Менеджер</th>
-                    <th className="py-2 pr-4">Входящих (оценка)</th>
-                    <th className="py-2 pr-4">Исходящих</th>
-                    <th className="py-2">Ср. ответ (мин)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {managerTable.map((r, i) => (
-                    <tr key={i} className="border-b border-slate-100">
-                      <td className="py-2 pr-4 font-medium">{r.manager}</td>
-                      <td className="py-2 pr-4 tabular-nums">{r.handled}</td>
-                      <td className="py-2 pr-4 tabular-nums">{r.replies}</td>
-                      <td className="py-2 tabular-nums">{r.avgMin}</td>
-                    </tr>
+              <div
+                className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+              >
+                <h3 className="font-bold mb-4">Диалоги</h3>
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  {[
+                    { t: 'Новые сегодня', v: convMetrics.newConv, c: 'from-cyan-500 to-blue-600' },
+                    { t: 'Активные', v: convMetrics.active, c: 'from-violet-500 to-purple-600' },
+                    { t: 'Закрытые', v: convMetrics.closed, c: 'from-slate-500 to-slate-700' }
+                  ].map((x) => (
+                    <div
+                      key={x.t}
+                      className={`rounded-xl p-4 text-white bg-gradient-to-br ${x.c} shadow-lg`}
+                    >
+                      <p className="text-2xl font-black">{x.v}</p>
+                      <p className="text-[10px] font-semibold mt-1 opacity-90">{x.t}</p>
+                    </div>
                   ))}
-                </tbody>
-              </table>
+                </div>
+                <div
+                  className={`mt-6 rounded-xl p-4 border ${dark ? 'border-slate-700 bg-slate-800/50' : 'border-slate-100 bg-slate-50'}`}
+                >
+                  <h4 className="text-sm font-bold mb-2">Сообщения → сделки</h4>
+                  <p className="text-sm">
+                    Входящих в периоде: <strong>{msgDealConversion.incoming}</strong>
+                  </p>
+                  <p className="text-sm">
+                    Сделок с WA: <strong>{msgDealConversion.dealsWa}</strong>
+                  </p>
+                  <p className="text-sm text-violet-600 dark:text-violet-400 font-bold mt-1">
+                    Конверсия ~ {msgDealConversion.rate}%
+                  </p>
+                </div>
+              </div>
             </div>
           </section>
 
-          <div className="grid lg:grid-cols-2 gap-6">
-            <section className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-slate-800 mb-4">Сообщения → сделки</h2>
-              <ul className="space-y-2 text-sm">
-                <li className="flex justify-between border-b border-slate-100 py-2">
-                  <span className="text-slate-600">Входящих в периоде</span>
-                  <span className="font-bold">{msgDealConversion.incoming}</span>
-                </li>
-                <li className="flex justify-between border-b border-slate-100 py-2">
-                  <span className="text-slate-600">Сделок с WhatsApp</span>
-                  <span className="font-bold">{msgDealConversion.dealsFromWa}</span>
-                </li>
-                <li className="flex justify-between py-2">
-                  <span className="text-slate-600">Оценка конверсии</span>
-                  <span className="font-bold text-emerald-700">{msgDealConversion.rate}%</span>
-                </li>
-              </ul>
-            </section>
-            <section className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-slate-800 mb-4">Непрочитанные</h2>
-              <ul className="space-y-3">
-                <li className="flex justify-between items-center rounded-xl bg-red-50 border border-red-100 px-4 py-3">
-                  <span className="font-medium text-red-900">Сейчас непрочитано</span>
-                  <span className="text-xl font-bold text-red-700">{unreadAlerts.now}</span>
-                </li>
-                <li className="flex justify-between items-center rounded-xl bg-amber-50 border border-amber-100 px-4 py-3">
-                  <span className="font-medium text-amber-900">&gt; 30 мин с входящего</span>
-                  <span className="text-xl font-bold text-amber-800">{unreadAlerts.u30}</span>
-                </li>
-                <li className="flex justify-between items-center rounded-xl bg-slate-100 border border-slate-200 px-4 py-3">
-                  <span className="font-medium text-slate-800">&gt; 1 час</span>
-                  <span className="text-xl font-bold text-slate-700">{unreadAlerts.u60}</span>
-                </li>
-              </ul>
-            </section>
-          </div>
+          {/* 8 Managers */}
+          <section id="sec-managers">
+            <h2 className="text-xs font-bold uppercase tracking-widest mb-4 text-indigo-500 dark:text-indigo-400">
+              Эффективность менеджеров
+            </h2>
+            <div
+              className={`rounded-2xl border overflow-hidden ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[640px]">
+                  <thead>
+                    <tr className={`border-b ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                      {['Менеджер', 'Лиды', 'Закрыто', 'Выручка', 'Сообщений', 'Ср. ответ (мин)'].map((h) => (
+                        <th key={h} className="text-left py-3 px-4 text-xs font-bold uppercase">
+                          {h}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {managerPerf.map((r, i) => (
+                      <tr
+                        key={i}
+                        className={`border-b ${dark ? 'border-slate-800 hover:bg-slate-800/50' : 'border-slate-100 hover:bg-slate-50'}`}
+                      >
+                        <td className="py-3 px-4 font-semibold">{r.manager}</td>
+                        <td className="py-3 px-4 tabular-nums">{r.leads}</td>
+                        <td className="py-3 px-4 tabular-nums">{r.closed}</td>
+                        <td className="py-3 px-4 tabular-nums">{r.revenue.toLocaleString('ru-RU')} ₸</td>
+                        <td className="py-3 px-4 tabular-nums">{r.msgHandled}</td>
+                        <td className="py-3 px-4 tabular-nums">{r.avgMin}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
 
-          <div className="grid lg:grid-cols-2 gap-6">
-            <section className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-slate-800 mb-4">Источники лидов</h2>
-              <div className="h-64 w-full min-w-0">
+          {/* 9 Sources + 10 Finance */}
+          <section id="sec-sources" className="grid lg:grid-cols-2 gap-6">
+            <div
+              className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+            >
+              <h3 className="font-bold mb-4 flex items-center gap-2">
+                <PieIcon className="w-5 h-5" /> Источники лидов
+              </h3>
+              <div className="h-72 w-full min-w-0">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
@@ -738,8 +1015,9 @@ export const AnalyticsPage: React.FC = () => {
                       nameKey="name"
                       cx="50%"
                       cy="50%"
-                      outerRadius={80}
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      innerRadius={50}
+                      outerRadius={85}
+                      paddingAngle={2}
                     >
                       {(sourcePie.length ? sourcePie : [{ name: '—', value: 1 }]).map((_, i) => (
                         <Cell key={i} fill={COLORS_PIE[i % COLORS_PIE.length]} />
@@ -750,59 +1028,113 @@ export const AnalyticsPage: React.FC = () => {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-            </section>
-            <section className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-              <h2 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2">
-                <Target className="w-4 h-4" /> План vs факт (месяц)
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-semibold text-slate-500">План выручки (₸)</label>
-                  <div className="flex gap-2 mt-1">
-                    <input
-                      type="number"
-                      className="flex-1 border rounded-lg px-3 py-2 text-sm"
-                      value={salesTarget || ''}
-                      onChange={(e) => setSalesTarget(Number(e.target.value) || 0)}
-                      placeholder="0"
+            </div>
+            <div id="sec-finance" className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <h3 className="font-bold mb-4 flex items-center gap-2">
+                <Target className="w-5 h-5" /> План vs факт (месяц)
+              </h3>
+              <input
+                type="number"
+                placeholder="План выручки ₸"
+                className={`w-full rounded-xl border px-4 py-3 text-sm mb-3 ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`}
+                value={salesTarget || ''}
+                onChange={(e) => setSalesTarget(Number(e.target.value) || 0)}
+              />
+              <button
+                type="button"
+                onClick={saveTarget}
+                className="w-full py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold mb-4"
+              >
+                Сохранить план
+              </button>
+              <p className={`text-sm ${dark ? 'text-slate-400' : 'text-slate-600'}`}>Факт</p>
+              <p className="text-3xl font-black">{kpi.revenueMonth.toLocaleString('ru-RU')} ₸</p>
+              {salesTarget > 0 && (
+                <>
+                  <div className="mt-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-violet-500 to-emerald-500 transition-all"
+                      style={{ width: `${Math.min(100, Math.round((kpi.revenueMonth / salesTarget) * 100))}%` }}
                     />
-                    <button
-                      type="button"
-                      onClick={saveTarget}
-                      className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-semibold"
-                    >
-                      Сохранить
-                    </button>
                   </div>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-4 border border-slate-200">
-                  <p className="text-sm text-slate-600">Факт за текущий месяц</p>
-                  <p className="text-2xl font-bold text-slate-900">
-                    {kpi.revenueMonth.toLocaleString('ru-RU')} ₸
+                  <p className="text-sm font-bold mt-2">
+                    {Math.round((kpi.revenueMonth / salesTarget) * 100)}% плана
                   </p>
-                  {salesTarget > 0 && (
-                    <>
-                      <div className="mt-3 h-3 rounded-full bg-slate-200 overflow-hidden">
-                        <div
-                          className="h-full bg-emerald-500 rounded-full transition-all"
-                          style={{
-                            width: `${Math.min(100, Math.round((kpi.revenueMonth / salesTarget) * 100))}%`
-                          }}
-                        />
-                      </div>
-                      <p className="text-xs text-slate-500 mt-2">
-                        Выполнение:{' '}
-                        {Math.round((kpi.revenueMonth / salesTarget) * 100)}% от плана
-                      </p>
-                    </>
-                  )}
+                </>
+              )}
+            </div>
+          </section>
+
+          {/* 11 Live */}
+          <section id="sec-live">
+            <h2 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 text-rose-500">
+              <Radio className="w-4 h-4 animate-pulse" /> Live · обновление каждые 10 с
+            </h2>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+              {[
+                { l: 'Сообщ. за 10 мин', v: liveMetrics.msg10 },
+                { l: 'Активных диалогов', v: liveMetrics.activeConv },
+                { l: 'С непрочитанным', v: liveMetrics.unreadConv },
+                { l: 'Лидов за час', v: liveMetrics.leadsHour }
+              ].map((x) => (
+                <div
+                  key={x.l}
+                  className={`rounded-xl border p-4 ${dark ? 'bg-slate-900 border-rose-900/50' : 'bg-rose-50 border-rose-200'}`}
+                >
+                  <p className="text-xs font-bold text-rose-600 dark:text-rose-400">{x.l}</p>
+                  <p className="text-2xl font-black mt-1">{x.v}</p>
                 </div>
-              </div>
-            </section>
-          </div>
+              ))}
+            </div>
+            <div
+              className={`rounded-2xl border max-h-[360px] overflow-y-auto ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+            >
+              <table className="w-full text-sm min-w-[520px]">
+                <thead className={`sticky top-0 ${dark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                  <tr>
+                    {['Время', 'Телефон', 'Превью', 'Менеджер', 'Статус'].map((h) => (
+                      <th key={h} className="text-left py-2 px-3 text-xs font-bold">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {liveFeed.slice(0, 40).map((m) => {
+                    const c = convById.get(m.conversationId);
+                    const status =
+                      c && c.unreadCount > 0 ? 'Непрочитано' : m.direction === 'incoming' ? 'Входящее' : 'Исходящее';
+                    return (
+                      <tr
+                        key={m.id}
+                        className={`border-b ${dark ? 'border-slate-800' : 'border-slate-100'}`}
+                      >
+                        <td className="py-2 px-3 whitespace-nowrap text-xs tabular-nums">
+                          {fmtTime(m.createdAt)}
+                        </td>
+                        <td className="py-2 px-3 font-mono text-xs">{c?.phone || '—'}</td>
+                        <td className="py-2 px-3 max-w-[200px] truncate text-xs">
+                          {(m.text || '').replace(/\s+/g, ' ')}
+                        </td>
+                        <td className="py-2 px-3 text-xs truncate max-w-[100px]">
+                          {c?.dealResponsibleName || '—'}
+                        </td>
+                        <td className="py-2 px-3 text-xs">{status}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {liveFeed.length === 0 && (
+                <p className={`p-8 text-center text-sm ${dark ? 'text-slate-500' : 'text-slate-400'}`}>
+                  Нет сообщений за 10 мин (или нет индекса Firestore)
+                </p>
+              )}
+            </div>
+          </section>
         </div>
       )}
-    </div>
+    </>
   );
 };
 

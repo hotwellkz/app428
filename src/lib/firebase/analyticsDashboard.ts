@@ -1,6 +1,6 @@
 /**
- * Загрузка данных для дашборда аналитики CRM + WhatsApp.
- * Запросы к Firestore; при отсутствии индексов — часть метрик считается по доступным данным.
+ * Данные для CRM analytics: сделки, диалоги, сообщения.
+ * Кэш на стороне клиента — в компоненте (TTL).
  */
 import {
   collection,
@@ -47,6 +47,7 @@ export interface MessageRow {
   direction: 'incoming' | 'outgoing';
   createdAt: number;
   system?: boolean;
+  text?: string;
 }
 
 export interface ConversationRow {
@@ -57,13 +58,31 @@ export interface ConversationRow {
   lastIncomingAt: number;
   lastOutgoingAt: number;
   dealId: string | null;
-  companyId?: string;
+  phone?: string;
+  dealResponsibleName?: string | null;
 }
 
-export async function fetchDealsForCompany(companyId: string): Promise<DealRow[]> {
+export interface ManagerRow {
+  id: string;
+  name: string;
+}
+
+let dealsCache: { companyId: string; at: number; data: DealRow[] } | null = null;
+let convCache: { companyId: string; at: number; data: ConversationRow[] } | null = null;
+let msgCache: { companyId: string; since: number; at: number; data: MessageRow[] } | null = null;
+const CACHE_TTL_MS = 45000;
+
+export function invalidateAnalyticsCache() {
+  dealsCache = convCache = msgCache = null;
+}
+
+export async function fetchDealsForCompany(companyId: string, useCache = true): Promise<DealRow[]> {
+  if (useCache && dealsCache && dealsCache.companyId === companyId && Date.now() - dealsCache.at < CACHE_TTL_MS) {
+    return dealsCache.data;
+  }
   const q = query(collection(db, COLLECTION_DEALS), where('companyId', '==', companyId));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => {
+  const data = snap.docs.map((d) => {
     const deal = docToDeal(d.id, d.data() as Record<string, unknown>);
     return {
       id: deal.id,
@@ -77,15 +96,23 @@ export async function fetchDealsForCompany(companyId: string): Promise<DealRow[]
       whatsappConversationId: deal.whatsappConversationId ?? null
     };
   });
+  dealsCache = { companyId, at: Date.now(), data };
+  return data;
 }
 
-export async function fetchConversationsForCompany(companyId: string): Promise<ConversationRow[]> {
+export async function fetchConversationsForCompany(
+  companyId: string,
+  useCache = true
+): Promise<ConversationRow[]> {
+  if (useCache && convCache && convCache.companyId === companyId && Date.now() - convCache.at < CACHE_TTL_MS) {
+    return convCache.data;
+  }
   const q = query(
     collection(db, COLLECTIONS.CONVERSATIONS),
     where('companyId', '==', companyId)
   );
   const snap = await getDocs(q);
-  return snap.docs.map((d) => {
+  const data = snap.docs.map((d) => {
     const x = d.data() as DocumentData;
     return {
       id: d.id,
@@ -95,17 +122,29 @@ export async function fetchConversationsForCompany(companyId: string): Promise<C
       lastIncomingAt: toMs(x.lastIncomingAt),
       lastOutgoingAt: toMs(x.lastOutgoingAt),
       dealId: (x.dealId as string) ?? null,
-      companyId: x.companyId as string
+      phone: (x.phone as string) || undefined,
+      dealResponsibleName: (x.dealResponsibleName as string) ?? null
     };
   });
+  convCache = { companyId, at: Date.now(), data };
+  return data;
 }
 
-/** Сообщения за период (нужен составной индекс companyId + createdAt). */
 export async function fetchMessagesSince(
   companyId: string,
   sinceMs: number,
-  maxDocs = 8000
+  maxDocs = 8000,
+  useCache = true
 ): Promise<MessageRow[]> {
+  if (
+    useCache &&
+    msgCache &&
+    msgCache.companyId === companyId &&
+    msgCache.since <= sinceMs &&
+    Date.now() - msgCache.at < CACHE_TTL_MS
+  ) {
+    return msgCache.data.filter((m) => m.createdAt >= sinceMs);
+  }
   try {
     const since = Timestamp.fromMillis(sinceMs);
     const q = query(
@@ -116,17 +155,63 @@ export async function fetchMessagesSince(
       limit(maxDocs)
     );
     const snap = await getDocs(q);
-    return snap.docs.map((d) => {
+    const data = snap.docs.map((d) => {
       const x = d.data() as DocumentData;
+      const text = (x.text as string) || '';
       return {
         id: d.id,
         conversationId: (x.conversationId as string) || '',
         direction: (x.direction as 'incoming' | 'outgoing') || 'incoming',
         createdAt: toMs(x.createdAt),
-        system: Boolean(x.system)
+        system: Boolean(x.system),
+        text: text.slice(0, 200)
+      };
+    });
+    msgCache = { companyId, since: sinceMs, at: Date.now(), data };
+    return data;
+  } catch {
+    return [];
+  }
+}
+
+/** Свежие сообщения для live-ленты (без кэша длинного периода). */
+export async function fetchRecentMessages(
+  companyId: string,
+  sinceMs: number,
+  maxDocs = 120
+): Promise<MessageRow[]> {
+  try {
+    const since = Timestamp.fromMillis(sinceMs);
+    const q = query(
+      collection(db, COLLECTIONS.MESSAGES),
+      where('companyId', '==', companyId),
+      where('createdAt', '>=', since),
+      orderBy('createdAt', 'desc'),
+      limit(maxDocs)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => {
+      const x = d.data() as DocumentData;
+      const text = (x.text as string) || '';
+      return {
+        id: d.id,
+        conversationId: (x.conversationId as string) || '',
+        direction: (x.direction as 'incoming' | 'outgoing') || 'incoming',
+        createdAt: toMs(x.createdAt),
+        system: Boolean(x.system),
+        text: text.slice(0, 160)
       };
     });
   } catch {
     return [];
   }
+}
+
+export async function fetchChatManagers(companyId: string): Promise<ManagerRow[]> {
+  const q = query(collection(db, 'chatManagers'), where('companyId', '==', companyId));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({
+    id: d.id,
+    name: ((d.data() as DocumentData).name as string) || d.id
+  }));
 }
