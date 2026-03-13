@@ -16,7 +16,7 @@
 |------------|----------|
 | `WAZZUP_API_KEY` | API Wazzup |
 | `WAZZUP_CHANNEL_ID` | Channel ID канала **WhatsApp** |
-| `WAZZUP_INSTAGRAM_CHANNEL_ID` | *(рекомендуется)* Channel ID канала **Instagram** в Wazzup. Если не задан — используется `WAZZUP_CHANNEL_ID` (подойдёт только если у вас один канал или тот же id). |
+| `WAZZUP_INSTAGRAM_CHANNEL_ID` | **Обязателен для ответов в Instagram.** UUID канала **Instagram** в Wazzup (кабинет → Каналы). Без него запрос уйдёт с WhatsApp `channelId` → ошибка **WRONG_TRANSPORT**. |
 
 ## Настройка в кабинете Wazzup (вручную)
 

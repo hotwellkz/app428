@@ -70,8 +70,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
   const apiKey = process.env.WAZZUP_API_KEY;
   const channelIdWa = process.env.WAZZUP_CHANNEL_ID;
-  const channelIdIg = process.env.WAZZUP_INSTAGRAM_CHANNEL_ID || channelIdWa;
-  const channelId = channelIdWa;
+  /** Только Instagram-канал в Wazzup. Нельзя подставлять WhatsApp channelId — будет WRONG_TRANSPORT. */
+  const channelIdIg = (process.env.WAZZUP_INSTAGRAM_CHANNEL_ID ?? '').trim();
   if (!apiKey || !channelIdWa) {
     log('Missing env: WAZZUP_API_KEY or WAZZUP_CHANNEL_ID');
     return withCors({
@@ -96,6 +96,18 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   const { chatId, chatType, text, contentUri, attachmentType, fileName, repliedToMessageId, forwarded, companyId } =
     body;
   const isInstagram = chatType === 'instagram';
+  if (isInstagram && !channelIdIg) {
+    log('Instagram send blocked: set WAZZUP_INSTAGRAM_CHANNEL_ID (UUID канала Instagram в кабинете Wazzup)');
+    return withCors({
+      statusCode: 503,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        error:
+          'Instagram: задайте WAZZUP_INSTAGRAM_CHANNEL_ID в Netlify (ID канала Instagram, не WhatsApp). Иначе Wazzup вернёт WRONG_TRANSPORT.',
+        code: 'MISSING_INSTAGRAM_CHANNEL_ID'
+      })
+    });
+  }
   const hasMedia = typeof contentUri === 'string' && contentUri.trim().length > 0;
   const hasText = typeof text === 'string' && text.trim().length > 0;
   if (!chatId) {
@@ -184,7 +196,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   try {
-    const wazzupChannel = isInstagram ? channelIdIg! : channelIdWa;
+    const wazzupChannel = isInstagram ? channelIdIg : channelIdWa;
     const wazzupBody: Record<string, string> = {
       channelId: wazzupChannel,
       chatType: isInstagram ? 'instagram' : 'whatsapp',
