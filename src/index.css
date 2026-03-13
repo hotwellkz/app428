@@ -26,6 +26,14 @@ body.whatsapp-chat-mobile-open {
   height: 100%;
 }
 
+/* Встроенное видео в чате WhatsApp (как в приложении) */
+.chat-video {
+  max-width: 260px;
+  border-radius: 12px;
+  background: #000;
+  vertical-align: middle;
+}
+
 #root {
   min-height: 100vh;
   height: 100vh;

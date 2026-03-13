@@ -131,17 +131,42 @@ function parseLegacyMediaAttachments(text: string): MessageAttachment[] {
   return [{ type, url }];
 }
 
+function inferAttachmentType(
+  stored: string,
+  mime: string | undefined,
+  url: string,
+  fileName: string | undefined
+): MessageAttachment['type'] {
+  const t = ['image', 'video', 'audio', 'file'].includes(stored) ? stored : 'file';
+  const mimeL = (mime ?? '').toLowerCase();
+  const path = url.split('?')[0].toLowerCase();
+  const name = (fileName ?? '').toLowerCase();
+  if (t === 'video') return 'video';
+  if (t === 'file' || t === 'image' || t === 'audio') {
+    if (mimeL.startsWith('video/')) return 'video';
+    if (/\.(mp4|webm|mov|m4v|ogv)(\?|$)/i.test(path) || /\.(mp4|webm|mov|m4v)$/i.test(name)) {
+      return 'video';
+    }
+    if (mimeL.startsWith('image/')) return 'image';
+    if (mimeL.startsWith('audio/')) return 'audio';
+  }
+  return t as MessageAttachment['type'];
+}
+
 function dataToAttachments(arr: unknown): MessageAttachment[] {
   if (!Array.isArray(arr)) return [];
   return arr.map((item) => {
     const o = item as Record<string, unknown>;
-    const type = (o.type as string) ?? 'file';
+    const typeRaw = (o.type as string) ?? 'file';
     const url = (o.url as string) ?? '';
+    const mimeType = o.mimeType as string | undefined;
+    const fileName = o.fileName as string | undefined;
+    const type = inferAttachmentType(typeRaw, mimeType, url, fileName);
     return {
-      type: (['image', 'video', 'audio', 'file'].includes(type) ? type : 'file') as MessageAttachment['type'],
+      type,
       url,
-      mimeType: o.mimeType as string | undefined,
-      fileName: o.fileName as string | undefined,
+      mimeType,
+      fileName,
       size: o.size as number | undefined,
       thumbnailUrl: (o.thumbnailUrl as string | null) ?? undefined
     };

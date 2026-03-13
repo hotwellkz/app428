@@ -551,11 +551,71 @@ function AudioMessageBubble({ att }: { att: MessageAttachment }) {
   );
 }
 
+/** Кадр с ~0.5 с для poster (без скачивания; в чате как WhatsApp). */
+function useVideoPoster(videoUrl: string, existingPoster?: string | null): string | undefined {
+  const [poster, setPoster] = useState<string | undefined>(existingPoster ?? undefined);
+  useEffect(() => {
+    if (existingPoster) {
+      setPoster(existingPoster);
+      return;
+    }
+    let cancelled = false;
+    const v = document.createElement('video');
+    v.crossOrigin = 'anonymous';
+    v.preload = 'auto';
+    v.muted = true;
+    v.playsInline = true;
+    const url = videoUrl;
+    v.src = url;
+
+    const capture = () => {
+      if (cancelled || !v.videoWidth) return;
+      try {
+        const c = document.createElement('canvas');
+        const w = Math.min(320, v.videoWidth);
+        const h = Math.round((w / v.videoWidth) * v.videoHeight);
+        c.width = w;
+        c.height = h || 180;
+        const ctx = c.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(v, 0, 0, c.width, c.height);
+        const data = c.toDataURL('image/jpeg', 0.72);
+        if (!cancelled) setPoster(data);
+      } catch {
+        /* CORS / tainted canvas — остаётся первый кадр из metadata */
+      }
+    };
+
+    const onSeeked = () => capture();
+    const onError = () => {
+      if (!cancelled) setPoster(undefined);
+    };
+    v.addEventListener('seeked', onSeeked);
+    v.addEventListener('error', onError);
+    v.addEventListener('loadeddata', () => {
+      try {
+        v.currentTime = Math.min(0.5, (v.duration && isFinite(v.duration) ? v.duration * 0.05 : 0) || 0.5);
+      } catch {
+        v.currentTime = 0.5;
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      v.removeEventListener('seeked', onSeeked);
+      v.removeEventListener('error', onError);
+      v.src = '';
+    };
+  }, [videoUrl, existingPoster]);
+  return poster;
+}
+
 function VideoMessageBubble({ att }: { att: MessageAttachment }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [duration, setDuration] = useState<number | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const generatedPoster = useVideoPoster(att.url, att.thumbnailUrl);
+  const poster = att.thumbnailUrl || generatedPoster;
 
   const handleLoadedMetadata = () => {
     const el = videoRef.current;
@@ -574,86 +634,39 @@ function VideoMessageBubble({ att }: { att: MessageAttachment }) {
     }
   };
 
-  const handlePlayClick = () => {
-    setIsPlaying(true);
-  };
-
-  const handleEnded = () => {
-    setIsPlaying(false);
-  };
-
   const durationLabel =
     duration != null && Number.isFinite(duration) ? formatDuration(duration) : null;
 
+  const mime = att.mimeType?.startsWith('video/') ? att.mimeType : 'video/mp4';
+
   return (
-    <div className="mt-1 w-full max-w-xs md:max-w-sm">
-      <div className="relative bg-black rounded-lg overflow-hidden">
-        {!error && !isPlaying && (
-          <button
-            type="button"
-            className="relative w-full focus:outline-none"
-            onClick={handlePlayClick}
-          >
-            <video
-              src={att.url}
-              muted
-              playsInline
-              preload="metadata"
-              className="w-full max-h-64 object-contain bg-black"
-              onLoadedMetadata={handleLoadedMetadata}
-              onError={handleError}
-            />
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-12 h-12 rounded-full bg-black/60 flex items-center justify-center text-white">
-                <Play className="w-6 h-6 ml-0.5" />
-              </div>
-            </div>
-            {durationLabel && (
-              <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded bg-black/70 text-white text-xs">
-                {durationLabel}
-              </div>
-            )}
-          </button>
-        )}
-        {!error && isPlaying && (
+    <div className="mt-1 rounded-xl overflow-hidden max-w-[260px] bg-black">
+      {!error ? (
+        <div className="relative w-full">
           <video
             ref={videoRef}
-            src={att.url}
+            className="chat-video block w-full max-w-[260px] max-h-[320px] object-contain bg-black rounded-xl"
             controls
-            autoPlay
             playsInline
             preload="metadata"
-            className="w-full max-h-64 object-contain bg-black"
+            poster={poster}
             onLoadedMetadata={handleLoadedMetadata}
             onError={handleError}
-            onEnded={handleEnded}
-          />
-        )}
-        {error && (
-          <div className="p-3 text-sm text-gray-100">
-            <p>{error}</p>
-          </div>
-        )}
-      </div>
-      <div className="mt-1 flex items-center justify-between gap-2 text-xs text-gray-600">
-        <a
-          href={att.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:underline"
-        >
-          Открыть
-        </a>
-        <a
-          href={att.url}
-          download={att.fileName}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="hover:underline text-gray-500"
-        >
-          Скачать
-        </a>
-      </div>
+          >
+            <source src={att.url} type={mime} />
+          </video>
+          {durationLabel && (
+            <div
+              className="pointer-events-none absolute bottom-10 right-1.5 px-1.5 py-0.5 rounded bg-black/75 text-white text-[11px] tabular-nums"
+              aria-hidden
+            >
+              {durationLabel}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="p-3 text-sm text-gray-200">{error}</div>
+      )}
     </div>
   );
 }
@@ -666,9 +679,12 @@ function AttachmentBlock({
   onPreview?: (att: MessageAttachment) => void;
 }) {
   const [imgError, setImgError] = useState(false);
-  const isImage = att.type === 'image';
-  const isVideo = att.type === 'video';
-  const isAudio = att.type === 'audio';
+  const isImage =
+    att.type === 'image' || (att.type === 'file' && getAttachmentCategory(att) === 'image');
+  const isVideo =
+    att.type === 'video' || (att.type === 'file' && getAttachmentCategory(att) === 'video');
+  const isAudio =
+    att.type === 'audio' || (att.type === 'file' && getAttachmentCategory(att) === 'audio');
   const label =
     att.type === 'image'
       ? 'Изображение'
