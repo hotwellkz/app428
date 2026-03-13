@@ -9,7 +9,7 @@ export interface CategoryCardType {
   color: string;
   row?: number;
   isVisible?: boolean;
-  /** Тип счёта: employee, company, general_expense и др. Для условия показа поля "Категория расхода". */
+  /** project | employee | system | client — влияет на сумму на иконке (проект = SUM|amount|). */
   type?: string;
 }
 
@@ -35,4 +35,5 @@ export interface CategoryData {
   color: string;
   row?: number;
   isVisible?: boolean;
+  type?: 'project' | 'employee' | 'system' | 'client';
 }

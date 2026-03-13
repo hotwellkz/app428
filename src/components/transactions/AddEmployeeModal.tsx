@@ -31,7 +31,8 @@ export const AddEmployeeModal: React.FC<AddEmployeeModalProps> = ({
         title: name,
         icon: selectedIcon,
         color: selectedColor,
-        row: 2 // Ряд сотрудников
+        row: 2,
+        type: 'employee',
       }, companyId);
       onClose();
     } catch (error) {

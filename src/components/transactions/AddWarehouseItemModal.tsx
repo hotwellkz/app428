@@ -31,7 +31,8 @@ export const AddWarehouseItemModal: React.FC<AddWarehouseItemModalProps> = ({
         title: name,
         icon: selectedIcon,
         color: selectedColor,
-        row: 4 // Ряд склада
+        row: 4,
+        type: 'system',
       }, companyId);
       onClose();
     } catch (error) {

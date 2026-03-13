@@ -30,6 +30,10 @@ import { RayBackground } from '../components/RayBackground';
 import { Scrollbars } from 'react-custom-scrollbars-2';
 import { PageMetadata } from '../components/PageMetadata';
 import { PendingTransactionsProvider } from '../contexts/PendingTransactionsContext';
+import {
+  isProjectCategory,
+  sumAbsAmountByCategory,
+} from '../lib/firebase/categoryIconAmount';
 
 export const Transactions: React.FC = () => {
   const companyId = useCompanyId();
@@ -55,16 +59,56 @@ export const Transactions: React.FC = () => {
     return () => { mounted = false; };
   }, []);
 
-  // Когда пришли новые данные с сервера — обновляем кэш
+  // Когда пришли новые данные с сервера — проекты: сумма расхода SUM|amount|; остальные — categories.amount
   useEffect(() => {
-    if (loadedCategories && loadedCategories.length > 0) {
-      setCategories(loadedCategories);
+    if (!companyId || !loadedCategories?.length) return;
+    let cancelled = false;
+    const visible = loadedCategories.filter((c) => c.isVisible !== false);
+    const projects = visible.filter((c) => isProjectCategory(c));
+
+    (async () => {
+      const absById: Record<string, number> = {};
+      await Promise.all(
+        projects.map(async (c) => {
+          try {
+            absById[c.id] = await sumAbsAmountByCategory(companyId, c.id);
+          } catch (e) {
+            console.error('sumAbsAmountByCategory', c.id, e);
+          }
+        })
+      );
+      if (cancelled) return;
+
+      const merged = loadedCategories.map((c) => ({
+        ...c,
+        amount: isProjectCategory(c)
+          ? String(
+              Math.round(
+                absById[c.id] ??
+                  (parseFloat(String(c.amount).replace(/[^\d.-]/g, '')) || 0)
+              )
+            )
+          : c.amount,
+      }));
+      setCategories(merged);
       setFromCache(false);
-      // Оставляем только сериализуемые поля
-      const serializable = loadedCategories.map(({id, title, amount, color, row, isVisible}) => ({id, title, amount, color, row, isVisible}));
-      saveSettingsToCache(TRANSACTIONS_CACHE_KEY, serializable);
-    }
-  }, [loadedCategories]);
+      saveSettingsToCache(
+        TRANSACTIONS_CACHE_KEY,
+        merged.map(({ id, title, amount, color, row, isVisible, type }) => ({
+          id,
+          title,
+          amount,
+          color,
+          row,
+          isVisible,
+          type,
+        }))
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, loadedCategories]);
 
   // Экспортируем функцию обновления глобально для StickyNavigation
   useEffect(() => {

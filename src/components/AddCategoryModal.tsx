@@ -4,6 +4,7 @@ import { IconSelector } from './IconSelector';
 import { ColorSelector } from './ColorSelector';
 import { addCategory } from '../lib/firebase';
 import { useCompanyId } from '../contexts/CompanyContext';
+import type { CategoryData } from '../types';
 
 interface AddCategoryModalProps {
   isOpen: boolean;
@@ -28,12 +29,19 @@ export const AddCategoryModal: React.FC<AddCategoryModalProps> = ({
     e.preventDefault();
     if (!companyId) return;
     try {
+      const typeByRow: Record<number, CategoryData['type']> = {
+        1: 'client',
+        2: 'employee',
+        3: 'project',
+        4: 'system',
+      };
       await addCategory({
         title,
         amount: amount + ' ₸',
         icon: selectedIcon,
         color: selectedColor,
-        row: selectedRow
+        row: selectedRow,
+        type: typeByRow[selectedRow] ?? 'client',
       }, companyId);
       
       onClose();
