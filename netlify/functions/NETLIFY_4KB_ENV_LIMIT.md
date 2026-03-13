@@ -6,12 +6,11 @@
 
 ---
 
-## Решение: оставить для Functions только 4 переменные
+## Решение: оставить для Functions только нужные переменные
 
-Нужно, чтобы в **Functions** были доступны только:
+Нужно, чтобы в **Functions** были доступны только (пример минимума):
 
 - `WAZZUP_API_KEY`
-- `WAZZUP_CHANNEL_ID`
 - `FIREBASE_SA_1`
 - `FIREBASE_SA_2`
 
@@ -27,7 +26,7 @@
    Если есть кнопка **Migrate environment variables** — нажмите её один раз.  
    **Scopes доступны на плане Pro и выше.** На Free плане этого пункта может не быть — см. раздел «Если Scopes нет» ниже.
 
-3. Для **каждой** переменной, кроме четырёх нужных для функций:
+3. Для **каждой** переменной, кроме нужных для функций (WAZZUP_API_KEY, FIREBASE_SA_*):
    - откройте переменную (клик / Edit);
    - в блоке **Scopes** снимите галочку **Functions**;
    - оставьте только **Builds** (и при необходимости другие, кроме Functions);
@@ -45,15 +44,14 @@
    - `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_VERIFY_TOKEN`
    - `SECRETS_SCAN_SMART_DETECTION_ENABLED`
 
-4. У этих четырёх переменных scope **Functions** должен быть **включён**:
+4. У этих переменных scope **Functions** должен быть **включён** (минимум):
    - `WAZZUP_API_KEY`
-   - `WAZZUP_CHANNEL_ID`
    - `FIREBASE_SA_1`
    - `FIREBASE_SA_2`
 
 5. Сохраните изменения и сделайте **Redeploy** (или новый деплой из репозитория).
 
-После этого в Lambda уйдёт только 4 переменные, лимит 4KB не должен превышаться.
+После этого в Lambda уйдёт меньше переменных, лимит 4KB не должен превышаться.
 
 ---
 
@@ -66,7 +64,7 @@
 1. **Перейти на Pro** и настроить Scopes как выше.
 2. **Отдельный сайт только для функций** в том же аккаунте Netlify:
    - создать новый сайт (например, «2wix-api») из того же репозитория;
-   - в этом сайте в Environment variables задать **только** эти 4 переменные: `WAZZUP_API_KEY`, `WAZZUP_CHANNEL_ID`, `FIREBASE_SA_1`, `FIREBASE_SA_2`;
+   - в этом сайте в Environment variables задать **как минимум**: `WAZZUP_API_KEY`, `FIREBASE_SA_1`, `FIREBASE_SA_2` (и далее по необходимости);
    - задеплоить;
    - в Wazzup и в приложении использовать URL функций этого сайта (например, `https://2wix-api.netlify.app/.netlify/functions/wazzup-webhook` и `.../send-whatsapp-message`).
 

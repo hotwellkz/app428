@@ -23,7 +23,7 @@
 ## Переменные окружения (Netlify)
 
 - **WAZZUP_API_KEY** — ключ API Wazzup.
-- **WAZZUP_CHANNEL_ID** — ID канала (UUID из личного кабинета Wazzup).
+- **WAZZUP_API_KEY** — достаточно для отправки. **channelId** берётся из webhook (поле на диалоге `wazzupChannelId`), отдельный env для канала не нужен.
 - **FIREBASE_SERVICE_ACCOUNT_JSON** — JSON ключа сервисного аккаунта Firebase (для сохранения в Firestore).
 
 ## Поведение

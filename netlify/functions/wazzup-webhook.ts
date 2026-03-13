@@ -21,12 +21,15 @@ import {
   createDealInstagram,
   instagramClientKey,
   upsertMessageFromWebhook,
+  syncConversationWazzupRouting,
   type MessageAttachmentRow
 } from './lib/firebaseAdmin';
 
 interface WazzupMessage {
   messageId?: string;
   channelId?: string;
+  /** instagram | whatsapp — из webhook Wazzup */
+  transport?: string;
   chatType?: string;
   chatId?: string;
   dateTime?: string;
@@ -85,6 +88,12 @@ function isInstagramChatType(chatType: string): boolean {
   return t === 'instagram' || t === 'instagram_direct' || t === 'ig';
 }
 
+function wazzupTransportFromMessage(msg: WazzupMessage, instagram: boolean): string {
+  const t = (msg.transport ?? '').toLowerCase().trim();
+  if (t === 'instagram' || t === 'whatsapp') return t;
+  return instagram ? 'instagram' : 'whatsapp';
+}
+
 async function handleInstagramMessage(msg: WazzupMessage, debugPayload: boolean): Promise<'ok' | 'skip' | 'err'> {
   const chatId = String(msg.chatId ?? '').trim();
   if (!chatId) {
@@ -134,15 +143,33 @@ async function handleInstagramMessage(msg: WazzupMessage, debugPayload: boolean)
       }
     }
 
+    const channelId = String(msg.channelId ?? '').trim();
+    const transport = wazzupTransportFromMessage(msg, true);
+    const wazzupChatId = chatId;
+
     let conversation = await findConversationByClientId(client.id);
     if (!conversation) {
       const convId = await createConversation(client.id, chatId, {
         channel: 'instagram',
-        displayPhone: `@${username}`
+        displayPhone: `@${username}`,
+        ...(channelId
+          ? { wazzupChannelId: channelId, wazzupTransport: transport, wazzupChatId }
+          : {})
       });
       logIg('conversation_created', convId);
       conversation = await findConversationByClientId(client.id);
       if (!conversation) return 'err';
+    } else if (channelId) {
+      try {
+        await syncConversationWazzupRouting(conversation.id, {
+          channelId,
+          transport,
+          chatId: wazzupChatId
+        });
+        logIg('wazzup_routing', { channelId, transport, chatId: wazzupChatId });
+      } catch (e) {
+        logIg('wazzup_routing_update_fail', e);
+      }
     }
 
     const { id: savedId, created } = await upsertMessageFromWebhook(conversation.id, text, direction, {
@@ -194,11 +221,31 @@ async function handleWhatsAppMessage(msg: WazzupMessage, debugPayload: boolean):
         /* ignore */
       }
     }
+    const channelId = String(msg.channelId ?? '').trim();
+    const transport = wazzupTransportFromMessage(msg, false);
+    const wazzupChatId = String(msg.chatId ?? normalizedPhone).trim();
+
     let conversation = await findConversationByClientId(client.id);
     if (!conversation) {
-      await createConversation(client.id, normalizedPhone);
+      await createConversation(client.id, normalizedPhone, {
+        channel: 'whatsapp',
+        ...(channelId
+          ? { wazzupChannelId: channelId, wazzupTransport: transport, wazzupChatId }
+          : {})
+      });
       conversation = await findConversationByClientId(client.id);
       if (!conversation) return 'err';
+    } else if (channelId) {
+      try {
+        await syncConversationWazzupRouting(conversation.id, {
+          channelId,
+          transport,
+          chatId: wazzupChatId
+        });
+        log('wazzup_routing', { channelId, transport, chatId: wazzupChatId });
+      } catch {
+        /* ignore */
+      }
     }
     const { created } = await upsertMessageFromWebhook(conversation.id, text, direction, {
       providerMessageId: msg.messageId ?? undefined,

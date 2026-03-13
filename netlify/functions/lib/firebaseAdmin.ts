@@ -59,6 +59,12 @@ export interface WhatsAppConversationRow {
   clientId: string;
   /** Номер для отображения/отправки, если клиент не загружен */
   phone?: string;
+  /** ID канала Wazzup из webhook (отправка только через него) */
+  wazzupChannelId?: string;
+  /** instagram | whatsapp — транспорт из webhook */
+  wazzupTransport?: string;
+  /** chatId для API Wazzup (как во входящем сообщении) */
+  wazzupChatId?: string;
   status: string;
   createdAt: Timestamp;
   unreadCount?: number;
@@ -167,6 +173,9 @@ export async function findConversationByClientId(clientId: string): Promise<What
     id: d.id,
     clientId: data.clientId as string,
     phone: data.phone as string | undefined,
+    wazzupChannelId: data.wazzupChannelId as string | undefined,
+    wazzupTransport: data.wazzupTransport as string | undefined,
+    wazzupChatId: data.wazzupChatId as string | undefined,
     status: data.status as string,
     createdAt: data.createdAt as Timestamp,
     unreadCount: (data.unreadCount as number) ?? 0,
@@ -179,14 +188,20 @@ export async function findConversationByClientId(clientId: string): Promise<What
 export async function createConversation(
   clientId: string,
   phone: string,
-  options?: { channel?: 'whatsapp' | 'instagram'; displayPhone?: string }
+  options?: {
+    channel?: 'whatsapp' | 'instagram';
+    displayPhone?: string;
+    wazzupChannelId?: string;
+    wazzupTransport?: string;
+    wazzupChatId?: string;
+  }
 ): Promise<string> {
   const db = getDb();
   const now = Timestamp.now();
   const channel = options?.channel ?? 'whatsapp';
   const phoneStored =
     channel === 'instagram' ? instagramClientKey(phone.replace(/^instagram:/, '')) : normalizePhone(phone);
-  const ref = await db.collection(COLLECTIONS.CONVERSATIONS).add({
+  const payload: Record<string, unknown> = {
     clientId,
     phone: options?.displayPhone ?? phoneStored,
     status: 'active',
@@ -201,8 +216,28 @@ export async function createConversation(
     companyId: DEFAULT_COMPANY_ID,
     channel,
     chatType: channel === 'instagram' ? 'instagram' : 'whatsapp'
-  });
+  };
+  if (options?.wazzupChannelId) payload.wazzupChannelId = options.wazzupChannelId;
+  if (options?.wazzupTransport) payload.wazzupTransport = options.wazzupTransport;
+  if (options?.wazzupChatId) payload.wazzupChatId = options.wazzupChatId;
+  const ref = await db.collection(COLLECTIONS.CONVERSATIONS).add(payload);
   return ref.id;
+}
+
+/** Обновить маршрут Wazzup по каждому входящему webhook (несколько каналов без env). */
+export async function syncConversationWazzupRouting(
+  conversationId: string,
+  meta: { channelId: string; transport: string; chatId: string }
+): Promise<void> {
+  const db = getDb();
+  await db
+    .collection(COLLECTIONS.CONVERSATIONS)
+    .doc(conversationId)
+    .update({
+      wazzupChannelId: meta.channelId,
+      wazzupTransport: meta.transport,
+      wazzupChatId: meta.chatId
+    });
 }
 
 /** Увеличить счётчик непрочитанных в диалоге (при входящем сообщении) */

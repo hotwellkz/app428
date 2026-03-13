@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 /**
  * Устанавливает scope переменных Netlify через CLI:
- * - WAZZUP_API_KEY, WAZZUP_CHANNEL_ID, FIREBASE_SA_1, FIREBASE_SA_2 → scope "functions"
+ * - WAZZUP_API_KEY, FIREBASE_SA_1, FIREBASE_SA_2 → scope "functions"
  * - остальные → scope "builds"
- * Так в Lambda попадают только 4 переменные, лимит 4KB не превышается.
+ * Так в Lambda попадают только нужные переменные, лимит 4KB не превышается.
  *
  * Требуется: netlify link и netlify env:list с доступом к проекту.
  * Запуск: node scripts/set-netlify-env-scopes.js
@@ -13,7 +13,6 @@ import { spawnSync } from 'child_process';
 
 const FUNCTIONS_SCOPE_KEYS = new Set([
   'WAZZUP_API_KEY',
-  'WAZZUP_CHANNEL_ID',
   'FIREBASE_SA_1',
   'FIREBASE_SA_2',
 ]);
