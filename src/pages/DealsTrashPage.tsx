@@ -39,7 +39,7 @@ const DealsTrashPage: React.FC = () => {
     if (!confirmPermanent) return;
     setBusyId(confirmPermanent.id);
     try {
-      await permanentDeleteDeal(confirmPermanent.id);
+      await permanentDeleteDeal(confirmPermanent.id, companyId);
       setConfirmPermanent(null);
     } finally {
       setBusyId(null);

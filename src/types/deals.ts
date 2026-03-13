@@ -57,6 +57,17 @@ export interface Deal {
   whatsappConversationId?: string | null;
   /** Мягкое удаление (корзина); null / отсутствует — сделка активна */
   deletedAt?: Date | Timestamp | null;
+  /** Источник лида: WhatsApp, Звонок и т.д. */
+  source?: string | null;
+}
+
+/** Запись истории сделки (deal_history) */
+export interface DealHistoryEntry {
+  id: string;
+  companyId: string;
+  dealId: string;
+  message: string;
+  createdAt: Date | Timestamp | null;
 }
 
 export type DealActivityType =

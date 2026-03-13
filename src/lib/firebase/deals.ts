@@ -85,7 +85,20 @@ function docToDeal(id: string, data: Record<string, unknown>): Deal {
     nextActionAt: (data.nextActionAt as Deal['nextActionAt']) ?? null,
     isArchived: Boolean(data.isArchived),
     whatsappConversationId: (data.whatsappConversationId as string) ?? null,
-    deletedAt: (data.deletedAt as Deal['deletedAt']) ?? null
+    deletedAt: (data.deletedAt as Deal['deletedAt']) ?? null,
+    source: (data.source as string) ?? null
+  };
+}
+
+const COLLECTION_DEAL_HISTORY = 'deal_history';
+
+function docToHistory(id: string, data: Record<string, unknown>): import('../../types/deals').DealHistoryEntry {
+  return {
+    id,
+    companyId: (data.companyId as string) ?? '',
+    dealId: (data.dealId as string) ?? '',
+    message: (data.message as string) ?? '',
+    createdAt: (data.createdAt as import('../../types/deals').DealHistoryEntry['createdAt']) ?? null
   };
 }
 
@@ -251,11 +264,60 @@ export function subscribeTrashedDeals(
   );
 }
 
-export async function softDeleteDeal(dealId: string): Promise<void> {
-  await updateDoc(doc(db, COLLECTION_DEALS, dealId), {
+/** Снять привязку сделки со всех чатов WhatsApp (только dealId на чате). */
+async function unlinkDealFromChats(
+  dealId: string,
+  companyId: string | null | undefined,
+  convIds: string[]
+): Promise<void> {
+  const seen = new Set<string>();
+  const clear = async (id: string) => {
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    try {
+      await updateDoc(doc(db, COLLECTION_WHATSAPP_CONVERSATIONS, id), {
+        dealId: deleteField(),
+        dealStageId: deleteField(),
+        dealStageName: deleteField(),
+        dealStageColor: deleteField(),
+        dealTitle: deleteField(),
+        dealResponsibleName: deleteField()
+      });
+      if (companyId) {
+        await saveSystemMessage(id, 'Сделка была удалена', companyId);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+  for (const id of convIds) await clear(id);
+  if (companyId) {
+    try {
+      const q = query(
+        collection(db, COLLECTION_WHATSAPP_CONVERSATIONS),
+        where('companyId', '==', companyId),
+        where('dealId', '==', dealId)
+      );
+      const snap = await getDocs(q);
+      for (const d of snap.docs) await clear(d.id);
+    } catch {
+      /* индекс companyId+dealId может отсутствовать — уже обработали convIds */
+    }
+  }
+}
+
+export async function softDeleteDeal(dealId: string, companyId?: string | null): Promise<void> {
+  const ref = doc(db, COLLECTION_DEALS, dealId);
+  const snap = await getDoc(ref);
+  const data = snap.data() as { whatsappConversationId?: string | null } | undefined;
+  const convId = data?.whatsappConversationId ?? undefined;
+
+  await updateDoc(ref, {
     deletedAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
+
+  await unlinkDealFromChats(dealId, companyId ?? null, convId ? [convId] : []);
 }
 
 export async function restoreDeal(dealId: string): Promise<void> {
@@ -265,8 +327,13 @@ export async function restoreDeal(dealId: string): Promise<void> {
   });
 }
 
-export async function permanentDeleteDeal(dealId: string): Promise<void> {
-  await deleteDoc(doc(db, COLLECTION_DEALS, dealId));
+export async function permanentDeleteDeal(dealId: string, companyId?: string | null): Promise<void> {
+  const ref = doc(db, COLLECTION_DEALS, dealId);
+  const snap = await getDoc(ref);
+  const data = snap.data() as { whatsappConversationId?: string | null } | undefined;
+  const convId = data?.whatsappConversationId ?? undefined;
+  await unlinkDealFromChats(dealId, companyId ?? null, convId ? [convId] : []);
+  await deleteDoc(ref);
 }
 
 export async function createDeal(
@@ -282,6 +349,7 @@ export async function createDeal(
     responsibleUserId?: string | null;
     responsibleNameSnapshot?: string;
     note?: string;
+    source?: string | null;
   }
 ): Promise<Deal> {
   const now = serverTimestamp();
@@ -300,6 +368,7 @@ export async function createDeal(
     status: null,
     priority: null,
     note: payload.note ?? '',
+    source: payload.source ?? 'Ручной',
     tags: [],
     sortOrder: Date.now(),
     createdBy: null,
@@ -313,6 +382,12 @@ export async function createDeal(
   const snap = await getDoc(ref);
   const deal = docToDeal(ref.id, snap.data() as Record<string, unknown>);
   await addDealActivity(companyId, deal.id, 'created', { pipelineId, stageId });
+  await addDoc(collection(db, COLLECTION_DEAL_HISTORY), {
+    companyId,
+    dealId: deal.id,
+    message: 'Сделка создана',
+    createdAt: serverTimestamp()
+  });
   return deal;
 }
 
@@ -335,6 +410,7 @@ export async function updateDeal(
       | 'nextActionAt'
       | 'isArchived'
       | 'whatsappConversationId'
+      | 'source'
     >
   >
 ): Promise<void> {
@@ -359,18 +435,20 @@ export async function moveDealToStage(
     updatedAt: serverTimestamp()
   });
   await addDealActivity(companyId, dealId, 'stage_changed', { stageId: targetStageId });
+  if (stageMeta?.name) {
+    await addDoc(collection(db, COLLECTION_DEAL_HISTORY), {
+      companyId,
+      dealId,
+      message: `Сделка перемещена в этап: ${stageMeta.name}`,
+      createdAt: serverTimestamp()
+    });
+  }
 
   const dealSnap = await getDoc(ref);
   const convId = (dealSnap.data() as { whatsappConversationId?: string | null })?.whatsappConversationId;
-  if (!convId || !stageMeta?.name) return;
-
-  await updateDoc(doc(db, COLLECTION_WHATSAPP_CONVERSATIONS, convId), {
-    dealStageId: targetStageId,
-    dealStageName: stageMeta.name,
-    dealStageColor: stageMeta.color ?? '#6B7280'
-  });
-
-  await saveSystemMessage(convId, `Сделка переведена в этап: ${stageMeta.name}`, companyId);
+  if (convId && stageMeta?.name) {
+    await saveSystemMessage(convId, `Сделка переведена в этап: ${stageMeta.name}`, companyId);
+  }
 }
 
 export async function reorderDealsWithinStage(
@@ -399,6 +477,25 @@ export async function addDealActivity(
     createdBy: null,
     createdAt: serverTimestamp()
   });
+}
+
+export function subscribeDealHistory(
+  companyId: string,
+  dealId: string,
+  callback: (entries: import('../../types/deals').DealHistoryEntry[]) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, COLLECTION_DEAL_HISTORY),
+    where('companyId', '==', companyId),
+    where('dealId', '==', dealId),
+    orderBy('createdAt', 'asc')
+  );
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => docToHistory(d.id, d.data() as Record<string, unknown>))),
+    (err) => onError?.(err)
+  );
 }
 
 export async function listDealActivity(

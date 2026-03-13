@@ -1,6 +1,19 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { collection, query, where, getDocs, doc, updateDoc, getDoc, addDoc, deleteDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  doc,
+  updateDoc,
+  getDoc,
+  addDoc,
+  deleteDoc,
+  writeBatch,
+  serverTimestamp,
+  deleteField
+} from 'firebase/firestore';
 import { db } from '../../lib/firebase/config';
 import { useCompanyId } from '../../contexts/CompanyContext';
 import { createDeal, ensureDefaultPipeline, listStages, moveDealToStage } from '../../lib/firebase/deals';
@@ -265,29 +278,56 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     setPipelineDealLoading(true);
     try {
       const d = await getDoc(doc(db, COLLECTION_DEALS, conversationDealId));
-      if (d.exists()) {
-        const data = d.data();
-        setPipelineDeal({
-          id: d.id,
-          companyId: (data.companyId as string) ?? '',
-          pipelineId: (data.pipelineId as string) ?? '',
-          stageId: (data.stageId as string) ?? '',
-          title: (data.title as string) ?? '',
-          clientId: (data.clientId as string | null) ?? null,
-          clientNameSnapshot: data.clientNameSnapshot as string | undefined,
-          clientPhoneSnapshot: data.clientPhoneSnapshot as string | undefined,
-          sortOrder: (data.sortOrder as number) ?? 0,
-          whatsappConversationId: (data.whatsappConversationId as string) ?? null
-        } as Deal);
-        const stages = await listStages(companyId, (data.pipelineId as string) ?? '');
-        setPipelineStages(stages.map((s) => ({ id: s.id, name: s.name, color: s.color })));
-      } else setPipelineDeal(null);
+      if (!d.exists()) {
+        setPipelineDeal(null);
+        if (conversationId) {
+          await updateDoc(doc(db, COLLECTION_WHATSAPP_CONVERSATIONS, conversationId), {
+            dealId: deleteField(),
+            dealStageId: deleteField(),
+            dealStageName: deleteField(),
+            dealStageColor: deleteField(),
+            dealTitle: deleteField(),
+            dealResponsibleName: deleteField()
+          });
+        }
+        return;
+      }
+      const data = d.data();
+      if (data.deletedAt != null) {
+        setPipelineDeal(null);
+        if (conversationId) {
+          await updateDoc(doc(db, COLLECTION_WHATSAPP_CONVERSATIONS, conversationId), {
+            dealId: deleteField(),
+            dealStageId: deleteField(),
+            dealStageName: deleteField(),
+            dealStageColor: deleteField(),
+            dealTitle: deleteField(),
+            dealResponsibleName: deleteField()
+          });
+        }
+        return;
+      }
+      setPipelineDeal({
+        id: d.id,
+        companyId: (data.companyId as string) ?? '',
+        pipelineId: (data.pipelineId as string) ?? '',
+        stageId: (data.stageId as string) ?? '',
+        title: (data.title as string) ?? '',
+        clientId: (data.clientId as string | null) ?? null,
+        clientNameSnapshot: data.clientNameSnapshot as string | undefined,
+        clientPhoneSnapshot: data.clientPhoneSnapshot as string | undefined,
+        sortOrder: (data.sortOrder as number) ?? 0,
+        whatsappConversationId: (data.whatsappConversationId as string) ?? null,
+        responsibleNameSnapshot: data.responsibleNameSnapshot as string | undefined
+      } as Deal);
+      const stages = await listStages(companyId, (data.pipelineId as string) ?? '');
+      setPipelineStages(stages.map((s) => ({ id: s.id, name: s.name, color: s.color })));
     } catch {
       setPipelineDeal(null);
     } finally {
       setPipelineDealLoading(false);
     }
-  }, [conversationDealId, companyId]);
+  }, [conversationDealId, companyId, conversationId]);
 
   useEffect(() => {
     loadPipelineDeal();
@@ -311,12 +351,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
         clientId: client?.id ?? null
       });
       await updateDoc(doc(db, COLLECTION_WHATSAPP_CONVERSATIONS, conversationId), {
-        dealId: deal.id,
-        dealStageId: first.id,
-        dealStageName: first.name,
-        dealStageColor: first.color ?? '#6B7280',
-        dealTitle: deal.title,
-        dealResponsibleName: deal.responsibleNameSnapshot ?? null
+        dealId: deal.id
       });
       await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
         whatsappConversationId: conversationId
@@ -335,11 +370,6 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       await moveDealToStage(companyId, pipelineDeal.id, stageId, Date.now(), {
         name: stageName,
         color: stageColor ?? null
-      });
-      await updateDoc(doc(db, COLLECTION_WHATSAPP_CONVERSATIONS, conversationId), {
-        dealStageId: stageId,
-        dealStageName: stageName,
-        dealStageColor: stageColor ?? '#6B7280'
       });
       setPipelineDeal({ ...pipelineDeal, stageId });
       setPipelineStageModal(false);
@@ -630,41 +660,42 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
 
           {conversationId && (
             <div className="mt-4 p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100">
-              <h3 className="text-xs font-semibold text-emerald-800 uppercase tracking-wide flex items-center gap-1">
-                <GitBranch className="w-3.5 h-3.5" />
-                Сделка (воронка)
-              </h3>
-              {pipelineDealLoading ? (
-                <p className="mt-2 text-xs text-gray-500">Загрузка…</p>
-              ) : pipelineDeal || conversationDealId ? (
+              {pipelineDealLoading && conversationDealId ? (
                 <>
-                  <p className="mt-2 text-sm font-medium text-gray-900 truncate">
-                    {pipelineDeal?.title ?? conversationDealTitle ?? 'Сделка'}
-                  </p>
+                  <h3 className="text-xs font-semibold text-emerald-800 uppercase tracking-wide flex items-center gap-1">
+                    <GitBranch className="w-3.5 h-3.5" />
+                    Сделка (воронка)
+                  </h3>
+                  <p className="mt-2 text-xs text-gray-500">Загрузка…</p>
+                </>
+              ) : pipelineDeal ? (
+                <>
+                  <h3 className="text-xs font-semibold text-emerald-800 uppercase tracking-wide flex items-center gap-1">
+                    <GitBranch className="w-3.5 h-3.5" />
+                    Сделка (воронка)
+                  </h3>
+                  <p className="mt-2 text-sm font-medium text-gray-900 truncate">{pipelineDeal.title}</p>
                   <p className="text-xs text-gray-600 mt-1">
                     Этап:{' '}
-                    <span
-                      className="font-medium px-1.5 py-0.5 rounded text-white"
-                      style={{
-                        backgroundColor:
-                          conversationStageColor && /^#[0-9A-Fa-f]{3,8}$/.test(conversationStageColor)
-                            ? conversationStageColor
-                            : '#6B7280'
-                      }}
-                    >
-                      {conversationStageName ?? '—'}
-                    </span>
+                    {(() => {
+                      const st = pipelineStages.find((s) => s.id === pipelineDeal.stageId);
+                      const col = st?.color && /^#[0-9A-Fa-f]{3,8}$/i.test(st.color) ? st.color : '#6B7280';
+                      return (
+                        <span className="font-medium px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: col }}>
+                          {st?.name ?? '—'}
+                        </span>
+                      );
+                    })()}
                   </p>
-                  {(pipelineDeal?.responsibleNameSnapshot || conversationResponsibleName) && (
+                  {pipelineDeal.responsibleNameSnapshot && (
                     <p className="text-xs text-gray-600 mt-1">
-                      Ответственный:{' '}
-                      {pipelineDeal?.responsibleNameSnapshot ?? conversationResponsibleName}
+                      Ответственный: {pipelineDeal.responsibleNameSnapshot}
                     </p>
                   )}
                   <div className="mt-3 flex flex-col gap-2">
                     <button
                       type="button"
-                      onClick={() => navigate(`/deals?deal=${pipelineDeal?.id ?? conversationDealId}`)}
+                      onClick={() => navigate(`/deals?deal=${pipelineDeal.id}`)}
                       className="w-full py-2 text-xs font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-1"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
@@ -681,14 +712,18 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                   </div>
                 </>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleCreatePipelineDeal}
-                  disabled={creatingPipelineDeal}
-                  className="mt-3 w-full py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50"
-                >
-                  {creatingPipelineDeal ? 'Создание…' : 'Создать сделку'}
-                </button>
+                <>
+                  <h3 className="text-xs font-semibold text-emerald-800 uppercase tracking-wide">Воронка</h3>
+                  <p className="text-xs text-gray-600 mt-1 mb-2">Нет активной сделки по этому чату</p>
+                  <button
+                    type="button"
+                    onClick={handleCreatePipelineDeal}
+                    disabled={creatingPipelineDeal}
+                    className="w-full py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {creatingPipelineDeal ? 'Создание…' : 'Создать сделку'}
+                  </button>
+                </>
               )}
             </div>
           )}

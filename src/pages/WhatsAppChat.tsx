@@ -21,7 +21,7 @@ import {
   type ConversationListItem
 } from '../lib/firebase/whatsappDb';
 import { showErrorNotification } from '../utils/notifications';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase/config';
 import type { WhatsAppMessage } from '../types/whatsappDb';
 import type { MediaQuickReply } from '../types/mediaQuickReplies';
@@ -718,6 +718,44 @@ const WhatsAppChat: React.FC = () => {
     return parts.join(', ') || `${toSend.length} сообщений`;
   }, [messages, selectedMessageIds]);
 
+  const [dealBadgeByConversationId, setDealBadgeByConversationId] = useState<
+    Record<string, { name: string; color: string }>
+  >({});
+
+  useEffect(() => {
+    let cancelled = false;
+    const dealIds = [...new Set(conversations.map((c) => c.dealId).filter(Boolean))] as string[];
+    if (dealIds.length === 0) {
+      setDealBadgeByConversationId({});
+      return;
+    }
+    (async () => {
+      const byDeal = new Map<string, { name: string; color: string }>();
+      for (const dealId of dealIds) {
+        const d = await getDoc(doc(db, 'deals', dealId));
+        if (!d.exists() || d.data().deletedAt != null) continue;
+        const stageId = d.data().stageId as string;
+        if (!stageId) continue;
+        const st = await getDoc(doc(db, 'pipeline_stages', stageId));
+        const name = st.exists() ? ((st.data().name as string) ?? '—') : '—';
+        const color =
+          st.exists() && st.data().color && /^#[0-9A-Fa-f]{3,8}$/i.test(String(st.data().color))
+            ? String(st.data().color)
+            : '#6B7280';
+        byDeal.set(dealId, { name, color });
+      }
+      if (cancelled) return;
+      const byConv: Record<string, { name: string; color: string }> = {};
+      conversations.forEach((c) => {
+        if (c.dealId && byDeal.has(c.dealId)) byConv[c.id] = byDeal.get(c.dealId)!;
+      });
+      setDealBadgeByConversationId(byConv);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversations]);
+
   const listWithDisplayTitle = useMemo(() => {
     return conversations.map((c) => {
       const effectiveUnread = locallyReadChatIds.has(c.id) ? 0 : (c.unreadCount ?? 0);
@@ -729,8 +767,9 @@ const WhatsAppChat: React.FC = () => {
       const status = statusId ? (dealStatuses.find((s) => s.id === statusId) ?? null) : null;
       const legacyColor = status?.color?.trim() || null;
       const legacyName = status?.name?.trim() || null;
-      const dealStatusColor = c.dealStageName ? c.dealStageColor ?? '#6B7280' : legacyColor;
-      const dealStatusName = c.dealStageName ?? legacyName;
+      const fromDeal = dealBadgeByConversationId[c.id];
+      const dealStatusColor = fromDeal?.color ?? legacyColor;
+      const dealStatusName = fromDeal?.name ?? legacyName;
       const manager = managerId ? (managers.find((m) => m.id === managerId) ?? null) : null;
       const managerColor = manager?.color?.trim() || null;
       const managerName = manager?.name?.trim() || null;
@@ -746,7 +785,16 @@ const WhatsAppChat: React.FC = () => {
         managerName: managerName || undefined
       };
     });
-  }, [conversations, locallyReadChatIds, crmNamesByPhone, dealStatusByPhone, dealStatuses, managerByPhone, managers]);
+  }, [
+    conversations,
+    locallyReadChatIds,
+    crmNamesByPhone,
+    dealStatusByPhone,
+    dealStatuses,
+    managerByPhone,
+    managers,
+    dealBadgeByConversationId
+  ]);
 
   const handleFileSelect = useCallback(async (file: File) => {
     setSendError(null);
@@ -1955,10 +2003,6 @@ const WhatsAppChat: React.FC = () => {
             phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null}
             conversationId={selectedId}
             conversationDealId={selectedItem?.dealId ?? null}
-            conversationDealTitle={selectedItem?.dealTitle ?? null}
-            conversationStageName={selectedItem?.dealStageName ?? null}
-            conversationStageColor={selectedItem?.dealStageColor ?? null}
-            conversationResponsibleName={selectedItem?.dealResponsibleName ?? null}
             messages={messages}
             dealStatuses={dealStatuses}
             managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
@@ -2040,10 +2084,6 @@ const WhatsAppChat: React.FC = () => {
                 }
                 conversationId={selectedId}
                 conversationDealId={selectedItem.dealId ?? null}
-                conversationDealTitle={selectedItem.dealTitle ?? null}
-                conversationStageName={selectedItem.dealStageName ?? null}
-                conversationStageColor={selectedItem.dealStageColor ?? null}
-                conversationResponsibleName={selectedItem.dealResponsibleName ?? null}
                 messages={messages}
                 dealStatuses={dealStatuses}
                 managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
