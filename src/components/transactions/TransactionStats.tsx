@@ -24,10 +24,14 @@ export const TransactionStats: React.FC<TransactionStatsProps> = ({
       <div className="bg-white rounded-lg shadow-sm transition-all duration-300">
         <div className="flex items-center justify-between p-3">
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <ArrowDownRight className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />
-            <span className="text-xs sm:text-sm text-gray-600">Общая сумма:</span>
+            <ArrowDownRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-500" />
+            <span className="text-xs sm:text-sm text-gray-600">Баланс счёта:</span>
           </div>
-          <span className="text-base sm:text-lg font-semibold text-red-600">
+          <span
+            className={`text-base sm:text-lg font-semibold ${
+              totalAmount >= 0 ? 'text-emerald-600' : 'text-red-600'
+            }`}
+          >
             {formatAmount(Math.abs(totalAmount))} ₸
           </span>
         </div>

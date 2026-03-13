@@ -19,6 +19,7 @@ import { deleteTransaction, secureDeleteTransaction } from '../lib/firebase';
 import { auth } from '../lib/firebase';
 import { useTransactionsPaginated } from '../hooks/useTransactionsPaginated';
 import { useAuth } from '../hooks/useAuth';
+import { useCompanyId } from '../contexts/CompanyContext';
 import { useExpenseCategories } from '../hooks/useExpenseCategories';
 import {
   VirtualizedTransactionsList,
@@ -29,6 +30,7 @@ import {
 } from '../components/transactions/VirtualizedTransactionsList';
 import { AttachmentViewerModal } from '../components/AttachmentViewerModal';
 import { exportTransactionsReport } from '../utils/exportTransactionsReport';
+import { calculateAccountBalance } from '../lib/firebase/accountBalance';
 import { TransactionExportModal, TransactionExportFilters } from '../components/transactions/TransactionExportModal';
 
 const CHIP_MAX_VISIBLE = 3;
@@ -213,14 +215,33 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
     loading,
     hasMore,
     loadMore,
-    totalAmount,
-    salaryTotal,
-    cashlessTotal
+    totalAmount: _pageTurnover,
+    salaryTotal: _pageSalary,
+    cashlessTotal: _pageCashless
   } = useTransactionsPaginated({
     categoryId: categoryId!,
     pageSize: 50,
     enabled: !!categoryId
   });
+
+  const companyIdHistory = useCompanyId();
+  const [ledgerBalance, setLedgerBalance] = useState(0);
+  const [ledgerSalary, setLedgerSalary] = useState(0);
+  const [ledgerCashless, setLedgerCashless] = useState(0);
+  useEffect(() => {
+    if (!companyIdHistory || !categoryId) return;
+    let cancelled = false;
+    calculateAccountBalance(companyIdHistory, categoryId).then((r) => {
+      if (!cancelled) {
+        setLedgerBalance(r.balance);
+        setLedgerSalary(r.salaryTotal);
+        setLedgerCashless(r.cashlessTotal);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [companyIdHistory, categoryId]);
 
   // Debug: результат выборки истории (только development)
   useEffect(() => {
@@ -656,9 +677,9 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
       {showStats && (
         <div className="max-w-[1200px] mx-auto px-4 lg:px-[60px] lg:pr-[40px]">
           <TransactionStats
-            totalAmount={totalAmount}
-            salaryTotal={salaryTotal}
-            cashlessTotal={cashlessTotal}
+            totalAmount={ledgerBalance}
+            salaryTotal={ledgerSalary}
+            cashlessTotal={ledgerCashless}
           />
         </div>
       )}
