@@ -32,7 +32,7 @@ import DeleteClientConfirmModal from '../components/whatsapp/DeleteClientConfirm
 import { supabase, CLIENTS_BUCKET } from '../lib/supabase/config';
 import { MAX_ATTACHMENT_MB } from '../components/whatsapp/ChatInput';
 import { compressImage, validateVideoFile } from '../utils/mediaUtils';
-import { createVoiceRecorder } from '../utils/voiceRecording';
+import { acquireVoiceStream, createVoiceRecorder } from '../utils/voiceRecording';
 
 const NEW_MESSAGE_SOUND_PATH = '/sounds/new-message.mp3';
 
@@ -150,6 +150,7 @@ const WhatsAppChat: React.FC = () => {
   const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
   const voiceRecorderRef = useRef<{ start: () => void; stop: () => void } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const voiceReleaseRef = useRef<(() => void) | null>(null);
   const voiceCancelledRef = useRef(false);
 
   const prevConversationsRef = useRef<ConversationListItem[]>([]);
@@ -866,14 +867,21 @@ const WhatsAppChat: React.FC = () => {
     voiceRecordingLockedRef.current = false;
     setVoiceRecordingLocked(false);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const { stream, release } = await acquireVoiceStream();
       streamRef.current = stream;
-      const recorder = await createVoiceRecorder(stream, (blob) => {
-        if (voiceCancelledRef.current) return;
-        sendVoiceBlobRef.current(blob);
-      });
+      voiceReleaseRef.current = release;
+      const recorder = await createVoiceRecorder(
+        stream,
+        (blob) => {
+          voiceReleaseRef.current = null;
+          if (voiceCancelledRef.current) return;
+          sendVoiceBlobRef.current(blob);
+        },
+        release
+      );
       if (!recorder) {
-        stream.getTracks().forEach((t) => t.stop());
+        release();
+        voiceReleaseRef.current = null;
         setSendError('Запись голоса не поддерживается.');
         return;
       }
