@@ -27,6 +27,53 @@ interface AnalyzeClientBody {
   messages?: AiMessage[];
 }
 
+function extractNameFromText(text: string): string | null {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+
+  const patterns = [
+    /(?:меня зовут|я\s+[-–—]?\s*)([А-ЯA-ZЁ][а-яa-zё]{1,20})/i,
+    /(?:это|имя)\s*[:\-]?\s*([А-ЯA-ZЁ][а-яa-zё]{1,20})/i,
+    /\b([А-ЯA-ZЁ][а-яa-zё]{1,20})\b/,
+  ];
+
+  for (const p of patterns) {
+    const m = normalized.match(p);
+    const candidate = m?.[1]?.trim();
+    if (!candidate) continue;
+    if (['Здравствуйте', 'Добрый', 'Доброе', 'Привет'].includes(candidate)) continue;
+    return candidate;
+  }
+  return null;
+}
+
+function buildFallbackComment(messages: AiMessage[]): string {
+  const clientTexts = messages
+    .filter((m) => m.role === 'client')
+    .map((m) => m.text.trim())
+    .filter(Boolean)
+    .slice(-5);
+
+  if (clientTexts.length === 0) {
+    return 'Клиент написал в WhatsApp. Требуется уточнение параметров объекта и запроса.';
+  }
+
+  const combined = clientTexts.join(' ').replace(/\s+/g, ' ').trim();
+  const short = combined.length > 280 ? `${combined.slice(0, 277)}…` : combined;
+  return `Запрос клиента: ${short}`;
+}
+
+function buildFallbackResult(messages: AiMessage[]) {
+  const clientTexts = messages.filter((m) => m.role === 'client').map((m) => m.text);
+  const firstName = clientTexts.map(extractNameFromText).find(Boolean) ?? null;
+  const comment = buildFallbackComment(messages);
+  return {
+    name: firstName,
+    leadTitle: firstName ? null : 'Лид из WhatsApp',
+    comment,
+  };
+}
+
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   if (event.httpMethod === 'OPTIONS') {
     return withCors({ statusCode: 204, headers: {}, body: '' });
@@ -41,14 +88,6 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    log('Missing OPENAI_API_KEY');
-    return withCors({
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'OpenAI API key is not configured' }),
-    });
-  }
 
   let body: AnalyzeClientBody;
   try {
@@ -81,6 +120,16 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: null, leadTitle: null, comment: null }),
+    });
+  }
+
+  if (!apiKey) {
+    const fallback = buildFallbackResult(messages);
+    log('Missing OPENAI_API_KEY, returning fallback result');
+    return withCors({
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...fallback, fallback: true }),
     });
   }
 
@@ -143,13 +192,17 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
     if (!response.ok) {
       log('OpenAI API error:', response.status, responseText.slice(0, 500));
+      const fallback = buildFallbackResult(messages);
       return withCors({
-        statusCode: 502,
+        statusCode: 200,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          error: 'OpenAI API error',
-          status: response.status,
-          detail: responseText.slice(0, 200),
+          ...fallback,
+          fallback: true,
+          providerError: {
+            status: response.status,
+            detail: responseText.slice(0, 200),
+          },
         }),
       });
     }
@@ -209,12 +262,14 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   } catch (e) {
     log('OpenAI request failed:', e);
+    const fallback = buildFallbackResult(messages);
     return withCors({
-      statusCode: 500,
+      statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        error: 'Failed to analyze client',
-        detail: String(e),
+        ...fallback,
+        fallback: true,
+        providerError: String(e),
       }),
     });
   }

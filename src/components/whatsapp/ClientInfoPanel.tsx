@@ -279,7 +279,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     return () => document.removeEventListener('click', onDocClick, true);
   }, [managerContextMenu]);
 
-  const AI_ANALYZE_ENDPOINT = '/api/ai/analyze-client';
+  const AI_ANALYZE_ENDPOINTS = ['/api/ai/analyze-client', '/.netlify/functions/ai-analyze-client'] as const;
 
   const handleAIAnalyze = async () => {
     if (!phone || aiLoading) return;
@@ -306,25 +306,49 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
         text: m._content.replace(/<[^>]*>/g, '').trim(),
       })),
     };
-    console.log('AI request', { url: AI_ANALYZE_ENDPOINT, chatId: payload.chatId, messagesCount: payload.messages.length });
+    console.log('AI request', { urls: AI_ANALYZE_ENDPOINTS, chatId: payload.chatId, messagesCount: payload.messages.length });
     try {
-      const res = await fetch(AI_ANALYZE_ENDPOINT, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const rawBody = await res.text();
-      let data: { name?: string | null; leadTitle?: string | null; comment?: string | null; error?: string } = {};
-      try {
-        data = rawBody ? (JSON.parse(rawBody) as typeof data) : {};
-      } catch {
-        console.error('AI response', 'invalid JSON', rawBody?.slice(0, 200));
-      }
-      console.log('AI response', res.status, data);
+      let res: Response | null = null;
+      let rawBody = '';
+      let data: {
+        name?: string | null;
+        leadTitle?: string | null;
+        lead_title?: string | null;
+        comment?: string | null;
+        summary?: string | null;
+        error?: string;
+      } = {};
 
-      if (!res.ok) {
+      for (const url of AI_ANALYZE_ENDPOINTS) {
+        try {
+          const currentRes = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const currentRawBody = await currentRes.text();
+          let currentData: typeof data = {};
+          try {
+            currentData = currentRawBody ? (JSON.parse(currentRawBody) as typeof data) : {};
+          } catch {
+            console.error('AI response', 'invalid JSON', currentRawBody?.slice(0, 200));
+          }
+
+          console.log('AI response', { url, status: currentRes.status, body: currentData });
+
+          res = currentRes;
+          rawBody = currentRawBody;
+          data = currentData;
+
+          if (currentRes.ok && !currentData.error) break;
+        } catch (endpointError) {
+          console.error('AI endpoint failed', { url, endpointError });
+        }
+      }
+
+      if (!res || !res.ok) {
         setAiError('Ошибка AI анализа. Попробуйте позже.');
-        console.error('AI error', { status: res.status, body: data, raw: rawBody?.slice(0, 300) });
+        console.error('AI error', { status: res?.status, body: data, raw: rawBody?.slice(0, 300) });
         return;
       }
       if (data.error) {
@@ -338,6 +362,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       const rawLeadTitle =
         typeof data.leadTitle === 'string'
           ? data.leadTitle.trim()
+          : typeof data.lead_title === 'string'
+          ? data.lead_title.trim()
           : data.leadTitle === null
           ? null
           : null;
@@ -345,6 +371,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       const nextComment =
         typeof data.comment === 'string'
           ? data.comment.trim()
+          : typeof data.summary === 'string'
+          ? data.summary.trim()
           : data.comment === null
           ? null
           : null;
