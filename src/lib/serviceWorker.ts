@@ -75,6 +75,24 @@ export const diagnoseServiceWorker = async (): Promise<void> => {
 };
 
 export const registerServiceWorker = async () => {
+  // В dev (Vite) SW кэширует .js → старые чанки → "Failed to fetch dynamically imported module"
+  // → App.tsx перезагружает страницу → бесконечные reload. В проде SW как раньше.
+  if (import.meta.env.DEV) {
+    console.log(
+      '🔧 DEV: Service Worker отключён (иначе кэш ломает HMR и даёт циклы перезагрузки). В проде включится сам.'
+    );
+    if ('serviceWorker' in navigator) {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const r of regs) await r.unregister();
+        if (regs.length) console.log('🗑️ Сняты регистрации SW для чистой разработки.');
+      } catch {
+        /* ignore */
+      }
+    }
+    return;
+  }
+
   // Проверяем отключение через localStorage
   if (isServiceWorkerDisabled()) {
     console.log('🚫 Service Worker disabled via localStorage');

@@ -1,10 +1,62 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'path';
 
+/**
+ * Только `vite` (порт 5173): прокси шлёт на :8888. Если Netlify Dev не запущен — 500.
+ * Эти функции — лёгкие stub'ы; отдаём их прямо из Vite, чтобы чат/стабилизатор не падали.
+ * Полный бэкенд: npm run dev:full
+ */
+function netlifyLocalStubsPlugin(): Plugin {
+  const cors = {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  };
+  return {
+    name: 'netlify-local-stubs',
+    enforce: 'pre',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        const pathOnly = (req.url || '').split('?')[0];
+        if (req.method === 'OPTIONS' && pathOnly.startsWith('/.netlify/functions/')) {
+          Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
+          res.statusCode = 204;
+          res.end();
+          return;
+        }
+        if (req.method === 'GET' && pathOnly.startsWith('/.netlify/functions/health')) {
+          res.setHeader('Content-Type', 'application/json');
+          Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
+          res.end(
+            JSON.stringify({
+              status: 'ok',
+              whatsapp: { ready: false, authenticated: false, connected: false, state: 'disconnected' },
+            })
+          );
+          return;
+        }
+        if (req.method === 'GET' && pathOnly.startsWith('/.netlify/functions/contacts')) {
+          res.setHeader('Content-Type', 'application/json');
+          Object.entries(cors).forEach(([k, v]) => res.setHeader(k, v));
+          res.end(JSON.stringify({ success: true, contacts: {} }));
+          return;
+        }
+        if (req.method === 'GET' && pathOnly.startsWith('/.netlify/functions/whatsapp-status')) {
+          res.setHeader('Content-Type', 'application/json');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          res.end(JSON.stringify({ status: 'disconnected' }));
+          return;
+        }
+        next();
+      });
+    },
+  };
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [netlifyLocalStubsPlugin(), react()],
   envPrefix: 'VITE_',
   resolve: {
     alias: {

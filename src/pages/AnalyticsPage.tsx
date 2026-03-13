@@ -43,7 +43,6 @@ import {
   type ProductAnalyticsRow,
   type WarehouseDocRow
 } from '../lib/firebase/analyticsExtended';
-import { LoadingSpinner } from '../components/LoadingSpinner';
 import {
   BarChart3,
   Download,
@@ -57,8 +56,6 @@ import {
   Percent,
   PieChart as PieIcon,
   Activity,
-  Moon,
-  Sun,
   Zap,
   Radio,
   LayoutDashboard,
@@ -67,8 +64,13 @@ import {
   X,
   Building2,
   Package,
-  Wallet
+  Wallet,
+  Menu,
+  ArrowLeft,
+  Filter
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useMobileSidebar } from '../contexts/MobileSidebarContext';
 import ru from '../locales/ru.json';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
@@ -112,11 +114,21 @@ type SectionId =
 
 const t = ru.analytics;
 
+/** Карточка блока в стиле Ленты: белый фон, серая рамка */
+const feedCard = 'bg-white rounded-xl border border-gray-200 shadow-sm';
+const feedCardPad = `${feedCard} p-4 md:p-5`;
+const feedMuted = 'text-gray-500';
+const chartGrid = '#e5e7eb';
+const chartTick = '#6b7280';
+const chartTooltipBg = '#ffffff';
+const chartTooltipBorder = '#e5e7eb';
+
 export const AnalyticsPage: React.FC = () => {
+  const navigate = useNavigate();
+  const { toggle: toggleMobileSidebar } = useMobileSidebar();
   const companyId = useCompanyId();
   const { menuAccess } = useCurrentCompanyUser();
   const reportRef = useRef<HTMLDivElement>(null);
-  const [dark, setDark] = useState(() => localStorage.getItem('analytics_dark') === '1');
   const [loading, setLoading] = useState(true);
   const [deals, setDeals] = useState<DealRow[]>([]);
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
@@ -159,16 +171,22 @@ export const AnalyticsPage: React.FC = () => {
   const [chartHPie, setChartHPie] = useState(288);
 
   useEffect(() => {
-    const mq = window.matchMedia('(max-width: 767px)');
+    const mqSm = window.matchMedia('(max-width: 767px)');
+    const mqXl = window.matchMedia('(min-width: 1280px)');
     const apply = () => {
-      const m = mq.matches;
-      setChartHMain(m ? 240 : 320);
-      setChartHMsg(m ? 228 : 256);
-      setChartHPie(m ? 240 : 288);
+      const sm = mqSm.matches;
+      const xl = mqXl.matches;
+      setChartHMain(sm ? 220 : xl ? 360 : 300);
+      setChartHMsg(sm ? 200 : xl ? 280 : 240);
+      setChartHPie(sm ? 220 : xl ? 320 : 260);
     };
     apply();
-    mq.addEventListener('change', apply);
-    return () => mq.removeEventListener('change', apply);
+    mqSm.addEventListener('change', apply);
+    mqXl.addEventListener('change', apply);
+    return () => {
+      mqSm.removeEventListener('change', apply);
+      mqXl.removeEventListener('change', apply);
+    };
   }, []);
 
   const openFilterSheet = useCallback(() => {
@@ -227,11 +245,6 @@ export const AnalyticsPage: React.FC = () => {
     else chips.push({ key: 'ch', text: `📡 ${t.channelOther}` });
     return chips;
   }, [dateFrom, dateTo, managerId, sourceFilter, channelFilter, managersList]);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', dark);
-    localStorage.setItem('analytics_dark', dark ? '1' : '0');
-  }, [dark]);
 
   useEffect(() => {
     if (!companyId || !auth.currentUser) return;
@@ -939,162 +952,174 @@ export const AnalyticsPage: React.FC = () => {
     [clientsRows, clientsInPeriod, txFinanceKpiFixed.incomeMonth, productsRows.length]
   );
 
-  const shell = (child: React.ReactNode) => (
-    <div
-      className={`min-h-full transition-colors ${
-        dark ? 'bg-slate-950 text-slate-100' : 'bg-slate-100 text-slate-900'
-      }`}
-    >
-      {child}
-    </div>
-  );
-
   if (!companyId) {
-    return shell(<div className="p-6 text-slate-500">{t.noCompany}</div>);
+    return (
+      <div className="min-h-dvh bg-gray-100 flex items-center justify-center p-6 text-gray-500">{t.noCompany}</div>
+    );
   }
 
-  return shell(
-    <>
-      <header
-        className={`sticky top-0 z-40 border-b backdrop-blur-md shadow-sm ${
-          dark ? 'bg-slate-900/95 border-slate-800' : 'bg-white/95 border-slate-200'
-        }`}
+  return (
+    <div className="min-h-dvh bg-gray-100 text-gray-900 [padding-bottom:env(safe-area-inset-bottom)]">
+      {/* Хедер: ПК под сайдбаром; мобилка — safe-area */}
+      <div
+        className="flex-shrink-0 fixed top-0 left-0 sm:left-64 right-0 z-40 bg-white border-b border-gray-200 shadow-sm pt-[env(safe-area-inset-top,0px)]"
+        style={{ background: '#ffffff' }}
       >
-        <div className="max-w-[1680px] mx-auto px-3 sm:px-5 py-2 md:py-3 flex flex-col gap-2 md:gap-3">
-          <div className="flex flex-wrap items-center gap-2 md:gap-3">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <div className="p-1.5 md:p-2 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg shrink-0">
-                <BarChart3 className="w-5 h-5 md:w-6 md:h-6" />
-              </div>
-              <div className="min-w-0">
-                <h1 className="text-base md:text-lg font-bold tracking-tight truncate">{t.pageTitle}</h1>
-                <p className={`text-[10px] md:text-xs truncate hidden sm:block ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {t.pageSubtitle}
-                </p>
-              </div>
-            </div>
-            <button type="button" onClick={() => setDark(!dark)} className={`p-2 rounded-xl border shrink-0 ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`} aria-label="Тема">
-              {dark ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5" />}
-            </button>
-            <button type="button" onClick={() => load(true)} className={`p-2 rounded-xl border shrink-0 ${dark ? 'border-slate-700' : 'border-slate-200'}`} aria-label="Обновить">
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            <button
-              type="button"
-              onClick={openFilterSheet}
-              className={`md:hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border shrink-0 ${dark ? 'border-violet-500 bg-violet-950 text-violet-200' : 'border-violet-300 bg-violet-50 text-violet-800'}`}
+        <div className="flex flex-wrap sm:flex-nowrap items-center min-h-12 sm:min-h-14 gap-x-2 gap-y-1 px-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] md:px-4 border-b border-gray-100">
+          <button
+            type="button"
+            onClick={toggleMobileSidebar}
+            className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-100 text-gray-700"
+            aria-label="Меню"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-100 text-gray-700"
+            aria-label="Назад"
+          >
+            <ArrowLeft className="w-6 h-6" />
+          </button>
+          <div className="flex-1 min-w-0 md:flex md:items-center md:gap-3 text-left">
+            <h1
+              className="truncate font-semibold text-gray-900 text-sm sm:text-base md:text-xl"
+              style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
             >
-              <Wrench className="w-4 h-4" />
-              {t.filtersButton}
-            </button>
-            <div className="flex gap-1.5 md:gap-2 ml-auto shrink-0">
-              <button type="button" onClick={exportCsv} className={`inline-flex items-center gap-1 px-2.5 md:px-3 py-2 rounded-xl text-xs md:text-sm font-semibold border ${dark ? 'border-slate-600 bg-slate-800' : 'border-slate-200 bg-white'}`}>
-                <FileSpreadsheet className="w-4 h-4" /> CSV
-              </button>
-              <button type="button" onClick={exportPdf} className="inline-flex items-center gap-1 px-2.5 md:px-3 py-2 rounded-xl text-xs md:text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md">
-                <Download className="w-4 h-4" /> PDF
-              </button>
-            </div>
+              {t.pageTitle}
+            </h1>
+            <p className={`hidden md:block text-sm truncate ${feedMuted}`}>{t.pageSubtitle}</p>
           </div>
-          <div className={`hidden md:flex flex-wrap gap-2 p-2 rounded-xl ${dark ? 'bg-slate-800/80' : 'bg-slate-50'}`}>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className={`rounded-lg px-2 py-1.5 text-sm border ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-200'}`}
-            />
-            <span className="self-center text-slate-500">—</span>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className={`rounded-lg px-2 py-1.5 text-sm border ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white border-slate-200'}`}
-            />
-            <select
-              value={managerId}
-              onChange={(e) => setManagerId(e.target.value)}
-              className={`rounded-lg px-2 py-1.5 text-sm border max-w-[160px] ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white'}`}
-            >
-              <option value="all">{t.allManagers}</option>
-              <option value="none">{t.noManager}</option>
-              {managersList.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={sourceFilter}
-              onChange={(e) => setSourceFilter(e.target.value)}
-              className={`rounded-lg px-2 py-1.5 text-sm border ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white'}`}
-            >
-              <option value="all">{t.sourceAll}</option>
-              <option value="WhatsApp">WhatsApp</option>
-              <option value="Instagram">Instagram</option>
-              <option value="Google">Google</option>
-              <option value="Звонок">Звонок</option>
-              <option value="Сайт">Сайт</option>
-            </select>
-            <select
-              value={channelFilter}
-              onChange={(e) => setChannelFilter(e.target.value)}
-              className={`rounded-lg px-2 py-1.5 text-sm border ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white'}`}
-            >
-              <option value="all">{t.channelAll}</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="instagram">{t.channelInstagram}</option>
-              <option value="other">{t.channelOther}</option>
-            </select>
-          </div>
-          <nav className="flex gap-1 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1 touch-pan-x">
-            {sections.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => {
-                  setActiveSection(s.id);
-                  document.getElementById(`sec-${s.id}`)?.scrollIntoView({ behavior: 'smooth' });
-                }}
-                className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
-                  activeSection === s.id
-                    ? 'bg-violet-600 text-white'
-                    : dark
-                      ? 'text-slate-400 hover:bg-slate-800'
-                      : 'text-slate-600 hover:bg-slate-200'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </nav>
+          <button
+            type="button"
+            onClick={() => load(true)}
+            className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+            aria-label="Обновить"
+          >
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin text-emerald-600' : ''}`} />
+          </button>
+          <button
+            type="button"
+            onClick={openFilterSheet}
+            className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+            aria-label={t.filtersButton}
+          >
+            <Filter className="w-5 h-5" />
+          </button>
+          <button
+            type="button"
+            onClick={exportCsv}
+            className="hidden sm:inline-flex items-center gap-1 px-3 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
+          >
+            <FileSpreadsheet className="w-4 h-4" /> CSV
+          </button>
+          <button
+            type="button"
+            onClick={exportPdf}
+            className="inline-flex items-center justify-center gap-1 min-h-10 min-w-10 sm:min-w-0 px-2.5 sm:px-3 py-2 rounded-lg text-sm font-medium bg-emerald-500 text-white hover:bg-emerald-600 shadow-sm shrink-0"
+            aria-label="PDF"
+          >
+            <Download className="w-4 h-4 shrink-0" />
+            <span className="hidden min-[360px]:inline">PDF</span>
+          </button>
         </div>
-      </header>
+        <div className="hidden md:flex flex-wrap items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 max-w-full">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="rounded-lg px-2 py-1.5 text-sm border border-gray-200 bg-white text-gray-900"
+          />
+          <span className="text-gray-400">—</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="rounded-lg px-2 py-1.5 text-sm border border-gray-200 bg-white text-gray-900"
+          />
+          <select
+            value={managerId}
+            onChange={(e) => setManagerId(e.target.value)}
+            className="rounded-lg px-2 py-1.5 text-sm border border-gray-200 bg-white max-w-[160px] text-gray-900"
+          >
+            <option value="all">{t.allManagers}</option>
+            <option value="none">{t.noManager}</option>
+            {managersList.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            className="rounded-lg px-2 py-1.5 text-sm border border-gray-200 bg-white text-gray-900"
+          >
+            <option value="all">{t.sourceAll}</option>
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Instagram">Instagram</option>
+            <option value="Google">Google</option>
+            <option value="Звонок">Звонок</option>
+            <option value="Сайт">Сайт</option>
+          </select>
+          <select
+            value={channelFilter}
+            onChange={(e) => setChannelFilter(e.target.value)}
+            className="rounded-lg px-2 py-1.5 text-sm border border-gray-200 bg-white text-gray-900"
+          >
+            <option value="all">{t.channelAll}</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="instagram">{t.channelInstagram}</option>
+            <option value="other">{t.channelOther}</option>
+          </select>
+        </div>
+        <nav className="flex gap-1 overflow-x-auto px-[max(0.75rem,env(safe-area-inset-left))] py-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] sm:pb-2 bg-white touch-pan-x scrollbar-thin [-webkit-overflow-scrolling:touch]">
+          {sections.map((s) => (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => {
+                setActiveSection(s.id);
+                document.getElementById(`sec-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }}
+              className={`shrink-0 min-h-9 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors active:scale-[0.98] ${
+                activeSection === s.id
+                  ? 'bg-emerald-500 text-white shadow-sm'
+                  : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
+              }`}
+            >
+              {s.label}
+            </button>
+          ))}
+        </nav>
+      </div>
 
       {mobileFiltersOpen && (
-        <div className="fixed inset-0 z-50 flex flex-col justify-end md:hidden" role="dialog" aria-modal="true">
-          <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-label="Закрыть" onClick={() => setMobileFiltersOpen(false)} />
-          <div className={`relative rounded-t-2xl shadow-2xl max-h-[88vh] overflow-hidden flex flex-col ${dark ? 'bg-slate-900 border-t border-slate-700' : 'bg-white border-t border-slate-200'}`}>
-            <div className={`flex items-center justify-between px-4 py-3 border-b shrink-0 ${dark ? 'border-slate-700' : 'border-slate-200'}`}>
-              <h2 className="text-lg font-bold flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-violet-500" />
+        <div className="fixed inset-0 z-[60] flex flex-col justify-end md:hidden" role="dialog" aria-modal="true">
+          <button type="button" className="absolute inset-0 bg-black/40" aria-label="Закрыть" onClick={() => setMobileFiltersOpen(false)} />
+          <div className="relative rounded-t-2xl shadow-xl max-h-[88vh] overflow-hidden flex flex-col bg-white border-t border-gray-200">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-white shrink-0">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-emerald-600" />
                 {t.filtersTitle}
               </h2>
-              <button type="button" onClick={() => setMobileFiltersOpen(false)} className={`p-2 rounded-lg ${dark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`} aria-label="Закрыть">
+              <button type="button" onClick={() => setMobileFiltersOpen(false)} className="p-2 rounded-full hover:bg-gray-100 text-gray-500" aria-label="Закрыть">
                 <X className="w-6 h-6" />
               </button>
             </div>
-            <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4 min-h-0">
+            <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4 min-h-0 bg-white">
               <div>
-                <label className={`block text-xs font-bold mb-1 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{t.periodLabel}</label>
+                <label className="block text-xs font-semibold mb-1 text-gray-500">{t.periodLabel}</label>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} className={`flex-1 min-w-[140px] rounded-xl px-3 py-2.5 text-sm border ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`} />
-                  <span className="text-slate-500">—</span>
-                  <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} className={`flex-1 min-w-[140px] rounded-xl px-3 py-2.5 text-sm border ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`} />
+                  <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} className="flex-1 min-w-[140px] rounded-lg px-3 py-2.5 text-sm border border-gray-200 bg-gray-50" />
+                  <span className="text-gray-400">—</span>
+                  <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} className="flex-1 min-w-[140px] rounded-lg px-3 py-2.5 text-sm border border-gray-200 bg-gray-50" />
                 </div>
               </div>
               <div>
-                <label className={`block text-xs font-bold mb-1 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{t.managerLabel}</label>
-                <select value={draftManager} onChange={(e) => setDraftManager(e.target.value)} className={`w-full rounded-xl px-3 py-2.5 text-sm border ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`}>
+                <label className="block text-xs font-semibold mb-1 text-gray-500">{t.managerLabel}</label>
+                <select value={draftManager} onChange={(e) => setDraftManager(e.target.value)} className="w-full rounded-lg px-3 py-2.5 text-sm border border-gray-200 bg-gray-50 text-gray-900">
                   <option value="all">{t.allManagers}</option>
                   <option value="none">{t.noManager}</option>
                   {managersList.map((m) => (
@@ -1103,8 +1128,8 @@ export const AnalyticsPage: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className={`block text-xs font-bold mb-1 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{t.sourceLabel}</label>
-                <select value={draftSource} onChange={(e) => setDraftSource(e.target.value)} className={`w-full rounded-xl px-3 py-2.5 text-sm border ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`}>
+                <label className="block text-xs font-semibold mb-1 text-gray-500">{t.sourceLabel}</label>
+                <select value={draftSource} onChange={(e) => setDraftSource(e.target.value)} className="w-full rounded-lg px-3 py-2.5 text-sm border border-gray-200 bg-gray-50 text-gray-900">
                   <option value="all">{t.sourceAll}</option>
                   <option value="WhatsApp">WhatsApp</option>
                   <option value="Instagram">Instagram</option>
@@ -1114,8 +1139,8 @@ export const AnalyticsPage: React.FC = () => {
                 </select>
               </div>
               <div>
-                <label className={`block text-xs font-bold mb-1 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{t.channelLabel}</label>
-                <select value={draftChannel} onChange={(e) => setDraftChannel(e.target.value)} className={`w-full rounded-xl px-3 py-2.5 text-sm border ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`}>
+                <label className="block text-xs font-semibold mb-1 text-gray-500">{t.channelLabel}</label>
+                <select value={draftChannel} onChange={(e) => setDraftChannel(e.target.value)} className="w-full rounded-lg px-3 py-2.5 text-sm border border-gray-200 bg-gray-50 text-gray-900">
                   <option value="all">{t.channelAll}</option>
                   <option value="whatsapp">WhatsApp</option>
                   <option value="instagram">{t.channelInstagram}</option>
@@ -1123,28 +1148,28 @@ export const AnalyticsPage: React.FC = () => {
                 </select>
               </div>
             </div>
-            <div className={`p-4 pt-2 border-t space-y-2 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))] ${dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50'}`}>
-              <button type="button" onClick={applyFilterSheet} className="w-full py-3 rounded-xl bg-violet-600 text-white font-bold text-base shadow-lg">{t.applyFilters}</button>
-              <button type="button" onClick={resetFilterSheet} className={`w-full py-2.5 rounded-xl text-sm font-semibold border ${dark ? 'border-slate-600 text-slate-300' : 'border-slate-300 text-slate-700'}`}>{t.resetFilters}</button>
+            <div className="p-4 pt-2 border-t border-gray-200 space-y-2 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))] bg-gray-50">
+              <button type="button" onClick={applyFilterSheet} className="w-full py-3 rounded-xl bg-emerald-500 text-white font-semibold text-base shadow-sm hover:bg-emerald-600">{t.applyFilters}</button>
+              <button type="button" onClick={resetFilterSheet} className="w-full py-2.5 rounded-xl text-sm font-medium border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">{t.resetFilters}</button>
             </div>
           </div>
         </div>
       )}
 
       {loading && !deals.length ? (
-        <div className="flex justify-center py-32">
-          <LoadingSpinner />
+        <div className="flex justify-center items-center min-h-[50vh] pt-32 sm:pl-64 bg-gray-100">
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-emerald-500 border-t-transparent" />
         </div>
       ) : (
         <div
           ref={reportRef}
-          className="max-w-[1680px] mx-auto px-3 sm:px-5 py-4 md:py-6 space-y-8 md:space-y-10 pb-24"
+          className="flex-1 min-h-0 overflow-y-auto bg-gray-100 w-full max-w-full sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto px-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:px-4 pt-[calc(7rem+env(safe-area-inset-top,0px))] md:pt-[calc(9.25rem+env(safe-area-inset-top,0px))] sm:pl-[calc(16rem+max(1rem,env(safe-area-inset-left)))] pb-[max(6rem,env(safe-area-inset-bottom,0px)+4rem)] space-y-5 sm:space-y-6"
         >
-          <div className="md:hidden flex flex-wrap gap-2 py-2">
+          <div className="md:hidden flex flex-wrap gap-2 py-2 border-b border-gray-200">
             {filterChips.map((c, i) => (
               <span
                 key={`${c.key}-${i}`}
-                className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold max-w-full truncate border ${dark ? 'bg-slate-800 border-slate-600 text-slate-200' : 'bg-white border-slate-200 text-slate-800 shadow-sm'}`}
+                className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-medium max-w-full truncate border border-gray-200 bg-white text-gray-800 shadow-sm"
               >
                 {c.text}
               </span>
@@ -1154,20 +1179,16 @@ export const AnalyticsPage: React.FC = () => {
           <section id="sec-director" className="space-y-4">
             <div className="flex flex-wrap items-end gap-2 justify-between">
               <div>
-                <h2
-                  className={`text-lg font-black tracking-tight flex items-center gap-2 ${
-                    dark ? 'text-violet-300' : 'text-violet-700'
-                  }`}
-                >
+                <h2 className="text-lg font-black tracking-tight flex items-center gap-2 text-violet-700">
                   <LayoutDashboard className="w-6 h-6" />
                   {t.directorPanel}
                 </h2>
-                <p className={`text-sm mt-1 ${dark ? 'text-slate-400' : 'text-slate-600'}`}>
+                <p className="text-sm mt-1 text-gray-600">
                   {t.directorPanelHint}
                 </p>
               </div>
             </div>
-            <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-thin pl-1 pr-4 -mx-1 w-full touch-pan-x [scrollbar-width:thin]">
+            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 overflow-x-auto md:overflow-visible pb-3 md:pb-0 snap-x snap-mandatory md:snap-none scrollbar-thin pl-1 pr-4 md:pl-0 md:pr-0 -mx-1 md:mx-0 w-full touch-pan-x [scrollbar-width:thin]">
               {[
                 {
                   label: t.applicationsToday,
@@ -1240,7 +1261,7 @@ export const AnalyticsPage: React.FC = () => {
               ].map((c) => (
                 <div
                   key={c.label}
-                  className={`min-w-[152px] sm:min-w-[168px] md:min-w-[188px] lg:min-w-0 lg:flex-1 snap-start rounded-2xl p-4 sm:p-5 text-white shadow-xl bg-gradient-to-br shrink-0 ${c.grad}`}
+                  className={`min-w-[148px] sm:min-w-[160px] md:min-w-0 w-[148px] md:w-auto snap-start rounded-2xl p-3.5 sm:p-4 md:p-5 text-white shadow-xl bg-gradient-to-br shrink-0 md:shrink ${c.grad}`}
                 >
                   <c.icon className="w-9 h-9 opacity-95 mb-3" />
                   <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide opacity-90 leading-tight">
@@ -1253,12 +1274,8 @@ export const AnalyticsPage: React.FC = () => {
                 </div>
               ))}
             </div>
-            <section
-              className={`rounded-2xl border p-4 ${
-                dark ? 'bg-red-950/40 border-red-900' : 'bg-red-50 border-red-200'
-              }`}
-            >
-              <h3 className={`text-sm font-bold mb-3 ${dark ? 'text-red-300' : 'text-red-800'}`}>
+            <section className="rounded-2xl border border-red-200 bg-red-50 p-4">
+              <h3 className="text-sm font-bold mb-3 text-red-800">
                 {t.unreadAlertTitle}
               </h3>
               <div className="grid sm:grid-cols-3 gap-3">
@@ -1278,17 +1295,17 @@ export const AnalyticsPage: React.FC = () => {
 
           {/* Операционная аналитика */}
           <section id="sec-ops" className="space-y-3">
-            <h2 className={`text-sm font-bold uppercase tracking-widest ${dark ? 'text-cyan-400' : 'text-cyan-700'}`}>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-cyan-700">
               {t.opsAnalytics}
             </h2>
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x pl-1 pr-4 touch-pan-x">
+            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 overflow-x-auto md:overflow-visible pb-2 snap-x md:snap-none pl-1 pr-4 md:px-0 touch-pan-x">
               {[
                 { label: t.activeBuilds, value: opsKpi.activeBuilds, icon: Building2, grad: 'from-amber-600 to-orange-700' },
                 { label: t.newClients, value: opsKpi.newClients, icon: Users, grad: 'from-cyan-600 to-blue-700' },
                 { label: t.incomeShort, value: `${(opsKpi.incomeMonth / 1000).toFixed(0)}k ₸`, sub: opsKpi.incomeMonth.toLocaleString('ru-RU') + ' ₸', icon: Wallet, grad: 'from-emerald-600 to-teal-700' },
                 { label: t.materialsOnStock, value: opsKpi.materialsCount, icon: Package, grad: 'from-violet-600 to-indigo-700' }
               ].map((c) => (
-                <div key={c.label} className={`min-w-[150px] snap-start rounded-2xl p-4 text-white bg-gradient-to-br shrink-0 ${c.grad}`}>
+                <div key={c.label} className={`min-w-[140px] md:min-w-0 w-[140px] md:w-auto snap-start rounded-2xl p-4 text-white bg-gradient-to-br shrink-0 md:shrink ${c.grad}`}>
                   <c.icon className="w-7 h-7 mb-2 opacity-95" />
                   <p className="text-[10px] font-bold uppercase opacity-90">{c.label}</p>
                   <p className="text-2xl font-black mt-1">{c.value}</p>
@@ -1300,10 +1317,10 @@ export const AnalyticsPage: React.FC = () => {
 
           {/* Строительство */}
           <section id="sec-construction" className="space-y-6">
-            <h2 className={`text-sm font-bold uppercase tracking-widest ${dark ? 'text-amber-400' : 'text-amber-700'}`}>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-amber-800">
               {t.navConstruction}
             </h2>
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x pl-1 pr-4">
+            <div className="flex md:grid md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 gap-2 sm:gap-3 overflow-x-auto md:overflow-visible pb-2 snap-x md:snap-none pl-1 pr-4 md:px-0">
               {[
                 { l: t.clientsTotal, v: constructionKpi.total },
                 { l: t.buildingNow, v: constructionKpi.building },
@@ -1316,46 +1333,47 @@ export const AnalyticsPage: React.FC = () => {
                 { l: t.clientsWithDeposit, v: constructionKpi.withDeposit },
                 { l: t.overdueProjects, v: constructionKpi.overdue }
               ].map((x) => (
-                <div key={x.l} className={`min-w-[130px] snap-start rounded-xl border p-3 shrink-0 ${dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
-                  <p className={`text-[9px] font-bold uppercase ${dark ? 'text-slate-500' : 'text-slate-500'}`}>{x.l}</p>
+                <div key={x.l} className="min-w-[120px] md:min-w-0 w-[120px] md:w-auto snap-start rounded-xl border border-gray-200 bg-white p-2.5 sm:p-3 shrink-0 md:shrink shadow-sm">
+                  <p className="text-[9px] font-bold uppercase text-gray-500">{x.l}</p>
                   <p className="text-xl font-black tabular-nums">{x.v}</p>
                 </div>
               ))}
             </div>
-            <div className={`rounded-2xl border p-4 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <h3 className="font-bold mb-2">{t.newClientsByDay}</h3>
               <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
                 <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
                   <LineChart data={clientsNewByDay}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
-                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
-                    <YAxis tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
-                    <Tooltip contentStyle={{ background: dark ? '#1e293b' : '#fff' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6b7280' }} />
+                    <YAxis tick={{ fontSize: 9, fill: '#6b7280' }} />
+                    <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb' }} />
                     <Line type="monotone" dataKey="count" stroke="#f59e0b" strokeWidth={2} dot={false} name={t.newClients} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className={`rounded-2xl border p-4 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
               <h3 className="font-bold mb-2">{t.completedHomesByMonth}</h3>
               <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
                 <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
                   <BarChart data={builtByMonth}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
-                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
-                    <YAxis tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
-                    <Tooltip contentStyle={{ background: dark ? '#1e293b' : '#fff' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#6b7280' }} />
+                    <YAxis tick={{ fontSize: 9, fill: '#6b7280' }} />
+                    <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb' }} />
                     <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} name={t.builtTotal} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className={`rounded-2xl border overflow-hidden ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <h3 className="font-bold p-4 pb-0">{t.activeBuildsTable}</h3>
-              <div className="overflow-x-auto">
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+              <h3 className="font-bold p-3 sm:p-4 pb-0 text-sm sm:text-base">{t.activeBuildsTable}</h3>
+              <p className="px-3 sm:px-4 pb-2 text-[10px] text-gray-500 md:hidden">← Листайте таблицу вбок →</p>
+              <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
                 <table className="w-full text-sm min-w-[720px]">
                   <thead>
-                    <tr className={`border-b ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                    <tr className="border-b border-gray-200 bg-gray-50">
                       {[t.colClient, t.colObject, t.colStatus, t.colProgress, t.colStart, t.colPlanEnd].map((h) => (
                         <th key={h} className="text-left py-2 px-3 text-xs font-bold whitespace-nowrap">{h}</th>
                       ))}
@@ -1366,7 +1384,7 @@ export const AnalyticsPage: React.FC = () => {
                       <tr><td colSpan={6} className="py-6 text-center text-slate-500">{t.noData}</td></tr>
                     ) : (
                       activeBuildsRows.map((r) => (
-                        <tr key={r.id} className={`border-b ${dark ? 'border-slate-800' : 'border-slate-100'}`}>
+                        <tr key={r.id} className="border-b border-gray-100">
                           <td className="py-2 px-3">{r.client}</td>
                           <td className="py-2 px-3">{r.object}</td>
                           <td className="py-2 px-3">{r.status}</td>
@@ -1384,10 +1402,10 @@ export const AnalyticsPage: React.FC = () => {
 
           {/* Финансы (транзакции) */}
           <section id="sec-txfinance" className="space-y-6">
-            <h2 className={`text-sm font-bold uppercase tracking-widest ${dark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-emerald-700">
               {t.navTxFinance}
             </h2>
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x pl-1 pr-4">
+            <div className="flex md:grid md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 overflow-x-auto md:overflow-visible pb-2 snap-x md:snap-none pl-1 pr-4 md:px-0">
               {[
                 { l: t.incomeToday, v: txFinanceKpiFixed.incomeToday.toLocaleString('ru-RU') + ' ₸' },
                 { l: t.incomeMonth, v: txFinanceKpiFixed.incomeMonth.toLocaleString('ru-RU') + ' ₸' },
@@ -1395,46 +1413,48 @@ export const AnalyticsPage: React.FC = () => {
                 { l: t.netProfit, v: txFinanceKpiFixed.netProfit.toLocaleString('ru-RU') + ' ₸' },
                 { l: t.avgPayment, v: txFinanceKpiFixed.avgPayment.toLocaleString('ru-RU') + ' ₸' }
               ].map((x) => (
-                <div key={x.l} className={`min-w-[140px] snap-start rounded-xl border p-3 shrink-0 ${dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
-                  <p className={`text-[9px] font-bold uppercase ${dark ? 'text-slate-500' : 'text-slate-500'}`}>{x.l}</p>
-                  <p className="text-sm font-black tabular-nums leading-tight mt-1">{x.v}</p>
+                <div key={x.l} className="min-w-[132px] md:min-w-0 w-[132px] md:w-auto snap-start rounded-xl border border-gray-200 bg-white p-2.5 sm:p-3 shrink-0 md:shrink shadow-sm">
+                  <p className="text-[9px] font-bold uppercase text-gray-500 leading-tight">{x.l}</p>
+                  <p className="text-xs sm:text-sm font-black tabular-nums leading-tight mt-1 break-all">{x.v}</p>
                 </div>
               ))}
             </div>
-            <div className={`rounded-2xl border p-4 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <h3 className="font-bold mb-2">{t.incomeByDay}</h3>
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:gap-6">
+            <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm min-w-0">
+              <h3 className="font-bold mb-2 text-sm sm:text-base">{t.incomeByDay}</h3>
               <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
                 <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
                   <LineChart data={incomeByDay}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
-                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
-                    <YAxis tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
-                    <Tooltip contentStyle={{ background: dark ? '#1e293b' : '#fff' }} formatter={(v: number) => [v.toLocaleString('ru-RU') + ' ₸', '']} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6b7280' }} />
+                    <YAxis tick={{ fontSize: 9, fill: '#6b7280' }} />
+                    <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb' }} formatter={(v: number) => [v.toLocaleString('ru-RU') + ' ₸', '']} />
                     <Line type="monotone" dataKey="sum" stroke="#10b981" strokeWidth={2} dot={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className={`rounded-2xl border p-4 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <h3 className="font-bold mb-2">{t.incomeByMonth}</h3>
+            <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm min-w-0">
+              <h3 className="font-bold mb-2 text-sm sm:text-base">{t.incomeByMonth}</h3>
               <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
                 <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
                   <BarChart data={incomeByMonthChart}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
-                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
-                    <YAxis tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#6b7280' }} />
+                    <YAxis tick={{ fontSize: 9, fill: '#6b7280' }} />
                     <Tooltip formatter={(v: number) => [v.toLocaleString('ru-RU') + ' ₸', '']} />
                     <Bar dataKey="sum" fill="#059669" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className={`rounded-2xl border overflow-hidden ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <h3 className="font-bold p-4 pb-0">{t.recentTx}</h3>
+            </div>
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+              <h3 className="font-bold p-3 sm:p-4 pb-0 text-sm sm:text-base">{t.recentTx}</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[640px]">
                   <thead>
-                    <tr className={`border-b ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                    <tr className="border-b border-gray-200 bg-gray-50">
                       {[t.colDate, t.colClient, t.colType, t.colAmount, t.colComment].map((h) => (
                         <th key={h} className="text-left py-2 px-3 text-xs font-bold whitespace-nowrap">{h}</th>
                       ))}
@@ -1442,7 +1462,7 @@ export const AnalyticsPage: React.FC = () => {
                   </thead>
                   <tbody>
                     {recentTxTable.map((r) => (
-                      <tr key={r.id} className={`border-b ${dark ? 'border-slate-800' : 'border-slate-100'}`}>
+                      <tr key={r.id} className="border-b border-gray-100">
                         <td className="py-2 px-3 whitespace-nowrap text-xs">{r.date}</td>
                         <td className="py-2 px-3 max-w-[120px] truncate">{r.client}</td>
                         <td className="py-2 px-3">{r.type}</td>
@@ -1458,28 +1478,28 @@ export const AnalyticsPage: React.FC = () => {
 
           {/* Склад */}
           <section id="sec-warehouse" className="space-y-6">
-            <h2 className={`text-sm font-bold uppercase tracking-widest ${dark ? 'text-lime-400' : 'text-lime-700'}`}>
+            <h2 className="text-sm font-bold uppercase tracking-widest text-lime-800">
               {t.navWarehouse}
             </h2>
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x pl-1 pr-4">
+            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 overflow-x-auto md:overflow-visible pb-2 snap-x md:snap-none pl-1 pr-4 md:px-0">
               {[
                 { l: t.warehouseValue, v: warehouseKpi.totalValue.toLocaleString('ru-RU') + ' ₸' },
                 { l: t.materialsCount, v: warehouseKpi.count },
                 { l: t.purchasesMonth, v: warehouseKpi.purchasesMonth.toLocaleString('ru-RU') + ' ₸' },
                 { l: t.consumptionMonth, v: warehouseKpi.consumptionMonth.toLocaleString('ru-RU') + ' ₸' }
               ].map((x) => (
-                <div key={x.l} className={`min-w-[150px] snap-start rounded-xl border p-3 shrink-0 ${dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
-                  <p className={`text-[9px] font-bold uppercase ${dark ? 'text-slate-500' : 'text-slate-500'}`}>{x.l}</p>
-                  <p className="text-sm font-black mt-1">{x.v}</p>
+                <div key={x.l} className="min-w-[140px] md:min-w-0 w-[140px] md:w-auto snap-start rounded-xl border border-gray-200 bg-white p-2.5 sm:p-3 shrink-0 md:shrink shadow-sm">
+                  <p className="text-[9px] font-bold uppercase text-gray-500">{x.l}</p>
+                  <p className="text-xs sm:text-sm font-black mt-1 break-all">{x.v}</p>
                 </div>
               ))}
             </div>
-            <div className={`rounded-2xl border overflow-hidden ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
-              <h3 className="font-bold p-4 pb-0">{t.topMaterials}</h3>
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+              <h3 className="font-bold p-3 sm:p-4 pb-0">{t.topMaterials}</h3>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[560px]">
                   <thead>
-                    <tr className={`border-b ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                    <tr className="border-b border-gray-200 bg-gray-50">
                       {[t.colMaterial, t.colUsedMonth, t.colStock, t.colCost].map((h) => (
                         <th key={h} className="text-left py-2 px-3 text-xs font-bold">{h}</th>
                       ))}
@@ -1490,7 +1510,7 @@ export const AnalyticsPage: React.FC = () => {
                       <tr><td colSpan={4} className="py-6 text-center text-slate-500">{t.noData}</td></tr>
                     ) : (
                       warehouseKpi.topMaterials.map((r, i) => (
-                        <tr key={i} className={`border-b ${dark ? 'border-slate-800' : 'border-slate-100'}`}>
+                        <tr key={i} className="border-b border-gray-100">
                           <td className="py-2 px-3 font-medium">{r.name}</td>
                           <td className="py-2 px-3 tabular-nums">{r.used.toLocaleString('ru-RU')}</td>
                           <td className="py-2 px-3 tabular-nums">{r.stock.toLocaleString('ru-RU')}</td>
@@ -1503,8 +1523,8 @@ export const AnalyticsPage: React.FC = () => {
               </div>
             </div>
             {warehouseKpi.lowStock.length > 0 && (
-              <div className={`rounded-2xl border p-4 ${dark ? 'bg-amber-950/40 border-amber-900' : 'bg-amber-50 border-amber-200'}`}>
-                <h3 className={`font-bold mb-2 ${dark ? 'text-amber-200' : 'text-amber-900'}`}>{t.lowStockAlert}</h3>
+              <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <h3 className="font-bold mb-2 text-amber-900">{t.lowStockAlert}</h3>
                 <ul className="text-sm space-y-1">
                   {warehouseKpi.lowStock.slice(0, 25).map((p) => (
                     <li key={p.id} className="flex justify-between gap-2">
@@ -1519,11 +1539,7 @@ export const AnalyticsPage: React.FC = () => {
 
           {/* График заявок + воронка */}
           <section id="sec-leads" className="space-y-6">
-            <div
-              className={`rounded-2xl border p-5 shadow-sm w-full ${
-                dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-              }`}
-            >
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm w-full">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                 <h2 className="text-base font-bold">{t.leadsChart}</h2>
                 <div className="flex gap-1 flex-wrap">
@@ -1532,12 +1548,8 @@ export const AnalyticsPage: React.FC = () => {
                       key={d}
                       type="button"
                       onClick={() => setLeadsRange(d)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
-                        leadsRange === d
-                          ? 'bg-violet-600 text-white'
-                          : dark
-                            ? 'bg-slate-800 text-slate-300'
-                            : 'bg-slate-100 text-slate-600'
+                      className={`min-h-9 min-w-9 px-2.5 py-2 rounded-lg text-xs font-bold touch-manipulation ${
+                        leadsRange === d ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200 active:bg-gray-300'
                       }`}
                     >
                       {d === '1' ? t.today : d === '365' ? t.year : `${d}${t.days}`}
@@ -1548,13 +1560,13 @@ export const AnalyticsPage: React.FC = () => {
               <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
                 <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
                   <LineChart data={leadsDays}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
-                    <YAxis tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} />
+                    <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
                     <Tooltip
                       contentStyle={{
-                        background: dark ? '#1e293b' : '#fff',
-                        border: dark ? '1px solid #334155' : '1px solid #e2e8f0'
+                        background: '#ffffff',
+                        border: '1px solid #e5e7eb'
                       }}
                     />
                     <Line
@@ -1570,28 +1582,24 @@ export const AnalyticsPage: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div
-              className={`rounded-2xl border p-5 shadow-sm w-full ${
-                dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-              }`}
-            >
+            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm w-full">
               <h2 className="text-base font-bold mb-1">{t.funnelTitle}</h2>
-              <p className={`text-xs mb-4 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{t.funnelHint}</p>
+              <p className="text-xs mb-4 text-gray-500">{t.funnelHint}</p>
               <div className="w-full min-w-0 shrink-0" style={{ minHeight: chartHMain }}>
                 <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
                   <BarChart data={funnelData} layout="vertical" margin={{ left: 4, right: 24 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
-                    <XAxis type="number" tick={{ fill: dark ? '#94a3b8' : '#64748b', fontSize: 11 }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 11 }} />
                     <YAxis
                       dataKey="name"
                       type="category"
                       width={88}
-                      tick={{ fill: dark ? '#94a3b8' : '#64748b', fontSize: 10 }}
+                      tick={{ fill: '#6b7280', fontSize: 10 }}
                     />
                     <Tooltip
                       contentStyle={{
-                        background: dark ? '#1e293b' : '#fff',
-                        border: dark ? '1px solid #334155' : '1px solid #e2e8f0'
+                        background: '#ffffff',
+                        border: '1px solid #e5e7eb'
                       }}
                       formatter={(v: number, _n: string, p: { payload: { pctFromPrev: number } }) => [
                         `${v} ${t.dealsCount} · ${p.payload.pctFromPrev}% ${t.fromPrev}`,
@@ -1611,14 +1619,10 @@ export const AnalyticsPage: React.FC = () => {
 
           {/* Аналитика сообщений (WhatsApp) */}
           <section id="sec-messaging" className="space-y-6">
-            <h2
-              className={`text-xs font-bold uppercase tracking-widest ${
-                dark ? 'text-emerald-400' : 'text-emerald-600'
-              }`}
-            >
+            <h2 className="text-xs font-bold uppercase tracking-widest text-emerald-600">
               {t.messagingTitle}
             </h2>
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x mb-2 w-full">
+            <div className="flex md:grid md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 overflow-x-auto md:overflow-visible pb-2 snap-x md:snap-none mb-2 w-full">
               {[
                 { label: t.incomingToday, v: waKpi.incomingToday, icon: MessageCircle },
                 { label: t.dialogsToday, v: waKpi.convToday, icon: Users },
@@ -1628,12 +1632,10 @@ export const AnalyticsPage: React.FC = () => {
               ].map((x) => (
                 <div
                   key={x.label}
-                  className={`min-w-[140px] snap-start rounded-2xl border p-4 shrink-0 ${
-                    dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'
-                  }`}
+                  className="min-w-[130px] md:min-w-0 w-[130px] md:w-auto snap-start shrink-0 md:shrink rounded-2xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm"
                 >
-                  <x.icon className={`w-6 h-6 mb-2 ${dark ? 'text-emerald-400' : 'text-emerald-600'}`} />
-                  <p className={`text-[10px] font-bold uppercase ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  <x.icon className="w-6 h-6 mb-2 text-emerald-600" />
+                  <p className="text-[10px] font-bold uppercase text-gray-500">
                     {x.label}
                   </p>
                   <p className="text-xl font-black mt-1 tabular-nums">{x.v}</p>
@@ -1641,15 +1643,15 @@ export const AnalyticsPage: React.FC = () => {
               ))}
             </div>
             <div
-              className={`rounded-2xl border p-5 w-full ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+              className="rounded-xl border border-gray-200 bg-white p-5 w-full shadow-sm"
             >
               <h3 className="font-bold mb-4">{t.messageActivity}</h3>
               <div className="w-full min-w-0" style={{ minHeight: chartHMsg }}>
                 <ResponsiveContainer width="100%" height={chartHMsg} debounce={80}>
                   <LineChart data={messagesPerDay}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
-                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
-                    <YAxis tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6b7280' }} />
+                    <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
                     <Tooltip />
                     <Line type="monotone" dataKey="incoming" stroke="#22c55e" strokeWidth={2} dot={false} isAnimationActive />
                   </LineChart>
@@ -1657,10 +1659,10 @@ export const AnalyticsPage: React.FC = () => {
               </div>
             </div>
             <div
-              className={`rounded-2xl border p-5 w-full ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+              className="rounded-xl border border-gray-200 bg-white p-5 w-full shadow-sm"
             >
               <h3 className="font-bold mb-4">{t.dialogs}</h3>
-              <div className="grid grid-cols-3 gap-2 text-center min-w-0">
+              <div className="grid grid-cols-1 min-[360px]:grid-cols-3 gap-2 sm:gap-3 text-center min-w-0">
                 {[
                   { lbl: t.newToday, v: convMetrics.newConv, c: 'from-cyan-500 to-blue-600' },
                   { lbl: t.active, v: convMetrics.active, c: 'from-violet-500 to-purple-600' },
@@ -1668,16 +1670,16 @@ export const AnalyticsPage: React.FC = () => {
                 ].map((x) => (
                   <div
                     key={x.lbl}
-                    className={`rounded-xl p-4 text-white bg-gradient-to-br ${x.c} shadow-lg`}
+                    className={`rounded-xl p-3 sm:p-4 text-white bg-gradient-to-br ${x.c} shadow-lg`}
                   >
-                    <p className="text-2xl font-black">{x.v}</p>
-                    <p className="text-[10px] font-semibold mt-1 opacity-90">{x.lbl}</p>
+                    <p className="text-xl sm:text-2xl font-black">{x.v}</p>
+                    <p className="text-[10px] font-semibold mt-1 opacity-90 leading-tight">{x.lbl}</p>
                   </div>
                 ))}
               </div>
             </div>
             <div
-              className={`rounded-2xl border p-5 w-full ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+              className="rounded-xl border border-gray-200 bg-white p-5 w-full shadow-sm"
             >
               <h3 className="font-bold mb-3">{t.msgDealConversion}</h3>
               <p className="text-sm">
@@ -1686,7 +1688,7 @@ export const AnalyticsPage: React.FC = () => {
               <p className="text-sm">
                 {t.dealsWithWa}: <strong>{msgDealConversion.dealsWa}</strong>
               </p>
-              <p className="text-sm text-violet-600 dark:text-violet-400 font-bold mt-2">
+              <p className="text-sm text-emerald-700 font-bold mt-2">
                 {t.conversionApprox} {msgDealConversion.rate}%
               </p>
             </div>
@@ -1694,16 +1696,16 @@ export const AnalyticsPage: React.FC = () => {
 
           {/* Эффективность менеджеров */}
           <section id="sec-managers">
-            <h2 className="text-xs font-bold uppercase tracking-widest mb-4 text-indigo-500 dark:text-indigo-400">
+            <h2 className="text-xs font-bold uppercase tracking-widest mb-4 text-indigo-600">
               {t.managersPerformance}
             </h2>
             <div
-              className={`rounded-2xl border overflow-hidden ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+              className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm"
             >
               <div className="overflow-x-auto w-full">
                 <table className="w-full text-sm min-w-[640px]">
                   <thead>
-                    <tr className={`border-b ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                    <tr className="border-b border-gray-200 bg-gray-50">
                       {[t.manager, t.leads, t.dealsClosed, t.revenue, t.messagesHandled, t.avgResponseMin].map((h) => (
                         <th key={h} className="text-left py-3 px-4 text-xs font-bold uppercase whitespace-nowrap">
                           {h}
@@ -1715,7 +1717,7 @@ export const AnalyticsPage: React.FC = () => {
                     {managerPerf.map((r, i) => (
                       <tr
                         key={i}
-                        className={`border-b ${dark ? 'border-slate-800 hover:bg-slate-800/50' : 'border-slate-100 hover:bg-slate-50'}`}
+                        className="border-b border-gray-100 hover:bg-gray-50"
                       >
                         <td className="py-3 px-4 font-semibold">{r.manager}</td>
                         <td className="py-3 px-4 tabular-nums">{r.leads}</td>
@@ -1734,7 +1736,7 @@ export const AnalyticsPage: React.FC = () => {
           {/* Источники лидов + Финансы */}
           <section id="sec-sources" className="grid lg:grid-cols-2 gap-6 w-full">
             <div
-              className={`rounded-2xl border p-5 min-w-0 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+              className="rounded-xl border border-gray-200 bg-white p-5 min-w-0 shadow-sm"
             >
               <h3 className="font-bold mb-4 flex items-center gap-2">
                 <PieIcon className="w-5 h-5 shrink-0" /> {t.leadSources}
@@ -1762,14 +1764,14 @@ export const AnalyticsPage: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div id="sec-finance" className={`rounded-2xl border p-5 min-w-0 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <div id="sec-finance" className="rounded-xl border border-gray-200 bg-white p-5 min-w-0 shadow-sm">
               <h3 className="font-bold mb-4 flex items-center gap-2">
                 <Target className="w-5 h-5 shrink-0" /> {t.financePlanFact}
               </h3>
               <input
                 type="number"
                 placeholder={t.planPlaceholder}
-                className={`w-full rounded-xl border px-4 py-3 text-sm mb-3 ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`}
+                className="mb-3 w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm"
                 value={salesTarget || ''}
                 onChange={(e) => setSalesTarget(Number(e.target.value) || 0)}
               />
@@ -1780,11 +1782,11 @@ export const AnalyticsPage: React.FC = () => {
               >
                 {t.savePlan}
               </button>
-              <p className={`text-sm ${dark ? 'text-slate-400' : 'text-slate-600'}`}>{t.fact}</p>
+              <p className="text-sm text-gray-600">{t.fact}</p>
               <p className="text-3xl font-black">{kpi.revenueMonth.toLocaleString('ru-RU')} ₸</p>
               {salesTarget > 0 && (
                 <>
-                  <div className="mt-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden">
+                  <div className="mt-4 h-4 rounded-full bg-gray-200 overflow-hidden">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-violet-500 to-emerald-500 transition-all"
                       style={{ width: `${Math.min(100, Math.round((kpi.revenueMonth / salesTarget) * 100))}%` }}
@@ -1812,18 +1814,18 @@ export const AnalyticsPage: React.FC = () => {
               ].map((x) => (
                 <div
                   key={x.l}
-                  className={`rounded-xl border p-4 ${dark ? 'bg-slate-900 border-rose-900/50' : 'bg-rose-50 border-rose-200'}`}
+                  className="rounded-xl border border-rose-200 bg-rose-50 p-4"
                 >
-                  <p className="text-xs font-bold text-rose-600 dark:text-rose-400">{x.l}</p>
+                  <p className="text-xs font-bold text-rose-600">{x.l}</p>
                   <p className="text-2xl font-black mt-1">{x.v}</p>
                 </div>
               ))}
             </div>
             <div
-              className={`rounded-2xl border max-h-[360px] overflow-y-auto overflow-x-auto ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+              className="rounded-xl border border-gray-200 bg-white max-h-[360px] overflow-y-auto overflow-x-auto shadow-sm"
             >
               <table className="w-full text-sm min-w-[520px]">
-                <thead className={`sticky top-0 ${dark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                <thead className="sticky top-0 bg-gray-100">
                   <tr>
                     {['Время', 'Телефон', 'Превью', 'Менеджер', 'Статус'].map((h) => (
                       <th key={h} className="text-left py-2 px-3 text-xs font-bold">
@@ -1840,7 +1842,7 @@ export const AnalyticsPage: React.FC = () => {
                     return (
                       <tr
                         key={m.id}
-                        className={`border-b ${dark ? 'border-slate-800' : 'border-slate-100'}`}
+                        className="border-b border-gray-100"
                       >
                         <td className="py-2 px-3 whitespace-nowrap text-xs tabular-nums">
                           {fmtTime(m.createdAt)}
@@ -1859,7 +1861,7 @@ export const AnalyticsPage: React.FC = () => {
                 </tbody>
               </table>
               {liveFeed.length === 0 && (
-                <p className={`p-8 text-center text-sm ${dark ? 'text-slate-500' : 'text-slate-400'}`}>
+                <p className="p-8 text-center text-sm text-gray-500">
                   {t.noMessages10m}
                 </p>
               )}
@@ -1867,7 +1869,7 @@ export const AnalyticsPage: React.FC = () => {
           </section>
         </div>
       )}
-    </>
+    </div>
   );
 };
 

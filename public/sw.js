@@ -247,6 +247,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Vite dev: чанки и @vite/client меняются каждую секунду — не кэшировать (иначе бесконечные reload)
+  if (
+    url.pathname.includes('@vite') ||
+    url.pathname.includes('/node_modules/') ||
+    url.pathname.includes('/src/') ||
+    url.searchParams.has('t') ||
+    url.searchParams.has('v')
+  ) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   // Для остальных ресурсов используем Cache First
   event.respondWith(
     caches.match(event.request)
@@ -264,12 +276,11 @@ self.addEventListener('fetch', (event) => {
               return response || createErrorResponse(404);
             }
 
-            // Кэшируем новый ресурс
+            // Кэшируем статику (именованные чанки в prod с хешем; dev не идёт сюда — см. bypass выше)
             try {
               const responseToCache = response.clone();
               caches.open(CACHE_NAME)
                 .then((cache) => {
-                  // Кэшируем только определенные типы файлов
                   const url = event.request.url;
                   if (isSupportedScheme(url) && (
                     url.endsWith('.pdf') ||
