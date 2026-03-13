@@ -40,7 +40,10 @@ export const TransactionStats: React.FC<TransactionStatsProps> = ({
         style={{ WebkitOverflowScrolling: 'touch' }}
       >
         <span className="inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap rounded-md bg-gray-50/90 px-2.5 py-1 sm:px-3 sm:py-1.5">
-          <span className="font-medium text-gray-600">Общая:</span>
+          <span className="font-medium text-gray-600 sm:hidden" aria-hidden>
+            Общ:
+          </span>
+          <span className="hidden font-medium text-gray-600 sm:inline">Общая:</span>
           <span className="font-semibold tabular-nums text-red-600">{totalStr}</span>
         </span>
 
@@ -61,7 +64,10 @@ export const TransactionStats: React.FC<TransactionStatsProps> = ({
         </span>
 
         <span className="inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap rounded-md bg-gray-50/90 px-2.5 py-1 sm:px-3 sm:py-1.5">
-          <span className="font-medium text-gray-600">Безнал:</span>
+          <span className="font-medium text-gray-600 sm:hidden" aria-hidden>
+            Б/Н:
+          </span>
+          <span className="hidden font-medium text-gray-600 sm:inline">Безнал:</span>
           <span className="font-semibold tabular-nums text-purple-600">{cashlessStr}</span>
         </span>
       </div>
