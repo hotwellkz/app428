@@ -45,6 +45,13 @@ export interface WhatsAppConversation {
   lastReadAt?: Date | Timestamp;
   /** ID последнего прочитанного сообщения на момент mark-as-read */
   lastReadMessageId?: string | null;
+  /** Связанная сделка (воронка CRM) */
+  dealId?: string | null;
+  dealStageId?: string | null;
+  dealStageName?: string | null;
+  dealStageColor?: string | null;
+  dealTitle?: string | null;
+  dealResponsibleName?: string | null;
 }
 
 /** Направление сообщения */
@@ -108,4 +115,6 @@ export interface WhatsAppMessage {
   starredBy?: string | null;
   /** Реакции (только в CRM) */
   reactions?: MessageReaction[];
+  /** Системное сообщение CRM (смена этапа сделки и т.п.) */
+  system?: boolean;
 }

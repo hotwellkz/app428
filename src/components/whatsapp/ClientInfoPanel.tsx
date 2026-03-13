@@ -1,8 +1,13 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc, addDoc, deleteDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { collection, query, where, getDocs, doc, updateDoc, getDoc, addDoc, deleteDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../lib/firebase/config';
 import { useCompanyId } from '../../contexts/CompanyContext';
-import { Sparkles, MoreVertical, X } from 'lucide-react';
+import { createDeal, ensureDefaultPipeline, listStages, moveDealToStage } from '../../lib/firebase/deals';
+import type { Deal } from '../../types/deals';
+import { Sparkles, MoreVertical, X, ExternalLink, GitBranch } from 'lucide-react';
+
+const COLLECTION_WHATSAPP_CONVERSATIONS = 'whatsappConversations';
 
 const COLLECTION_CLIENTS = 'clients';
 const COLLECTION_DEALS = 'deals';
@@ -170,6 +175,14 @@ const COLLECTION_MANAGERS = 'chatManagers';
 interface ClientInfoPanelProps {
   /** Номер телефона (chatId) выбранного диалога */
   phone: string | null;
+  /** ID диалога WhatsApp (whatsappConversations) — для связи со сделкой */
+  conversationId?: string | null;
+  /** Уже привязанная сделка воронки (денорм. с диалога) */
+  conversationDealId?: string | null;
+  conversationDealTitle?: string | null;
+  conversationStageName?: string | null;
+  conversationStageColor?: string | null;
+  conversationResponsibleName?: string | null;
   /** Сообщения текущего диалога (для AI-анализа имени) */
   messages?: WhatsAppMessage[];
   /** Настроенные статусы сделок компании */
@@ -188,6 +201,12 @@ const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] 
 
 const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   phone,
+  conversationId = null,
+  conversationDealId = null,
+  conversationDealTitle = null,
+  conversationStageName = null,
+  conversationStageColor = null,
+  conversationResponsibleName = null,
   messages = [],
   dealStatuses,
   managers = [],
@@ -196,6 +215,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   embeddedInSheet = false
 }) => {
   const companyId = useCompanyId();
+  const navigate = useNavigate();
   const [client, setClient] = useState<WhatsAppClientCard | null>(null);
   const [deal, setDeal] = useState<DealCard | null>(null);
   const [loading, setLoading] = useState(false);
@@ -230,6 +250,103 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [deletingManager, setDeletingManager] = useState<{ manager: ChatManagerRecord; dealCount: number } | null>(null);
   const [deleteManagerLoading, setDeleteManagerLoading] = useState(false);
   const managerMenuRef = useRef<HTMLDivElement>(null);
+
+  const [pipelineDeal, setPipelineDeal] = useState<Deal | null>(null);
+  const [pipelineStages, setPipelineStages] = useState<Array<{ id: string; name: string; color?: string | null }>>([]);
+  const [pipelineDealLoading, setPipelineDealLoading] = useState(false);
+  const [creatingPipelineDeal, setCreatingPipelineDeal] = useState(false);
+  const [pipelineStageModal, setPipelineStageModal] = useState(false);
+
+  const loadPipelineDeal = useCallback(async () => {
+    if (!conversationDealId || !companyId) {
+      setPipelineDeal(null);
+      return;
+    }
+    setPipelineDealLoading(true);
+    try {
+      const d = await getDoc(doc(db, COLLECTION_DEALS, conversationDealId));
+      if (d.exists()) {
+        const data = d.data();
+        setPipelineDeal({
+          id: d.id,
+          companyId: (data.companyId as string) ?? '',
+          pipelineId: (data.pipelineId as string) ?? '',
+          stageId: (data.stageId as string) ?? '',
+          title: (data.title as string) ?? '',
+          clientId: (data.clientId as string | null) ?? null,
+          clientNameSnapshot: data.clientNameSnapshot as string | undefined,
+          clientPhoneSnapshot: data.clientPhoneSnapshot as string | undefined,
+          sortOrder: (data.sortOrder as number) ?? 0,
+          whatsappConversationId: (data.whatsappConversationId as string) ?? null
+        } as Deal);
+        const stages = await listStages(companyId, (data.pipelineId as string) ?? '');
+        setPipelineStages(stages.map((s) => ({ id: s.id, name: s.name, color: s.color })));
+      } else setPipelineDeal(null);
+    } catch {
+      setPipelineDeal(null);
+    } finally {
+      setPipelineDealLoading(false);
+    }
+  }, [conversationDealId, companyId]);
+
+  useEffect(() => {
+    loadPipelineDeal();
+  }, [loadPipelineDeal]);
+
+  const handleCreatePipelineDeal = async () => {
+    if (!phone || !companyId || !conversationId) return;
+    setCreatingPipelineDeal(true);
+    try {
+      const pipeline = await ensureDefaultPipeline(companyId);
+      if (!pipeline) return;
+      const stages = await listStages(companyId, pipeline.id);
+      const first = stages[0];
+      if (!first) return;
+      const title =
+        client?.name?.trim() ? `Сделка: ${client.name.trim()}` : `WhatsApp ${normalizePhone(phone)}`;
+      const deal = await createDeal(companyId, pipeline.id, first.id, {
+        title,
+        clientPhoneSnapshot: normalizePhone(phone),
+        clientNameSnapshot: client?.name ?? undefined,
+        clientId: client?.id ?? null
+      });
+      await updateDoc(doc(db, COLLECTION_WHATSAPP_CONVERSATIONS, conversationId), {
+        dealId: deal.id,
+        dealStageId: first.id,
+        dealStageName: first.name,
+        dealStageColor: first.color ?? '#6B7280',
+        dealTitle: deal.title,
+        dealResponsibleName: deal.responsibleNameSnapshot ?? null
+      });
+      await updateDoc(doc(db, COLLECTION_DEALS, deal.id), {
+        whatsappConversationId: conversationId
+      });
+      setPipelineDeal(deal);
+      setPipelineStages(stages.map((s) => ({ id: s.id, name: s.name, color: s.color })));
+    } finally {
+      setCreatingPipelineDeal(false);
+    }
+  };
+
+  const handlePipelineStageSelect = async (stageId: string, stageName: string, stageColor?: string | null) => {
+    if (!pipelineDeal || !companyId || !conversationId) return;
+    setCreatingPipelineDeal(true);
+    try {
+      await moveDealToStage(companyId, pipelineDeal.id, stageId, Date.now(), {
+        name: stageName,
+        color: stageColor ?? null
+      });
+      await updateDoc(doc(db, COLLECTION_WHATSAPP_CONVERSATIONS, conversationId), {
+        dealStageId: stageId,
+        dealStageName: stageName,
+        dealStageColor: stageColor ?? '#6B7280'
+      });
+      setPipelineDeal({ ...pipelineDeal, stageId });
+      setPipelineStageModal(false);
+    } finally {
+      setCreatingPipelineDeal(false);
+    }
+  };
 
   const loadClientAndDeal = React.useCallback(() => {
     if (!phone) return;
@@ -510,6 +627,109 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
           <p className="mt-1 text-base font-medium text-gray-900">
             {client ? (client.name || client.phone) : 'Новый клиент'}
           </p>
+
+          {conversationId && (
+            <div className="mt-4 p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100">
+              <h3 className="text-xs font-semibold text-emerald-800 uppercase tracking-wide flex items-center gap-1">
+                <GitBranch className="w-3.5 h-3.5" />
+                Сделка (воронка)
+              </h3>
+              {pipelineDealLoading ? (
+                <p className="mt-2 text-xs text-gray-500">Загрузка…</p>
+              ) : pipelineDeal || conversationDealId ? (
+                <>
+                  <p className="mt-2 text-sm font-medium text-gray-900 truncate">
+                    {pipelineDeal?.title ?? conversationDealTitle ?? 'Сделка'}
+                  </p>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Этап:{' '}
+                    <span
+                      className="font-medium px-1.5 py-0.5 rounded text-white"
+                      style={{
+                        backgroundColor:
+                          conversationStageColor && /^#[0-9A-Fa-f]{3,8}$/.test(conversationStageColor)
+                            ? conversationStageColor
+                            : '#6B7280'
+                      }}
+                    >
+                      {conversationStageName ?? '—'}
+                    </span>
+                  </p>
+                  {(pipelineDeal?.responsibleNameSnapshot || conversationResponsibleName) && (
+                    <p className="text-xs text-gray-600 mt-1">
+                      Ответственный:{' '}
+                      {pipelineDeal?.responsibleNameSnapshot ?? conversationResponsibleName}
+                    </p>
+                  )}
+                  <div className="mt-3 flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/deals?deal=${pipelineDeal?.id ?? conversationDealId}`)}
+                      className="w-full py-2 text-xs font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-1"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Открыть сделку
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPipelineStageModal(true)}
+                      disabled={creatingPipelineDeal}
+                      className="w-full py-2 text-xs font-medium text-emerald-700 border border-emerald-500 rounded-lg hover:bg-emerald-50"
+                    >
+                      Изменить статус
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleCreatePipelineDeal}
+                  disabled={creatingPipelineDeal}
+                  className="mt-3 w-full py-2.5 text-sm font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {creatingPipelineDeal ? 'Создание…' : 'Создать сделку'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {pipelineStageModal && pipelineStages.length > 0 && (
+            <div
+              className="fixed inset-0 z-[1200] flex items-end sm:items-center justify-center bg-black/40 p-4"
+              role="dialog"
+              aria-label="Этап сделки"
+            >
+              <div className="bg-white rounded-xl shadow-xl max-w-sm w-full max-h-[70vh] overflow-y-auto p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-semibold text-gray-900">Этап воронки</h4>
+                  <button type="button" onClick={() => setPipelineStageModal(false)} className="p-1 rounded hover:bg-gray-100">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <ul className="space-y-1">
+                  {pipelineStages.map((s) => (
+                    <li key={s.id}>
+                      <button
+                        type="button"
+                        onClick={() => handlePipelineStageSelect(s.id, s.name, s.color)}
+                        disabled={creatingPipelineDeal}
+                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 text-sm flex items-center gap-2"
+                      >
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{
+                            backgroundColor:
+                              s.color && /^#[0-9A-Fa-f]{3,8}$/.test(s.color) ? s.color : '#9CA3AF'
+                          }}
+                        />
+                        {s.name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
 
           {!editing ? (
             <>

@@ -1,13 +1,17 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { usePipelines, usePipelineStages, useDeals } from '../hooks/useDeals';
 import type { Deal, DealsPipelineStage } from '../types/deals';
 import { createDeal, moveDealToStage } from '../lib/firebase/deals';
 import { LoadingSpinner } from '../components/LoadingSpinner';
-import { Plus, Settings2 } from 'lucide-react';
+import { Plus, Settings2, MessageCircle, X } from 'lucide-react';
 
 export const DealsPage: React.FC = () => {
   const companyId = useCompanyId();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dealIdFromUrl = searchParams.get('deal');
+  const [detailDeal, setDetailDeal] = useState<Deal | null>(null);
   const { pipelines, loading: loadingPipelines, error: pipelinesError } = usePipelines(companyId);
   const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(null);
 
@@ -50,7 +54,11 @@ export const DealsPage: React.FC = () => {
     targetIndex: number
   ) => {
     try {
-      await moveDealToStage(deal.companyId, deal.id, targetStageId, Date.now() + targetIndex);
+      const stage = stages.find((s) => s.id === targetStageId);
+      await moveDealToStage(deal.companyId, deal.id, targetStageId, Date.now() + targetIndex, {
+        name: stage?.name ?? 'Этап',
+        color: stage?.color ?? null
+      });
       if (import.meta.env.DEV) {
         console.log('[Deals] stage move success:', {
           dealId: deal.id,
@@ -74,6 +82,21 @@ export const DealsPage: React.FC = () => {
   }
 
   const loading = loadingPipelines || loadingStages || loadingDeals;
+
+  useEffect(() => {
+    if (!dealIdFromUrl) {
+      setDetailDeal(null);
+      return;
+    }
+    const d = deals.find((x) => x.id === dealIdFromUrl) ?? null;
+    setDetailDeal(d);
+  }, [dealIdFromUrl, deals]);
+
+  const closeDetail = () => {
+    searchParams.delete('deal');
+    setSearchParams(searchParams, { replace: true });
+    setDetailDeal(null);
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -161,9 +184,17 @@ export const DealsPage: React.FC = () => {
                     {items.map((deal, index) => (
                       <div
                         key={deal.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => setSearchParams({ deal: deal.id }, { replace: false })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ')
+                            setSearchParams({ deal: deal.id }, { replace: false });
+                        }}
                         className="bg-white rounded-md shadow-sm px-3 py-2 cursor-pointer hover:shadow-md transition-shadow text-sm"
                         draggable
                         onDragStart={(e) => {
+                          e.stopPropagation();
                           e.dataTransfer.setData('text/plain', JSON.stringify({ dealId: deal.id }));
                         }}
                         onDragOver={(e) => e.preventDefault()}
@@ -207,6 +238,59 @@ export const DealsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {detailDeal && (
+        <div
+          className="fixed inset-0 z-[1000] flex items-end sm:items-center justify-center bg-black/45 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Карточка сделки"
+        >
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5 max-h-[85vh] overflow-y-auto">
+            <div className="flex justify-between items-start gap-2">
+              <h2 className="text-lg font-semibold text-gray-900 pr-8">{detailDeal.title}</h2>
+              <button
+                type="button"
+                onClick={closeDetail}
+                className="p-1 rounded-lg hover:bg-gray-100 shrink-0"
+                aria-label="Закрыть"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            {detailDeal.clientNameSnapshot && (
+              <p className="text-sm text-gray-600 mt-1">{detailDeal.clientNameSnapshot}</p>
+            )}
+            {detailDeal.amount != null && (
+              <p className="text-sm font-medium text-gray-800 mt-2">
+                {detailDeal.amount.toLocaleString('ru-RU')} ₸
+              </p>
+            )}
+            <div className="mt-4 p-3 rounded-lg bg-[#e7fce3] border border-green-200">
+              <h3 className="text-xs font-semibold text-green-800 uppercase">Источник общения</h3>
+              <p className="text-sm font-medium text-gray-900 mt-1 flex items-center gap-1">
+                <MessageCircle className="w-4 h-4 text-green-600" />
+                WhatsApp
+              </p>
+              {detailDeal.clientPhoneSnapshot && (
+                <p className="text-sm text-gray-700 mt-1 font-mono">{detailDeal.clientPhoneSnapshot}</p>
+              )}
+              {detailDeal.whatsappConversationId ? (
+                <Link
+                  to={`/whatsapp?chatId=${detailDeal.whatsappConversationId}`}
+                  className="mt-3 inline-flex items-center justify-center w-full py-2 rounded-lg bg-[#25D366] text-white text-sm font-medium hover:bg-[#20bd5a]"
+                >
+                  Открыть чат
+                </Link>
+              ) : (
+                <p className="text-xs text-gray-500 mt-2">
+                  Чат не привязан. Откройте диалог в WhatsApp и нажмите «Создать сделку» в карточке клиента.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

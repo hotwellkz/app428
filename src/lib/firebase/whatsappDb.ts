@@ -46,6 +46,13 @@ export interface ConversationListItem {
   /** Время последнего ручного сброса состояния «ждёт ответа» (one-shot dismiss). */
   awaitingReplyDismissedAt?: Date | Timestamp | null;
   unreadCount: number;
+  /** Сделка (воронка): этап в списке чатов */
+  dealId?: string | null;
+  dealStageId?: string | null;
+  dealStageName?: string | null;
+  dealStageColor?: string | null;
+  dealTitle?: string | null;
+  dealResponsibleName?: string | null;
   /** Имя клиента из CRM, если контакт связан; иначе показывать phone */
   displayTitle?: string;
 }
@@ -115,7 +122,13 @@ function docToConversation(docId: string, data: Record<string, unknown>): WhatsA
     lastMessageSender: (data.lastMessageSender as WhatsAppConversation['lastMessageSender']) ?? null,
     unreadCount: (data.unreadCount as number) ?? 0,
     lastReadAt: data.lastReadAt as WhatsAppConversation['lastReadAt'],
-    lastReadMessageId: (data.lastReadMessageId as string) ?? undefined
+    lastReadMessageId: (data.lastReadMessageId as string) ?? undefined,
+    dealId: (data.dealId as string) ?? undefined,
+    dealStageId: (data.dealStageId as string) ?? undefined,
+    dealStageName: (data.dealStageName as string) ?? undefined,
+    dealStageColor: (data.dealStageColor as string) ?? undefined,
+    dealTitle: (data.dealTitle as string) ?? undefined,
+    dealResponsibleName: (data.dealResponsibleName as string) ?? undefined
   };
 }
 
@@ -216,8 +229,28 @@ function docToMessage(docId: string, data: Record<string, unknown>): WhatsAppMes
     starred: data.starred === true,
     starredAt: data.starredAt as WhatsAppMessage['starredAt'],
     starredBy: (data.starredBy as string) ?? undefined,
-    reactions: reactions.length > 0 ? reactions : undefined
+    reactions: reactions.length > 0 ? reactions : undefined,
+    system: data.system === true
   };
+}
+
+/** Системное сообщение в чате (CRM), не уходит в WhatsApp. */
+export async function saveSystemMessage(
+  conversationId: string,
+  text: string,
+  companyId?: string | null
+): Promise<string> {
+  const ref = await addDoc(collection(db, COLLECTIONS.MESSAGES), {
+    conversationId,
+    text,
+    direction: 'outgoing',
+    createdAt: serverTimestamp(),
+    channel: 'whatsapp',
+    system: true,
+    status: 'sent',
+    ...(companyId ? { companyId } : {})
+  });
+  return ref.id;
 }
 
 /**
@@ -406,7 +439,13 @@ export function subscribeConversationsList(
         lastIncomingAt: c.lastIncomingAt,
         lastOutgoingAt: c.lastOutgoingAt,
         awaitingReplyDismissedAt: c.awaitingReplyDismissedAt ?? null,
-        unreadCount: c.unreadCount ?? 0
+        unreadCount: c.unreadCount ?? 0,
+        dealId: c.dealId ?? null,
+        dealStageId: c.dealStageId ?? null,
+        dealStageName: c.dealStageName ?? null,
+        dealStageColor: c.dealStageColor ?? null,
+        dealTitle: c.dealTitle ?? null,
+        dealResponsibleName: c.dealResponsibleName ?? null
       };
     });
     const getItemSortTime = (item: ConversationListItem): number => {

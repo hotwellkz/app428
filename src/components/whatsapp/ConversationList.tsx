@@ -68,8 +68,12 @@ const ConversationList: React.FC<ConversationListProps> = ({
         };
 
         const waitingDuration = !hasUnread && isNeedReply ? getWaitingDurationText() : null;
-        const dealStatusColor = (item as { dealStatusColor?: string | null }).dealStatusColor;
-        const dealStatusName = (item as { dealStatusName?: string | null }).dealStatusName;
+        const dealStageName = (item as { dealStageName?: string | null }).dealStageName;
+        const dealStageColor = (item as { dealStageColor?: string | null }).dealStageColor;
+        const dealStatusColor =
+          dealStageColor || (item as { dealStatusColor?: string | null }).dealStatusColor;
+        const dealStatusName =
+          dealStageName || (item as { dealStatusName?: string | null }).dealStatusName;
         const managerColor = (item as { managerColor?: string | null }).managerColor;
         const managerName = (item as { managerName?: string | null }).managerName;
         const statusDotStyle = dealStatusColor
@@ -149,7 +153,7 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   phone={item.phone ?? item.client?.phone ?? undefined}
                   avatarUrl={item.client?.avatarUrl ?? null}
                 />
-                <div className="flex-1 min-w-0 flex items-center gap-2">
+                <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
                   <span
                     className={`truncate text-sm md:text-[15px] ${
                       hasUnread ? 'font-semibold text-gray-900' : 'font-medium text-gray-900'
@@ -157,6 +161,19 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   >
                     {item.displayTitle ?? item.phone ?? item.client?.phone ?? item.clientId ?? '—'}
                   </span>
+                  {dealStageName && (
+                    <span
+                      className="truncate max-w-[140px] text-[10px] md:text-[11px] font-medium px-1.5 py-0.5 rounded-md text-white shrink-0"
+                      style={{
+                        backgroundColor: dealStageColor && /^#[0-9A-Fa-f]{3,8}$/.test(dealStageColor)
+                          ? dealStageColor
+                          : '#6B7280'
+                      }}
+                      title={dealStageName}
+                    >
+                      {dealStageName}
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   {item.lastMessage && (

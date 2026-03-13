@@ -14,6 +14,7 @@ import {
   type Unsubscribe
 } from 'firebase/firestore';
 import { db } from './config';
+import { saveSystemMessage } from './whatsappDb';
 import type {
   DealsPipeline,
   DealsPipelineStage,
@@ -80,7 +81,8 @@ function docToDeal(id: string, data: Record<string, unknown>): Deal {
     updatedAt: (data.updatedAt as Deal['updatedAt']) ?? null,
     stageChangedAt: (data.stageChangedAt as Deal['stageChangedAt']) ?? null,
     nextActionAt: (data.nextActionAt as Deal['nextActionAt']) ?? null,
-    isArchived: Boolean(data.isArchived)
+    isArchived: Boolean(data.isArchived),
+    whatsappConversationId: (data.whatsappConversationId as string) ?? null
   };
 }
 
@@ -287,6 +289,7 @@ export async function updateDeal(
       | 'tags'
       | 'nextActionAt'
       | 'isArchived'
+      | 'whatsappConversationId'
     >
   >
 ): Promise<void> {
@@ -294,11 +297,14 @@ export async function updateDeal(
   await updateDoc(ref, { ...data, updatedAt: serverTimestamp() });
 }
 
+const COLLECTION_WHATSAPP_CONVERSATIONS = 'whatsappConversations';
+
 export async function moveDealToStage(
   companyId: string,
   dealId: string,
   targetStageId: string,
-  sortOrder: number
+  sortOrder: number,
+  stageMeta?: { name: string; color?: string | null }
 ): Promise<void> {
   const ref = doc(db, COLLECTION_DEALS, dealId);
   await updateDoc(ref, {
@@ -308,6 +314,18 @@ export async function moveDealToStage(
     updatedAt: serverTimestamp()
   });
   await addDealActivity(companyId, dealId, 'stage_changed', { stageId: targetStageId });
+
+  const dealSnap = await getDoc(ref);
+  const convId = (dealSnap.data() as { whatsappConversationId?: string | null })?.whatsappConversationId;
+  if (!convId || !stageMeta?.name) return;
+
+  await updateDoc(doc(db, COLLECTION_WHATSAPP_CONVERSATIONS, convId), {
+    dealStageId: targetStageId,
+    dealStageName: stageMeta.name,
+    dealStageColor: stageMeta.color ?? '#6B7280'
+  });
+
+  await saveSystemMessage(convId, `Сделка переведена в этап: ${stageMeta.name}`, companyId);
 }
 
 export async function reorderDealsWithinStage(

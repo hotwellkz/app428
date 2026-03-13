@@ -53,6 +53,8 @@ export interface Deal {
   stageChangedAt: Date | Timestamp | null;
   nextActionAt?: Date | Timestamp | null;
   isArchived?: boolean;
+  /** Диалог WhatsApp, привязанный к сделке */
+  whatsappConversationId?: string | null;
 }
 
 export type DealActivityType =

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { MessageSquare, Menu, Search } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useAuth } from '../hooks/useAuth';
@@ -124,6 +125,9 @@ const MOBILE_BREAKPOINT = 768;
 const WIDE_LAYOUT_BREAKPOINT = 1200;
 
 const WhatsAppChat: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const chatIdFromUrl = searchParams.get('chatId');
+
   const isMobile = useIsMobile(MOBILE_BREAKPOINT);
   const isWideLayout = !useIsMobile(WIDE_LAYOUT_BREAKPOINT);
   const { isAdmin, user } = useAuth();
@@ -377,6 +381,15 @@ const WhatsAppChat: React.FC = () => {
     const unsub = subscribeConversationsList(companyId, setConversationsWithNotification, onError);
     return unsub;
   }, [companyId, setConversationsWithNotification]);
+
+  useEffect(() => {
+    if (!chatIdFromUrl) return;
+    const found = conversations.some((c) => c.id === chatIdFromUrl);
+    if (found) {
+      setSelectedId(chatIdFromUrl);
+      setSearchParams({}, { replace: true });
+    }
+  }, [chatIdFromUrl, conversations, setSearchParams]);
 
   useEffect(() => {
     if (!companyId) {
@@ -714,8 +727,10 @@ const WhatsAppChat: React.FC = () => {
       const displayTitle =
         crmNamesByPhone.get(normalizePhone(c.phone))?.trim() || c.phone || '—';
       const status = statusId ? (dealStatuses.find((s) => s.id === statusId) ?? null) : null;
-      const dealStatusColor = status?.color?.trim() || null;
-      const dealStatusName = status?.name?.trim() || null;
+      const legacyColor = status?.color?.trim() || null;
+      const legacyName = status?.name?.trim() || null;
+      const dealStatusColor = c.dealStageName ? c.dealStageColor ?? '#6B7280' : legacyColor;
+      const dealStatusName = c.dealStageName ?? legacyName;
       const manager = managerId ? (managers.find((m) => m.id === managerId) ?? null) : null;
       const managerColor = manager?.color?.trim() || null;
       const managerName = manager?.name?.trim() || null;
@@ -1938,6 +1953,12 @@ const WhatsAppChat: React.FC = () => {
         {isWideLayout && (
           <ClientInfoPanel
             phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null}
+            conversationId={selectedId}
+            conversationDealId={selectedItem?.dealId ?? null}
+            conversationDealTitle={selectedItem?.dealTitle ?? null}
+            conversationStageName={selectedItem?.dealStageName ?? null}
+            conversationStageColor={selectedItem?.dealStageColor ?? null}
+            conversationResponsibleName={selectedItem?.dealResponsibleName ?? null}
             messages={messages}
             dealStatuses={dealStatuses}
             managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
@@ -2017,6 +2038,12 @@ const WhatsAppChat: React.FC = () => {
                     ? selectedItem.phone
                     : selectedItem.client?.phone ?? null
                 }
+                conversationId={selectedId}
+                conversationDealId={selectedItem.dealId ?? null}
+                conversationDealTitle={selectedItem.dealTitle ?? null}
+                conversationStageName={selectedItem.dealStageName ?? null}
+                conversationStageColor={selectedItem.dealStageColor ?? null}
+                conversationResponsibleName={selectedItem.dealResponsibleName ?? null}
                 messages={messages}
                 dealStatuses={dealStatuses}
                 managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}

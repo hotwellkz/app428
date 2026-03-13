@@ -176,6 +176,18 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
 
   const isOutgoing = message.direction === 'outgoing';
   const isDeleted = message.deleted === true;
+  const isSystem = message.system === true;
+
+  if (isSystem) {
+    return (
+      <div className="message flex justify-center w-full my-1 px-2">
+        <div className="rounded-lg px-3 py-1.5 bg-black/[0.06] text-center max-w-[90%]">
+          <p className="text-xs text-gray-600 whitespace-pre-wrap">{message.text}</p>
+          <p className="text-[10px] text-gray-400 mt-0.5">{formatMessageTime(message.createdAt)}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
