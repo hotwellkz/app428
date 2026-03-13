@@ -50,8 +50,11 @@ import {
   Moon,
   Sun,
   Zap,
-  Radio
+  Radio,
+  LayoutDashboard,
+  Clock
 } from 'lucide-react';
+import ru from '../locales/ru.json';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -80,13 +83,15 @@ function fmtTime(ms: number): string {
 }
 
 type SectionId =
-  | 'executive'
-  | 'sales'
+  | 'director'
+  | 'leads'
   | 'messaging'
   | 'managers'
   | 'sources'
   | 'finance'
   | 'live';
+
+const t = ru.analytics;
 
 export const AnalyticsPage: React.FC = () => {
   const companyId = useCompanyId();
@@ -100,7 +105,7 @@ export const AnalyticsPage: React.FC = () => {
   const [managersList, setManagersList] = useState<ManagerRow[]>([]);
   const [stageMeta, setStageMeta] = useState<{ id: string; name: string; type: string }[]>([]);
   const [liveFeed, setLiveFeed] = useState<MessageRow[]>([]);
-  const [activeSection, setActiveSection] = useState<SectionId>('executive');
+  const [activeSection, setActiveSection] = useState<SectionId>('director');
 
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
@@ -303,6 +308,29 @@ export const AnalyticsPage: React.FC = () => {
       avgDeal
     };
   }, [dealsAllTimeFiltered, todayStart, monthStart, monthEnd, wonStageIds]);
+
+  /** KPI директорской панели: период + фильтры менеджер/источник/канал */
+  const directorKpi = useMemo(() => {
+    const leadsToday = dealsAllTimeFiltered.filter((d) => d.createdAt >= todayStart).length;
+    const leadsPeriod = dealsFiltered.length;
+    const closedPeriod = dealsAllTimeFiltered.filter(
+      (d) =>
+        wonStageIds.has(d.stageId) && d.stageChangedAt >= fromMs && d.stageChangedAt <= toMs
+    );
+    const revenuePeriod = closedPeriod.reduce((s, d) => s + (d.amount || 0), 0);
+    const convPct =
+      leadsPeriod > 0 ? Math.min(100, Math.round((closedPeriod.length / leadsPeriod) * 100)) : 0;
+    const avgCheck =
+      closedPeriod.length > 0 ? Math.round(revenuePeriod / closedPeriod.length) : 0;
+    return {
+      leadsToday,
+      leadsPeriod,
+      dealsClosedPeriod: closedPeriod.length,
+      revenuePeriod,
+      convPct,
+      avgCheck
+    };
+  }, [dealsAllTimeFiltered, dealsFiltered, fromMs, toMs, wonStageIds, todayStart]);
 
   const funnelData = useMemo(() => {
     const stages = stageMeta.filter((s) => s.type === 'open' || s.type === 'won' || s.type === 'lost');
@@ -583,13 +611,13 @@ export const AnalyticsPage: React.FC = () => {
   };
 
   const sections: { id: SectionId; label: string }[] = [
-    { id: 'executive', label: 'Директор' },
-    { id: 'sales', label: 'Продажи' },
-    { id: 'messaging', label: 'WhatsApp' },
-    { id: 'managers', label: 'Менеджеры' },
-    { id: 'sources', label: 'Источники' },
-    { id: 'finance', label: 'Финансы' },
-    { id: 'live', label: 'Мониторинг' }
+    { id: 'director', label: t.navDirector },
+    { id: 'leads', label: t.navLeads },
+    { id: 'messaging', label: t.navWhatsapp },
+    { id: 'managers', label: t.navManagers },
+    { id: 'sources', label: t.navSources },
+    { id: 'finance', label: t.navFinance },
+    { id: 'live', label: t.navLive }
   ];
 
   const shell = (child: React.ReactNode) => (
@@ -603,7 +631,7 @@ export const AnalyticsPage: React.FC = () => {
   );
 
   if (!companyId) {
-    return shell(<div className="p-6 text-slate-500">Компания не выбрана</div>);
+    return shell(<div className="p-6 text-slate-500">{t.noCompany}</div>);
   }
 
   return shell(
@@ -620,9 +648,9 @@ export const AnalyticsPage: React.FC = () => {
                 <BarChart3 className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-lg font-bold tracking-tight">Центр аналитики CRM</h1>
+                <h1 className="text-lg font-bold tracking-tight">{t.pageTitle}</h1>
                 <p className={`text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  Лиды · сделки · WhatsApp · менеджеры · live · кэш ~45 с
+                  {t.pageSubtitle}
                 </p>
               </div>
             </div>
@@ -744,116 +772,192 @@ export const AnalyticsPage: React.FC = () => {
           ref={reportRef}
           className="max-w-[1680px] mx-auto px-3 sm:px-5 py-6 space-y-10 pb-24"
         >
-          {/* 1 Executive Dashboard */}
-          <section id="sec-executive">
-            <h2
-              className={`text-xs font-bold uppercase tracking-widest mb-2 flex items-center gap-2 ${
-                dark ? 'text-violet-400' : 'text-violet-600'
-              }`}
-            >
-              <Zap className="w-4 h-4" /> Executive Dashboard — обзор для руководителя
-            </h2>
-            <p className={`text-sm mb-4 ${dark ? 'text-slate-400' : 'text-slate-600'}`}>
-              Статус бизнеса за секунды: лиды, закрытия, выручка, ответы клиентам.
-            </p>
-            <div className="flex gap-4 overflow-x-auto pb-2 snap-x scrollbar-thin -mx-1 px-1">
+          {/* Директорская панель */}
+          <section id="sec-director" className="space-y-4">
+            <div className="flex flex-wrap items-end gap-2 justify-between">
+              <div>
+                <h2
+                  className={`text-lg font-black tracking-tight flex items-center gap-2 ${
+                    dark ? 'text-violet-300' : 'text-violet-700'
+                  }`}
+                >
+                  <LayoutDashboard className="w-6 h-6" />
+                  {t.directorPanel}
+                </h2>
+                <p className={`text-sm mt-1 ${dark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  {t.directorPanelHint}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-4 overflow-x-auto pb-3 snap-x scrollbar-thin -mx-1 px-1 w-full">
               {[
                 {
-                  label: 'Лиды сегодня',
-                  value: kpi.leadsToday,
+                  label: t.applicationsToday,
+                  value: directorKpi.leadsToday,
                   icon: Users,
-                  grad: 'from-cyan-500 to-blue-600'
+                  grad: 'from-cyan-600 to-blue-700'
                 },
                 {
-                  label: 'Лиды за месяц',
+                  label: t.applicationsMonth,
                   value: kpi.leadsMonth,
                   icon: TrendingUp,
-                  grad: 'from-blue-500 to-indigo-600'
+                  grad: 'from-blue-600 to-indigo-700'
                 },
                 {
-                  label: 'Закрыто сделок (мес.)',
-                  value: kpi.dealsClosedMonth,
+                  label: t.applicationsPeriod,
+                  value: directorKpi.leadsPeriod,
                   icon: BarChart3,
-                  grad: 'from-indigo-500 to-violet-600'
+                  grad: 'from-indigo-600 to-violet-700'
                 },
                 {
-                  label: 'Выручка (мес.)',
+                  label: t.dealsMonth,
+                  value: kpi.dealsClosedMonth,
+                  icon: Target,
+                  grad: 'from-violet-600 to-purple-700'
+                },
+                {
+                  label: t.dealsPeriod,
+                  value: directorKpi.dealsClosedPeriod,
+                  icon: Zap,
+                  grad: 'from-fuchsia-600 to-pink-700'
+                },
+                {
+                  label: t.revenueMonth,
                   value: `${(kpi.revenueMonth / 1000).toFixed(0)}k ₸`,
                   sub: kpi.revenueMonth.toLocaleString('ru-RU') + ' ₸',
                   icon: DollarSign,
-                  grad: 'from-emerald-500 to-teal-600'
+                  grad: 'from-emerald-600 to-teal-700'
                 },
                 {
-                  label: 'Конверсия в победу',
-                  value: `${kpi.conversion}%`,
+                  label: t.revenuePeriod,
+                  value: `${(directorKpi.revenuePeriod / 1000).toFixed(0)}k ₸`,
+                  sub: directorKpi.revenuePeriod.toLocaleString('ru-RU') + ' ₸',
+                  icon: DollarSign,
+                  grad: 'from-teal-600 to-cyan-700'
+                },
+                {
+                  label: t.conversionLeadDeal,
+                  value: `${directorKpi.convPct}%`,
                   icon: Percent,
-                  grad: 'from-amber-500 to-orange-600'
+                  grad: 'from-amber-600 to-orange-700'
                 },
                 {
-                  label: 'Средний чек (won)',
-                  value: kpi.avgDeal ? `${(kpi.avgDeal / 1000).toFixed(0)}k ₸` : '—',
+                  label: t.avgCheck,
+                  value: directorKpi.avgCheck ? directorKpi.avgCheck.toLocaleString('ru-RU') + ' ₸' : '—',
                   icon: Target,
-                  grad: 'from-rose-500 to-pink-600'
+                  grad: 'from-rose-600 to-red-800'
                 },
                 {
-                  label: 'Ждут ответа',
+                  label: t.clientsWaiting,
                   value: clientsWaitingReply,
-                  icon: Radio,
-                  grad: 'from-red-500 to-rose-700'
+                  icon: Clock,
+                  grad: 'from-red-600 to-rose-900'
+                },
+                {
+                  label: t.unreadWhatsapp,
+                  value: waKpi.unread,
+                  icon: MessageCircle,
+                  grad: 'from-green-600 to-emerald-900'
                 }
               ].map((c) => (
                 <div
                   key={c.label}
-                  className={`min-w-[158px] sm:min-w-[180px] snap-start rounded-2xl p-4 text-white shadow-xl bg-gradient-to-br ${c.grad}`}
+                  className={`min-w-[168px] sm:min-w-[188px] lg:min-w-0 lg:flex-1 snap-start rounded-2xl p-5 text-white shadow-xl bg-gradient-to-br shrink-0 ${c.grad}`}
                 >
-                  <c.icon className="w-8 h-8 opacity-90 mb-3" />
-                  <p className="text-[11px] font-semibold uppercase tracking-wide opacity-90">{c.label}</p>
-                  <p className="text-3xl sm:text-4xl font-black tabular-nums mt-1 leading-none">{c.value}</p>
+                  <c.icon className="w-9 h-9 opacity-95 mb-3" />
+                  <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide opacity-90 leading-tight">
+                    {c.label}
+                  </p>
+                  <p className="text-2xl sm:text-3xl font-black tabular-nums mt-2 leading-none">{c.value}</p>
                   {'sub' in c && c.sub && (
-                    <p className="text-[10px] opacity-80 mt-0.5 truncate max-w-full">{c.sub}</p>
+                    <p className="text-[10px] opacity-85 mt-1 truncate max-w-full">{c.sub}</p>
                   )}
                 </div>
               ))}
             </div>
+            <section
+              className={`rounded-2xl border p-4 ${
+                dark ? 'bg-red-950/40 border-red-900' : 'bg-red-50 border-red-200'
+              }`}
+            >
+              <h3 className={`text-sm font-bold mb-3 ${dark ? 'text-red-300' : 'text-red-800'}`}>
+                {t.unreadAlertTitle}
+              </h3>
+              <div className="grid sm:grid-cols-3 gap-3">
+                {[
+                  { label: t.unreadNow, v: unreadAlerts.now, tone: 'bg-red-600 text-white' },
+                  { label: t.unread30m, v: unreadAlerts.u30, tone: 'bg-red-700 text-white' },
+                  { label: t.unread60m, v: unreadAlerts.u60, tone: 'bg-red-900 text-white' }
+                ].map((x) => (
+                  <div key={x.label} className={`rounded-xl px-4 py-3 ${x.tone} shadow-lg`}>
+                    <p className="text-xs font-semibold opacity-90">{x.label}</p>
+                    <p className="text-3xl font-black mt-1 tabular-nums">{x.v}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
           </section>
 
-          {/* Unread alerts */}
-          <section
-            className={`rounded-2xl border p-4 ${
-              dark ? 'bg-red-950/40 border-red-900' : 'bg-red-50 border-red-200'
-            }`}
-          >
-            <h3 className={`text-sm font-bold mb-3 ${dark ? 'text-red-300' : 'text-red-800'}`}>
-              Unread Alert System
-            </h3>
-            <div className="grid sm:grid-cols-3 gap-3">
-              {[
-                { label: 'Сейчас непрочитано', v: unreadAlerts.now, tone: 'bg-red-600 text-white' },
-                { label: '> 30 мин с входящего', v: unreadAlerts.u30, tone: 'bg-red-700 text-white' },
-                { label: '> 1 час', v: unreadAlerts.u60, tone: 'bg-red-900 text-white' }
-              ].map((x) => (
-                <div
-                  key={x.label}
-                  className={`rounded-xl px-4 py-3 ${x.tone} shadow-lg`}
-                >
-                  <p className="text-xs font-semibold opacity-90">{x.label}</p>
-                  <p className="text-3xl font-black mt-1 tabular-nums">{x.v}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* 2 Sales funnel + 3 Leads graph */}
-          <section id="sec-sales" className="grid lg:grid-cols-2 gap-6">
+          {/* График заявок + воронка */}
+          <section id="sec-leads" className="space-y-6">
             <div
-              className={`rounded-2xl border p-5 shadow-sm ${
+              className={`rounded-2xl border p-5 shadow-sm w-full ${
                 dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
               }`}
             >
-              <h2 className="text-base font-bold mb-1">Sales Analytics — воронка</h2>
-              <p className={`text-xs mb-4 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
-                Этапы CRM · количество · конверсия между этапами (%)
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <h2 className="text-base font-bold">{t.leadsChart}</h2>
+                <div className="flex gap-1 flex-wrap">
+                  {(['1', '7', '30', '90', '365'] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      onClick={() => setLeadsRange(d)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
+                        leadsRange === d
+                          ? 'bg-violet-600 text-white'
+                          : dark
+                            ? 'bg-slate-800 text-slate-300'
+                            : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      {d === '1' ? t.today : d === '365' ? t.year : `${d}${t.days}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="h-80 w-full min-w-0" style={{ minHeight: 320 }}>
+                <ResponsiveContainer width="100%" height={320} debounce={80}>
+                  <LineChart data={leadsDays}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <YAxis tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <Tooltip
+                      contentStyle={{
+                        background: dark ? '#1e293b' : '#fff',
+                        border: dark ? '1px solid #334155' : '1px solid #e2e8f0'
+                      }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="leads"
+                      name={t.leads}
+                      stroke="#7c3aed"
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div
+              className={`rounded-2xl border p-5 shadow-sm w-full ${
+                dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
+              }`}
+            >
+              <h2 className="text-base font-bold mb-1">{t.funnelTitle}</h2>
+              <p className={`text-xs mb-4 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{t.funnelHint}</p>
               <div className="h-80 w-full min-w-0 shrink-0" style={{ minHeight: 320 }}>
                 <ResponsiveContainer width="100%" height={320} debounce={80}>
                   <BarChart data={funnelData} layout="vertical" margin={{ left: 4, right: 24 }}>
@@ -871,11 +975,11 @@ export const AnalyticsPage: React.FC = () => {
                         border: dark ? '1px solid #334155' : '1px solid #e2e8f0'
                       }}
                       formatter={(v: number, _n: string, p: { payload: { pctFromPrev: number } }) => [
-                        `${v} сделок · ${p.payload.pctFromPrev}% от пред.`,
-                        'Этап'
+                        `${v} ${t.dealsCount} · ${p.payload.pctFromPrev}% ${t.fromPrev}`,
+                        t.stage
                       ]}
                     />
-                    <Bar dataKey="value" radius={[0, 8, 8, 0]} name="Сделок">
+                    <Bar dataKey="value" radius={[0, 8, 8, 0]} name={t.dealsClosed}>
                       {funnelData.map((e, i) => (
                         <Cell key={i} fill={e.fill} />
                       ))}
@@ -884,78 +988,28 @@ export const AnalyticsPage: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div
-              className={`rounded-2xl border p-5 shadow-sm ${
-                dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
-              }`}
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                <h2 className="text-base font-bold">Лиды по дням</h2>
-                <div className="flex gap-1 flex-wrap">
-                  {(['1', '7', '30', '90', '365'] as const).map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setLeadsRange(d)}
-                      className={`px-2.5 py-1 rounded-lg text-xs font-bold ${
-                        leadsRange === d
-                          ? 'bg-violet-600 text-white'
-                          : dark
-                            ? 'bg-slate-800 text-slate-300'
-                            : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {d === '1' ? 'Сегодня' : d === '365' ? 'Год' : `${d}д`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="h-80 w-full min-w-0 shrink-0" style={{ minHeight: 320 }}>
-                <ResponsiveContainer width="100%" height={320} debounce={80}>
-                  <LineChart data={leadsDays}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
-                    <YAxis tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
-                    <Tooltip
-                      contentStyle={{
-                        background: dark ? '#1e293b' : '#fff',
-                        border: dark ? '1px solid #334155' : '1px solid #e2e8f0'
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="leads"
-                      stroke="#7c3aed"
-                      strokeWidth={2}
-                      dot={false}
-                      isAnimationActive
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
           </section>
 
-          {/* 4–6 Messaging */}
-          <section id="sec-messaging">
+          {/* Аналитика сообщений (WhatsApp) */}
+          <section id="sec-messaging" className="space-y-6">
             <h2
-              className={`text-xs font-bold uppercase tracking-widest mb-4 ${
+              className={`text-xs font-bold uppercase tracking-widest ${
                 dark ? 'text-emerald-400' : 'text-emerald-600'
               }`}
             >
-              Messaging Analytics (WhatsApp)
+              {t.messagingTitle}
             </h2>
-            <div className="flex gap-3 overflow-x-auto pb-2 snap-x mb-6">
+            <div className="flex gap-3 overflow-x-auto pb-2 snap-x mb-2 w-full">
               {[
-                { label: 'Входящие сегодня', v: waKpi.incomingToday, icon: MessageCircle },
-                { label: 'Диалогов сегодня', v: waKpi.convToday, icon: Users },
-                { label: 'Ответов менеджеров', v: waKpi.replies, icon: Activity },
-                { label: 'Непрочитано', v: waKpi.unread, icon: Radio },
-                { label: 'Ср. ответ (мин)', v: waKpi.avgMin, icon: Zap }
+                { label: t.incomingToday, v: waKpi.incomingToday, icon: MessageCircle },
+                { label: t.dialogsToday, v: waKpi.convToday, icon: Users },
+                { label: t.managerReplies, v: waKpi.replies, icon: Activity },
+                { label: t.unread, v: waKpi.unread, icon: Radio },
+                { label: t.avgReplyMin, v: waKpi.avgMin, icon: Zap }
               ].map((x) => (
                 <div
                   key={x.label}
-                  className={`min-w-[140px] snap-start rounded-2xl border p-4 ${
+                  className={`min-w-[140px] snap-start rounded-2xl border p-4 shrink-0 ${
                     dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200 shadow-sm'
                   }`}
                 >
@@ -967,74 +1021,72 @@ export const AnalyticsPage: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div className="grid lg:grid-cols-2 gap-6">
-              <div
-                className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
-              >
-                <h3 className="font-bold mb-4">Message activity — входящие / день</h3>
-                <div className="h-64 w-full min-w-0 shrink-0" style={{ minHeight: 256 }}>
-                  <ResponsiveContainer width="100%" height={256} debounce={80}>
-                    <LineChart data={messagesPerDay}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
-                      <XAxis dataKey="date" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
-                      <YAxis tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
-                      <Tooltip />
-                      <Line type="monotone" dataKey="incoming" stroke="#22c55e" strokeWidth={2} dot={false} isAnimationActive />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
+            <div
+              className={`rounded-2xl border p-5 w-full ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+            >
+              <h3 className="font-bold mb-4">{t.messageActivity}</h3>
+              <div className="h-64 w-full min-w-0" style={{ minHeight: 256 }}>
+                <ResponsiveContainer width="100%" height={256} debounce={80}>
+                  <LineChart data={messagesPerDay}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
+                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <YAxis tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="incoming" stroke="#22c55e" strokeWidth={2} dot={false} isAnimationActive />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-              <div
-                className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
-              >
-                <h3 className="font-bold mb-4">Диалоги</h3>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  {[
-                    { t: 'Новые сегодня', v: convMetrics.newConv, c: 'from-cyan-500 to-blue-600' },
-                    { t: 'Активные', v: convMetrics.active, c: 'from-violet-500 to-purple-600' },
-                    { t: 'Закрытые', v: convMetrics.closed, c: 'from-slate-500 to-slate-700' }
-                  ].map((x) => (
-                    <div
-                      key={x.t}
-                      className={`rounded-xl p-4 text-white bg-gradient-to-br ${x.c} shadow-lg`}
-                    >
-                      <p className="text-2xl font-black">{x.v}</p>
-                      <p className="text-[10px] font-semibold mt-1 opacity-90">{x.t}</p>
-                    </div>
-                  ))}
-                </div>
-                <div
-                  className={`mt-6 rounded-xl p-4 border ${dark ? 'border-slate-700 bg-slate-800/50' : 'border-slate-100 bg-slate-50'}`}
-                >
-                  <h4 className="text-sm font-bold mb-2">Message → Deal conversion</h4>
-                  <p className="text-sm">
-                    Входящих в периоде: <strong>{msgDealConversion.incoming}</strong>
-                  </p>
-                  <p className="text-sm">
-                    Сделок с WA: <strong>{msgDealConversion.dealsWa}</strong>
-                  </p>
-                  <p className="text-sm text-violet-600 dark:text-violet-400 font-bold mt-1">
-                    Конверсия ~ {msgDealConversion.rate}%
-                  </p>
-                </div>
+            </div>
+            <div
+              className={`rounded-2xl border p-5 w-full ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+            >
+              <h3 className="font-bold mb-4">{t.dialogs}</h3>
+              <div className="grid grid-cols-3 gap-2 text-center min-w-0">
+                {[
+                  { lbl: t.newToday, v: convMetrics.newConv, c: 'from-cyan-500 to-blue-600' },
+                  { lbl: t.active, v: convMetrics.active, c: 'from-violet-500 to-purple-600' },
+                  { lbl: t.closed, v: convMetrics.closed, c: 'from-slate-500 to-slate-700' }
+                ].map((x) => (
+                  <div
+                    key={x.lbl}
+                    className={`rounded-xl p-4 text-white bg-gradient-to-br ${x.c} shadow-lg`}
+                  >
+                    <p className="text-2xl font-black">{x.v}</p>
+                    <p className="text-[10px] font-semibold mt-1 opacity-90">{x.lbl}</p>
+                  </div>
+                ))}
               </div>
+            </div>
+            <div
+              className={`rounded-2xl border p-5 w-full ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+            >
+              <h3 className="font-bold mb-3">{t.msgDealConversion}</h3>
+              <p className="text-sm">
+                {t.incomingInPeriod}: <strong>{msgDealConversion.incoming}</strong>
+              </p>
+              <p className="text-sm">
+                {t.dealsWithWa}: <strong>{msgDealConversion.dealsWa}</strong>
+              </p>
+              <p className="text-sm text-violet-600 dark:text-violet-400 font-bold mt-2">
+                {t.conversionApprox} {msgDealConversion.rate}%
+              </p>
             </div>
           </section>
 
-          {/* 8 Managers */}
+          {/* Эффективность менеджеров */}
           <section id="sec-managers">
             <h2 className="text-xs font-bold uppercase tracking-widest mb-4 text-indigo-500 dark:text-indigo-400">
-              Managers Performance
+              {t.managersPerformance}
             </h2>
             <div
               className={`rounded-2xl border overflow-hidden ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
             >
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto w-full">
                 <table className="w-full text-sm min-w-[640px]">
                   <thead>
                     <tr className={`border-b ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
-                      {['Менеджер', 'Лиды', 'Закрыто', 'Выручка', 'Сообщений', 'Ср. ответ (мин)'].map((h) => (
-                        <th key={h} className="text-left py-3 px-4 text-xs font-bold uppercase">
+                      {[t.manager, t.leads, t.dealsClosed, t.revenue, t.messagesHandled, t.avgResponseMin].map((h) => (
+                        <th key={h} className="text-left py-3 px-4 text-xs font-bold uppercase whitespace-nowrap">
                           {h}
                         </th>
                       ))}
@@ -1060,19 +1112,19 @@ export const AnalyticsPage: React.FC = () => {
             </div>
           </section>
 
-          {/* 9 Sources + 10 Finance */}
-          <section id="sec-sources" className="grid lg:grid-cols-2 gap-6">
+          {/* Источники лидов + Финансы */}
+          <section id="sec-sources" className="grid lg:grid-cols-2 gap-6 w-full">
             <div
-              className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+              className={`rounded-2xl border p-5 min-w-0 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
             >
               <h3 className="font-bold mb-4 flex items-center gap-2">
-                <PieIcon className="w-5 h-5" /> Lead Sources
+                <PieIcon className="w-5 h-5 shrink-0" /> {t.leadSources}
               </h3>
               <div className="h-72 w-full min-w-0 shrink-0" style={{ minHeight: 288 }}>
                 <ResponsiveContainer width="100%" height={288} debounce={80}>
                   <PieChart>
                     <Pie
-                      data={sourcePie.length ? sourcePie : [{ name: 'Нет данных', value: 1 }]}
+                      data={sourcePie.length ? sourcePie : [{ name: t.noData, value: 1 }]}
                       dataKey="value"
                       nameKey="name"
                       cx="50%"
@@ -1091,13 +1143,13 @@ export const AnalyticsPage: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div id="sec-finance" className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+            <div id="sec-finance" className={`rounded-2xl border p-5 min-w-0 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
               <h3 className="font-bold mb-4 flex items-center gap-2">
-                <Target className="w-5 h-5" /> Finance — план vs факт
+                <Target className="w-5 h-5 shrink-0" /> {t.financePlanFact}
               </h3>
               <input
                 type="number"
-                placeholder="План выручки ₸"
+                placeholder={t.planPlaceholder}
                 className={`w-full rounded-xl border px-4 py-3 text-sm mb-3 ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`}
                 value={salesTarget || ''}
                 onChange={(e) => setSalesTarget(Number(e.target.value) || 0)}
@@ -1107,9 +1159,9 @@ export const AnalyticsPage: React.FC = () => {
                 onClick={saveTarget}
                 className="w-full py-2.5 rounded-xl bg-violet-600 text-white text-sm font-bold mb-4"
               >
-                Сохранить план
+                {t.savePlan}
               </button>
-              <p className={`text-sm ${dark ? 'text-slate-400' : 'text-slate-600'}`}>Факт</p>
+              <p className={`text-sm ${dark ? 'text-slate-400' : 'text-slate-600'}`}>{t.fact}</p>
               <p className="text-3xl font-black">{kpi.revenueMonth.toLocaleString('ru-RU')} ₸</p>
               {salesTarget > 0 && (
                 <>
@@ -1120,7 +1172,7 @@ export const AnalyticsPage: React.FC = () => {
                     />
                   </div>
                   <p className="text-sm font-bold mt-2">
-                    {Math.round((kpi.revenueMonth / salesTarget) * 100)}% плана
+                    {Math.round((kpi.revenueMonth / salesTarget) * 100)}% {t.planPercent}
                   </p>
                 </>
               )}
@@ -1130,14 +1182,14 @@ export const AnalyticsPage: React.FC = () => {
           {/* 11 Live */}
           <section id="sec-live">
             <h2 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 text-rose-500">
-              <Radio className="w-4 h-4 animate-pulse" /> Live Monitoring — каждые 10 с
+              <Radio className="w-4 h-4 animate-pulse" /> {t.liveMonitoring}
             </h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
               {[
-                { l: 'Сообщ. за 10 мин', v: liveMetrics.msg10 },
-                { l: 'Активных диалогов', v: liveMetrics.activeConv },
-                { l: 'С непрочитанным', v: liveMetrics.unreadConv },
-                { l: 'Лидов за час', v: liveMetrics.leadsHour }
+                { l: t.messages10min, v: liveMetrics.msg10 },
+                { l: t.activeDialogs, v: liveMetrics.activeConv },
+                { l: t.withUnread, v: liveMetrics.unreadConv },
+                { l: t.leadsHour, v: liveMetrics.leadsHour }
               ].map((x) => (
                 <div
                   key={x.l}
@@ -1149,7 +1201,7 @@ export const AnalyticsPage: React.FC = () => {
               ))}
             </div>
             <div
-              className={`rounded-2xl border max-h-[360px] overflow-y-auto ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
+              className={`rounded-2xl border max-h-[360px] overflow-y-auto overflow-x-auto ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
             >
               <table className="w-full text-sm min-w-[520px]">
                 <thead className={`sticky top-0 ${dark ? 'bg-slate-800' : 'bg-slate-100'}`}>
@@ -1189,7 +1241,7 @@ export const AnalyticsPage: React.FC = () => {
               </table>
               {liveFeed.length === 0 && (
                 <p className={`p-8 text-center text-sm ${dark ? 'text-slate-500' : 'text-slate-400'}`}>
-                  Нет сообщений за 10 мин (или нет индекса Firestore)
+                  {t.noMessages10m}
                 </p>
               )}
             </div>
