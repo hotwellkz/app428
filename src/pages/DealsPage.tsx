@@ -5,7 +5,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase/config';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { usePipelines, usePipelineStages, useDeals, useTrashedDeals } from '../hooks/useDeals';
-import { useConversationUnreadMap } from '../hooks/useConversationUnreadMap';
+import { useConversationMetaMap } from '../hooks/useConversationMetaMap';
 import type { Deal, DealsPipelineStage } from '../types/deals';
 import {
   createDeal,
@@ -34,7 +34,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 
-const DEAL_CARD_HEIGHT = 168;
+const DEAL_CARD_HEIGHT = 212;
 const SOURCES = ['Все', 'WhatsApp', 'Звонок', 'Сайт', 'Ручной', 'Другое'];
 const MS_DAY = 86400000;
 
@@ -70,6 +70,33 @@ function daysSinceActivity(deal: Deal): number {
   return Math.floor((Date.now() - lastActivityMs(deal)) / MS_DAY);
 }
 
+function nextActionMs(deal: Deal): number | null {
+  if (!deal.nextActionAt) return null;
+  return dealTime(deal.nextActionAt);
+}
+
+function isStageOpen(deal: Deal, stages: DealsPipelineStage[]): boolean {
+  const t = stages.find((s) => s.id === deal.stageId)?.type;
+  return t === 'open' || t === undefined;
+}
+
+function startOfToday(): number {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function endOfToday(): number {
+  const d = new Date();
+  d.setHours(23, 59, 59, 999);
+  return d.getTime();
+}
+
+function isNewLeadToday(deal: Deal): boolean {
+  const c = deal.createdAt ? dealTime(deal.createdAt) : 0;
+  return c >= startOfToday() && c <= endOfToday();
+}
+
 function dealWord(n: number): string {
   const m10 = n % 10;
   const m100 = n % 100;
@@ -92,7 +119,7 @@ export const DealsPage: React.FC = () => {
   const { stages, loading: loadingStages } = usePipelineStages(companyId, effectivePipelineId);
   const { deals: rawDeals, loading: loadingDeals } = useDeals(companyId, effectivePipelineId);
   const { deals: trashedDeals } = useTrashedDeals(companyId);
-  const unreadByConversation = useConversationUnreadMap(companyId);
+  const convMetaMap = useConversationMetaMap(companyId);
 
   const trashCount = trashedDeals.length;
 
@@ -111,6 +138,11 @@ export const DealsPage: React.FC = () => {
   const [dateTo, setDateTo] = useState('');
   const [amountMin, setAmountMin] = useState('');
   const [amountMax, setAmountMax] = useState('');
+  const [filterPriority, setFilterPriority] = useState<string>('all');
+  const [filterOverdue, setFilterOverdue] = useState(false);
+  const [filterStaleHours, setFilterStaleHours] = useState<string>(''); // 24 | 72 | 168 | ''
+  const [filterTag, setFilterTag] = useState('');
+  const [quickChip, setQuickChip] = useState<string | null>(null);
 
   const [createModal, setCreateModal] = useState<{ stage: DealsPipelineStage } | null>(null);
   const [createForm, setCreateForm] = useState({
@@ -156,15 +188,32 @@ export const DealsPage: React.FC = () => {
     const totalDeals = active.length;
     const totalAmount = active.reduce((s, d) => s + (d.amount ?? 0), 0);
     const noManager = active.filter((d) => !d.responsibleUserId).length;
-    const stale = active.filter((d) => daysSinceActivity(d) > 3).length;
+    const stale3 = active.filter((d) => daysSinceActivity(d) > 3).length;
+    const newToday = active.filter(isNewLeadToday).length;
+    const now = Date.now();
+    const overdue = active.filter((d) => {
+      if (!isStageOpen(d, stages)) return false;
+      const na = nextActionMs(d);
+      return na != null && na < now;
+    }).length;
+    const todayTouch = active.filter((d) => {
+      if (!isStageOpen(d, stages)) return false;
+      const na = nextActionMs(d);
+      return na != null && na >= startOfToday() && na <= endOfToday();
+    }).length;
+    const stale24h = active.filter((d) => now - lastActivityMs(d) > 86400000).length;
     return {
       totalDeals,
       totalAmount,
       trashCount,
       noManager,
-      stale
+      stale3,
+      newToday,
+      overdue,
+      todayTouch,
+      stale24h
     };
-  }, [activeDealsAll, trashCount]);
+  }, [activeDealsAll, trashCount, stages]);
 
   const deals = useMemo(() => {
     let list = activeDealsAll;
@@ -177,6 +226,24 @@ export const DealsPage: React.FC = () => {
           (d.clientPhoneSnapshot ?? '').includes(q)
       );
     }
+    if (quickChip === 'no_manager') {
+      list = list.filter((d) => !d.responsibleUserId);
+    } else if (quickChip === 'overdue') {
+      const now = Date.now();
+      list = list.filter((d) => {
+        if (!isStageOpen(d, stages)) return false;
+        const na = nextActionMs(d);
+        return na != null && na < now;
+      });
+    } else if (quickChip === 'today') {
+      list = list.filter((d) => {
+        if (!isStageOpen(d, stages)) return false;
+        const na = nextActionMs(d);
+        return na != null && na >= startOfToday() && na <= endOfToday();
+      });
+    } else if (quickChip === 'new_leads') {
+      list = list.filter(isNewLeadToday);
+    }
     if (filterManager === 'none') {
       list = list.filter((d) => !d.responsibleUserId);
     } else if (filterManager !== 'all') {
@@ -187,6 +254,27 @@ export const DealsPage: React.FC = () => {
     }
     if (filterStage !== 'all') {
       list = list.filter((d) => d.stageId === filterStage);
+    }
+    if (filterPriority !== 'all') {
+      list = list.filter((d) => (d.priority || 'medium') === filterPriority);
+    }
+    if (filterOverdue) {
+      const now = Date.now();
+      list = list.filter((d) => {
+        if (!isStageOpen(d, stages)) return false;
+        const na = nextActionMs(d);
+        return na != null && na < now;
+      });
+    }
+    if (filterStaleHours) {
+      const h = Number(filterStaleHours);
+      const ms = h * 3600000;
+      const now = Date.now();
+      list = list.filter((d) => now - lastActivityMs(d) > ms);
+    }
+    if (filterTag.trim()) {
+      const t = filterTag.trim().toLowerCase();
+      list = list.filter((d) => (d.tags ?? []).some((x) => x.toLowerCase().includes(t)));
     }
     if (dateFrom) {
       const from = new Date(dateFrom).getTime();
@@ -210,7 +298,13 @@ export const DealsPage: React.FC = () => {
     dateFrom,
     dateTo,
     amountMin,
-    amountMax
+    amountMax,
+    filterPriority,
+    filterOverdue,
+    filterStaleHours,
+    filterTag,
+    quickChip,
+    stages
   ]);
 
   const groupedDeals = useMemo(() => {
@@ -414,29 +508,75 @@ export const DealsPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="px-4 pb-3">
-            <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-2.5 text-xs sm:text-sm">
-              <div className="flex items-baseline gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-100 shadow-sm">
-                <span className="text-slate-500 font-medium">Всего</span>
+        <div className="px-4 pb-2 space-y-2">
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                { id: null, label: 'Все' },
+                { id: 'overdue' as const, label: 'Просрочено', tone: 'red' },
+                { id: 'no_manager' as const, label: 'Без менеджера', tone: 'slate' },
+                { id: 'today' as const, label: 'Сегодня связаться', tone: 'amber' },
+                { id: 'new_leads' as const, label: 'Новые лиды', tone: 'emerald' }
+              ].map((c) => (
+                <button
+                  key={c.id ?? 'all'}
+                  type="button"
+                  onClick={() => setQuickChip(c.id)}
+                  className={`px-2.5 py-1 rounded-full text-[11px] font-bold border transition-colors ${
+                    quickChip === c.id
+                      ? c.tone === 'red'
+                        ? 'bg-red-600 text-white border-red-600'
+                        : c.tone === 'amber'
+                          ? 'bg-amber-500 text-white border-amber-500'
+                          : c.tone === 'emerald'
+                            ? 'bg-emerald-600 text-white border-emerald-600'
+                            : 'bg-slate-800 text-white border-slate-800'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+                  } ${!c.id && quickChip === null ? 'ring-2 ring-slate-300' : ''}`}
+                >
+                  {c.label}
+                </button>
+              ))}
+              <Link
+                to="/deals/trash"
+                className="px-2.5 py-1 rounded-full text-[11px] font-bold border border-slate-200 bg-white text-slate-600 hover:bg-red-50 hover:border-red-200 hover:text-red-700"
+              >
+                Корзина ({summary.trashCount})
+              </Link>
+            </div>
+            <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white px-3 py-2.5 text-[11px] sm:text-xs">
+              <div className="flex items-baseline gap-1 px-2 py-1 rounded-lg bg-white border border-slate-100 shadow-sm">
+                <span className="text-slate-500 font-semibold">Всего</span>
                 <span className="font-bold text-slate-900 tabular-nums">{summary.totalDeals}</span>
               </div>
-              <div className="flex items-baseline gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-100 shadow-sm">
-                <span className="text-slate-500 font-medium">Сумма</span>
+              <div className="flex items-baseline gap-1 px-2 py-1 rounded-lg bg-white border border-slate-100 shadow-sm">
+                <span className="text-slate-500 font-semibold">Сумма</span>
                 <span className="font-bold text-emerald-700 tabular-nums">
                   {summary.totalAmount.toLocaleString('ru-RU')} ₸
                 </span>
               </div>
-              <div className="flex items-baseline gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-100 shadow-sm">
-                <span className="text-slate-500 font-medium">В корзине</span>
+              <div className="flex items-baseline gap-1 px-2 py-1 rounded-lg bg-emerald-50 border border-emerald-100">
+                <span className="text-emerald-800 font-semibold">Новые сегодня</span>
+                <span className="font-bold text-emerald-900 tabular-nums">{summary.newToday}</span>
+              </div>
+              <div className="flex items-baseline gap-1 px-2 py-1 rounded-lg bg-red-50 border border-red-100">
+                <span className="text-red-800 font-semibold">Просрочено</span>
+                <span className="font-bold text-red-700 tabular-nums">{summary.overdue}</span>
+              </div>
+              <div className="flex items-baseline gap-1 px-2 py-1 rounded-lg bg-amber-50 border border-amber-100">
+                <span className="text-amber-900 font-semibold">Касание сегодня</span>
+                <span className="font-bold tabular-nums">{summary.todayTouch}</span>
+              </div>
+              <div className="flex items-baseline gap-1 px-2 py-1 rounded-lg bg-slate-100 border border-slate-200">
+                <span className="text-slate-600 font-semibold">Без менедж.</span>
+                <span className="font-bold tabular-nums">{summary.noManager}</span>
+              </div>
+              <div className="flex items-baseline gap-1 px-2 py-1 rounded-lg bg-slate-100 border border-slate-200">
+                <span className="text-slate-600 font-semibold">&gt;24ч без акт.</span>
+                <span className="font-bold tabular-nums">{summary.stale24h}</span>
+              </div>
+              <div className="flex items-baseline gap-1 px-2 py-1 rounded-lg bg-white border border-slate-100">
+                <span className="text-slate-500 font-semibold">Корзина</span>
                 <span className="font-bold text-red-600 tabular-nums">{summary.trashCount}</span>
-              </div>
-              <div className="flex items-baseline gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-100 shadow-sm">
-                <span className="text-slate-500 font-medium">Без менеджера</span>
-                <span className="font-bold text-amber-700 tabular-nums">{summary.noManager}</span>
-              </div>
-              <div className="flex items-baseline gap-1.5 px-2 py-1 rounded-lg bg-amber-50 border border-amber-100 shadow-sm">
-                <span className="text-amber-800 font-medium">&gt;3 дн. без активности</span>
-                <span className="font-bold text-amber-900 tabular-nums">{summary.stale}</span>
               </div>
             </div>
         </div>
@@ -538,6 +678,51 @@ export const DealsPage: React.FC = () => {
                   />
                 </div>
               </div>
+              <div>
+                <label className="text-[10px] uppercase text-slate-400 font-semibold">Приоритет</label>
+                <select
+                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm bg-white"
+                  value={filterPriority}
+                  onChange={(e) => setFilterPriority(e.target.value)}
+                >
+                  <option value="all">Все</option>
+                  <option value="high">Высокий</option>
+                  <option value="medium">Средний</option>
+                  <option value="low">Низкий</option>
+                </select>
+              </div>
+              <div className="flex items-end pb-1">
+                <label className="flex items-center gap-2 text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={filterOverdue}
+                    onChange={(e) => setFilterOverdue(e.target.checked)}
+                  />
+                  <span className="text-slate-700 font-medium">Просрочен next step</span>
+                </label>
+              </div>
+              <div>
+                <label className="text-[10px] uppercase text-slate-400 font-semibold">Без активности</label>
+                <select
+                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm bg-white"
+                  value={filterStaleHours}
+                  onChange={(e) => setFilterStaleHours(e.target.value)}
+                >
+                  <option value="">Не фильтровать</option>
+                  <option value="24">&gt; 24 ч</option>
+                  <option value="72">&gt; 3 дн.</option>
+                  <option value="168">&gt; 7 дн.</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] uppercase text-slate-400 font-semibold">Тег</label>
+                <input
+                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm bg-white"
+                  placeholder="горячий, КП…"
+                  value={filterTag}
+                  onChange={(e) => setFilterTag(e.target.value)}
+                />
+              </div>
             </div>
           )}
         </div>
@@ -564,7 +749,7 @@ export const DealsPage: React.FC = () => {
                 items={groupedDeals[stage.id] ?? []}
                 allDeals={deals}
                 stages={stages}
-                unreadByConversation={unreadByConversation}
+                convMetaMap={convMetaMap}
                 onCardDrop={handleCardDrop}
                 onOpenDeal={openSidebar}
                 menuDealId={menuDealId}
@@ -712,7 +897,7 @@ function StageColumn({
   items,
   allDeals,
   stages,
-  unreadByConversation,
+  convMetaMap,
   onCardDrop,
   onOpenDeal,
   menuDealId,
@@ -730,7 +915,7 @@ function StageColumn({
   items: Deal[];
   allDeals: Deal[];
   stages: DealsPipelineStage[];
-  unreadByConversation: Record<string, number>;
+  convMetaMap: Record<string, import('../hooks/useConversationMetaMap').ConversationMeta>;
   onCardDrop: (deal: Deal, stageId: string, index: number) => void;
   onOpenDeal: (d: Deal) => void;
   menuDealId: string | null;
@@ -822,9 +1007,10 @@ function StageColumn({
         }}
       >
         {items.length === 0 && (
-          <p className="text-[11px] text-slate-400 text-center py-10 px-2 leading-relaxed">
-            Перетащите сделку сюда
-          </p>
+          <div className="py-10 px-3 text-center rounded-lg border border-dashed border-slate-200/80 bg-white/50 mx-1">
+            <p className="text-[11px] font-medium text-slate-500">Пустой этап</p>
+            <p className="text-[10px] text-slate-400 mt-1">Перетащите сюда сделку или создайте новую</p>
+          </div>
         )}
         {items.length > 0 && (
           <div
@@ -837,12 +1023,27 @@ function StageColumn({
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const deal = items[virtualRow.index];
               const isNewTitle = deal.title.trim() === 'Новая сделка';
-              const unread =
+              const meta =
                 deal.whatsappConversationId != null
-                  ? unreadByConversation[deal.whatsappConversationId] ?? 0
-                  : 0;
+                  ? convMetaMap[deal.whatsappConversationId]
+                  : undefined;
+              const unread = meta?.unreadCount ?? 0;
               const staleDays = daysSinceActivity(deal);
-              const staleWarn = staleDays >= 3;
+              const open = isStageOpen(deal, stages);
+              const naMs = nextActionMs(deal);
+              const now = Date.now();
+              const overdueStep = open && naMs != null && naMs < now;
+              const todayStep =
+                open && naMs != null && naMs >= startOfToday() && naMs <= endOfToday();
+              const noStep = !deal.nextAction?.trim() && !naMs;
+              const clientPing =
+                meta &&
+                meta.lastIncomingAt > meta.lastOutgoingAt &&
+                meta.lastIncomingAt > lastActivityMs(deal) - 60000;
+              const isHot =
+                deal.priority === 'high' ||
+                (deal.tags ?? []).some((t) => /горяч/i.test(t));
+              const newLead = isNewLeadToday(deal);
 
               return (
                 <div
@@ -854,7 +1055,15 @@ function StageColumn({
                   }}
                 >
                   <div
-                    className="deal-card h-[160px] rounded-lg border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-slate-300 transition-all text-sm flex flex-col overflow-hidden"
+                    className={`deal-card h-[204px] rounded-xl border bg-white shadow-md hover:shadow-lg transition-all text-sm flex flex-col overflow-hidden ${
+                      overdueStep
+                        ? 'border-red-300 ring-1 ring-red-100'
+                        : todayStep
+                          ? 'border-amber-300 ring-1 ring-amber-50'
+                          : clientPing
+                            ? 'border-sky-300 ring-1 ring-sky-50'
+                            : 'border-slate-200/90 hover:border-slate-300'
+                    }`}
                     draggable
                     onDragStart={(e) => {
                       e.stopPropagation();
@@ -884,41 +1093,84 @@ function StageColumn({
                         className="flex-1 min-w-0 text-left overflow-hidden pb-1"
                       >
                         <div className="flex items-start justify-between gap-1">
-                          <p className="font-bold text-slate-900 truncate text-[13px] leading-tight pr-1">
+                          <p className="font-bold text-slate-900 truncate text-[12px] leading-tight pr-1">
                             {deal.title}
                           </p>
-                          <div className="flex flex-col items-end gap-0.5 shrink-0">
+                          <div className="flex flex-wrap justify-end gap-0.5 shrink-0 max-w-[42%]">
                             {unread > 0 && (
-                              <span className="min-w-[1.1rem] h-4 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">
+                              <span className="h-4 min-w-4 px-1 rounded-full bg-red-600 text-white text-[9px] font-bold flex items-center justify-center">
                                 {unread > 99 ? '99+' : unread}
                               </span>
                             )}
-                            {staleWarn && (
-                              <span
-                                className="max-w-[7rem] text-[9px] font-semibold text-amber-800 bg-amber-100 px-1 py-0.5 rounded leading-tight text-right"
-                                title={`Последняя активность: ${formatLastActivity(deal)}`}
-                              >
-                                Нет ответа {staleDays} {staleDays === 1 ? 'день' : staleDays < 5 ? 'дня' : 'дней'}
+                            {!deal.responsibleUserId && (
+                              <span className="text-[8px] font-bold uppercase text-slate-600 bg-slate-100 px-1 rounded">
+                                нет менедж.
+                              </span>
+                            )}
+                            {overdueStep && (
+                              <span className="text-[8px] font-bold text-white bg-red-600 px-1 rounded">просроч.</span>
+                            )}
+                            {todayStep && !overdueStep && (
+                              <span className="text-[8px] font-bold text-amber-900 bg-amber-200 px-1 rounded">
+                                сегодня
+                              </span>
+                            )}
+                            {isHot && (
+                              <span className="text-[8px] font-bold text-orange-900 bg-orange-100 px-1 rounded">
+                                горячий
+                              </span>
+                            )}
+                            {newLead && (
+                              <span className="text-[8px] font-bold text-emerald-800 bg-emerald-100 px-1 rounded">
+                                новый
                               </span>
                             )}
                           </div>
                         </div>
-                        <p className="text-[11px] text-slate-700 truncate mt-0.5 font-medium">
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5">{stage.name}</p>
+                        <p className="text-[11px] text-slate-800 truncate font-medium">
                           {deal.clientNameSnapshot || '—'}
                         </p>
-                        <p className="text-[10px] text-slate-500 font-mono truncate">{deal.clientPhoneSnapshot || '—'}</p>
-                        <p className="text-sm font-bold text-emerald-700 tabular-nums mt-0.5">
+                        <p className="text-[9px] text-slate-500 font-mono truncate">{deal.clientPhoneSnapshot || '—'}</p>
+                        <p className="text-xs font-bold text-emerald-700 tabular-nums">
                           {deal.amount != null ? `${deal.amount.toLocaleString('ru-RU')} ₸` : '—'}
                         </p>
-                        <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[10px] text-slate-500">
-                          <span className="truncate max-w-[48%]" title={deal.responsibleNameSnapshot || ''}>
-                            {deal.responsibleNameSnapshot ? `👤 ${deal.responsibleNameSnapshot}` : '👤 —'}
-                          </span>
-                          <span className="text-slate-400">·</span>
-                          <span className="truncate">{deal.source || 'Ручной'}</span>
+                        <div className="flex flex-wrap gap-0.5 mt-0.5">
+                          {(deal.tags ?? []).slice(0, 2).map((t) => (
+                            <span
+                              key={t}
+                              className="text-[8px] px-1 py-px rounded bg-slate-100 text-slate-600 max-w-[4.5rem] truncate"
+                              title={(deal.tags ?? []).join(', ')}
+                            >
+                              {t}
+                            </span>
+                          ))}
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
-                          Активность: {formatLastActivity(deal)}
+                        <p className="text-[9px] text-slate-500 truncate mt-0.5">
+                          {deal.responsibleNameSnapshot || 'Без менеджера'} · {deal.source || 'Ручной'}
+                        </p>
+                        <div
+                          className={`text-[9px] mt-0.5 truncate px-1 py-0.5 rounded ${
+                            overdueStep
+                              ? 'bg-red-50 text-red-800 font-semibold'
+                              : todayStep
+                                ? 'bg-amber-50 text-amber-900 font-semibold'
+                                : noStep
+                                  ? 'bg-slate-100 text-slate-500'
+                                  : 'bg-slate-50 text-slate-700'
+                          }`}
+                        >
+                          {deal.nextAction?.trim()
+                            ? `${deal.nextAction}${naMs ? ` · ${new Date(naMs).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}` : ''}`
+                            : naMs
+                              ? `Касание: ${new Date(naMs).toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}`
+                              : 'Нет следующего шага'}
+                        </div>
+                        <p className="text-[9px] text-slate-400 mt-0.5 truncate">
+                          Активн. {formatLastActivity(deal)}
+                          {meta?.lastMessageAt
+                            ? ` · WA ${new Date(meta.lastMessageAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}`
+                            : ''}
                         </p>
                       </button>
                       <div

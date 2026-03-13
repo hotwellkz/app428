@@ -82,6 +82,7 @@ function docToDeal(id: string, data: Record<string, unknown>): Deal {
     createdAt: (data.createdAt as Deal['createdAt']) ?? null,
     updatedAt: (data.updatedAt as Deal['updatedAt']) ?? null,
     stageChangedAt: (data.stageChangedAt as Deal['stageChangedAt']) ?? null,
+    nextAction: (data.nextAction as string | null) ?? null,
     nextActionAt: (data.nextActionAt as Deal['nextActionAt']) ?? null,
     isArchived: Boolean(data.isArchived),
     whatsappConversationId: (data.whatsappConversationId as string) ?? null,
@@ -316,15 +317,34 @@ export async function softDeleteDeal(dealId: string, companyId?: string | null):
     deletedAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
+  await addDealActivity(companyId ?? '', dealId, 'deleted', {});
+  await addDoc(collection(db, COLLECTION_DEAL_HISTORY), {
+    companyId: companyId ?? '',
+    dealId,
+    message: 'Сделка перемещена в корзину',
+    createdAt: serverTimestamp()
+  });
 
   await unlinkDealFromChats(dealId, companyId ?? null, convId ? [convId] : []);
 }
 
-export async function restoreDeal(dealId: string): Promise<void> {
-  await updateDoc(doc(db, COLLECTION_DEALS, dealId), {
+export async function restoreDeal(dealId: string, companyId?: string | null): Promise<void> {
+  const ref = doc(db, COLLECTION_DEALS, dealId);
+  const snap = await getDoc(ref);
+  const cid = (snap.data()?.companyId as string) ?? companyId ?? '';
+  await updateDoc(ref, {
     deletedAt: deleteField(),
     updatedAt: serverTimestamp()
   });
+  if (cid) {
+    await addDealActivity(cid, dealId, 'restored', {});
+    await addDoc(collection(db, COLLECTION_DEAL_HISTORY), {
+      companyId: cid,
+      dealId,
+      message: 'Сделка восстановлена из корзины',
+      createdAt: serverTimestamp()
+    });
+  }
 }
 
 export async function permanentDeleteDeal(dealId: string, companyId?: string | null): Promise<void> {
@@ -375,6 +395,7 @@ export async function createDeal(
     createdAt: now,
     updatedAt: now,
     stageChangedAt: now,
+    nextAction: null,
     nextActionAt: null,
     isArchived: false,
     deletedAt: null
@@ -407,6 +428,7 @@ export async function updateDeal(
       | 'priority'
       | 'note'
       | 'tags'
+      | 'nextAction'
       | 'nextActionAt'
       | 'isArchived'
       | 'whatsappConversationId'
@@ -510,6 +532,25 @@ export async function listDealActivity(
   );
   const snap = await getDocs(q);
   return snap.docs.map((d) => docToActivity(d.id, d.data() as Record<string, unknown>));
+}
+
+export function subscribeDealActivity(
+  companyId: string,
+  dealId: string,
+  callback: (entries: DealActivityLogEntry[]) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, COLLECTION_ACTIVITY),
+    where('companyId', '==', companyId),
+    where('dealId', '==', dealId),
+    orderBy('createdAt', 'asc')
+  );
+  return onSnapshot(
+    q,
+    (snap) => callback(snap.docs.map((d) => docToActivity(d.id, d.data() as Record<string, unknown>))),
+    (err) => onError?.(err)
+  );
 }
 
 // Lazy seed для HotWell: дефолтная воронка и этапы

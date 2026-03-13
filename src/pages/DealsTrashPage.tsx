@@ -48,7 +48,7 @@ const DealsTrashPage: React.FC = () => {
   const handleRestore = async (id: string) => {
     setBusyId(id);
     try {
-      await restoreDeal(id);
+      await restoreDeal(id, companyId);
     } finally {
       setBusyId(null);
     }

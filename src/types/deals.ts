@@ -29,6 +29,8 @@ export interface DealsPipelineStage {
   updatedAt: Date | Timestamp | null;
 }
 
+export type DealPriority = 'high' | 'medium' | 'low';
+
 export interface Deal {
   id: string;
   companyId: string;
@@ -43,6 +45,7 @@ export interface Deal {
   responsibleUserId?: string | null;
   responsibleNameSnapshot?: string;
   status?: string | null;
+  /** high | medium | low */
   priority?: string | null;
   note?: string;
   tags?: string[];
@@ -51,17 +54,16 @@ export interface Deal {
   createdAt: Date | Timestamp | null;
   updatedAt: Date | Timestamp | null;
   stageChangedAt: Date | Timestamp | null;
+  /** Текст следующего шага: «Перезвонить», «Отправить КП» */
+  nextAction?: string | null;
+  /** Когда нужно сделать следующий шаг */
   nextActionAt?: Date | Timestamp | null;
   isArchived?: boolean;
-  /** Диалог WhatsApp, привязанный к сделке */
   whatsappConversationId?: string | null;
-  /** Мягкое удаление (корзина); null / отсутствует — сделка активна */
   deletedAt?: Date | Timestamp | null;
-  /** Источник лида: WhatsApp, Звонок и т.д. */
   source?: string | null;
 }
 
-/** Запись истории сделки (deal_history) */
 export interface DealHistoryEntry {
   id: string;
   companyId: string;
@@ -75,7 +77,14 @@ export type DealActivityType =
   | 'updated'
   | 'stage_changed'
   | 'comment_added'
-  | 'deleted';
+  | 'deleted'
+  | 'restored'
+  | 'manager_assigned'
+  | 'priority_changed'
+  | 'amount_changed'
+  | 'next_step_set'
+  | 'whatsapp_in'
+  | 'whatsapp_out';
 
 export interface DealActivityLogEntry {
   id: string;
@@ -86,4 +95,3 @@ export interface DealActivityLogEntry {
   createdBy?: string | null;
   createdAt: Date | Timestamp | null;
 }
-
