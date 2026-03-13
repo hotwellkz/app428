@@ -5,13 +5,8 @@ import { getSectionByPath, MENU_SECTIONS, DEFAULT_MENU_ACCESS } from '../../type
 import { canAccessSection } from '../../types/menuAccess';
 import toast from 'react-hot-toast';
 
-/** Безопасная стартовая страница при отсутствии доступа к текущей. */
 const FALLBACK_PATH = '/transactions';
 
-/**
- * Проверяет доступ к разделу по текущему pathname.
- * Если раздел есть и доступ запрещён — редирект на FALLBACK_PATH и toast.
- */
 export const MenuAccessGuard: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const location = useLocation();
   const { menuAccess, loading } = useCurrentCompanyUser();
@@ -31,6 +26,10 @@ export const MenuAccessGuard: React.FC<{ children: React.ReactNode }> = ({ child
 
   if (loading) return <>{children}</>;
   if (!allowed && sectionId) {
+    if (sectionId === 'analytics') {
+      toast.error('У вас нет доступа к разделу Analytics.');
+      return <Navigate to="/deals" replace />;
+    }
     toast.error('У вас нет доступа к этому разделу');
     return <Navigate to={firstAllowedPath} replace />;
   }

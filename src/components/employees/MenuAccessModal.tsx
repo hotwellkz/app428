@@ -3,6 +3,7 @@ import { Shield, Loader } from 'lucide-react';
 import {
   MENU_SECTIONS,
   DEFAULT_MENU_ACCESS,
+  defaultMenuAccessForRole,
   type MenuAccess,
   type MenuSectionId
 } from '../../types/menuAccess';
@@ -33,8 +34,9 @@ export const MenuAccessModal: React.FC<MenuAccessModalProps> = ({
     setLoading(true);
     getCompanyUser(userId)
       .then((cu) => {
-        if (cu?.menuAccess) setAccess({ ...DEFAULT_MENU_ACCESS, ...cu.menuAccess });
-        else setAccess({ ...DEFAULT_MENU_ACCESS });
+        const base = defaultMenuAccessForRole(cu?.role ?? 'member');
+        if (cu?.menuAccess) setAccess({ ...base, ...cu.menuAccess });
+        else setAccess(base);
       })
       .catch(() => setAccess({ ...DEFAULT_MENU_ACCESS }))
       .finally(() => setLoading(false));
@@ -45,11 +47,21 @@ export const MenuAccessModal: React.FC<MenuAccessModalProps> = ({
   };
 
   const handleSelectAll = () => {
-    setAccess(MENU_SECTIONS.reduce<MenuAccess>((acc, s) => ({ ...acc, [s.id]: true }), { ...DEFAULT_MENU_ACCESS }));
+    setAccess(
+      MENU_SECTIONS.reduce<MenuAccess>(
+        (acc, s) => ({ ...acc, [s.id]: true }),
+        { ...DEFAULT_MENU_ACCESS }
+      )
+    );
   };
 
   const handleDeselectAll = () => {
-    setAccess(MENU_SECTIONS.reduce<MenuAccess>((acc, s) => ({ ...acc, [s.id]: false }), { ...DEFAULT_MENU_ACCESS }));
+    setAccess(
+      MENU_SECTIONS.reduce<MenuAccess>(
+        (acc, s) => ({ ...acc, [s.id]: false }),
+        { ...DEFAULT_MENU_ACCESS }
+      )
+    );
   };
 
   const handleSave = async () => {

@@ -21,12 +21,17 @@ import {
   fetchRecentMessages,
   fetchChatManagers,
   invalidateAnalyticsCache,
+  AnalyticsForbiddenError,
   type DealRow,
   type MessageRow,
   type ConversationRow,
   type ManagerRow
 } from '../lib/firebase/analyticsDashboard';
 import { useCompanyId } from '../contexts/CompanyContext';
+import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../lib/firebase/config';
+import { auth } from '../lib/firebase/auth';
 import { listPipelines, listStages } from '../lib/firebase/deals';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import {
@@ -85,6 +90,7 @@ type SectionId =
 
 export const AnalyticsPage: React.FC = () => {
   const companyId = useCompanyId();
+  const { menuAccess } = useCurrentCompanyUser();
   const reportRef = useRef<HTMLDivElement>(null);
   const [dark, setDark] = useState(() => localStorage.getItem('analytics_dark') === '1');
   const [loading, setLoading] = useState(true);
@@ -115,6 +121,16 @@ export const AnalyticsPage: React.FC = () => {
     localStorage.setItem('analytics_dark', dark ? '1' : '0');
   }, [dark]);
 
+  useEffect(() => {
+    if (!companyId || !auth.currentUser) return;
+    addDoc(collection(db, 'analytics_access_log'), {
+      companyId,
+      userId: auth.currentUser.uid,
+      action: 'analytics_open',
+      at: serverTimestamp()
+    }).catch(() => {});
+  }, [companyId]);
+
   const load = useCallback(
     async (force = false) => {
       if (!companyId) return;
@@ -122,9 +138,9 @@ export const AnalyticsPage: React.FC = () => {
       setLoading(true);
       try {
         const [d, c, mgr, pipelines] = await Promise.all([
-          fetchDealsForCompany(companyId, !force),
-          fetchConversationsForCompany(companyId, !force),
-          fetchChatManagers(companyId),
+          fetchDealsForCompany(companyId, !force, menuAccess),
+          fetchConversationsForCompany(companyId, !force, menuAccess),
+          fetchChatManagers(companyId, menuAccess),
           listPipelines(companyId)
         ]);
         setDeals(d);
@@ -136,7 +152,7 @@ export const AnalyticsPage: React.FC = () => {
           setStageMeta(stages.map((s) => ({ id: s.id, name: s.name, type: s.type })));
         } else setStageMeta([]);
         const since = Date.now() - 400 * MS_DAY;
-        const msg = await fetchMessagesSince(companyId, since, 8000, !force);
+        const msg = await fetchMessagesSince(companyId, since, 8000, !force, menuAccess);
         setMessages(msg);
         if (msg.length === 0 && d.length > 0) {
           toast('Для графиков WhatsApp создайте индекс: whatsappMessages (companyId + createdAt)', {
@@ -144,12 +160,16 @@ export const AnalyticsPage: React.FC = () => {
           });
         }
       } catch (e) {
-        toast.error(e instanceof Error ? e.message : 'Ошибка загрузки');
+        if (e instanceof AnalyticsForbiddenError) {
+          toast.error('Нет права analytics:view (403)');
+        } else {
+          toast.error(e instanceof Error ? e.message : 'Ошибка загрузки');
+        }
       } finally {
         setLoading(false);
       }
     },
-    [companyId]
+    [companyId, menuAccess]
   );
 
   useEffect(() => {
@@ -160,9 +180,13 @@ export const AnalyticsPage: React.FC = () => {
     if (!companyId) return;
     let cancelled = false;
     const tick = async () => {
-      const since = Date.now() - 10 * MS_MIN;
-      const recent = await fetchRecentMessages(companyId, since, 80);
-      if (!cancelled) setLiveFeed(recent);
+      try {
+        const since = Date.now() - 10 * MS_MIN;
+        const recent = await fetchRecentMessages(companyId, since, 80, menuAccess);
+        if (!cancelled) setLiveFeed(recent);
+      } catch {
+        if (!cancelled) setLiveFeed([]);
+      }
     };
     tick();
     const id = setInterval(tick, 10000);
@@ -170,7 +194,7 @@ export const AnalyticsPage: React.FC = () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [companyId]);
+  }, [companyId, menuAccess]);
 
   const wonStageIds = useMemo(
     () => new Set(stageMeta.filter((s) => s.type === 'won').map((s) => s.id)),

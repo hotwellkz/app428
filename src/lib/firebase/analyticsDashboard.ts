@@ -1,6 +1,7 @@
 /**
  * Данные для CRM analytics: сделки, диалоги, сообщения.
  * Кэш на стороне клиента — в компоненте (TTL).
+ * Все публичные fetch* требуют права analytics:view (иначе 403-совместимая ошибка).
  */
 import {
   collection,
@@ -15,8 +16,25 @@ import {
 import { db } from './config';
 import { COLLECTIONS } from './whatsappDb';
 import { docToDeal } from './deals';
+import type { MenuAccess } from '../../types/menuAccess';
+import { canAccessSection } from '../../types/menuAccess';
 
 const COLLECTION_DEALS = 'deals';
+
+/** Нет права analytics:view — как 403 для вызывающего кода. */
+export class AnalyticsForbiddenError extends Error {
+  readonly status = 403 as const;
+  constructor(message = 'analytics:view required') {
+    super(message);
+    this.name = 'AnalyticsForbiddenError';
+  }
+}
+
+export function assertAnalyticsView(menuAccess: MenuAccess | null | undefined): void {
+  if (!canAccessSection(menuAccess ?? undefined, 'analytics')) {
+    throw new AnalyticsForbiddenError();
+  }
+}
 
 export function toMs(v: unknown): number {
   if (!v) return 0;
@@ -78,7 +96,12 @@ export function invalidateAnalyticsCache() {
   dealsCache = convCache = msgCache = null;
 }
 
-export async function fetchDealsForCompany(companyId: string, useCache = true): Promise<DealRow[]> {
+export async function fetchDealsForCompany(
+  companyId: string,
+  useCache = true,
+  menuAccess?: MenuAccess | null
+): Promise<DealRow[]> {
+  assertAnalyticsView(menuAccess);
   if (useCache && dealsCache && dealsCache.companyId === companyId && Date.now() - dealsCache.at < CACHE_TTL_MS) {
     return dealsCache.data;
   }
@@ -105,8 +128,10 @@ export async function fetchDealsForCompany(companyId: string, useCache = true): 
 
 export async function fetchConversationsForCompany(
   companyId: string,
-  useCache = true
+  useCache = true,
+  menuAccess?: MenuAccess | null
 ): Promise<ConversationRow[]> {
+  assertAnalyticsView(menuAccess);
   if (useCache && convCache && convCache.companyId === companyId && Date.now() - convCache.at < CACHE_TTL_MS) {
     return convCache.data;
   }
@@ -137,8 +162,10 @@ export async function fetchMessagesSince(
   companyId: string,
   sinceMs: number,
   maxDocs = 8000,
-  useCache = true
+  useCache = true,
+  menuAccess?: MenuAccess | null
 ): Promise<MessageRow[]> {
+  assertAnalyticsView(menuAccess);
   if (
     useCache &&
     msgCache &&
@@ -181,8 +208,10 @@ export async function fetchMessagesSince(
 export async function fetchRecentMessages(
   companyId: string,
   sinceMs: number,
-  maxDocs = 120
+  maxDocs = 120,
+  menuAccess?: MenuAccess | null
 ): Promise<MessageRow[]> {
+  assertAnalyticsView(menuAccess);
   try {
     const since = Timestamp.fromMillis(sinceMs);
     const q = query(
@@ -210,7 +239,11 @@ export async function fetchRecentMessages(
   }
 }
 
-export async function fetchChatManagers(companyId: string): Promise<ManagerRow[]> {
+export async function fetchChatManagers(
+  companyId: string,
+  menuAccess?: MenuAccess | null
+): Promise<ManagerRow[]> {
+  assertAnalyticsView(menuAccess);
   const q = query(collection(db, 'chatManagers'), where('companyId', '==', companyId));
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({

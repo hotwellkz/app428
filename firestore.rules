@@ -429,6 +429,22 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Лог открытий Analytics (кто заходил на /analytics)
+    match /analytics_access_log/{logId} {
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) &&
+          request.resource.data.companyId == get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId &&
+          request.resource.data.userId == request.auth.uid)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          request.resource.data.companyId == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId &&
+          request.resource.data.userId == request.auth.uid)
+        || isGlobalAdmin()
+      );
+      allow read: if isGlobalAdmin();
+      allow read: if isCompanyOwnerOrAdmin() && resource.data.companyId == get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId;
+      allow update, delete: if false;
+    }
+
     // Приглашения в компанию: только своя компания (create/read/update по companyId)
     match /company_invites/{inviteId} {
       allow read: if isAuthenticated() && (

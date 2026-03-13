@@ -1,6 +1,6 @@
 /**
  * Доступ к разделам меню по ID.
- * Расширяемо: позже можно добавить clients.view, clients.edit и т.д.
+ * analytics — отдельное право на /analytics (аналитика CRM).
  */
 export type MenuSectionId =
   | 'transactions'
@@ -15,7 +15,8 @@ export type MenuSectionId =
   | 'whatsapp'
   | 'knowledgeBase'
   | 'quickReplies'
-  | 'deals';
+  | 'deals'
+  | 'analytics';
 
 export interface MenuAccess {
   transactions: boolean;
@@ -31,9 +32,11 @@ export interface MenuAccess {
   knowledgeBase: boolean;
   quickReplies: boolean;
   deals: boolean;
+  /** Доступ к /analytics (аналитический центр) */
+  analytics: boolean;
 }
 
-/** Дефолт: все разделы разрешены (для обратной совместимости и owner/admin). */
+/** Дефолт: все разделы включены (владелец / старые пользователи без записи menuAccess). */
 export const DEFAULT_MENU_ACCESS: MenuAccess = {
   transactions: true,
   feed: true,
@@ -48,7 +51,21 @@ export const DEFAULT_MENU_ACCESS: MenuAccess = {
   knowledgeBase: true,
   quickReplies: true,
   deals: true,
+  analytics: true
 };
+
+/** Менеджер / сотрудник: аналитика по умолчанию выключена (админ может включить). */
+export const DEFAULT_MENU_ACCESS_MANAGER: MenuAccess = {
+  ...DEFAULT_MENU_ACCESS,
+  analytics: false
+};
+
+import type { CompanyUserRole } from './company';
+
+export function defaultMenuAccessForRole(role: CompanyUserRole): MenuAccess {
+  if (role === 'owner' || role === 'admin') return { ...DEFAULT_MENU_ACCESS };
+  return { ...DEFAULT_MENU_ACCESS_MANAGER };
+}
 
 /** Конфиг разделов: id, label, путь для роута (для guard). */
 export const MENU_SECTIONS: { id: MenuSectionId; label: string; path: string }[] = [
@@ -65,31 +82,29 @@ export const MENU_SECTIONS: { id: MenuSectionId; label: string; path: string }[]
   { id: 'knowledgeBase', label: 'AI База знаний', path: '/settings/knowledge' },
   { id: 'quickReplies', label: 'Быстрые ответы', path: '/settings/quick-replies' },
   { id: 'deals', label: 'Сделки', path: '/deals' },
+  { id: 'analytics', label: 'Analytics', path: '/analytics' }
 ];
 
-/**
- * Проверка доступа к разделу.
- * @param menuAccess — права из company_users (может быть undefined для старых пользователей)
- * @param section — id раздела
- * @returns true если доступ разрешён. Если menuAccess нет — считаем всё разрешённым (дефолт).
- */
 export function canAccessSection(
   menuAccess: MenuAccess | undefined | null,
   section: MenuSectionId
 ): boolean {
   if (!menuAccess) return true;
   const value = menuAccess[section];
-  // Разрешаем, если явно true или ключ отсутствует (новые разделы по умолчанию доступны)
+  if (section === 'analytics') {
+    if (value === true) return true;
+    if (value === false) return false;
+    return true;
+  }
   return value !== false;
 }
 
-/** Определить section по pathname (для guard). */
 export function getSectionByPath(pathname: string): MenuSectionId | null {
   const normalized = pathname.split('?')[0].replace(/\/$/, '') || '/';
-  if (normalized === '/analytics') return 'deals';
+  if (normalized === '/analytics') return 'analytics';
   if (normalized === '/client-files' || /^\/clients\/[^/]+\/files/.test(normalized)) return 'clientFiles';
-  const section = MENU_SECTIONS.find(
-    (s) => s.id !== 'clientFiles' && (normalized === s.path || normalized.startsWith(s.path + '/'))
+  const byPath = MENU_SECTIONS.filter((s) => s.id !== 'clientFiles').find(
+    (s) => normalized === s.path || normalized.startsWith(s.path + '/')
   );
-  return section?.id ?? null;
+  return byPath?.id ?? null;
 }

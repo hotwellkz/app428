@@ -14,6 +14,7 @@ import {
 import { db } from './config';
 import type { CompanyUserRole } from '../../types/company';
 import type { MenuAccess } from '../../types/menuAccess';
+import { defaultMenuAccessForRole } from '../../types/menuAccess';
 
 const COMPANIES = 'companies';
 const COMPANY_USERS = 'company_users';
@@ -58,6 +59,7 @@ export async function addCompanyUser(
   email?: string
 ): Promise<string> {
   const ref = doc(db, COMPANY_USERS, userId);
+  const snap = await getDoc(ref);
   const data: Record<string, unknown> = {
     companyId,
     userId,
@@ -66,6 +68,9 @@ export async function addCompanyUser(
     updatedAt: serverTimestamp()
   };
   if (email !== undefined) data.email = email;
+  if (!snap.exists() || snap.data()?.menuAccess == null) {
+    data.menuAccess = defaultMenuAccessForRole(role);
+  }
   await setDoc(ref, data, { merge: true });
   return ref.id;
 }
