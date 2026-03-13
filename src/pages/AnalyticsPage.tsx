@@ -118,6 +118,12 @@ const t = ru.analytics;
 const feedCard = 'bg-white rounded-xl border border-gray-200 shadow-sm';
 const feedCardPad = `${feedCard} p-4 md:p-5`;
 const feedMuted = 'text-gray-500';
+
+/** Десктопный dashboard: 1 col мобилка → 2 (md) → 3 (1100) → 4 (1400) → 5 (1800), gap 16px */
+const DASHBOARD_GRID =
+  'grid w-full max-w-full gap-4 grid-cols-1 md:grid-cols-2 min-[1100px]:grid-cols-3 min-[1400px]:grid-cols-4 min-[1800px]:grid-cols-5';
+/** Графики в ряд на md+ (каждый ~50% ширины при 2 колонках) */
+const CHART_PAIR_GRID = 'grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0';
 const chartGrid = '#e5e7eb';
 const chartTick = '#6b7280';
 const chartTooltipBg = '#ffffff';
@@ -1211,7 +1217,7 @@ export const AnalyticsPage: React.FC = () => {
       ) : (
         <div
           ref={reportRef}
-          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-gray-100 w-full max-w-[100vw] sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto px-2 sm:px-4 pt-[calc(11.5rem+env(safe-area-inset-top,0px))] min-[480px]:pt-[calc(10.5rem+env(safe-area-inset-top,0px))] md:pt-[calc(9.25rem+env(safe-area-inset-top,0px))] sm:pl-[calc(16rem+max(0.5rem,env(safe-area-inset-left)))] pb-[max(6rem,env(safe-area-inset-bottom,0px)+4rem)] space-y-4 sm:space-y-6"
+          className="analytics-dashboard-root flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-gray-100 w-full max-w-[100vw] md:max-w-[1800px] md:w-full md:mx-auto px-4 pt-[calc(11.5rem+env(safe-area-inset-top,0px))] min-[480px]:pt-[calc(10.5rem+env(safe-area-inset-top,0px))] md:pt-[calc(9.25rem+env(safe-area-inset-top,0px))] md:pl-[calc(16rem+2rem)] md:pr-8 pb-[max(6rem,env(safe-area-inset-bottom,0px)+4rem)] space-y-4 sm:space-y-6 box-border max-md:px-2"
         >
           <div className="md:hidden flex flex-wrap gap-2 py-2 border-b border-gray-200">
             {filterChips.map((c, i) => (
@@ -1236,7 +1242,7 @@ export const AnalyticsPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 w-full max-w-full">
+            <div className={DASHBOARD_GRID}>
               {[
                 {
                   label: t.applicationsToday,
@@ -1346,7 +1352,7 @@ export const AnalyticsPage: React.FC = () => {
             <h2 className="text-sm font-bold uppercase tracking-widest text-cyan-700">
               {t.opsAnalytics}
             </h2>
-            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 w-full max-w-full">
+            <div className={DASHBOARD_GRID}>
               {[
                 { label: t.activeBuilds, value: opsKpi.activeBuilds, icon: Building2, grad: 'from-amber-600 to-orange-700' },
                 { label: t.newClients, value: opsKpi.newClients, icon: Users, grad: 'from-cyan-600 to-blue-700' },
@@ -1368,7 +1374,7 @@ export const AnalyticsPage: React.FC = () => {
             <h2 className="text-sm font-bold uppercase tracking-widest text-amber-800">
               {t.navConstruction}
             </h2>
-            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 w-full max-w-full">
+            <div className={DASHBOARD_GRID}>
               {[
                 { l: t.clientsTotal, v: constructionKpi.total },
                 { l: t.buildingNow, v: constructionKpi.building },
@@ -1387,35 +1393,37 @@ export const AnalyticsPage: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm max-w-full overflow-x-hidden">
-              <h3 className="font-bold mb-2 text-sm">{t.newClientsByDay}</h3>
-              <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
-                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
-                  <LineChart data={clientsNewByDay}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6b7280' }} />
-                    <YAxis tick={{ fontSize: 9, fill: '#6b7280' }} />
-                    <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb' }} />
-                    <Line type="monotone" dataKey="count" stroke="#f59e0b" strokeWidth={2} dot={false} name={t.newClients} />
-                  </LineChart>
-                </ResponsiveContainer>
+            <div className={CHART_PAIR_GRID}>
+              <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm max-w-full overflow-x-hidden min-w-0 md:min-h-[300px] min-[1400px]:min-h-[340px]">
+                <h3 className="font-bold mb-2 text-sm">{t.newClientsByDay}</h3>
+                <div className="w-full min-w-0 h-[240px] min-[1100px]:h-[280px] min-[1400px]:h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%" debounce={80}>
+                    <LineChart data={clientsNewByDay}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6b7280' }} />
+                      <YAxis tick={{ fontSize: 9, fill: '#6b7280' }} />
+                      <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb' }} />
+                      <Line type="monotone" dataKey="count" stroke="#f59e0b" strokeWidth={2} dot={false} name={t.newClients} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm min-w-0 md:min-h-[300px] min-[1400px]:min-h-[340px]">
+                <h3 className="font-bold mb-2 text-sm">{t.completedHomesByMonth}</h3>
+                <div className="w-full min-w-0 h-[240px] min-[1100px]:h-[280px] min-[1400px]:h-[300px]">
+                  <ResponsiveContainer width="100%" height="100%" debounce={80}>
+                    <BarChart data={builtByMonth}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#6b7280' }} />
+                      <YAxis tick={{ fontSize: 9, fill: '#6b7280' }} />
+                      <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb' }} />
+                      <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} name={t.builtTotal} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <h3 className="font-bold mb-2">{t.completedHomesByMonth}</h3>
-              <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
-                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
-                  <BarChart data={builtByMonth}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#6b7280' }} />
-                    <YAxis tick={{ fontSize: 9, fill: '#6b7280' }} />
-                    <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb' }} />
-                    <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} name={t.builtTotal} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm max-w-full">
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm max-w-full w-full">
               <h3 className="font-bold p-2 sm:p-3 text-sm">{t.activeBuildsTable}</h3>
               {activeBuildsRows.length === 0 ? (
                 <p className="p-4 text-center text-slate-500 text-sm">{t.noData}</p>
@@ -1469,7 +1477,7 @@ export const AnalyticsPage: React.FC = () => {
             <h2 className="text-sm font-bold uppercase tracking-widest text-emerald-700">
               {t.navTxFinance}
             </h2>
-            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 w-full max-w-full">
+            <div className={DASHBOARD_GRID}>
               {[
                 { l: t.incomeToday, v: txFinanceKpiFixed.incomeToday.toLocaleString('ru-RU') + ' ₸' },
                 { l: t.incomeMonth, v: txFinanceKpiFixed.incomeMonth.toLocaleString('ru-RU') + ' ₸' },
@@ -1483,11 +1491,11 @@ export const AnalyticsPage: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 xl:gap-6">
-            <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm min-w-0">
+            <div className={CHART_PAIR_GRID}>
+            <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm min-w-0 md:min-h-[300px]">
               <h3 className="font-bold mb-2 text-sm sm:text-base">{t.incomeByDay}</h3>
-              <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
-                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
+              <div className="w-full min-w-0 h-[240px] min-[1100px]:h-[280px] min-[1400px]:h-[300px]">
+                <ResponsiveContainer width="100%" height="100%" debounce={80}>
                   <LineChart data={incomeByDay}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6b7280' }} />
@@ -1498,10 +1506,10 @@ export const AnalyticsPage: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm min-w-0">
+            <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm min-w-0 md:min-h-[300px]">
               <h3 className="font-bold mb-2 text-sm sm:text-base">{t.incomeByMonth}</h3>
-              <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
-                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
+              <div className="w-full min-w-0 h-[240px] min-[1100px]:h-[280px] min-[1400px]:h-[300px]">
+                <ResponsiveContainer width="100%" height="100%" debounce={80}>
                   <BarChart data={incomeByMonthChart}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="month" tick={{ fontSize: 9, fill: '#6b7280' }} />
@@ -1555,7 +1563,7 @@ export const AnalyticsPage: React.FC = () => {
             <h2 className="text-sm font-bold uppercase tracking-widest text-lime-800">
               {t.navWarehouse}
             </h2>
-            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 w-full max-w-full">
+            <div className={DASHBOARD_GRID}>
               {[
                 { l: t.warehouseValue, v: warehouseKpi.totalValue.toLocaleString('ru-RU') + ' ₸' },
                 { l: t.materialsCount, v: warehouseKpi.count },
@@ -1623,9 +1631,10 @@ export const AnalyticsPage: React.FC = () => {
             )}
           </section>
 
-          {/* График заявок + воронка */}
+          {/* График заявок + воронка — md+ в два столбца */}
           <section id="sec-leads" className="space-y-6">
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm w-full">
+            <div className={CHART_PAIR_GRID}>
+            <div className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 shadow-sm w-full min-w-0">
               <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                 <h2 className="text-base font-bold">{t.leadsChart}</h2>
                 <div className="flex gap-1 flex-wrap">
@@ -1643,50 +1652,29 @@ export const AnalyticsPage: React.FC = () => {
                   ))}
                 </div>
               </div>
-              <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
-                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
+              <div className="w-full min-w-0 h-[260px] min-[1100px]:h-[300px] min-[1400px]:h-[320px]">
+                <ResponsiveContainer width="100%" height="100%" debounce={80}>
                   <LineChart data={leadsDays}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#6b7280' }} />
                     <YAxis tick={{ fontSize: 10, fill: '#6b7280' }} />
-                    <Tooltip
-                      contentStyle={{
-                        background: '#ffffff',
-                        border: '1px solid #e5e7eb'
-                      }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="leads"
-                      name={t.leads}
-                      stroke="#7c3aed"
-                      strokeWidth={2}
-                      dot={false}
-                      isAnimationActive
-                    />
+                    <Tooltip contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb' }} />
+                    <Line type="monotone" dataKey="leads" name={t.leads} stroke="#7c3aed" strokeWidth={2} dot={false} isAnimationActive />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm w-full">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 shadow-sm w-full min-w-0">
               <h2 className="text-base font-bold mb-1">{t.funnelTitle}</h2>
               <p className="text-xs mb-4 text-gray-500">{t.funnelHint}</p>
-              <div className="w-full min-w-0 shrink-0" style={{ minHeight: chartHMain }}>
-                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
+              <div className="w-full min-w-0 h-[260px] min-[1100px]:h-[300px] min-[1400px]:h-[320px]">
+                <ResponsiveContainer width="100%" height="100%" debounce={80}>
                   <BarChart data={funnelData} layout="vertical" margin={{ left: 4, right: 24 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis type="number" tick={{ fill: '#6b7280', fontSize: 11 }} />
-                    <YAxis
-                      dataKey="name"
-                      type="category"
-                      width={88}
-                      tick={{ fill: '#6b7280', fontSize: 10 }}
-                    />
+                    <YAxis dataKey="name" type="category" width={88} tick={{ fill: '#6b7280', fontSize: 10 }} />
                     <Tooltip
-                      contentStyle={{
-                        background: '#ffffff',
-                        border: '1px solid #e5e7eb'
-                      }}
+                      contentStyle={{ background: '#ffffff', border: '1px solid #e5e7eb' }}
                       formatter={(v: number, _n: string, p: { payload: { pctFromPrev: number } }) => [
                         `${v} ${t.dealsCount} · ${p.payload.pctFromPrev}% ${t.fromPrev}`,
                         t.stage
@@ -1701,6 +1689,7 @@ export const AnalyticsPage: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             </div>
+            </div>
           </section>
 
           {/* Аналитика сообщений (WhatsApp) */}
@@ -1708,7 +1697,7 @@ export const AnalyticsPage: React.FC = () => {
             <h2 className="text-xs font-bold uppercase tracking-widest text-emerald-600">
               {t.messagingTitle}
             </h2>
-            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-2 w-full max-w-full">
+            <div className={`${DASHBOARD_GRID} mb-2`}>
               {[
                 { label: t.incomingToday, v: waKpi.incomingToday, icon: MessageCircle },
                 { label: t.dialogsToday, v: waKpi.convToday, icon: Users },
@@ -1728,12 +1717,10 @@ export const AnalyticsPage: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div
-              className="rounded-xl border border-gray-200 bg-white p-5 w-full shadow-sm"
-            >
+            <div className="rounded-xl border border-gray-200 bg-white p-4 md:p-5 w-full shadow-sm min-w-0">
               <h3 className="font-bold mb-4">{t.messageActivity}</h3>
-              <div className="w-full min-w-0" style={{ minHeight: chartHMsg }}>
-                <ResponsiveContainer width="100%" height={chartHMsg} debounce={80}>
+              <div className="w-full min-w-0 h-[220px] min-[1100px]:h-[260px] min-[1400px]:h-[280px]">
+                <ResponsiveContainer width="100%" height="100%" debounce={80}>
                   <LineChart data={messagesPerDay}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                     <XAxis dataKey="date" tick={{ fontSize: 9, fill: '#6b7280' }} />
@@ -1748,7 +1735,7 @@ export const AnalyticsPage: React.FC = () => {
               className="rounded-xl border border-gray-200 bg-white p-5 w-full shadow-sm"
             >
               <h3 className="font-bold mb-4">{t.dialogs}</h3>
-              <div className="grid grid-cols-1 min-[360px]:grid-cols-3 gap-2 sm:gap-3 text-center min-w-0">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-3 text-center min-w-0">
                 {[
                   { lbl: t.newToday, v: convMetrics.newConv, c: 'from-cyan-500 to-blue-600' },
                   { lbl: t.active, v: convMetrics.active, c: 'from-violet-500 to-purple-600' },
@@ -1822,7 +1809,7 @@ export const AnalyticsPage: React.FC = () => {
           </section>
 
           {/* Источники лидов + Финансы */}
-          <section id="sec-sources" className="grid lg:grid-cols-2 gap-6 w-full">
+          <section id="sec-sources" className="grid grid-cols-1 min-[1100px]:grid-cols-2 gap-4 md:gap-6 w-full min-w-0">
             <div
               className="rounded-xl border border-gray-200 bg-white p-5 min-w-0 shadow-sm"
             >
