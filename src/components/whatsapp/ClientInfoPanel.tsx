@@ -279,7 +279,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     return () => document.removeEventListener('click', onDocClick, true);
   }, [managerContextMenu]);
 
-  const AI_ANALYZE_ENDPOINTS = ['/api/ai/analyze-client', '/.netlify/functions/ai-analyze-client'] as const;
+  /** Сначала прямой вызов функции Netlify (на хостинге без редиректа /api даёт 404 HTML) */
+  const AI_ANALYZE_ENDPOINTS = ['/.netlify/functions/ai-analyze-client', '/api/ai/analyze-client'] as const;
 
   const handleAIAnalyze = async () => {
     if (!phone || aiLoading) return;
@@ -327,11 +328,18 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
             body: JSON.stringify(payload),
           });
           const currentRawBody = await currentRes.text();
+          const looksLikeHtml =
+            currentRawBody.trimStart().startsWith('<') || currentRawBody.includes('<!DOCTYPE');
+          if (looksLikeHtml || currentRes.status === 404) {
+            console.warn('AI analyze: skip non-JSON / 404', { url, status: currentRes.status });
+            continue;
+          }
           let currentData: typeof data = {};
           try {
             currentData = currentRawBody ? (JSON.parse(currentRawBody) as typeof data) : {};
           } catch {
-            console.error('AI response', 'invalid JSON', currentRawBody?.slice(0, 200));
+            console.error('AI response invalid JSON', url, currentRawBody?.slice(0, 200));
+            continue;
           }
 
           console.log('AI response', { url, status: currentRes.status, body: currentData });
@@ -378,7 +386,15 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
           : null;
 
       const baseName = nextName && nextName.length > 0 ? nextName : AI_NAME_FALLBACKS[0];
-      const uniqueName = companyId ? await generateUniqueName(baseName, companyId) : baseName;
+      let uniqueName = baseName;
+      if (companyId) {
+        try {
+          uniqueName = await generateUniqueName(baseName, companyId);
+        } catch (idxErr) {
+          console.error('generateUniqueName (нужен индекс Firestore clients: companyId+name)', idxErr);
+          uniqueName = baseName;
+        }
+      }
       setEditName(uniqueName);
       if (nextComment != null && nextComment.length > 0) {
         setEditComment(nextComment);
