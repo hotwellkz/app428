@@ -959,28 +959,28 @@ export const AnalyticsPage: React.FC = () => {
   }
 
   return (
-    <div className="min-h-dvh bg-gray-100 text-gray-900 [padding-bottom:env(safe-area-inset-bottom)]">
-      {/* Хедер: ПК под сайдбаром; мобилка — safe-area */}
+    <div className="min-h-dvh max-w-[100vw] overflow-x-hidden bg-gray-100 text-gray-900 [padding-bottom:env(safe-area-inset-bottom)]">
+      {/* Фиксированная шапка + липкие фильтры (моб.) + навигация без горизонтального скролла */}
       <div
-        className="flex-shrink-0 fixed top-0 left-0 sm:left-64 right-0 z-40 bg-white border-b border-gray-200 shadow-sm pt-[env(safe-area-inset-top,0px)]"
+        className="flex-shrink-0 fixed top-0 left-0 sm:left-64 right-0 z-40 max-w-[100vw] overflow-x-hidden bg-white border-b border-gray-200 shadow-sm pt-[env(safe-area-inset-top,0px)]"
         style={{ background: '#ffffff' }}
       >
-        <div className="flex flex-wrap sm:flex-nowrap items-center min-h-12 sm:min-h-14 gap-x-2 gap-y-1 px-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] md:px-4 border-b border-gray-100">
+        <div className="flex flex-wrap items-center min-h-11 gap-1 px-2 sm:px-3 md:px-4 border-b border-gray-100">
           <button
             type="button"
             onClick={toggleMobileSidebar}
-            className="md:hidden flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-100 text-gray-700"
+            className="xl:hidden flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 text-gray-700 shrink-0"
             aria-label="Меню"
           >
-            <Menu className="w-6 h-6" />
+            <Menu className="w-5 h-5" />
           </button>
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="flex items-center justify-center w-10 h-10 rounded-lg hover:bg-gray-100 text-gray-700"
+            className="flex items-center justify-center w-9 h-9 rounded-lg hover:bg-gray-100 text-gray-700 shrink-0"
             aria-label="Назад"
           >
-            <ArrowLeft className="w-6 h-6" />
+            <ArrowLeft className="w-5 h-5" />
           </button>
           <div className="flex-1 min-w-0 md:flex md:items-center md:gap-3 text-left">
             <h1
@@ -1002,10 +1002,10 @@ export const AnalyticsPage: React.FC = () => {
           <button
             type="button"
             onClick={openFilterSheet}
-            className="md:hidden p-2 rounded-lg hover:bg-gray-100 text-gray-600"
+            className="md:hidden p-1.5 rounded-lg hover:bg-gray-100 text-gray-600 shrink-0"
             aria-label={t.filtersButton}
           >
-            <Filter className="w-5 h-5" />
+            <Filter className="w-4 h-4" />
           </button>
           <button
             type="button"
@@ -1023,6 +1023,54 @@ export const AnalyticsPage: React.FC = () => {
             <Download className="w-4 h-4 shrink-0" />
             <span className="hidden min-[360px]:inline">PDF</span>
           </button>
+        </div>
+        {/* Мобильные фильтры — всегда в шапке (липко вместе с фикс-блоком), без горизонтального скролла */}
+        <div className="md:hidden grid grid-cols-2 min-[480px]:grid-cols-4 gap-1.5 px-2 py-2 bg-gray-50 border-b border-gray-100 max-w-full">
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="min-w-0 rounded-md px-1.5 py-1.5 text-[11px] border border-gray-200 bg-white text-gray-900"
+          />
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="min-w-0 rounded-md px-1.5 py-1.5 text-[11px] border border-gray-200 bg-white text-gray-900"
+          />
+          <select
+            value={managerId}
+            onChange={(e) => setManagerId(e.target.value)}
+            className="min-w-0 rounded-md px-1 py-1.5 text-[11px] border border-gray-200 bg-white text-gray-900 col-span-2 min-[480px]:col-span-1"
+          >
+            <option value="all">{t.allManagers}</option>
+            <option value="none">{t.noManager}</option>
+            {managersList.map((m) => (
+              <option key={m.id} value={m.id}>{m.name}</option>
+            ))}
+          </select>
+          <select
+            value={sourceFilter}
+            onChange={(e) => setSourceFilter(e.target.value)}
+            className="min-w-0 rounded-md px-1 py-1.5 text-[11px] border border-gray-200 bg-white text-gray-900 col-span-2 min-[480px]:col-span-1"
+          >
+            <option value="all">{t.sourceAll}</option>
+            <option value="WhatsApp">WhatsApp</option>
+            <option value="Instagram">Instagram</option>
+            <option value="Google">Google</option>
+            <option value="Звонок">Звонок</option>
+            <option value="Сайт">Сайт</option>
+          </select>
+          <select
+            value={channelFilter}
+            onChange={(e) => setChannelFilter(e.target.value)}
+            className="min-w-0 rounded-md px-1 py-1.5 text-[11px] border border-gray-200 bg-white text-gray-900 col-span-2 min-[480px]:col-span-2"
+          >
+            <option value="all">{t.channelAll}</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="instagram">{t.channelInstagram}</option>
+            <option value="other">{t.channelOther}</option>
+          </select>
         </div>
         <div className="hidden md:flex flex-wrap items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 max-w-full">
           <input
@@ -1074,7 +1122,7 @@ export const AnalyticsPage: React.FC = () => {
             <option value="other">{t.channelOther}</option>
           </select>
         </div>
-        <nav className="flex gap-1 overflow-x-auto px-[max(0.75rem,env(safe-area-inset-left))] py-2 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] sm:pb-2 bg-white touch-pan-x scrollbar-thin [-webkit-overflow-scrolling:touch]">
+        <nav className="grid grid-cols-2 min-[480px]:grid-cols-3 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-1 p-2 bg-white max-w-full overflow-x-hidden">
           {sections.map((s) => (
             <button
               key={s.id}
@@ -1083,7 +1131,7 @@ export const AnalyticsPage: React.FC = () => {
                 setActiveSection(s.id);
                 document.getElementById(`sec-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }}
-              className={`shrink-0 min-h-9 px-3 py-2 rounded-lg text-[11px] sm:text-xs font-semibold transition-colors active:scale-[0.98] ${
+              className={`min-h-8 px-2 py-1.5 rounded-md text-[10px] sm:text-[11px] font-semibold transition-colors text-center leading-tight ${
                 activeSection === s.id
                   ? 'bg-emerald-500 text-white shadow-sm'
                   : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
@@ -1163,7 +1211,7 @@ export const AnalyticsPage: React.FC = () => {
       ) : (
         <div
           ref={reportRef}
-          className="flex-1 min-h-0 overflow-y-auto bg-gray-100 w-full max-w-full sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto px-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] sm:px-4 pt-[calc(7rem+env(safe-area-inset-top,0px))] md:pt-[calc(9.25rem+env(safe-area-inset-top,0px))] sm:pl-[calc(16rem+max(1rem,env(safe-area-inset-left)))] pb-[max(6rem,env(safe-area-inset-bottom,0px)+4rem)] space-y-5 sm:space-y-6"
+          className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-gray-100 w-full max-w-[100vw] sm:max-w-3xl md:max-w-4xl lg:max-w-5xl xl:max-w-6xl 2xl:max-w-7xl mx-auto px-2 sm:px-4 pt-[calc(11.5rem+env(safe-area-inset-top,0px))] min-[480px]:pt-[calc(10.5rem+env(safe-area-inset-top,0px))] md:pt-[calc(9.25rem+env(safe-area-inset-top,0px))] sm:pl-[calc(16rem+max(0.5rem,env(safe-area-inset-left)))] pb-[max(6rem,env(safe-area-inset-bottom,0px)+4rem)] space-y-4 sm:space-y-6"
         >
           <div className="md:hidden flex flex-wrap gap-2 py-2 border-b border-gray-200">
             {filterChips.map((c, i) => (
@@ -1188,7 +1236,7 @@ export const AnalyticsPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 sm:gap-4 overflow-x-auto md:overflow-visible pb-3 md:pb-0 snap-x snap-mandatory md:snap-none scrollbar-thin pl-1 pr-4 md:pl-0 md:pr-0 -mx-1 md:mx-0 w-full touch-pan-x [scrollbar-width:thin]">
+            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 sm:gap-3 w-full max-w-full">
               {[
                 {
                   label: t.applicationsToday,
@@ -1261,13 +1309,13 @@ export const AnalyticsPage: React.FC = () => {
               ].map((c) => (
                 <div
                   key={c.label}
-                  className={`min-w-[148px] sm:min-w-[160px] md:min-w-0 w-[148px] md:w-auto snap-start rounded-2xl p-3.5 sm:p-4 md:p-5 text-white shadow-xl bg-gradient-to-br shrink-0 md:shrink ${c.grad}`}
+                  className={`rounded-xl p-2.5 sm:p-3 md:p-4 text-white shadow-md bg-gradient-to-br min-h-0 ${c.grad}`}
                 >
-                  <c.icon className="w-9 h-9 opacity-95 mb-3" />
-                  <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide opacity-90 leading-tight">
+                  <c.icon className="w-5 h-5 sm:w-6 sm:h-6 opacity-95 mb-1.5" />
+                  <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wide opacity-90 leading-tight line-clamp-2">
                     {c.label}
                   </p>
-                  <p className="text-2xl sm:text-3xl font-black tabular-nums mt-2 leading-none">{c.value}</p>
+                  <p className="text-lg sm:text-xl md:text-2xl font-black tabular-nums mt-1 leading-none truncate">{c.value}</p>
                   {'sub' in c && c.sub && (
                     <p className="text-[10px] opacity-85 mt-1 truncate max-w-full">{c.sub}</p>
                   )}
@@ -1278,15 +1326,15 @@ export const AnalyticsPage: React.FC = () => {
               <h3 className="text-sm font-bold mb-3 text-red-800">
                 {t.unreadAlertTitle}
               </h3>
-              <div className="grid sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 min-[480px]:grid-cols-3 gap-2">
                 {[
                   { label: t.unreadNow, v: unreadAlerts.now, tone: 'bg-red-600 text-white' },
                   { label: t.unread30m, v: unreadAlerts.u30, tone: 'bg-red-700 text-white' },
                   { label: t.unread60m, v: unreadAlerts.u60, tone: 'bg-red-900 text-white' }
                 ].map((x) => (
-                  <div key={x.label} className={`rounded-xl px-4 py-3 ${x.tone} shadow-lg`}>
-                    <p className="text-xs font-semibold opacity-90">{x.label}</p>
-                    <p className="text-3xl font-black mt-1 tabular-nums">{x.v}</p>
+                  <div key={x.label} className={`rounded-lg px-3 py-2 ${x.tone} shadow-md`}>
+                    <p className="text-[10px] font-semibold opacity-90">{x.label}</p>
+                    <p className="text-xl font-black mt-0.5 tabular-nums">{x.v}</p>
                   </div>
                 ))}
               </div>
@@ -1298,17 +1346,17 @@ export const AnalyticsPage: React.FC = () => {
             <h2 className="text-sm font-bold uppercase tracking-widest text-cyan-700">
               {t.opsAnalytics}
             </h2>
-            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 gap-3 overflow-x-auto md:overflow-visible pb-2 snap-x md:snap-none pl-1 pr-4 md:px-0 touch-pan-x">
+            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 w-full max-w-full">
               {[
                 { label: t.activeBuilds, value: opsKpi.activeBuilds, icon: Building2, grad: 'from-amber-600 to-orange-700' },
                 { label: t.newClients, value: opsKpi.newClients, icon: Users, grad: 'from-cyan-600 to-blue-700' },
                 { label: t.incomeShort, value: `${(opsKpi.incomeMonth / 1000).toFixed(0)}k ₸`, sub: opsKpi.incomeMonth.toLocaleString('ru-RU') + ' ₸', icon: Wallet, grad: 'from-emerald-600 to-teal-700' },
                 { label: t.materialsOnStock, value: opsKpi.materialsCount, icon: Package, grad: 'from-violet-600 to-indigo-700' }
               ].map((c) => (
-                <div key={c.label} className={`min-w-[140px] md:min-w-0 w-[140px] md:w-auto snap-start rounded-2xl p-4 text-white bg-gradient-to-br shrink-0 md:shrink ${c.grad}`}>
-                  <c.icon className="w-7 h-7 mb-2 opacity-95" />
-                  <p className="text-[10px] font-bold uppercase opacity-90">{c.label}</p>
-                  <p className="text-2xl font-black mt-1">{c.value}</p>
+                <div key={c.label} className={`rounded-xl p-2.5 sm:p-3 text-white bg-gradient-to-br shadow-md ${c.grad}`}>
+                  <c.icon className="w-5 h-5 mb-1 opacity-95" />
+                  <p className="text-[9px] font-bold uppercase opacity-90 line-clamp-2">{c.label}</p>
+                  <p className="text-lg sm:text-xl font-black mt-0.5 truncate">{c.value}</p>
                   {'sub' in c && c.sub && <p className="text-[10px] opacity-85 mt-0.5">{c.sub}</p>}
                 </div>
               ))}
@@ -1320,7 +1368,7 @@ export const AnalyticsPage: React.FC = () => {
             <h2 className="text-sm font-bold uppercase tracking-widest text-amber-800">
               {t.navConstruction}
             </h2>
-            <div className="flex md:grid md:grid-cols-3 lg:grid-cols-5 xl:grid-cols-5 gap-2 sm:gap-3 overflow-x-auto md:overflow-visible pb-2 snap-x md:snap-none pl-1 pr-4 md:px-0">
+            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 w-full max-w-full">
               {[
                 { l: t.clientsTotal, v: constructionKpi.total },
                 { l: t.buildingNow, v: constructionKpi.building },
@@ -1333,14 +1381,14 @@ export const AnalyticsPage: React.FC = () => {
                 { l: t.clientsWithDeposit, v: constructionKpi.withDeposit },
                 { l: t.overdueProjects, v: constructionKpi.overdue }
               ].map((x) => (
-                <div key={x.l} className="min-w-[120px] md:min-w-0 w-[120px] md:w-auto snap-start rounded-xl border border-gray-200 bg-white p-2.5 sm:p-3 shrink-0 md:shrink shadow-sm">
-                  <p className="text-[9px] font-bold uppercase text-gray-500">{x.l}</p>
-                  <p className="text-xl font-black tabular-nums">{x.v}</p>
+                <div key={x.l} className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+                  <p className="text-[8px] font-bold uppercase text-gray-500 line-clamp-2">{x.l}</p>
+                  <p className="text-base font-black tabular-nums">{x.v}</p>
                 </div>
               ))}
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-              <h3 className="font-bold mb-2">{t.newClientsByDay}</h3>
+            <div className="rounded-xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm max-w-full overflow-x-hidden">
+              <h3 className="font-bold mb-2 text-sm">{t.newClientsByDay}</h3>
               <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
                 <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
                   <LineChart data={clientsNewByDay}>
@@ -1367,15 +1415,31 @@ export const AnalyticsPage: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-              <h3 className="font-bold p-3 sm:p-4 pb-0 text-sm sm:text-base">{t.activeBuildsTable}</h3>
-              <p className="px-3 sm:px-4 pb-2 text-[10px] text-gray-500 md:hidden">← Листайте таблицу вбок →</p>
-              <div className="overflow-x-auto overscroll-x-contain [-webkit-overflow-scrolling:touch]">
-                <table className="w-full text-sm min-w-[720px]">
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm max-w-full">
+              <h3 className="font-bold p-2 sm:p-3 text-sm">{t.activeBuildsTable}</h3>
+              {activeBuildsRows.length === 0 ? (
+                <p className="p-4 text-center text-slate-500 text-sm">{t.noData}</p>
+              ) : (
+                <ul className="md:hidden divide-y divide-gray-100 max-w-full">
+                  {activeBuildsRows.map((r) => (
+                    <li key={r.id} className="p-2.5 text-xs space-y-1 break-words">
+                      <p className="font-semibold text-gray-900">{r.client}</p>
+                      <p className="text-gray-600">{r.object}</p>
+                      <p className="flex flex-wrap gap-x-2 gap-y-0 text-gray-500">
+                        <span>{r.status}</span>
+                        <span className="tabular-nums">{r.progress}</span>
+                      </p>
+                      <p className="text-[10px] text-gray-400">{r.start} → {r.planEnd}</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="hidden md:block overflow-x-hidden">
+                <table className="w-full text-sm table-fixed">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
                       {[t.colClient, t.colObject, t.colStatus, t.colProgress, t.colStart, t.colPlanEnd].map((h) => (
-                        <th key={h} className="text-left py-2 px-3 text-xs font-bold whitespace-nowrap">{h}</th>
+                        <th key={h} className="text-left py-2 px-2 text-xs font-bold truncate">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1385,12 +1449,12 @@ export const AnalyticsPage: React.FC = () => {
                     ) : (
                       activeBuildsRows.map((r) => (
                         <tr key={r.id} className="border-b border-gray-100">
-                          <td className="py-2 px-3">{r.client}</td>
-                          <td className="py-2 px-3">{r.object}</td>
-                          <td className="py-2 px-3">{r.status}</td>
-                          <td className="py-2 px-3 tabular-nums">{r.progress}</td>
-                          <td className="py-2 px-3 whitespace-nowrap">{r.start}</td>
-                          <td className="py-2 px-3 whitespace-nowrap">{r.planEnd}</td>
+                          <td className="py-2 px-2 truncate text-xs">{r.client}</td>
+                          <td className="py-2 px-2 truncate text-xs">{r.object}</td>
+                          <td className="py-2 px-2 truncate text-xs">{r.status}</td>
+                          <td className="py-2 px-2 tabular-nums text-xs">{r.progress}</td>
+                          <td className="py-2 px-2 text-xs whitespace-nowrap">{r.start}</td>
+                          <td className="py-2 px-2 text-xs whitespace-nowrap">{r.planEnd}</td>
                         </tr>
                       ))
                     )}
@@ -1405,7 +1469,7 @@ export const AnalyticsPage: React.FC = () => {
             <h2 className="text-sm font-bold uppercase tracking-widest text-emerald-700">
               {t.navTxFinance}
             </h2>
-            <div className="flex md:grid md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 overflow-x-auto md:overflow-visible pb-2 snap-x md:snap-none pl-1 pr-4 md:px-0">
+            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 w-full max-w-full">
               {[
                 { l: t.incomeToday, v: txFinanceKpiFixed.incomeToday.toLocaleString('ru-RU') + ' ₸' },
                 { l: t.incomeMonth, v: txFinanceKpiFixed.incomeMonth.toLocaleString('ru-RU') + ' ₸' },
@@ -1413,9 +1477,9 @@ export const AnalyticsPage: React.FC = () => {
                 { l: t.netProfit, v: txFinanceKpiFixed.netProfit.toLocaleString('ru-RU') + ' ₸' },
                 { l: t.avgPayment, v: txFinanceKpiFixed.avgPayment.toLocaleString('ru-RU') + ' ₸' }
               ].map((x) => (
-                <div key={x.l} className="min-w-[132px] md:min-w-0 w-[132px] md:w-auto snap-start rounded-xl border border-gray-200 bg-white p-2.5 sm:p-3 shrink-0 md:shrink shadow-sm">
-                  <p className="text-[9px] font-bold uppercase text-gray-500 leading-tight">{x.l}</p>
-                  <p className="text-xs sm:text-sm font-black tabular-nums leading-tight mt-1 break-all">{x.v}</p>
+                <div key={x.l} className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+                  <p className="text-[8px] font-bold uppercase text-gray-500 leading-tight line-clamp-2">{x.l}</p>
+                  <p className="text-xs font-black tabular-nums mt-0.5 break-all">{x.v}</p>
                 </div>
               ))}
             </div>
@@ -1449,25 +1513,35 @@ export const AnalyticsPage: React.FC = () => {
               </div>
             </div>
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-              <h3 className="font-bold p-3 sm:p-4 pb-0 text-sm sm:text-base">{t.recentTx}</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[640px]">
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm max-w-full">
+              <h3 className="font-bold p-2 text-sm">{t.recentTx}</h3>
+              <ul className="md:hidden divide-y divide-gray-100">
+                {recentTxTable.map((r) => (
+                  <li key={r.id} className="p-2.5 text-xs space-y-0.5 break-words">
+                    <p className="font-semibold tabular-nums">{r.amount.toLocaleString('ru-RU')} ₸ · {r.type}</p>
+                    <p className="text-gray-500">{r.date}</p>
+                    <p className="text-gray-700">{r.client}</p>
+                    {r.comment ? <p className="text-gray-500 line-clamp-2">{r.comment}</p> : null}
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden md:block overflow-x-hidden">
+                <table className="w-full text-sm table-fixed">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
                       {[t.colDate, t.colClient, t.colType, t.colAmount, t.colComment].map((h) => (
-                        <th key={h} className="text-left py-2 px-3 text-xs font-bold whitespace-nowrap">{h}</th>
+                        <th key={h} className="text-left py-2 px-2 text-xs font-bold truncate">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {recentTxTable.map((r) => (
                       <tr key={r.id} className="border-b border-gray-100">
-                        <td className="py-2 px-3 whitespace-nowrap text-xs">{r.date}</td>
-                        <td className="py-2 px-3 max-w-[120px] truncate">{r.client}</td>
-                        <td className="py-2 px-3">{r.type}</td>
-                        <td className="py-2 px-3 tabular-nums font-semibold">{r.amount.toLocaleString('ru-RU')} ₸</td>
-                        <td className="py-2 px-3 max-w-[200px] truncate text-xs">{r.comment}</td>
+                        <td className="py-2 px-2 text-xs whitespace-nowrap">{r.date}</td>
+                        <td className="py-2 px-2 truncate text-xs">{r.client}</td>
+                        <td className="py-2 px-2 truncate text-xs">{r.type}</td>
+                        <td className="py-2 px-2 tabular-nums font-semibold text-xs">{r.amount.toLocaleString('ru-RU')} ₸</td>
+                        <td className="py-2 px-2 truncate text-xs">{r.comment}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1481,27 +1555,39 @@ export const AnalyticsPage: React.FC = () => {
             <h2 className="text-sm font-bold uppercase tracking-widest text-lime-800">
               {t.navWarehouse}
             </h2>
-            <div className="flex md:grid md:grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3 overflow-x-auto md:overflow-visible pb-2 snap-x md:snap-none pl-1 pr-4 md:px-0">
+            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-2 w-full max-w-full">
               {[
                 { l: t.warehouseValue, v: warehouseKpi.totalValue.toLocaleString('ru-RU') + ' ₸' },
                 { l: t.materialsCount, v: warehouseKpi.count },
                 { l: t.purchasesMonth, v: warehouseKpi.purchasesMonth.toLocaleString('ru-RU') + ' ₸' },
                 { l: t.consumptionMonth, v: warehouseKpi.consumptionMonth.toLocaleString('ru-RU') + ' ₸' }
               ].map((x) => (
-                <div key={x.l} className="min-w-[140px] md:min-w-0 w-[140px] md:w-auto snap-start rounded-xl border border-gray-200 bg-white p-2.5 sm:p-3 shrink-0 md:shrink shadow-sm">
-                  <p className="text-[9px] font-bold uppercase text-gray-500">{x.l}</p>
-                  <p className="text-xs sm:text-sm font-black mt-1 break-all">{x.v}</p>
+                <div key={x.l} className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+                  <p className="text-[8px] font-bold uppercase text-gray-500 line-clamp-2">{x.l}</p>
+                  <p className="text-xs font-black mt-0.5 break-all">{x.v}</p>
                 </div>
               ))}
             </div>
-            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
-              <h3 className="font-bold p-3 sm:p-4 pb-0">{t.topMaterials}</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[560px]">
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm max-w-full">
+              <h3 className="font-bold p-2 text-sm">{t.topMaterials}</h3>
+              {warehouseKpi.topMaterials.length === 0 ? (
+                <p className="p-4 text-center text-slate-500 text-sm">{t.noData}</p>
+              ) : (
+                <ul className="md:hidden divide-y divide-gray-100">
+                  {warehouseKpi.topMaterials.map((r, i) => (
+                    <li key={i} className="p-2.5 text-xs">
+                      <p className="font-medium break-words">{r.name}</p>
+                      <p className="text-gray-500 tabular-nums">исп. {r.used.toLocaleString('ru-RU')} · склад {r.stock.toLocaleString('ru-RU')} · {r.cost.toLocaleString('ru-RU')} ₸</p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="hidden md:block overflow-x-hidden">
+                <table className="w-full text-sm table-fixed">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
                       {[t.colMaterial, t.colUsedMonth, t.colStock, t.colCost].map((h) => (
-                        <th key={h} className="text-left py-2 px-3 text-xs font-bold">{h}</th>
+                        <th key={h} className="text-left py-2 px-2 text-xs font-bold truncate">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1511,10 +1597,10 @@ export const AnalyticsPage: React.FC = () => {
                     ) : (
                       warehouseKpi.topMaterials.map((r, i) => (
                         <tr key={i} className="border-b border-gray-100">
-                          <td className="py-2 px-3 font-medium">{r.name}</td>
-                          <td className="py-2 px-3 tabular-nums">{r.used.toLocaleString('ru-RU')}</td>
-                          <td className="py-2 px-3 tabular-nums">{r.stock.toLocaleString('ru-RU')}</td>
-                          <td className="py-2 px-3 tabular-nums">{r.cost.toLocaleString('ru-RU')} ₸</td>
+                          <td className="py-2 px-2 font-medium truncate text-xs">{r.name}</td>
+                          <td className="py-2 px-2 tabular-nums text-xs">{r.used.toLocaleString('ru-RU')}</td>
+                          <td className="py-2 px-2 tabular-nums text-xs">{r.stock.toLocaleString('ru-RU')}</td>
+                          <td className="py-2 px-2 tabular-nums text-xs">{r.cost.toLocaleString('ru-RU')} ₸</td>
                         </tr>
                       ))
                     )}
@@ -1622,7 +1708,7 @@ export const AnalyticsPage: React.FC = () => {
             <h2 className="text-xs font-bold uppercase tracking-widest text-emerald-600">
               {t.messagingTitle}
             </h2>
-            <div className="flex md:grid md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 overflow-x-auto md:overflow-visible pb-2 snap-x md:snap-none mb-2 w-full">
+            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 mb-2 w-full max-w-full">
               {[
                 { label: t.incomingToday, v: waKpi.incomingToday, icon: MessageCircle },
                 { label: t.dialogsToday, v: waKpi.convToday, icon: Users },
@@ -1632,13 +1718,13 @@ export const AnalyticsPage: React.FC = () => {
               ].map((x) => (
                 <div
                   key={x.label}
-                  className="min-w-[130px] md:min-w-0 w-[130px] md:w-auto snap-start shrink-0 md:shrink rounded-2xl border border-gray-200 bg-white p-3 sm:p-4 shadow-sm"
+                  className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm"
                 >
-                  <x.icon className="w-6 h-6 mb-2 text-emerald-600" />
-                  <p className="text-[10px] font-bold uppercase text-gray-500">
+                  <x.icon className="w-4 h-4 mb-1 text-emerald-600" />
+                  <p className="text-[9px] font-bold uppercase text-gray-500 line-clamp-2">
                     {x.label}
                   </p>
-                  <p className="text-xl font-black mt-1 tabular-nums">{x.v}</p>
+                  <p className="text-base font-black mt-0.5 tabular-nums">{x.v}</p>
                 </div>
               ))}
             </div>
@@ -1699,32 +1785,34 @@ export const AnalyticsPage: React.FC = () => {
             <h2 className="text-xs font-bold uppercase tracking-widest mb-4 text-indigo-600">
               {t.managersPerformance}
             </h2>
-            <div
-              className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm"
-            >
-              <div className="overflow-x-auto w-full">
-                <table className="w-full text-sm min-w-[640px]">
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm max-w-full">
+              <ul className="md:hidden divide-y divide-gray-100">
+                {managerPerf.map((r, i) => (
+                  <li key={i} className="p-2.5 text-xs space-y-1">
+                    <p className="font-semibold">{r.manager}</p>
+                    <p className="text-gray-600 tabular-nums">{t.leads}: {r.leads} · {t.dealsClosed}: {r.closed}</p>
+                    <p className="text-gray-600 tabular-nums">{r.revenue.toLocaleString('ru-RU')} ₸ · {t.messagesHandled}: {r.msgHandled} · {t.avgResponseMin}: {r.avgMin}</p>
+                  </li>
+                ))}
+              </ul>
+              <div className="hidden md:block overflow-x-hidden">
+                <table className="w-full text-sm table-fixed">
                   <thead>
                     <tr className="border-b border-gray-200 bg-gray-50">
                       {[t.manager, t.leads, t.dealsClosed, t.revenue, t.messagesHandled, t.avgResponseMin].map((h) => (
-                        <th key={h} className="text-left py-3 px-4 text-xs font-bold uppercase whitespace-nowrap">
-                          {h}
-                        </th>
+                        <th key={h} className="text-left py-2 px-2 text-[10px] font-bold uppercase truncate">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {managerPerf.map((r, i) => (
-                      <tr
-                        key={i}
-                        className="border-b border-gray-100 hover:bg-gray-50"
-                      >
-                        <td className="py-3 px-4 font-semibold">{r.manager}</td>
-                        <td className="py-3 px-4 tabular-nums">{r.leads}</td>
-                        <td className="py-3 px-4 tabular-nums">{r.closed}</td>
-                        <td className="py-3 px-4 tabular-nums">{r.revenue.toLocaleString('ru-RU')} ₸</td>
-                        <td className="py-3 px-4 tabular-nums">{r.msgHandled}</td>
-                        <td className="py-3 px-4 tabular-nums">{r.avgMin}</td>
+                      <tr key={i} className="border-b border-gray-100 hover:bg-gray-50">
+                        <td className="py-2 px-2 font-semibold truncate text-xs">{r.manager}</td>
+                        <td className="py-2 px-2 tabular-nums text-xs">{r.leads}</td>
+                        <td className="py-2 px-2 tabular-nums text-xs">{r.closed}</td>
+                        <td className="py-2 px-2 tabular-nums text-xs">{r.revenue.toLocaleString('ru-RU')} ₸</td>
+                        <td className="py-2 px-2 tabular-nums text-xs">{r.msgHandled}</td>
+                        <td className="py-2 px-2 tabular-nums text-xs">{r.avgMin}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1821,49 +1909,28 @@ export const AnalyticsPage: React.FC = () => {
                 </div>
               ))}
             </div>
-            <div
-              className="rounded-xl border border-gray-200 bg-white max-h-[360px] overflow-y-auto overflow-x-auto shadow-sm"
-            >
-              <table className="w-full text-sm min-w-[520px]">
-                <thead className="sticky top-0 bg-gray-100">
-                  <tr>
-                    {['Время', 'Телефон', 'Превью', 'Менеджер', 'Статус'].map((h) => (
-                      <th key={h} className="text-left py-2 px-3 text-xs font-bold">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
+            <div className="rounded-xl border border-gray-200 bg-white max-h-[min(50vh,360px)] overflow-y-auto overflow-x-hidden shadow-sm max-w-full">
+              {liveFeed.length === 0 ? (
+                <p className="p-8 text-center text-sm text-gray-500">{t.noMessages10m}</p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
                   {liveFeed.slice(0, 40).map((m) => {
                     const c = convById.get(m.conversationId);
                     const status =
                       c && c.unreadCount > 0 ? 'Непрочитано' : m.direction === 'incoming' ? 'Входящее' : 'Исходящее';
                     return (
-                      <tr
-                        key={m.id}
-                        className="border-b border-gray-100"
-                      >
-                        <td className="py-2 px-3 whitespace-nowrap text-xs tabular-nums">
-                          {fmtTime(m.createdAt)}
-                        </td>
-                        <td className="py-2 px-3 font-mono text-xs">{c?.phone || '—'}</td>
-                        <td className="py-2 px-3 max-w-[200px] truncate text-xs">
-                          {(m.text || '').replace(/\s+/g, ' ')}
-                        </td>
-                        <td className="py-2 px-3 text-xs truncate max-w-[100px]">
-                          {c?.dealResponsibleName || '—'}
-                        </td>
-                        <td className="py-2 px-3 text-xs">{status}</td>
-                      </tr>
+                      <li key={m.id} className="p-2.5 text-xs break-words">
+                        <p className="flex flex-wrap gap-x-2 text-gray-400 tabular-nums">
+                          <span>{fmtTime(m.createdAt)}</span>
+                          <span className="font-mono">{c?.phone || '—'}</span>
+                          <span>{status}</span>
+                        </p>
+                        <p className="text-gray-800 mt-0.5">{(m.text || '').replace(/\s+/g, ' ')}</p>
+                        <p className="text-gray-500 truncate">{c?.dealResponsibleName || '—'}</p>
+                      </li>
                     );
                   })}
-                </tbody>
-              </table>
-              {liveFeed.length === 0 && (
-                <p className="p-8 text-center text-sm text-gray-500">
-                  {t.noMessages10m}
-                </p>
+                </ul>
               )}
             </div>
           </section>

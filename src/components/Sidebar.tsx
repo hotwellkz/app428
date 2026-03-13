@@ -98,9 +98,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
   const mobileWhatsApp = useMobileWhatsAppChat();
   const navigate = useNavigate();
   const location = useLocation();
-  /** На странице WhatsApp бургер перенесён в шапку страницы — плавающую кнопку не показываем */
+  /** WhatsApp: бургер в шапке страницы. Аналитика: своя шапка — плавающую кнопку не показываем */
   const hideFloatingBurgerOnWhatsApp = location.pathname === '/whatsapp';
+  const hideFloatingBurgerOnAnalytics = location.pathname === '/analytics';
   const hideBurgerInChat = location.pathname === '/whatsapp' && (mobileWhatsApp?.isMobileWhatsAppChatOpen ?? false);
+  const hideFloatingBurger =
+    hideFloatingBurgerOnWhatsApp || hideFloatingBurgerOnAnalytics;
   const [isAdmin, setIsAdmin] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [isApprovedEmail, setIsApprovedEmail] = useState(false);
@@ -179,8 +182,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
       <button
         onClick={toggleMobileMenu}
         className={`menu-toggle fixed top-4 left-4 z-[60] xl:hidden bg-white p-2 rounded-lg shadow-lg mt-2 hover:bg-gray-50 transition-all duration-200 border border-gray-200 ${
-          !isMenuVisible || hideBurgerInChat || hideFloatingBurgerOnWhatsApp ? 'opacity-0 pointer-events-none' : 'opacity-100'
-        } ${hideBurgerInChat || hideFloatingBurgerOnWhatsApp ? 'invisible' : ''}`}
+          !isMenuVisible || hideBurgerInChat || hideFloatingBurger ? 'opacity-0 pointer-events-none' : 'opacity-100'
+        } ${hideBurgerInChat || hideFloatingBurger ? 'invisible' : ''}`}
         aria-label="Открыть меню"
       >
         {isMobileMenuOpen ? (
