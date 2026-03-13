@@ -1,10 +1,11 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../lib/firebase/config';
 import { useCompanyId } from '../contexts/CompanyContext';
-import { usePipelines, usePipelineStages, useDeals } from '../hooks/useDeals';
+import { usePipelines, usePipelineStages, useDeals, useTrashedDeals } from '../hooks/useDeals';
+import { useConversationUnreadMap } from '../hooks/useConversationUnreadMap';
 import type { Deal, DealsPipelineStage } from '../types/deals';
 import {
   createDeal,
@@ -24,11 +25,18 @@ import {
   Trash2,
   Filter,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  LayoutGrid,
+  Trash2 as TrashIcon,
+  MessageCircle,
+  User,
+  ChevronRight,
+  ExternalLink
 } from 'lucide-react';
 
-const DEAL_CARD_HEIGHT = 136;
+const DEAL_CARD_HEIGHT = 168;
 const SOURCES = ['Все', 'WhatsApp', 'Звонок', 'Сайт', 'Ручной', 'Другое'];
+const MS_DAY = 86400000;
 
 function dealTime(d: Deal['createdAt']): number {
   if (!d) return 0;
@@ -41,14 +49,39 @@ function dealTime(d: Deal['createdAt']): number {
   return new Date(d as string).getTime();
 }
 
-function formatCardDate(d: Deal['createdAt']): string {
-  if (!d) return '—';
-  const ms = dealTime(d);
-  return new Date(ms).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+function lastActivityMs(deal: Deal): number {
+  const u = deal.updatedAt ? dealTime(deal.updatedAt) : 0;
+  const s = deal.stageChangedAt ? dealTime(deal.stageChangedAt) : 0;
+  const c = deal.createdAt ? dealTime(deal.createdAt) : 0;
+  return Math.max(u, s, c) || Date.now();
+}
+
+function formatLastActivity(deal: Deal): string {
+  const ms = lastActivityMs(deal);
+  return new Date(ms).toLocaleString('ru-RU', {
+    day: 'numeric',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function daysSinceActivity(deal: Deal): number {
+  return Math.floor((Date.now() - lastActivityMs(deal)) / MS_DAY);
+}
+
+function dealWord(n: number): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m100 >= 11 && m100 <= 14) return 'сделок';
+  if (m10 === 1) return 'сделка';
+  if (m10 >= 2 && m10 <= 4) return 'сделки';
+  return 'сделок';
 }
 
 export const DealsPage: React.FC = () => {
   const companyId = useCompanyId();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const dealIdFromUrl = searchParams.get('deal');
   const [sidebarDeal, setSidebarDeal] = useState<Deal | null>(null);
@@ -58,6 +91,10 @@ export const DealsPage: React.FC = () => {
     selectedPipelineId ?? (pipelines.length > 0 ? pipelines[0].id : null);
   const { stages, loading: loadingStages } = usePipelineStages(companyId, effectivePipelineId);
   const { deals: rawDeals, loading: loadingDeals } = useDeals(companyId, effectivePipelineId);
+  const { deals: trashedDeals } = useTrashedDeals(companyId);
+  const unreadByConversation = useConversationUnreadMap(companyId);
+
+  const trashCount = trashedDeals.length;
 
   const [managers, setManagers] = useState<ManagerOption[]>([]);
   const [creating, setCreating] = useState(false);
@@ -109,8 +146,28 @@ export const DealsPage: React.FC = () => {
     return () => document.removeEventListener('click', close);
   }, []);
 
+  const activeDealsAll = useMemo(
+    () => rawDeals.filter((d) => !d.isArchived),
+    [rawDeals]
+  );
+
+  const summary = useMemo(() => {
+    const active = activeDealsAll;
+    const totalDeals = active.length;
+    const totalAmount = active.reduce((s, d) => s + (d.amount ?? 0), 0);
+    const noManager = active.filter((d) => !d.responsibleUserId).length;
+    const stale = active.filter((d) => daysSinceActivity(d) > 3).length;
+    return {
+      totalDeals,
+      totalAmount,
+      trashCount,
+      noManager,
+      stale
+    };
+  }, [activeDealsAll, trashCount]);
+
   const deals = useMemo(() => {
-    let list = rawDeals.filter((d) => !d.isArchived);
+    let list = activeDealsAll;
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       list = list.filter(
@@ -136,7 +193,7 @@ export const DealsPage: React.FC = () => {
       list = list.filter((d) => dealTime(d.createdAt) >= from);
     }
     if (dateTo) {
-      const to = new Date(dateTo).getTime() + 86400000;
+      const to = new Date(dateTo).getTime() + MS_DAY;
       list = list.filter((d) => dealTime(d.createdAt) <= to);
     }
     const min = amountMin.trim() ? Number(amountMin.replace(/\s/g, '')) : NaN;
@@ -145,7 +202,7 @@ export const DealsPage: React.FC = () => {
     if (!Number.isNaN(max)) list = list.filter((d) => (d.amount ?? 0) <= max);
     return list;
   }, [
-    rawDeals,
+    activeDealsAll,
     searchQuery,
     filterManager,
     filterSource,
@@ -210,11 +267,14 @@ export const DealsPage: React.FC = () => {
     }
   };
 
-  const openSidebar = useCallback((deal: Deal) => {
-    setMenuDealId(null);
-    setSidebarDeal(deal);
-    setSearchParams({ deal: deal.id }, { replace: true });
-  }, [setSearchParams]);
+  const openSidebar = useCallback(
+    (deal: Deal) => {
+      setMenuDealId(null);
+      setSidebarDeal(deal);
+      setSearchParams({ deal: deal.id }, { replace: true });
+    },
+    [setSearchParams]
+  );
 
   const closeSidebar = () => {
     setSidebarDeal(null);
@@ -264,6 +324,14 @@ export const DealsPage: React.FC = () => {
     });
   };
 
+  const moveToNextStage = async (deal: Deal) => {
+    setMenuDealId(null);
+    const idx = stages.findIndex((s) => s.id === deal.stageId);
+    if (idx < 0 || idx >= stages.length - 1) return;
+    const next = stages[idx + 1];
+    await handleCardDrop(deal, next.id, groupedDeals[next.id]?.length ?? 0);
+  };
+
   if (!companyId) {
     return (
       <div className="p-4">
@@ -275,14 +343,43 @@ export const DealsPage: React.FC = () => {
   const loading = loadingPipelines || loadingStages || loadingDeals;
 
   return (
-    <div className="flex flex-col h-full bg-slate-100/80">
+    <div className="flex flex-col h-full bg-slate-100">
       <header className="flex-none bg-white border-b border-slate-200 shadow-sm">
         <div className="px-4 py-3 flex flex-wrap items-center gap-3">
-          <h1 className="text-xl font-bold text-slate-800 tracking-tight">Сделки</h1>
+          <h1 className="text-xl font-bold text-slate-900 tracking-tight">Сделки</h1>
+          <nav className="flex rounded-lg bg-slate-100 p-0.5 border border-slate-200/80">
+            <Link
+              to="/deals"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors bg-white text-slate-900 shadow-sm"
+            >
+              <LayoutGrid className="w-4 h-4 opacity-80" />
+              Воронка
+            </Link>
+            <Link
+              to="/deals/trash"
+              title={trashCount > 0 ? `В корзине: ${trashCount} ${dealWord(trashCount)}` : undefined}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                trashCount > 0
+                  ? 'text-slate-800 hover:bg-white/90 bg-slate-100/50'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-white/80'
+              }`}
+            >
+              <TrashIcon className={`w-4 h-4 ${trashCount > 0 ? 'text-red-500' : 'opacity-70'}`} />
+              Корзина
+              {trashCount > 0 && (
+                <span
+                  className="min-w-[1.25rem] h-5 px-1.5 inline-flex items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-bold leading-none tabular-nums"
+                  title={`В корзине: ${trashCount} ${dealWord(trashCount)}`}
+                >
+                  {trashCount > 99 ? '99+' : trashCount}
+                </span>
+              )}
+            </Link>
+          </nav>
           <select
             value={effectivePipelineId ?? ''}
             onChange={(e) => setSelectedPipelineId(e.target.value || null)}
-            className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white"
+            className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white text-slate-800"
           >
             {pipelines.map((p) => (
               <option key={p.id} value={p.id}>
@@ -297,19 +394,13 @@ export const DealsPage: React.FC = () => {
             <Settings2 className="w-4 h-4" />
             Воронка
           </button>
-          <Link
-            to="/deals/trash"
-            className="text-sm text-slate-600 hover:text-slate-900 px-2 py-1 rounded-lg hover:bg-slate-100"
-          >
-            Корзина
-          </Link>
           <div className="ml-auto flex items-center gap-2">
             <input
               type="search"
               placeholder="Поиск…"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm w-44 md:w-56"
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm w-44 md:w-56 bg-white"
             />
             <button
               type="button"
@@ -322,6 +413,34 @@ export const DealsPage: React.FC = () => {
             </button>
           </div>
         </div>
+
+        <div className="px-4 pb-3">
+            <div className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50/90 px-3 py-2.5 text-xs sm:text-sm">
+              <div className="flex items-baseline gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-100 shadow-sm">
+                <span className="text-slate-500 font-medium">Всего</span>
+                <span className="font-bold text-slate-900 tabular-nums">{summary.totalDeals}</span>
+              </div>
+              <div className="flex items-baseline gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-100 shadow-sm">
+                <span className="text-slate-500 font-medium">Сумма</span>
+                <span className="font-bold text-emerald-700 tabular-nums">
+                  {summary.totalAmount.toLocaleString('ru-RU')} ₸
+                </span>
+              </div>
+              <div className="flex items-baseline gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-100 shadow-sm">
+                <span className="text-slate-500 font-medium">В корзине</span>
+                <span className="font-bold text-red-600 tabular-nums">{summary.trashCount}</span>
+              </div>
+              <div className="flex items-baseline gap-1.5 px-2 py-1 rounded-lg bg-white border border-slate-100 shadow-sm">
+                <span className="text-slate-500 font-medium">Без менеджера</span>
+                <span className="font-bold text-amber-700 tabular-nums">{summary.noManager}</span>
+              </div>
+              <div className="flex items-baseline gap-1.5 px-2 py-1 rounded-lg bg-amber-50 border border-amber-100 shadow-sm">
+                <span className="text-amber-800 font-medium">&gt;3 дн. без активности</span>
+                <span className="font-bold text-amber-900 tabular-nums">{summary.stale}</span>
+              </div>
+            </div>
+        </div>
+
         <div className="border-t border-slate-100 bg-slate-50/80">
           <button
             type="button"
@@ -339,7 +458,7 @@ export const DealsPage: React.FC = () => {
               <div>
                 <label className="text-[10px] uppercase text-slate-400 font-semibold">Этап</label>
                 <select
-                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm"
+                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm bg-white"
                   value={filterStage}
                   onChange={(e) => setFilterStage(e.target.value)}
                 >
@@ -354,7 +473,7 @@ export const DealsPage: React.FC = () => {
               <div>
                 <label className="text-[10px] uppercase text-slate-400 font-semibold">Ответственный</label>
                 <select
-                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm"
+                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm bg-white"
                   value={filterManager}
                   onChange={(e) => setFilterManager(e.target.value)}
                 >
@@ -370,7 +489,7 @@ export const DealsPage: React.FC = () => {
               <div>
                 <label className="text-[10px] uppercase text-slate-400 font-semibold">Источник</label>
                 <select
-                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm"
+                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm bg-white"
                   value={filterSource}
                   onChange={(e) => setFilterSource(e.target.value)}
                 >
@@ -385,7 +504,7 @@ export const DealsPage: React.FC = () => {
                 <label className="text-[10px] uppercase text-slate-400 font-semibold">Дата с</label>
                 <input
                   type="date"
-                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm"
+                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm bg-white"
                   value={dateFrom}
                   onChange={(e) => setDateFrom(e.target.value)}
                 />
@@ -394,7 +513,7 @@ export const DealsPage: React.FC = () => {
                 <label className="text-[10px] uppercase text-slate-400 font-semibold">Дата по</label>
                 <input
                   type="date"
-                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm"
+                  className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm bg-white"
                   value={dateTo}
                   onChange={(e) => setDateTo(e.target.value)}
                 />
@@ -403,7 +522,7 @@ export const DealsPage: React.FC = () => {
                 <div>
                   <label className="text-[10px] uppercase text-slate-400 font-semibold">Сумма от</label>
                   <input
-                    className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm"
+                    className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm bg-white"
                     placeholder="₸"
                     value={amountMin}
                     onChange={(e) => setAmountMin(e.target.value)}
@@ -412,7 +531,7 @@ export const DealsPage: React.FC = () => {
                 <div>
                   <label className="text-[10px] uppercase text-slate-400 font-semibold">до</label>
                   <input
-                    className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm"
+                    className="mt-0.5 w-full border rounded-lg px-2 py-1.5 text-sm bg-white"
                     placeholder="₸"
                     value={amountMax}
                     onChange={(e) => setAmountMax(e.target.value)}
@@ -437,13 +556,15 @@ export const DealsPage: React.FC = () => {
           <div className="p-4 text-sm text-slate-500">Нет этапов воронки.</div>
         )}
         {!loading && !pipelinesError && stages.length > 0 && (
-          <div className="h-full overflow-x-auto overflow-y-hidden flex gap-3 p-3 pb-4">
+          <div className="h-full overflow-x-auto overflow-y-hidden flex gap-3 p-3 pb-4 bg-slate-100/50">
             {stages.map((stage) => (
               <StageColumn
                 key={stage.id}
                 stage={stage}
                 items={groupedDeals[stage.id] ?? []}
                 allDeals={deals}
+                stages={stages}
+                unreadByConversation={unreadByConversation}
                 onCardDrop={handleCardDrop}
                 onOpenDeal={openSidebar}
                 menuDealId={menuDealId}
@@ -453,6 +574,17 @@ export const DealsPage: React.FC = () => {
                 onArchive={handleArchive}
                 onDelete={(d) => setDeleteTarget(d)}
                 onNewDeal={() => setCreateModal({ stage })}
+                onMoveNext={moveToNextStage}
+                onOpenChat={(d) => {
+                  setMenuDealId(null);
+                  if (d.whatsappConversationId)
+                    navigate(`/whatsapp?chatId=${encodeURIComponent(d.whatsappConversationId)}`);
+                }}
+                onOpenClient={(d) => {
+                  setMenuDealId(null);
+                  if (d.clientId) navigate(`/clients`, { state: { focusClientId: d.clientId } });
+                  else navigate('/clients');
+                }}
               />
             ))}
           </div>
@@ -541,8 +673,8 @@ export const DealsPage: React.FC = () => {
       {deleteTarget && (
         <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/45 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5">
-            <h2 className="text-lg font-semibold">Удалить сделку?</h2>
-            <p className="text-sm text-slate-600 mt-2">Сделка будет в корзине; восстановление возможно.</p>
+            <h2 className="text-lg font-semibold">В корзину?</h2>
+            <p className="text-sm text-slate-600 mt-2">Сделка попадёт в корзину; восстановление возможно.</p>
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" onClick={() => setDeleteTarget(null)} className="px-4 py-2 border rounded-lg text-sm">
                 Отмена
@@ -553,7 +685,7 @@ export const DealsPage: React.FC = () => {
                 onClick={confirmSoftDelete}
                 className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm disabled:opacity-50"
               >
-                Удалить
+                В корзину
               </button>
             </div>
           </div>
@@ -579,6 +711,8 @@ function StageColumn({
   stage,
   items,
   allDeals,
+  stages,
+  unreadByConversation,
   onCardDrop,
   onOpenDeal,
   menuDealId,
@@ -587,11 +721,16 @@ function StageColumn({
   onEditTitle,
   onArchive,
   onDelete,
-  onNewDeal
+  onNewDeal,
+  onMoveNext,
+  onOpenChat,
+  onOpenClient
 }: {
   stage: DealsPipelineStage;
   items: Deal[];
   allDeals: Deal[];
+  stages: DealsPipelineStage[];
+  unreadByConversation: Record<string, number>;
   onCardDrop: (deal: Deal, stageId: string, index: number) => void;
   onOpenDeal: (d: Deal) => void;
   menuDealId: string | null;
@@ -601,12 +740,19 @@ function StageColumn({
   onArchive: (d: Deal) => void;
   onDelete: (d: Deal) => void;
   onNewDeal: () => void;
+  onMoveNext: (d: Deal) => void;
+  onOpenChat: (d: Deal) => void;
+  onOpenClient: (d: Deal) => void;
 }) {
   const parentRef = useRef<HTMLDivElement>(null);
   const count = items.length;
   const sumAmount = items.reduce((s, d) => s + (d.amount ?? 0), 0);
   const stageColor =
     stage.color && /^#[0-9A-Fa-f]{3,8}$/i.test(stage.color) ? stage.color : '#64748b';
+  const isEmpty = count === 0;
+  const stageIndex = stages.findIndex((s) => s.id === stage.id);
+  const hasNext = stageIndex >= 0 && stageIndex < stages.length - 1;
+  const nextStageName = hasNext ? stages[stageIndex + 1]?.name : null;
 
   const rowVirtualizer = useVirtualizer({
     count: items.length,
@@ -616,26 +762,43 @@ function StageColumn({
   });
 
   return (
-    <div className="flex-shrink-0 w-[300px] flex flex-col rounded-xl border border-slate-200 bg-slate-100/90 shadow-sm max-h-full min-h-0">
+    <div
+      className={`flex-shrink-0 w-[308px] flex flex-col rounded-xl border max-h-full min-h-0 shadow-sm overflow-hidden transition-colors ${
+        isEmpty
+          ? 'border-slate-200/90 bg-slate-100/70'
+          : 'border-slate-200 bg-slate-50/95 ring-1 ring-slate-200/60'
+      }`}
+    >
       <div
-        className="flex-none px-3 py-3 border-b border-slate-200 rounded-t-xl bg-white"
-        style={{ borderTopWidth: 3, borderTopColor: stageColor }}
+        className={`flex-none px-3 pt-0 pb-3 border-b rounded-t-xl ${
+          isEmpty ? 'bg-slate-50/90 border-slate-200/80' : 'bg-white border-slate-200'
+        }`}
       >
-        <div className="flex items-center gap-2">
-          <span
-            className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-white shadow"
-            style={{ backgroundColor: stageColor }}
-          />
-          <h3 className="font-semibold text-slate-800 text-sm truncate">{stage.name}</h3>
-        </div>
-        <p className="text-xs text-slate-500 mt-1 pl-4">
-          {count} {count === 1 ? 'сделка' : count < 5 ? 'сделки' : 'сделок'} ·{' '}
-          <span className="font-semibold text-slate-700">{sumAmount.toLocaleString('ru-RU')} ₸</span>
+        <div
+          className="h-1 w-full rounded-t-xl -mx-0 mb-2.5"
+          style={{ backgroundColor: stageColor, marginLeft: 0, marginRight: 0, width: '100%' }}
+        />
+        <h3
+          className={`font-bold truncate text-[15px] leading-tight ${
+            isEmpty ? 'text-slate-500' : 'text-slate-900'
+          }`}
+        >
+          {stage.name}
+        </h3>
+        <p
+          className={`text-xs mt-1.5 font-medium tabular-nums ${
+            isEmpty ? 'text-slate-400' : 'text-slate-600'
+          }`}
+        >
+          {count} {dealWord(count)} <span className="text-slate-300 mx-1">•</span>{' '}
+          <span className={isEmpty ? 'text-slate-500' : 'text-slate-900 font-semibold'}>
+            {sumAmount.toLocaleString('ru-RU')} ₸
+          </span>
         </p>
         <button
           type="button"
           onClick={onNewDeal}
-          className="mt-2 w-full py-2 rounded-lg border border-dashed border-slate-300 text-xs font-medium text-emerald-700 hover:bg-emerald-50/80 flex items-center justify-center gap-1"
+          className="mt-2.5 w-full py-2 rounded-lg border border-dashed border-slate-300 text-xs font-semibold text-emerald-700 hover:bg-emerald-50/90 flex items-center justify-center gap-1"
         >
           <Plus className="w-3.5 h-3.5" />
           Новая сделка
@@ -643,7 +806,7 @@ function StageColumn({
       </div>
       <div
         ref={parentRef}
-        className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-0"
+        className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-0 bg-slate-100/40"
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
@@ -659,7 +822,9 @@ function StageColumn({
         }}
       >
         {items.length === 0 && (
-          <p className="text-xs text-slate-400 text-center py-8">Перетащите сделку сюда</p>
+          <p className="text-[11px] text-slate-400 text-center py-10 px-2 leading-relaxed">
+            Перетащите сделку сюда
+          </p>
         )}
         {items.length > 0 && (
           <div
@@ -672,6 +837,13 @@ function StageColumn({
             {rowVirtualizer.getVirtualItems().map((virtualRow) => {
               const deal = items[virtualRow.index];
               const isNewTitle = deal.title.trim() === 'Новая сделка';
+              const unread =
+                deal.whatsappConversationId != null
+                  ? unreadByConversation[deal.whatsappConversationId] ?? 0
+                  : 0;
+              const staleDays = daysSinceActivity(deal);
+              const staleWarn = staleDays >= 3;
+
               return (
                 <div
                   key={deal.id}
@@ -682,7 +854,7 @@ function StageColumn({
                   }}
                 >
                   <div
-                    className="deal-card h-[128px] rounded-lg border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-slate-300 transition-all text-sm flex flex-col overflow-hidden"
+                    className="deal-card h-[160px] rounded-lg border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-slate-300 transition-all text-sm flex flex-col overflow-hidden"
                     draggable
                     onDragStart={(e) => {
                       e.stopPropagation();
@@ -705,33 +877,139 @@ function StageColumn({
                       }
                     }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => onOpenDeal(deal)}
-                      className="flex-1 min-h-0 text-left px-3 pt-2 pb-1 overflow-hidden w-full"
-                    >
-                      <p className="font-semibold text-slate-900 truncate text-[13px] leading-tight">
-                        {deal.title}
-                      </p>
-                      <p className="text-xs text-slate-600 truncate mt-0.5">
-                        {deal.clientNameSnapshot || '—'}
-                      </p>
-                      <p className="text-[11px] text-slate-500 font-mono truncate">
-                        {deal.clientPhoneSnapshot || '—'}
-                      </p>
-                      <div className="flex items-center justify-between mt-1 gap-1">
-                        <span className="text-sm font-bold text-emerald-700 tabular-nums">
+                    <div className="flex items-start gap-1 px-2 pt-1.5 min-h-0 flex-1 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => onOpenDeal(deal)}
+                        className="flex-1 min-w-0 text-left overflow-hidden pb-1"
+                      >
+                        <div className="flex items-start justify-between gap-1">
+                          <p className="font-bold text-slate-900 truncate text-[13px] leading-tight pr-1">
+                            {deal.title}
+                          </p>
+                          <div className="flex flex-col items-end gap-0.5 shrink-0">
+                            {unread > 0 && (
+                              <span className="min-w-[1.1rem] h-4 px-1 rounded-full bg-red-600 text-white text-[10px] font-bold flex items-center justify-center">
+                                {unread > 99 ? '99+' : unread}
+                              </span>
+                            )}
+                            {staleWarn && (
+                              <span
+                                className="max-w-[7rem] text-[9px] font-semibold text-amber-800 bg-amber-100 px-1 py-0.5 rounded leading-tight text-right"
+                                title={`Последняя активность: ${formatLastActivity(deal)}`}
+                              >
+                                Нет ответа {staleDays} {staleDays === 1 ? 'день' : staleDays < 5 ? 'дня' : 'дней'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-[11px] text-slate-700 truncate mt-0.5 font-medium">
+                          {deal.clientNameSnapshot || '—'}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-mono truncate">{deal.clientPhoneSnapshot || '—'}</p>
+                        <p className="text-sm font-bold text-emerald-700 tabular-nums mt-0.5">
                           {deal.amount != null ? `${deal.amount.toLocaleString('ru-RU')} ₸` : '—'}
-                        </span>
+                        </p>
+                        <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1 text-[10px] text-slate-500">
+                          <span className="truncate max-w-[48%]" title={deal.responsibleNameSnapshot || ''}>
+                            {deal.responsibleNameSnapshot ? `👤 ${deal.responsibleNameSnapshot}` : '👤 —'}
+                          </span>
+                          <span className="text-slate-400">·</span>
+                          <span className="truncate">{deal.source || 'Ручной'}</span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          Активность: {formatLastActivity(deal)}
+                        </p>
+                      </button>
+                      <div
+                        className="relative shrink-0 pt-0.5"
+                        ref={menuDealId === deal.id ? menuRef : undefined}
+                      >
+                        <button
+                          type="button"
+                          className="p-1 rounded-md text-slate-500 hover:bg-slate-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setMenuDealId(menuDealId === deal.id ? null : deal.id);
+                          }}
+                          aria-label="Меню"
+                        >
+                          <MoreVertical className="w-4 h-4" />
+                        </button>
+                        {menuDealId === deal.id && (
+                          <div className="absolute right-0 top-full mt-1 z-[60] w-52 rounded-lg border border-slate-200 bg-white shadow-xl py-1 text-left">
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-xs hover:bg-slate-50 flex items-center gap-2"
+                              onClick={() => {
+                                setMenuDealId(null);
+                                onOpenDeal(deal);
+                              }}
+                            >
+                              <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                              Открыть сделку
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!deal.whatsappConversationId}
+                              className="w-full px-3 py-2 text-left text-xs hover:bg-slate-50 flex items-center gap-2 disabled:opacity-40 disabled:pointer-events-none"
+                              onClick={() => onOpenChat(deal)}
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 opacity-70" />
+                              Открыть чат
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-xs hover:bg-slate-50 flex items-center gap-2"
+                              onClick={() => onOpenClient(deal)}
+                            >
+                              <User className="w-3.5 h-3.5 opacity-70" />
+                              Открыть клиента
+                            </button>
+                            {hasNext && (
+                              <button
+                                type="button"
+                                className="w-full px-3 py-2 text-left text-xs hover:bg-slate-50 flex items-center gap-2"
+                                onClick={() => onMoveNext(deal)}
+                              >
+                                <ChevronRight className="w-3.5 h-3.5 opacity-70" />
+                                Далее: {nextStageName}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-xs hover:bg-slate-50 flex items-center gap-2"
+                              onClick={() => onEditTitle(deal)}
+                            >
+                              <Pencil className="w-3.5 h-3.5 opacity-70" />
+                              Переименовать
+                            </button>
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-xs hover:bg-slate-50 flex items-center gap-2"
+                              onClick={() => onArchive(deal)}
+                            >
+                              <Archive className="w-3.5 h-3.5 opacity-70" />
+                              В архив
+                            </button>
+                            <div className="border-t border-slate-100 my-0.5" />
+                            <button
+                              type="button"
+                              className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
+                              onClick={() => {
+                                setMenuDealId(null);
+                                onDelete(deal);
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              В корзину
+                            </button>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
-                        <span className="truncate max-w-[45%]">{deal.responsibleNameSnapshot || '—'}</span>
-                        <span className="truncate max-w-[45%] text-right">{deal.source || 'Ручной'}</span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-0.5">{formatCardDate(deal.createdAt)}</p>
-                    </button>
-                    <div className="flex items-center justify-end gap-0.5 px-1 pb-1 border-t border-slate-50 bg-slate-50/50">
-                      {isNewTitle && (
+                    </div>
+                    {isNewTitle && (
+                      <div className="flex justify-end px-1 pb-1 border-t border-slate-50 bg-slate-50/60">
                         <button
                           type="button"
                           title="Удалить"
@@ -743,56 +1021,8 @@ function StageColumn({
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
-                      )}
-                      <div className="relative ml-auto" ref={menuDealId === deal.id ? menuRef : undefined}>
-                        <button
-                          type="button"
-                          className="p-1 rounded text-slate-500 hover:bg-white"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMenuDealId(menuDealId === deal.id ? null : deal.id);
-                          }}
-                        >
-                          <MoreVertical className="w-4 h-4" />
-                        </button>
-                        {menuDealId === deal.id && (
-                          <div className="absolute right-0 bottom-full mb-1 z-50 w-40 rounded-lg border bg-white shadow-xl py-1 text-left">
-                            <button
-                              type="button"
-                              className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-50"
-                              onClick={() => onOpenDeal(deal)}
-                            >
-                              Открыть
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-50 flex gap-1"
-                              onClick={() => onEditTitle(deal)}
-                            >
-                              <Pencil className="w-3 h-3" /> Редактировать
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full px-3 py-1.5 text-left text-xs hover:bg-slate-50 flex gap-1"
-                              onClick={() => onArchive(deal)}
-                            >
-                              <Archive className="w-3 h-3" /> Архив
-                            </button>
-                            <button
-                              type="button"
-                              className="w-full px-3 py-1.5 text-left text-xs text-red-600 hover:bg-red-50"
-                              onClick={() => {
-                                setMenuDealId(null);
-                                onDelete(deal);
-                              }}
-                            >
-                              <Trash2 className="w-3 h-3 inline mr-1" />
-                              Удалить
-                            </button>
-                          </div>
-                        )}
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               );
