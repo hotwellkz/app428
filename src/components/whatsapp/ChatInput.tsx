@@ -6,6 +6,7 @@ import {
   Square,
   Loader2,
   Camera,
+  Video,
   Image,
   FileText,
   Music,
@@ -118,9 +119,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
   mediaQuickReplies = [],
   onMediaQuickReplySelect
 }) => {
-  /** Мобильная камера: capture=environment → нативная камера */
-  const cameraCaptureRef = useRef<HTMLInputElement>(null);
-  /** ПК / fallback: без capture → обычный выбор файла */
+  /** Android/iOS: только фото + capture → камера, не галерея */
+  const cameraPhotoRef = useRef<HTMLInputElement>(null);
+  /** Android/iOS: только видео + capture → камера */
+  const cameraVideoRef = useRef<HTMLInputElement>(null);
+  /** ПК: без capture → файловый диалог */
   const cameraPickerRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
@@ -132,6 +135,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const voiceLockedLocalRef = useRef(false);
   const SWIPE_LOCK_PX = 56;
   const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
+  /** Мобильное меню: фото / видео — каждый пункт синхронно вызывает .click() на своём input */
+  const [showCameraMenu, setShowCameraMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [selectedQuickIndex, setSelectedQuickIndex] = useState(0);
 
@@ -238,19 +243,22 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const showSend = hasText || hasAttachment;
   const isBusy = sending;
 
-  const preferCameraCapture =
-    typeof window !== 'undefined' &&
-    (window.matchMedia('(pointer: coarse)').matches ||
-      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+  const isMobileCameraDevice =
+    typeof navigator !== 'undefined' &&
+    /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-  const openCamera = () => {
-    setShowAttachmentSheet(false);
-    if (preferCameraCapture) cameraCaptureRef.current?.click();
-    else cameraPickerRef.current?.click();
+  const runCameraPhoto = () => {
+    setShowCameraMenu(false);
+    cameraPhotoRef.current?.click();
+  };
+  const runCameraVideo = () => {
+    setShowCameraMenu(false);
+    cameraVideoRef.current?.click();
   };
 
+  /** Иконка камеры в панели */
   const openCameraToolbar = () => {
-    if (preferCameraCapture) cameraCaptureRef.current?.click();
+    if (isMobileCameraDevice) setShowCameraMenu(true);
     else cameraPickerRef.current?.click();
   };
   const openGallery = () => {
@@ -513,9 +521,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
         {onCameraCapture && (
           <>
             <input
-              ref={cameraCaptureRef}
+              ref={cameraPhotoRef}
               type="file"
-              accept="image/*,video/*"
+              accept="image/*"
               capture="environment"
               className="hidden"
               onChange={(e) => {
@@ -523,7 +531,20 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 if (f) onCameraCapture(f);
                 e.target.value = '';
               }}
-              aria-label="Камера"
+              aria-label="Сделать фото"
+            />
+            <input
+              ref={cameraVideoRef}
+              type="file"
+              accept="video/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onCameraCapture(f);
+                e.target.value = '';
+              }}
+              aria-label="Записать видео"
             />
             <input
               ref={cameraPickerRef}
@@ -535,7 +556,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 if (f) onCameraCapture(f);
                 e.target.value = '';
               }}
-              aria-label="Фото или видео с устройства"
+              aria-label="Фото или видео"
             />
           </>
         )}
@@ -795,7 +816,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
               {onCameraCapture && (
                 <button
                   type="button"
-                  onClick={openCamera}
+                  onClick={() => {
+                    setShowAttachmentSheet(false);
+                    if (isMobileCameraDevice) setShowCameraMenu(true);
+                    else cameraPickerRef.current?.click();
+                  }}
                   className="flex flex-col items-center gap-1.5 py-3 rounded-xl hover:bg-gray-100 active:bg-gray-200 transition-colors"
                 >
                   <span className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center">
@@ -837,6 +862,54 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 <span className="text-[10px] text-gray-400">Скоро</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showCameraMenu && onCameraCapture && (
+        <div
+          className="fixed inset-0 z-[1101] flex flex-col justify-end"
+          role="dialog"
+          aria-label="Камера"
+          aria-modal="true"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setShowCameraMenu(false)}
+            aria-label="Закрыть"
+          />
+          <div
+            className="relative bg-white rounded-t-2xl shadow-xl px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] space-y-2"
+          >
+            <p className="text-center text-sm font-medium text-gray-700 pb-1">Камера</p>
+            <button
+              type="button"
+              className="w-full flex items-center gap-3 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 px-4 py-3.5 text-left"
+              onClick={runCameraPhoto}
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white shadow">
+                <Camera className="w-6 h-6 text-gray-800" />
+              </span>
+              <span className="text-base font-medium text-gray-900">Сделать фото</span>
+            </button>
+            <button
+              type="button"
+              className="w-full flex items-center gap-3 rounded-xl bg-gray-100 hover:bg-gray-200 active:bg-gray-300 px-4 py-3.5 text-left"
+              onClick={runCameraVideo}
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white shadow">
+                <Video className="w-6 h-6 text-gray-800" />
+              </span>
+              <span className="text-base font-medium text-gray-900">Записать видео</span>
+            </button>
+            <button
+              type="button"
+              className="w-full py-3 text-center text-sm text-gray-600"
+              onClick={() => setShowCameraMenu(false)}
+            >
+              Отмена
+            </button>
           </div>
         </div>
       )}
