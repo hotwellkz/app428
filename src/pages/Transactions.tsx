@@ -30,7 +30,6 @@ import { RayBackground } from '../components/RayBackground';
 import { Scrollbars } from 'react-custom-scrollbars-2';
 import { PageMetadata } from '../components/PageMetadata';
 import { PendingTransactionsProvider } from '../contexts/PendingTransactionsContext';
-import { calculateAccountBalance } from '../lib/firebase/accountBalance';
 
 export const Transactions: React.FC = () => {
   const companyId = useCompanyId();
@@ -66,47 +65,6 @@ export const Transactions: React.FC = () => {
       saveSettingsToCache(TRANSACTIONS_CACHE_KEY, serializable);
     }
   }, [loadedCategories]);
-
-  // Единый баланс по журналу транзакций (совпадает с /transactions/history)
-  useEffect(() => {
-    if (!companyId || !loadedCategories?.length) return;
-    let cancelled = false;
-    const visible = loadedCategories.filter((c) => c.isVisible !== false);
-    (async () => {
-      const next: Record<string, number> = {};
-      await Promise.all(
-        visible.map(async (c) => {
-          try {
-            const { balance } = await calculateAccountBalance(companyId, c.id);
-            next[c.id] = balance;
-          } catch (e) {
-            console.error('calculateAccountBalance', c.id, e);
-          }
-        })
-      );
-      if (cancelled) return;
-      const merged = loadedCategories.map((c) => ({
-        ...c,
-        amount:
-          next[c.id] !== undefined ? String(Math.round(next[c.id])) : c.amount,
-      }));
-      setCategories(merged);
-      saveSettingsToCache(
-        TRANSACTIONS_CACHE_KEY,
-        merged.map(({ id, title, amount, color, row, isVisible }) => ({
-          id,
-          title,
-          amount,
-          color,
-          row,
-          isVisible,
-        }))
-      );
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [companyId, loadedCategories]);
 
   // Экспортируем функцию обновления глобально для StickyNavigation
   useEffect(() => {
