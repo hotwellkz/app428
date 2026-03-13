@@ -55,6 +55,7 @@ export interface ConversationListItem {
   dealResponsibleName?: string | null;
   /** Имя клиента из CRM, если контакт связан; иначе показывать phone */
   displayTitle?: string;
+  channel?: 'whatsapp' | 'instagram';
 }
 
 export type ConversationAttentionState = 'unread' | 'need_reply' | 'normal';
@@ -128,7 +129,8 @@ function docToConversation(docId: string, data: Record<string, unknown>): WhatsA
     dealStageName: (data.dealStageName as string) ?? undefined,
     dealStageColor: (data.dealStageColor as string) ?? undefined,
     dealTitle: (data.dealTitle as string) ?? undefined,
-    dealResponsibleName: (data.dealResponsibleName as string) ?? undefined
+    dealResponsibleName: (data.dealResponsibleName as string) ?? undefined,
+    channel: (data.channel as WhatsAppConversation['channel']) ?? undefined
   };
 }
 
@@ -429,10 +431,13 @@ export function subscribeConversationsList(
       const client = clientsById.get(c.clientId) ?? null;
       const lastMessage = lastByConv.get(c.id) ?? null;
       const phone = client?.phone ?? c.phone ?? c.clientId;
+      const channel: ConversationListItem['channel'] =
+        c.channel ?? (phone.startsWith('instagram:') ? 'instagram' : 'whatsapp');
       return {
         id: c.id,
         clientId: c.clientId,
         phone,
+        channel,
         client,
         lastMessage,
         lastMessageAt: c.lastMessageAt,

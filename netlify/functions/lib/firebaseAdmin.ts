@@ -93,6 +93,46 @@ export async function findClientByPhone(phone: string): Promise<WhatsAppClientRo
 
 export const DEFAULT_COMPANY_ID = 'hotwell';
 
+/** Стабильный ключ контакта Instagram (Wazzup chatId потока). */
+export function instagramClientKey(chatId: string): string {
+  return `instagram:${String(chatId).trim()}`;
+}
+
+export async function findClientByInstagramChatId(chatId: string): Promise<WhatsAppClientRow | null> {
+  const db = getDb();
+  const key = instagramClientKey(chatId);
+  const snap = await db.collection(COLLECTIONS.CLIENTS).where('phone', '==', key).limit(1).get();
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  const data = d.data();
+  return {
+    id: d.id,
+    name: (data.name as string) ?? '',
+    phone: (data.phone as string) ?? key,
+    createdAt: data.createdAt as Timestamp,
+    avatarUrl: (data.avatarUrl as string | null) ?? null
+  };
+}
+
+export async function createInstagramClient(
+  chatId: string,
+  name: string = '',
+  avatarUrl?: string | null
+): Promise<string> {
+  const db = getDb();
+  const key = instagramClientKey(chatId);
+  const ref = await db.collection(COLLECTIONS.CLIENTS).add({
+    name: name || key,
+    phone: key,
+    avatarUrl: avatarUrl ?? null,
+    createdAt: Timestamp.now(),
+    companyId: DEFAULT_COMPANY_ID,
+    channel: 'instagram',
+    source: 'Instagram'
+  });
+  return ref.id;
+}
+
 export async function createClient(phone: string, name: string = '', avatarUrl?: string | null): Promise<string> {
   const db = getDb();
   const normalized = normalizePhone(phone);
@@ -136,12 +176,19 @@ export async function findConversationByClientId(clientId: string): Promise<What
   };
 }
 
-export async function createConversation(clientId: string, phone: string): Promise<string> {
+export async function createConversation(
+  clientId: string,
+  phone: string,
+  options?: { channel?: 'whatsapp' | 'instagram'; displayPhone?: string }
+): Promise<string> {
   const db = getDb();
   const now = Timestamp.now();
+  const channel = options?.channel ?? 'whatsapp';
+  const phoneStored =
+    channel === 'instagram' ? instagramClientKey(phone.replace(/^instagram:/, '')) : normalizePhone(phone);
   const ref = await db.collection(COLLECTIONS.CONVERSATIONS).add({
     clientId,
-    phone: normalizePhone(phone),
+    phone: options?.displayPhone ?? phoneStored,
     status: 'active',
     createdAt: now,
     lastMessageAt: now,
@@ -151,7 +198,9 @@ export async function createConversation(clientId: string, phone: string): Promi
     lastClientMessageTime: null,
     lastManagerMessageTime: null,
     lastMessageSender: null,
-    companyId: DEFAULT_COMPANY_ID
+    companyId: DEFAULT_COMPANY_ID,
+    channel,
+    chatType: channel === 'instagram' ? 'instagram' : 'whatsapp'
   });
   return ref.id;
 }
@@ -219,6 +268,8 @@ export interface SaveMessageOptions {
   errorMessage?: string | null;
   repliedToMessageId?: string | null;
   forwarded?: boolean;
+  /** Канал сообщения (WhatsApp / Instagram). */
+  channel?: 'whatsapp' | 'instagram';
 }
 
 export async function saveMessage(
@@ -234,7 +285,7 @@ export async function saveMessage(
     text,
     direction,
     createdAt: now,
-    channel: 'whatsapp',
+    channel: options.channel ?? 'whatsapp',
     companyId: DEFAULT_COMPANY_ID
   };
   if (options.status != null) data.status = options.status;
@@ -323,7 +374,10 @@ export async function upsertMessageFromWebhook(
     }
   }
 
-  const id = await saveMessage(conversationId, text, direction, options);
+  const id = await saveMessage(conversationId, text, direction, {
+    ...options,
+    channel: options.channel ?? 'whatsapp'
+  });
   return { id, created: true };
 }
 
@@ -410,6 +464,43 @@ export async function createCrmClient(phone: string): Promise<string> {
   return ref.id;
 }
 
+export async function findCrmClientByExternalKey(key: string): Promise<CrmClientRow | null> {
+  const db = getDb();
+  const snap = await db
+    .collection(COLLECTIONS.CRM_CLIENTS)
+    .where('companyId', '==', DEFAULT_COMPANY_ID)
+    .where('phone', '==', key)
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  const data = d.data();
+  return {
+    id: d.id,
+    phone: (data.phone as string) ?? key,
+    name: (data.name as string) ?? null,
+    source: (data.source as string) ?? 'Instagram',
+    createdAt: data.createdAt as Timestamp,
+    lastMessageAt: data.lastMessageAt as Timestamp
+  };
+}
+
+export async function createCrmClientInstagram(chatId: string, displayName: string): Promise<string> {
+  const db = getDb();
+  const key = instagramClientKey(chatId);
+  const now = Timestamp.now();
+  const ref = await db.collection(COLLECTIONS.CRM_CLIENTS).add({
+    phone: key,
+    name: displayName || null,
+    source: 'Instagram',
+    channel: 'instagram',
+    createdAt: now,
+    lastMessageAt: now,
+    companyId: DEFAULT_COMPANY_ID
+  });
+  return ref.id;
+}
+
 export async function updateCrmClientLastMessageAt(clientId: string): Promise<void> {
   const db = getDb();
   await db.collection(COLLECTIONS.CRM_CLIENTS).doc(clientId).update({
@@ -458,6 +549,42 @@ export async function createDeal(phone: string): Promise<string> {
     clientPhone: normalized,
     status: 'new',
     source: 'whatsapp',
+    createdAt: now,
+    updatedAt: now,
+    companyId: DEFAULT_COMPANY_ID
+  });
+  return ref.id;
+}
+
+export async function findDealByClientKey(clientKey: string): Promise<DealRow | null> {
+  const db = getDb();
+  const snap = await db
+    .collection(COLLECTIONS.DEALS)
+    .where('companyId', '==', DEFAULT_COMPANY_ID)
+    .where('clientPhone', '==', clientKey)
+    .limit(1)
+    .get();
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  const data = d.data();
+  return {
+    id: d.id,
+    clientPhone: (data.clientPhone as string) ?? clientKey,
+    status: (data.status as DealStatus) ?? 'new',
+    source: (data.source as string) ?? 'Instagram',
+    createdAt: data.createdAt as Timestamp,
+    updatedAt: data.updatedAt as Timestamp
+  };
+}
+
+export async function createDealInstagram(chatId: string): Promise<string> {
+  const db = getDb();
+  const key = instagramClientKey(chatId);
+  const now = Timestamp.now();
+  const ref = await db.collection(COLLECTIONS.DEALS).add({
+    clientPhone: key,
+    status: 'new',
+    source: 'Instagram',
     createdAt: now,
     updatedAt: now,
     companyId: DEFAULT_COMPANY_ID

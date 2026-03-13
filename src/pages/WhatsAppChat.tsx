@@ -112,6 +112,16 @@ function showNewMessageBrowserNotification() {
 
 const SEND_API = '/.netlify/functions/send-whatsapp-message';
 
+/** Тело для Wazzup: WhatsApp — chatId = нормализованный номер; Instagram — сырой chatId + chatType. */
+function wazzupSendBody(phone: string, rest: Record<string, unknown>): Record<string, unknown> {
+  const ig = phone.startsWith('instagram:');
+  return {
+    chatId: ig ? phone.slice('instagram:'.length) : normalizePhone(phone),
+    ...(ig ? { chatType: 'instagram' as const } : {}),
+    ...rest
+  };
+}
+
 /** Преобразует литеральные \n в переносы строк перед отправкой в WhatsApp. */
 function formatMessageForWhatsApp(message: string): string {
   if (typeof message !== 'string') return '';
@@ -850,7 +860,6 @@ const WhatsAppChat: React.FC = () => {
       if (incognitoMode || !selectedId || !companyId || sending || uploadState !== 'idle') return;
       const phone = selectedItem?.phone ?? selectedItem?.client?.phone;
       if (!phone || phone === '…') return;
-      const chatId = normalizePhone(phone);
       const valid = Array.from(files).filter(isDropAllowedFile);
       const rejected = Array.from(files).filter((f) => !isDropAllowedFile(f));
       if (rejected.length > 0) {
@@ -898,13 +907,14 @@ const WhatsAppChat: React.FC = () => {
           const res = await fetch(SEND_API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chatId,
-              contentUri: urlData.publicUrl,
-              attachmentType: getAttachmentType(file),
-              fileName: file.name,
-              companyId
-            })
+            body: JSON.stringify(
+              wazzupSendBody(phone, {
+                contentUri: urlData.publicUrl,
+                attachmentType: getAttachmentType(file),
+                fileName: file.name,
+                companyId
+              })
+            )
           });
           if (!res.ok) {
             const data = await res.json().catch(() => ({}));
@@ -990,15 +1000,16 @@ const WhatsAppChat: React.FC = () => {
         const res = await fetch(SEND_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chatId: phone,
-            contentUri: urlData.publicUrl,
-            attachmentType: getAttachmentType(uploadFile),
-            fileName: uploadFile.name,
-            text: caption ? formatMessageForWhatsApp(caption) : undefined,
-            repliedToMessageId: replyToMessage?.id ?? undefined,
-            companyId: companyId ?? undefined
-          })
+          body: JSON.stringify(
+            wazzupSendBody(phone, {
+              contentUri: urlData.publicUrl,
+              attachmentType: getAttachmentType(uploadFile),
+              fileName: uploadFile.name,
+              text: caption ? formatMessageForWhatsApp(caption) : undefined,
+              repliedToMessageId: replyToMessage?.id ?? undefined,
+              companyId: companyId ?? undefined
+            })
+          )
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
@@ -1112,14 +1123,15 @@ const WhatsAppChat: React.FC = () => {
         const res = await fetch(SEND_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chatId: phone,
-            contentUri: urlData.publicUrl,
-            attachmentType: 'voice',
-            fileName,
-            repliedToMessageId: replyToMessage?.id ?? undefined,
-            companyId
-          })
+          body: JSON.stringify(
+            wazzupSendBody(phone, {
+              contentUri: urlData.publicUrl,
+              attachmentType: 'voice',
+              fileName,
+              repliedToMessageId: replyToMessage?.id ?? undefined,
+              companyId
+            })
+          )
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
@@ -1190,15 +1202,16 @@ const WhatsAppChat: React.FC = () => {
         const res = await fetch(SEND_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chatId: phone,
-            contentUri,
-            attachmentType: getAttachmentType(uploadFile),
-            fileName: uploadFile.name,
-            text: caption ? formatMessageForWhatsApp(caption) : undefined,
-            repliedToMessageId: replyToMessage?.id ?? undefined,
-            companyId: companyId ?? undefined
-          })
+          body: JSON.stringify(
+            wazzupSendBody(phone, {
+              contentUri,
+              attachmentType: getAttachmentType(uploadFile),
+              fileName: uploadFile.name,
+              text: caption ? formatMessageForWhatsApp(caption) : undefined,
+              repliedToMessageId: replyToMessage?.id ?? undefined,
+              companyId: companyId ?? undefined
+            })
+          )
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
@@ -1242,7 +1255,6 @@ const WhatsAppChat: React.FC = () => {
     const hasQueuedFiles = (pendingQuickReplyFiles?.length ?? 0) > 0;
     if (!caption && !hasQueuedFiles) return;
 
-    const chatId = normalizePhone(phone);
     const replyId = replyToMessage?.id;
     const filesToSend = pendingQuickReplyFiles ?? [];
     setSending(true);
@@ -1254,12 +1266,13 @@ const WhatsAppChat: React.FC = () => {
         const res = await fetch(SEND_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chatId,
-            text: formatMessageForWhatsApp(caption),
-            repliedToMessageId: replyId ?? undefined,
-            companyId: companyId ?? undefined
-          })
+          body: JSON.stringify(
+            wazzupSendBody(phone, {
+              text: formatMessageForWhatsApp(caption),
+              repliedToMessageId: replyId ?? undefined,
+              companyId: companyId ?? undefined
+            })
+          )
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
@@ -1299,13 +1312,14 @@ const WhatsAppChat: React.FC = () => {
         const res = await fetch(SEND_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chatId,
-            contentUri: filesToSend[i].url,
-            attachmentType: filesToSend[i].type as 'image' | 'video' | 'file' | 'audio',
-            fileName: filesToSend[i].name,
-            companyId: companyId ?? undefined
-          })
+          body: JSON.stringify(
+            wazzupSendBody(phone, {
+              contentUri: filesToSend[i].url,
+              attachmentType: filesToSend[i].type as 'image' | 'video' | 'file' | 'audio',
+              fileName: filesToSend[i].name,
+              companyId: companyId ?? undefined
+            })
+          )
         });
         if (!res.ok) {
           setSendError('Не удалось отправить один из файлов шаблона.');
@@ -1347,13 +1361,14 @@ const WhatsAppChat: React.FC = () => {
         const resImage = await fetch(SEND_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chatId: phone,
-            contentUri,
-            attachmentType: 'image',
-            fileName: 'kp.jpg',
-            companyId: companyId ?? undefined
-          })
+          body: JSON.stringify(
+            wazzupSendBody(phone, {
+              contentUri,
+              attachmentType: 'image',
+              fileName: 'kp.jpg',
+              companyId: companyId ?? undefined
+            })
+          )
         });
         const dataImage = (await resImage.json().catch(() => ({}))) as { error?: string };
         if (!resImage.ok) {
@@ -1370,11 +1385,12 @@ const WhatsAppChat: React.FC = () => {
         const resText = await fetch(SEND_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chatId: phone,
-            text: formatMessageForWhatsApp(textToSend),
-            companyId: companyId ?? undefined
-          })
+          body: JSON.stringify(
+            wazzupSendBody(phone, {
+              text: formatMessageForWhatsApp(textToSend),
+              companyId: companyId ?? undefined
+            })
+          )
         });
         if (!resText.ok) {
           const dataText = (await resText.json().catch(() => ({}))) as { error?: string };
@@ -1514,7 +1530,6 @@ const WhatsAppChat: React.FC = () => {
       const conv = conversations.find((c) => c.id === selectedId);
       const phone = conv?.phone ?? conv?.client?.phone;
       if (!phone || phone === '…') return;
-      const chatId = normalizePhone(phone);
       const files = [...(reply.files ?? [])].sort((a, b) => a.order - b.order);
       if (files.length === 0) return;
       setSending(true);
@@ -1524,13 +1539,14 @@ const WhatsAppChat: React.FC = () => {
           const res = await fetch(SEND_API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              chatId,
-              contentUri: file.url,
-              attachmentType: 'image' as const,
-              fileName: file.fileName ?? undefined,
-              companyId
-            })
+            body: JSON.stringify(
+              wazzupSendBody(phone, {
+                contentUri: file.url,
+                attachmentType: 'image' as const,
+                fileName: file.fileName ?? undefined,
+                companyId
+              })
+            )
           });
           if (!res.ok) throw new Error('Send failed');
           if (i < files.length - 1) {
@@ -1565,7 +1581,6 @@ const WhatsAppChat: React.FC = () => {
           if (!targetPhone) continue;
           for (const msg of toSend) {
             const payload: Record<string, unknown> = {
-              chatId: targetPhone,
               forwarded: true
             };
             if (msg.deleted) continue;
@@ -1580,7 +1595,7 @@ const WhatsAppChat: React.FC = () => {
             await fetch(SEND_API, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(payload)
+              body: JSON.stringify(wazzupSendBody(targetPhone, payload))
             });
           }
         }

@@ -2,6 +2,8 @@ import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions'
 import {
   findClientByPhone,
   createClient,
+  findClientByInstagramChatId,
+  createInstagramClient,
   findConversationByClientId,
   createConversation,
   saveMessage,
@@ -39,6 +41,8 @@ function log(...args: unknown[]) {
 
 interface SendMessageBody {
   chatId: string;
+  /** instagram — отправка в поток Instagram (Wazzup). Нужен WAZZUP_INSTAGRAM_CHANNEL_ID или общий channelId с IG. */
+  chatType?: 'whatsapp' | 'instagram';
   /** Текст (обязателен, если нет contentUri). При contentUri не передаётся в Wazzup, только сохраняется в БД как caption. */
   text?: string;
   /** Публичный URL файла для отправки как медиа. Взаимоисключающе с отправкой text в Wazzup. */
@@ -65,8 +69,10 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   const apiKey = process.env.WAZZUP_API_KEY;
-  const channelId = process.env.WAZZUP_CHANNEL_ID;
-  if (!apiKey || !channelId) {
+  const channelIdWa = process.env.WAZZUP_CHANNEL_ID;
+  const channelIdIg = process.env.WAZZUP_INSTAGRAM_CHANNEL_ID || channelIdWa;
+  const channelId = channelIdWa;
+  if (!apiKey || !channelIdWa) {
     log('Missing env: WAZZUP_API_KEY or WAZZUP_CHANNEL_ID');
     return withCors({
       statusCode: 500,
@@ -87,7 +93,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
 
-  const { chatId, text, contentUri, attachmentType, fileName, repliedToMessageId, forwarded, companyId } = body;
+  const { chatId, chatType, text, contentUri, attachmentType, fileName, repliedToMessageId, forwarded, companyId } =
+    body;
+  const isInstagram = chatType === 'instagram';
   const hasMedia = typeof contentUri === 'string' && contentUri.trim().length > 0;
   const hasText = typeof text === 'string' && text.trim().length > 0;
   if (!chatId) {
@@ -105,7 +113,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
 
-  const normalizedPhone = normalizePhone(chatId);
+  const normalizedPhone = isInstagram ? chatId : normalizePhone(chatId);
   const effectiveCompanyId = (companyId ?? DEFAULT_COMPANY_ID).trim();
   if (effectiveCompanyId !== DEFAULT_COMPANY_ID) {
     log('Forbidden: WhatsApp not configured for companyId', effectiveCompanyId);
@@ -120,8 +128,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   if (isDev) {
     log('Prepare send payload', {
       originalChatId: chatId,
+      chatType: isInstagram ? 'instagram' : 'whatsapp',
       normalizedPhone,
-      finalChatIdForWazzup: normalizedPhone.replace(/^\+/, ''),
+      finalChatIdForWazzup: isInstagram ? chatId : normalizedPhone.replace(/^\+/, ''),
       hasMedia,
       hasText,
       captionLength: caption.length,
@@ -135,18 +144,28 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   let conversationId: string;
   let clientId: string;
   try {
-    let client = await findClientByPhone(normalizedPhone);
+    let client = isInstagram
+      ? await findClientByInstagramChatId(chatId)
+      : await findClientByPhone(normalizedPhone);
     if (!client) {
-      const newClientId = await createClient(normalizedPhone, '');
-      log('Created client:', newClientId);
-      client = await findClientByPhone(normalizedPhone);
+      if (isInstagram) {
+        const newClientId = await createInstagramClient(chatId, '');
+        log('Created IG client:', newClientId);
+        client = await findClientByInstagramChatId(chatId);
+      } else {
+        const newClientId = await createClient(normalizedPhone, '');
+        log('Created client:', newClientId);
+        client = await findClientByPhone(normalizedPhone);
+      }
       if (!client) throw new Error('Failed to load created client');
     }
     clientId = client.id;
 
     let conversation = await findConversationByClientId(client.id);
     if (!conversation) {
-      const newConvId = await createConversation(client.id, normalizedPhone);
+      const newConvId = isInstagram
+        ? await createConversation(client.id, chatId, { channel: 'instagram', displayPhone: '@Instagram' })
+        : await createConversation(client.id, normalizedPhone);
       log('Created conversation:', newConvId);
       conversation = await findConversationByClientId(client.id);
       if (!conversation) throw new Error('Failed to load created conversation');
@@ -165,10 +184,11 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   try {
+    const wazzupChannel = isInstagram ? channelIdIg! : channelIdWa;
     const wazzupBody: Record<string, string> = {
-      channelId,
-      chatType: 'whatsapp',
-      chatId: normalizedPhone.replace(/^\+/, '')
+      channelId: wazzupChannel,
+      chatType: isInstagram ? 'instagram' : 'whatsapp',
+      chatId: isInstagram ? chatId : normalizedPhone.replace(/^\+/, '')
     };
     if (hasMedia) {
       wazzupBody.contentUri = (contentUri as string).trim();
@@ -236,7 +256,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       providerMessageId: providerMessageId ?? undefined,
       attachments,
       repliedToMessageId: repliedToMessageId ?? undefined,
-      forwarded: forwarded === true
+      forwarded: forwarded === true,
+      channel: isInstagram ? 'instagram' : 'whatsapp'
     });
     log('Message sent and saved, conversationId:', conversationId, providerMessageId ? 'providerId=' + providerMessageId : '');
 

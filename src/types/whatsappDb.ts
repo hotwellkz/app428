@@ -52,13 +52,15 @@ export interface WhatsAppConversation {
   dealStageColor?: string | null;
   dealTitle?: string | null;
   dealResponsibleName?: string | null;
+  /** Канал диалога (Instagram — тот же список «Чаты») */
+  channel?: 'whatsapp' | 'instagram';
 }
 
 /** Направление сообщения */
 export type MessageDirection = 'incoming' | 'outgoing';
 
 /** Канал (для расширения на другие мессенджеры) */
-export type MessageChannel = 'whatsapp';
+export type MessageChannel = 'whatsapp' | 'instagram';
 
 /** Статус исходящего сообщения (по контракту Wazzup: sent, delivered, read, error) */
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';

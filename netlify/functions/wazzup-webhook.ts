@@ -2,6 +2,8 @@ import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions'
 import {
   findClientByPhone,
   createClient,
+  findClientByInstagramChatId,
+  createInstagramClient,
   updateClientAvatar,
   findConversationByClientId,
   createConversation,
@@ -10,14 +12,18 @@ import {
   normalizePhone,
   findCrmClientByPhone,
   createCrmClient,
+  findCrmClientByExternalKey,
+  createCrmClientInstagram,
   updateCrmClientLastMessageAt,
   findDealByClientPhone,
   createDeal,
+  findDealByClientKey,
+  createDealInstagram,
+  instagramClientKey,
   upsertMessageFromWebhook,
   type MessageAttachmentRow
 } from './lib/firebaseAdmin';
 
-/** Формат входящего сообщения Wazzup (по документации) */
 interface WazzupMessage {
   messageId?: string;
   channelId?: string;
@@ -37,7 +43,6 @@ interface WazzupMessage {
   };
 }
 
-/** Элемент webhook statuses — обновление статуса исходящего сообщения */
 interface WazzupStatusItem {
   messageId?: string;
   timestamp?: string;
@@ -49,6 +54,8 @@ interface WazzupWebhookBody {
   test?: boolean;
   messages?: WazzupMessage[];
   statuses?: WazzupStatusItem[];
+  /** События CRM: chat_created, chat_updated (игнорируем тело, 200 OK) */
+  event?: string;
 }
 
 function buildAttachmentsFromWazzup(type: string | undefined, contentUri: string | undefined): MessageAttachmentRow[] {
@@ -62,10 +69,147 @@ function buildAttachmentsFromWazzup(type: string | undefined, contentUri: string
   return [{ type: attachmentType, url: contentUri.trim() }];
 }
 
-const LOG_PREFIX = '[wazzup-webhook]';
+const LOG = '[wazzup-webhook]';
+const IG_LOG = '[wazzup-instagram]';
+
+function logIg(...args: unknown[]) {
+  console.log(IG_LOG, new Date().toISOString(), ...args);
+}
 
 function log(...args: unknown[]) {
-  console.log(LOG_PREFIX, ...args);
+  console.log(LOG, ...args);
+}
+
+function isInstagramChatType(chatType: string): boolean {
+  const t = chatType.toLowerCase();
+  return t === 'instagram' || t === 'instagram_direct' || t === 'ig';
+}
+
+async function handleInstagramMessage(msg: WazzupMessage, debugPayload: boolean): Promise<'ok' | 'skip' | 'err'> {
+  const chatId = String(msg.chatId ?? '').trim();
+  if (!chatId) {
+    logIg('skip_no_chatId', msg.messageId);
+    return 'skip';
+  }
+  const isEcho = msg.isEcho === true;
+  const direction: 'incoming' | 'outgoing' = isEcho ? 'outgoing' : 'incoming';
+  const username = (msg.contact?.name ?? '').trim() || `IG ${chatId.slice(0, 8)}`;
+  const avatarUri = msg.contact?.avatarUri ?? undefined;
+  const attachments = buildAttachmentsFromWazzup(msg.type, msg.contentUri);
+  const textContent = (msg.text ?? '').trim();
+  const text = textContent || (attachments.length ? '' : '[no text]');
+  const extKey = instagramClientKey(chatId);
+
+  try {
+    logIg('incoming', { chatId, direction, username, messageId: msg.messageId });
+
+    let crm = await findCrmClientByExternalKey(extKey);
+    if (!crm) {
+      await createCrmClientInstagram(chatId, username);
+      logIg('crm_client_created', extKey);
+    } else {
+      await updateCrmClientLastMessageAt(crm.id);
+    }
+
+    let deal = await findDealByClientKey(extKey);
+    if (!deal) {
+      await createDealInstagram(chatId);
+      logIg('deal_created', extKey);
+    }
+
+    let client = await findClientByInstagramChatId(chatId);
+    if (!client) {
+      const clientId = await createInstagramClient(chatId, username, avatarUri ?? null);
+      logIg('wa_client_created', clientId);
+      client = await findClientByInstagramChatId(chatId);
+      if (!client) {
+        logIg('error_load_client', clientId);
+        return 'err';
+      }
+    } else if (avatarUri && !client.avatarUrl) {
+      try {
+        await updateClientAvatar(client.id, avatarUri);
+      } catch (e) {
+        logIg('avatar_update_fail', e);
+      }
+    }
+
+    let conversation = await findConversationByClientId(client.id);
+    if (!conversation) {
+      const convId = await createConversation(client.id, chatId, {
+        channel: 'instagram',
+        displayPhone: `@${username}`
+      });
+      logIg('conversation_created', convId);
+      conversation = await findConversationByClientId(client.id);
+      if (!conversation) return 'err';
+    }
+
+    const { id: savedId, created } = await upsertMessageFromWebhook(conversation.id, text, direction, {
+      providerMessageId: msg.messageId ?? undefined,
+      attachments: attachments.length ? attachments : undefined,
+      channel: 'instagram'
+    });
+    if (direction === 'incoming' && created) {
+      await incrementUnreadCount(conversation.id);
+    }
+    logIg('message_saved', savedId, created, direction);
+    return 'ok';
+  } catch (e) {
+    logIg('error', msg.messageId, e);
+    return 'err';
+  }
+}
+
+async function handleWhatsAppMessage(msg: WazzupMessage, debugPayload: boolean): Promise<'ok' | 'skip' | 'err'> {
+  const phone = msg.chatId ?? msg.contact?.phone ?? '';
+  if (!phone) return 'skip';
+  const normalizedPhone = normalizePhone(phone);
+  const isEcho = msg.isEcho === true;
+  const direction: 'incoming' | 'outgoing' = isEcho ? 'outgoing' : 'incoming';
+  const attachments = buildAttachmentsFromWazzup(msg.type, msg.contentUri);
+  const textContent = (msg.text ?? '').trim();
+  const text = textContent || (attachments.length ? '' : '[no text]');
+  const authorName = msg.contact?.name ?? '';
+  const avatarUri = msg.contact?.avatarUri ?? undefined;
+  try {
+    let crmClient = await findCrmClientByPhone(normalizedPhone);
+    if (!crmClient) {
+      await createCrmClient(normalizedPhone);
+    } else {
+      await updateCrmClientLastMessageAt(crmClient.id);
+    }
+    const deal = await findDealByClientPhone(normalizedPhone);
+    if (!deal) await createDeal(normalizedPhone);
+
+    let client = await findClientByPhone(normalizedPhone);
+    if (!client) {
+      await createClient(normalizedPhone, authorName, avatarUri ?? null);
+      client = await findClientByPhone(normalizedPhone);
+      if (!client) return 'err';
+    } else if (avatarUri && !client.avatarUrl) {
+      try {
+        await updateClientAvatar(client.id, avatarUri);
+      } catch {
+        /* ignore */
+      }
+    }
+    let conversation = await findConversationByClientId(client.id);
+    if (!conversation) {
+      await createConversation(client.id, normalizedPhone);
+      conversation = await findConversationByClientId(client.id);
+      if (!conversation) return 'err';
+    }
+    const { created } = await upsertMessageFromWebhook(conversation.id, text, direction, {
+      providerMessageId: msg.messageId ?? undefined,
+      attachments: attachments.length ? attachments : undefined,
+      channel: 'whatsapp'
+    });
+    if (direction === 'incoming' && created) await incrementUnreadCount(conversation.id);
+    return 'ok';
+  } catch {
+    return 'err';
+  }
 }
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
@@ -79,6 +223,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     body = typeof event.body === 'string' ? JSON.parse(event.body) : event.body ?? {};
   } catch (e) {
     log('Invalid JSON body:', e);
+    logIg('webhook_json_error', String(e));
     return { statusCode: 400, body: 'Invalid JSON' };
   }
 
@@ -91,14 +236,22 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     };
   }
 
+  /* Подписка на chat_created / chat_updated — отвечаем 200 без обработки тела */
+  if (body.event && !Array.isArray(body.messages)) {
+    log('Wazzup event (ack):', body.event);
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ok: true })
+    };
+  }
+
   const messages = Array.isArray(body.messages) ? body.messages : [];
   const debugPayload = process.env.WAZZUP_WEBHOOK_DEBUG === '1' || process.env.NODE_ENV !== 'production';
   if (debugPayload) {
     log('Raw webhook keys:', Object.keys(body));
     log('Received messages count:', messages.length);
-    if (messages.length > 0) {
-      log('First message sample:', JSON.stringify(messages[0], null, 2));
-    }
+    if (messages.length > 0) log('First message sample:', JSON.stringify(messages[0], null, 2));
   } else {
     log('Received messages count:', messages.length);
   }
@@ -109,140 +262,35 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
   for (const msg of messages) {
     const chatType = msg.chatType ?? '';
-    const status = (msg.status ?? '').toLowerCase();
-    const isEcho = msg.isEcho === true;
     if (debugPayload) {
       log('Message item:', {
         messageId: msg.messageId,
         chatType,
-        status,
-        isEcho,
         chatId: msg.chatId,
-        type: msg.type
+        isEcho: msg.isEcho
       });
     }
+
+    if (isInstagramChatType(chatType)) {
+      const r = await handleInstagramMessage(msg, debugPayload);
+      if (r === 'ok') processed++;
+      else if (r === 'skip') skipped++;
+      else errors++;
+      continue;
+    }
+
     if (chatType !== 'whatsapp') {
-      if (debugPayload) log('Skip non-whatsapp chatType:', chatType, 'messageId=', msg.messageId);
+      if (debugPayload) log('Skip chatType:', chatType);
       skipped++;
       continue;
     }
 
-    const direction: 'incoming' | 'outgoing' = isEcho ? 'outgoing' : 'incoming';
-
-    const phone = msg.chatId ?? msg.contact?.phone ?? '';
-    if (!phone) {
-      log('Skip message without chatId:', msg.messageId);
-      skipped++;
-      continue;
-    }
-
-    const normalizedPhone = normalizePhone(phone);
-    const attachments = buildAttachmentsFromWazzup(msg.type, msg.contentUri);
-    const hasMedia = attachments.length > 0;
-    const textContent = (msg.text ?? '').trim();
-    const text = textContent || (hasMedia ? '' : '[no text]');
-    const authorName = msg.contact?.name ?? '';
-    const avatarUri = msg.contact?.avatarUri ?? undefined;
-
-    try {
-      if (debugPayload) {
-        log('Process incoming:', { normalizedPhone, text: text.slice(0, 50), authorName });
-      }
-
-      // CRM: клиент и сделка при первом сообщении
-      let crmClient = await findCrmClientByPhone(normalizedPhone);
-      if (!crmClient) {
-        await createCrmClient(normalizedPhone);
-        log('Created CRM client for phone=', normalizedPhone);
-      } else {
-        await updateCrmClientLastMessageAt(crmClient.id);
-      }
-      const deal = await findDealByClientPhone(normalizedPhone);
-      if (!deal) {
-        await createDeal(normalizedPhone);
-        log('Created deal for phone=', normalizedPhone);
-      }
-
-      let client = await findClientByPhone(normalizedPhone);
-      if (!client) {
-        const clientId = await createClient(normalizedPhone, authorName, avatarUri ?? null);
-        log('Created client:', clientId, 'phone=', normalizedPhone);
-        client = await findClientByPhone(normalizedPhone);
-        if (!client) {
-          log('Failed to load created client:', clientId);
-          errors++;
-          continue;
-        }
-      } else if (avatarUri && !client.avatarUrl) {
-        try {
-          await updateClientAvatar(client.id, avatarUri);
-          if (debugPayload) {
-            log('Updated client avatar:', client.id);
-          }
-        } catch (e) {
-          log('Failed to update client avatar:', client.id, e);
-        }
-      }
-
-      let conversation = await findConversationByClientId(client.id);
-      if (!conversation) {
-        const conversationId = await createConversation(client.id, normalizedPhone);
-        log('Created conversation:', conversationId, 'clientId=', client.id);
-        conversation = await findConversationByClientId(client.id);
-        if (!conversation) {
-          log('Failed to load created conversation');
-          errors++;
-          continue;
-        }
-      }
-
-      if (direction === 'incoming') {
-        const { id: savedId, created } = await upsertMessageFromWebhook(conversation.id, text, 'incoming', {
-          providerMessageId: msg.messageId ?? undefined,
-          attachments: attachments.length > 0 ? attachments : undefined
-        });
-        if (created) {
-          await incrementUnreadCount(conversation.id);
-        }
-        processed++;
-        if (debugPayload) {
-          log(
-            'Saved incoming message:',
-            savedId,
-            'conversationId=',
-            conversation.id,
-            hasMedia ? 'with attachment' : '',
-            'created=',
-            created
-          );
-        }
-      } else {
-        // Исходящее сообщение (isEcho === true): сохраняем как outgoing, но не трогаем unreadCount
-        const { id: savedId, created } = await upsertMessageFromWebhook(conversation.id, text, 'outgoing', {
-          providerMessageId: msg.messageId ?? undefined,
-          attachments: attachments.length > 0 ? attachments : undefined
-        });
-        processed++;
-        if (debugPayload) {
-          log(
-            'Saved outgoing message (webhook):',
-            savedId,
-            'conversationId=',
-            conversation.id,
-            hasMedia ? 'with attachment' : '',
-            'created=',
-            created
-          );
-        }
-      }
-    } catch (err) {
-      log('Error processing message:', msg.messageId, err);
-      errors++;
-      // Не возвращаем 500 — обрабатываем остальные сообщения
-    }
+    const r = await handleWhatsAppMessage(msg, debugPayload);
+    if (r === 'ok') processed++;
+    else if (r === 'skip') skipped++;
+    else errors++;
   }
 
-  // Обработка statuses — обновление статусов исходящих сообщений (sent → delivered → read / error)
   const statuses = Array.isArray(body.statuses) ? body.statuses : [];
   let statusUpdates = 0;
   for (const st of statuses) {
@@ -265,19 +313,12 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       const errorMsg = isError && st.error ? (st.error.description ?? st.error.error) ?? null : null;
       const updated = await updateMessageStatus(providerId, mapped, errorMsg);
       if (updated) statusUpdates++;
-      if (debugPayload && updated) log('Status updated:', providerId, mapped);
     } catch (e) {
       log('Error updating status:', providerId, e);
     }
   }
-  if (statusUpdates > 0 || (debugPayload && statuses.length > 0)) {
-    log('Statuses processed:', statusUpdates, 'of', statuses.length);
-  }
 
-  if (errors > 0 || (debugPayload && (processed > 0 || skipped > 0))) {
-    log('Done: processed=', processed, 'skipped=', skipped, 'errors=', errors);
-  }
-
+  log('Done: processed=', processed, 'skipped=', skipped, 'errors=', errors);
   return {
     statusCode: 200,
     headers: { 'Content-Type': 'application/json' },

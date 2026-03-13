@@ -161,6 +161,14 @@ const ConversationList: React.FC<ConversationListProps> = ({
                   >
                     {item.displayTitle ?? item.phone ?? item.client?.phone ?? item.clientId ?? '—'}
                   </span>
+                  {item.channel === 'instagram' && (
+                    <span
+                      className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-gradient-to-r from-purple-500 to-pink-500 text-white"
+                      title="Instagram"
+                    >
+                      IG
+                    </span>
+                  )}
                   {dealStageName && (
                     <span
                       className="truncate max-w-[140px] text-[10px] md:text-[11px] font-medium px-1.5 py-0.5 rounded-md text-white shrink-0"
