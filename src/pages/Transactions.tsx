@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getSettingsFromCache, saveSettingsToCache } from '../lib/cache';
 import { deleteCategory } from '../lib/firebase/categories';
 
@@ -14,8 +14,8 @@ import {
   useSensor,
   useSensors,
   DragStartEvent,
-  DragOverlay,
-  defaultDropAnimationSideEffects
+  AutoScrollActivator,
+  type DragMoveEvent,
 } from '@dnd-kit/core';
 import { CategoryRow } from '../components/transactions/CategoryRow';
 import { useCategories } from '../hooks/useCategories';
@@ -27,8 +27,8 @@ import { TransferModal } from '../components/transactions/transfer/TransferModal
 import { AddWarehouseItemModal } from '../components/transactions/AddWarehouseItemModal';
 import { useNavigate } from 'react-router-dom';
 import { RayBackground } from '../components/RayBackground';
-import { Scrollbars } from 'react-custom-scrollbars-2';
 import { PageMetadata } from '../components/PageMetadata';
+import './Transactions.css';
 import { PendingTransactionsProvider } from '../contexts/PendingTransactionsContext';
 import {
   isProjectCategory,
@@ -165,9 +165,28 @@ export const Transactions: React.FC = () => {
     })
   );
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
   };
+
+  /** Авто-прокрутка по нижнему/верхнему краю контейнера (позиция перетаскиваемой карточки) */
+  const handleDragMove = useCallback((event: DragMoveEvent) => {
+    const el = scrollContainerRef.current;
+    const translated = event.active.rect.current.translated;
+    if (!el || !translated) return;
+    const clientY = translated.top + translated.height / 2;
+    const rect = el.getBoundingClientRect();
+    const margin = 80;
+    const speed = 26;
+    if (clientY > rect.bottom - margin) {
+      el.scrollTop += speed;
+    } else if (clientY < rect.top + margin) {
+      el.scrollTop -= speed;
+    }
+  }, []);
+
   const navigate = useNavigate();
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -328,22 +347,26 @@ export const Transactions: React.FC = () => {
         <meta name="robots" content="index, follow" />
       </Helmet>
 
-      <Scrollbars
-        style={{ width: '100%', height: '100vh' }}
-        universal={true}
-        renderThumbVertical={props => <div {...props} className="thumb-vertical" />}
-        autoHide
-        autoHideTimeout={1000}
-        autoHideDuration={200}
+      <div
+        ref={scrollContainerRef}
+        className="transactions-scroll-container w-full"
+        style={{ height: '100dvh', maxHeight: '100vh' }}
       >
         <PendingTransactionsProvider>
           <DndContext
             sensors={sensors}
+            autoScroll={{
+              enabled: true,
+              acceleration: 18,
+              activator: AutoScrollActivator.Pointer,
+              threshold: { x: 0.12, y: 0.12 },
+            }}
             onDragStart={handleDragStart}
+            onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
             onDragCancel={() => setActiveId(null)}
           >
-            <div className="relative min-h-screen">
+            <div className="relative min-h-screen pb-8">
               <RayBackground theme="light" />
               <div className="relative z-10 p-2 sm:p-3 space-y-2">
               <CategoryRow
@@ -413,7 +436,7 @@ export const Transactions: React.FC = () => {
             </div>
           </DndContext>
         </PendingTransactionsProvider>
-      </Scrollbars>
+      </div>
     </div>
   );
 };
