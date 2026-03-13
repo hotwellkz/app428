@@ -1,5 +1,4 @@
 import React from 'react';
-import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
 import clsx from 'clsx';
 
 interface TransactionStatsProps {
@@ -19,40 +18,52 @@ export const TransactionStats: React.FC<TransactionStatsProps> = ({
   cashlessTotal,
   className
 }) => {
+  const totalStr = `${formatAmount(Math.abs(totalAmount))} ₸`;
+  const salaryStr = `${formatAmount(Math.abs(salaryTotal))} ₸`;
+  const cashlessStr = `${formatAmount(Math.abs(cashlessTotal))} ₸`;
+
   return (
-    <div className={clsx("grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 py-4 bg-white", className)}>
-      <div className="bg-white rounded-lg shadow-sm transition-all duration-300">
-        <div className="flex items-center justify-between p-3">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <ArrowDownRight className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" />
-            <span className="text-xs sm:text-sm text-gray-600">Общая сумма:</span>
-          </div>
-          <span className="text-base sm:text-lg font-semibold text-red-600">
-            {formatAmount(Math.abs(totalAmount))} ₸
-          </span>
-        </div>
-      </div>
-      <div className="bg-white rounded-lg shadow-sm transition-all duration-300">
-        <div className="flex items-center justify-between p-3">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-500" />
-            <span className="text-xs sm:text-sm text-gray-600">Сумма ЗП:</span>
-          </div>
-          <span className="text-base sm:text-lg font-semibold text-emerald-600">
-            {formatAmount(Math.abs(salaryTotal))} ₸
-          </span>
-        </div>
-      </div>
-      <div className="bg-white rounded-lg shadow-sm transition-all duration-300">
-        <div className="flex items-center justify-between p-3">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <ArrowUpRight className="w-4 h-4 sm:w-5 sm:h-5 text-purple-500" />
-            <span className="text-xs sm:text-sm text-gray-600">Безнал:</span>
-          </div>
-          <span className="text-base sm:text-lg font-semibold text-purple-600">
-            {formatAmount(Math.abs(cashlessTotal))} ₸
-          </span>
-        </div>
+    <div
+      className={clsx(
+        'bg-white border-b border-gray-100',
+        className
+      )}
+    >
+      <div
+        className={clsx(
+          'flex flex-row flex-nowrap items-center gap-2 sm:gap-3',
+          'overflow-x-auto overflow-y-hidden',
+          'py-2 px-2 sm:py-2.5 sm:px-3',
+          'min-h-[36px]',
+          'text-[12px] sm:text-sm'
+        )}
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+        <span className="inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap rounded-md bg-gray-50/90 px-2.5 py-1 sm:px-3 sm:py-1.5">
+          <span className="font-medium text-gray-600">Общая:</span>
+          <span className="font-semibold tabular-nums text-red-600">{totalStr}</span>
+        </span>
+
+        <span
+          className="shrink-0 select-none text-gray-300 sm:text-gray-400"
+          aria-hidden
+        >
+          |
+        </span>
+
+        <span className="inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap rounded-md bg-gray-50/90 px-2.5 py-1 sm:px-3 sm:py-1.5">
+          <span className="font-medium text-gray-600">ЗП:</span>
+          <span className="font-semibold tabular-nums text-emerald-600">{salaryStr}</span>
+        </span>
+
+        <span className="shrink-0 select-none text-gray-300 sm:text-gray-400" aria-hidden>
+          |
+        </span>
+
+        <span className="inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap rounded-md bg-gray-50/90 px-2.5 py-1 sm:px-3 sm:py-1.5">
+          <span className="font-medium text-gray-600">Безнал:</span>
+          <span className="font-semibold tabular-nums text-purple-600">{cashlessStr}</span>
+        </span>
       </div>
     </div>
   );
