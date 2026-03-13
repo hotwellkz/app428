@@ -32,6 +32,8 @@ export function toMs(v: unknown): number {
 export interface DealRow {
   id: string;
   createdAt: number;
+  /** Последняя смена этапа — для «закрыто в этом месяце» */
+  stageChangedAt: number;
   amount: number;
   stageId: string;
   source: string | null;
@@ -87,6 +89,7 @@ export async function fetchDealsForCompany(companyId: string, useCache = true): 
     return {
       id: deal.id,
       createdAt: toMs(deal.createdAt),
+      stageChangedAt: toMs(deal.stageChangedAt ?? deal.updatedAt ?? deal.createdAt),
       amount: deal.amount ?? 0,
       stageId: deal.stageId,
       source: deal.source ?? null,

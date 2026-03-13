@@ -75,7 +75,7 @@ function fmtTime(ms: number): string {
 }
 
 type SectionId =
-  | 'overview'
+  | 'executive'
   | 'sales'
   | 'messaging'
   | 'managers'
@@ -94,7 +94,7 @@ export const AnalyticsPage: React.FC = () => {
   const [managersList, setManagersList] = useState<ManagerRow[]>([]);
   const [stageMeta, setStageMeta] = useState<{ id: string; name: string; type: string }[]>([]);
   const [liveFeed, setLiveFeed] = useState<MessageRow[]>([]);
-  const [activeSection, setActiveSection] = useState<SectionId>('overview');
+  const [activeSection, setActiveSection] = useState<SectionId>('executive');
 
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
@@ -227,31 +227,52 @@ export const AnalyticsPage: React.FC = () => {
     [messages, fromMs, toMs]
   );
 
+  const clientsWaitingReply = useMemo(() => {
+    return conversations.filter((c) => {
+      if (c.unreadCount > 0) return true;
+      const lo = c.lastOutgoingAt || 0;
+      const li = c.lastIncomingAt || 0;
+      return li > 0 && li > lo;
+    }).length;
+  }, [conversations]);
+
   const kpi = useMemo(() => {
     const leadsToday = dealsAllTimeFiltered.filter((d) => d.createdAt >= todayStart).length;
     const leadsMonth = dealsAllTimeFiltered.filter(
       (d) => d.createdAt >= monthStart && d.createdAt <= monthEnd
     ).length;
-    const dealsMonth = dealsAllTimeFiltered.filter(
-      (d) => d.createdAt >= monthStart && d.createdAt <= monthEnd
-    ).length;
-    const revenueMonth = dealsAllTimeFiltered
-      .filter((d) => d.createdAt >= monthStart && d.createdAt <= monthEnd)
-      .reduce((s, d) => s + d.amount, 0);
+    const closedInMonth = dealsAllTimeFiltered.filter(
+      (d) =>
+        wonStageIds.has(d.stageId) &&
+        d.stageChangedAt >= monthStart &&
+        d.stageChangedAt <= monthEnd
+    );
+    const dealsClosedMonth = closedInMonth.length;
+    const revenueMonth =
+      closedInMonth.length > 0
+        ? closedInMonth.reduce((s, d) => s + d.amount, 0)
+        : dealsAllTimeFiltered
+            .filter((d) => d.createdAt >= monthStart && d.createdAt <= monthEnd)
+            .reduce((s, d) => s + d.amount, 0);
     const wonCount = dealsAllTimeFiltered.filter((d) => wonStageIds.has(d.stageId)).length;
     const conversion =
       dealsAllTimeFiltered.length > 0
         ? Math.min(100, Math.round((wonCount / dealsAllTimeFiltered.length) * 100))
         : 0;
-    const withAmount = dealsAllTimeFiltered.filter((d) => d.amount > 0);
+    const wonWithAmount = dealsAllTimeFiltered.filter((d) => wonStageIds.has(d.stageId) && d.amount > 0);
     const avgDeal =
-      withAmount.length > 0
-        ? Math.round(withAmount.reduce((s, d) => s + d.amount, 0) / withAmount.length)
-        : 0;
+      wonWithAmount.length > 0
+        ? Math.round(wonWithAmount.reduce((s, d) => s + d.amount, 0) / wonWithAmount.length)
+        : dealsAllTimeFiltered.filter((d) => d.amount > 0).length > 0
+          ? Math.round(
+              dealsAllTimeFiltered.filter((d) => d.amount > 0).reduce((s, d) => s + d.amount, 0) /
+                dealsAllTimeFiltered.filter((d) => d.amount > 0).length
+            )
+          : 0;
     return {
       leadsToday,
       leadsMonth,
-      dealsMonth,
+      dealsClosedMonth,
       revenueMonth,
       conversion,
       avgDeal
@@ -389,7 +410,11 @@ export const AnalyticsPage: React.FC = () => {
       const id = d.responsibleUserId || '__none__';
       const r = ensure(id);
       if (d.createdAt >= fromMs && d.createdAt <= toMs) r.leads++;
-      if (wonStageIds.has(d.stageId) && d.createdAt >= fromMs && d.createdAt <= toMs) {
+      if (
+        wonStageIds.has(d.stageId) &&
+        d.stageChangedAt >= fromMs &&
+        d.stageChangedAt <= toMs
+      ) {
         r.closed++;
         r.revenue += d.amount;
       }
@@ -500,7 +525,9 @@ export const AnalyticsPage: React.FC = () => {
     const lines = [
       ['Показатель', 'Значение'],
       ['Лиды сегодня', String(kpi.leadsToday)],
-      ['Выручка месяц', String(kpi.revenueMonth)],
+      ['Закрыто сделок (мес.)', String(kpi.dealsClosedMonth)],
+      ['Выручка (мес.)', String(kpi.revenueMonth)],
+      ['Ждут ответа (диалоги)', String(clientsWaitingReply)],
       ['Входящие WA сегодня', String(waKpi.incomingToday)],
       ['Непрочитано', String(waKpi.unread)]
     ];
@@ -531,13 +558,13 @@ export const AnalyticsPage: React.FC = () => {
   };
 
   const sections: { id: SectionId; label: string }[] = [
-    { id: 'overview', label: 'Обзор' },
+    { id: 'executive', label: 'Директор' },
     { id: 'sales', label: 'Продажи' },
-    { id: 'messaging', label: 'Сообщения' },
+    { id: 'messaging', label: 'WhatsApp' },
     { id: 'managers', label: 'Менеджеры' },
     { id: 'sources', label: 'Источники' },
     { id: 'finance', label: 'Финансы' },
-    { id: 'live', label: 'Live' }
+    { id: 'live', label: 'Мониторинг' }
   ];
 
   const shell = (child: React.ReactNode) => (
@@ -568,9 +595,9 @@ export const AnalyticsPage: React.FC = () => {
                 <BarChart3 className="w-6 h-6" />
               </div>
               <div>
-                <h1 className="text-lg font-bold tracking-tight">Аналитика CRM</h1>
+                <h1 className="text-lg font-bold tracking-tight">Центр аналитики CRM</h1>
                 <p className={`text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  Продажи + WhatsApp · обновление данных кэшем ~45 с
+                  Лиды · сделки · WhatsApp · менеджеры · live · кэш ~45 с
                 </p>
               </div>
             </div>
@@ -692,15 +719,18 @@ export const AnalyticsPage: React.FC = () => {
           ref={reportRef}
           className="max-w-[1680px] mx-auto px-3 sm:px-5 py-6 space-y-10 pb-24"
         >
-          {/* 1 Overview KPI */}
-          <section id="sec-overview">
+          {/* 1 Executive Dashboard */}
+          <section id="sec-executive">
             <h2
-              className={`text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 ${
+              className={`text-xs font-bold uppercase tracking-widest mb-2 flex items-center gap-2 ${
                 dark ? 'text-violet-400' : 'text-violet-600'
               }`}
             >
-              <Zap className="w-4 h-4" /> Обзор KPI
+              <Zap className="w-4 h-4" /> Executive Dashboard — обзор для руководителя
             </h2>
+            <p className={`text-sm mb-4 ${dark ? 'text-slate-400' : 'text-slate-600'}`}>
+              Статус бизнеса за секунды: лиды, закрытия, выручка, ответы клиентам.
+            </p>
             <div className="flex gap-4 overflow-x-auto pb-2 snap-x scrollbar-thin -mx-1 px-1">
               {[
                 {
@@ -716,29 +746,35 @@ export const AnalyticsPage: React.FC = () => {
                   grad: 'from-blue-500 to-indigo-600'
                 },
                 {
-                  label: 'Сделок за месяц',
-                  value: kpi.dealsMonth,
+                  label: 'Закрыто сделок (мес.)',
+                  value: kpi.dealsClosedMonth,
                   icon: BarChart3,
                   grad: 'from-indigo-500 to-violet-600'
                 },
                 {
-                  label: 'Выручка за месяц',
+                  label: 'Выручка (мес.)',
                   value: `${(kpi.revenueMonth / 1000).toFixed(0)}k ₸`,
                   sub: kpi.revenueMonth.toLocaleString('ru-RU') + ' ₸',
                   icon: DollarSign,
                   grad: 'from-emerald-500 to-teal-600'
                 },
                 {
-                  label: 'Конверсия',
+                  label: 'Конверсия в победу',
                   value: `${kpi.conversion}%`,
                   icon: Percent,
                   grad: 'from-amber-500 to-orange-600'
                 },
                 {
-                  label: 'Средний чек',
-                  value: `${(kpi.avgDeal / 1000).toFixed(0)}k ₸`,
+                  label: 'Средний чек (won)',
+                  value: kpi.avgDeal ? `${(kpi.avgDeal / 1000).toFixed(0)}k ₸` : '—',
                   icon: Target,
                   grad: 'from-rose-500 to-pink-600'
+                },
+                {
+                  label: 'Ждут ответа',
+                  value: clientsWaitingReply,
+                  icon: Radio,
+                  grad: 'from-red-500 to-rose-700'
                 }
               ].map((c) => (
                 <div
@@ -747,7 +783,7 @@ export const AnalyticsPage: React.FC = () => {
                 >
                   <c.icon className="w-8 h-8 opacity-90 mb-3" />
                   <p className="text-[11px] font-semibold uppercase tracking-wide opacity-90">{c.label}</p>
-                  <p className="text-2xl sm:text-3xl font-black tabular-nums mt-1">{c.value}</p>
+                  <p className="text-3xl sm:text-4xl font-black tabular-nums mt-1 leading-none">{c.value}</p>
                   {'sub' in c && c.sub && (
                     <p className="text-[10px] opacity-80 mt-0.5 truncate max-w-full">{c.sub}</p>
                   )}
@@ -763,7 +799,7 @@ export const AnalyticsPage: React.FC = () => {
             }`}
           >
             <h3 className={`text-sm font-bold mb-3 ${dark ? 'text-red-300' : 'text-red-800'}`}>
-              Непрочитанные (важно)
+              Unread Alert System
             </h3>
             <div className="grid sm:grid-cols-3 gap-3">
               {[
@@ -789,9 +825,9 @@ export const AnalyticsPage: React.FC = () => {
                 dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'
               }`}
             >
-              <h2 className="text-base font-bold mb-1">Воронка продаж</h2>
+              <h2 className="text-base font-bold mb-1">Sales Analytics — воронка</h2>
               <p className={`text-xs mb-4 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
-                Число сделок по этапу · % от предыдущего этапа
+                Этапы CRM · количество · конверсия между этапами (%)
               </p>
               <div className="h-80 w-full min-w-0">
                 <ResponsiveContainer width="100%" height="100%">
@@ -867,6 +903,7 @@ export const AnalyticsPage: React.FC = () => {
                       stroke="#7c3aed"
                       strokeWidth={2}
                       dot={false}
+                      isAnimationActive
                     />
                   </LineChart>
                 </ResponsiveContainer>
@@ -881,7 +918,7 @@ export const AnalyticsPage: React.FC = () => {
                 dark ? 'text-emerald-400' : 'text-emerald-600'
               }`}
             >
-              Сообщения WhatsApp
+              Messaging Analytics (WhatsApp)
             </h2>
             <div className="flex gap-3 overflow-x-auto pb-2 snap-x mb-6">
               {[
@@ -909,7 +946,7 @@ export const AnalyticsPage: React.FC = () => {
               <div
                 className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
               >
-                <h3 className="font-bold mb-4">Входящие сообщения / день</h3>
+                <h3 className="font-bold mb-4">Message activity — входящие / день</h3>
                 <div className="h-64 w-full min-w-0">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={messagesPerDay}>
@@ -917,7 +954,7 @@ export const AnalyticsPage: React.FC = () => {
                       <XAxis dataKey="date" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
                       <YAxis tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
                       <Tooltip />
-                      <Line type="monotone" dataKey="incoming" stroke="#22c55e" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="incoming" stroke="#22c55e" strokeWidth={2} dot={false} isAnimationActive />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -944,7 +981,7 @@ export const AnalyticsPage: React.FC = () => {
                 <div
                   className={`mt-6 rounded-xl p-4 border ${dark ? 'border-slate-700 bg-slate-800/50' : 'border-slate-100 bg-slate-50'}`}
                 >
-                  <h4 className="text-sm font-bold mb-2">Сообщения → сделки</h4>
+                  <h4 className="text-sm font-bold mb-2">Message → Deal conversion</h4>
                   <p className="text-sm">
                     Входящих в периоде: <strong>{msgDealConversion.incoming}</strong>
                   </p>
@@ -962,7 +999,7 @@ export const AnalyticsPage: React.FC = () => {
           {/* 8 Managers */}
           <section id="sec-managers">
             <h2 className="text-xs font-bold uppercase tracking-widest mb-4 text-indigo-500 dark:text-indigo-400">
-              Эффективность менеджеров
+              Managers Performance
             </h2>
             <div
               className={`rounded-2xl border overflow-hidden ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
@@ -1004,7 +1041,7 @@ export const AnalyticsPage: React.FC = () => {
               className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
             >
               <h3 className="font-bold mb-4 flex items-center gap-2">
-                <PieIcon className="w-5 h-5" /> Источники лидов
+                <PieIcon className="w-5 h-5" /> Lead Sources
               </h3>
               <div className="h-72 w-full min-w-0">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1031,7 +1068,7 @@ export const AnalyticsPage: React.FC = () => {
             </div>
             <div id="sec-finance" className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
               <h3 className="font-bold mb-4 flex items-center gap-2">
-                <Target className="w-5 h-5" /> План vs факт (месяц)
+                <Target className="w-5 h-5" /> Finance — план vs факт
               </h3>
               <input
                 type="number"
@@ -1068,7 +1105,7 @@ export const AnalyticsPage: React.FC = () => {
           {/* 11 Live */}
           <section id="sec-live">
             <h2 className="text-xs font-bold uppercase tracking-widest mb-4 flex items-center gap-2 text-rose-500">
-              <Radio className="w-4 h-4 animate-pulse" /> Live · обновление каждые 10 с
+              <Radio className="w-4 h-4 animate-pulse" /> Live Monitoring — каждые 10 с
             </h2>
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
               {[
