@@ -33,6 +33,16 @@ import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase/config';
 import { auth } from '../lib/firebase/auth';
 import { listPipelines, listStages } from '../lib/firebase/deals';
+import {
+  fetchClientsForAnalytics,
+  fetchTransactionsForAnalytics,
+  fetchProductsForAnalytics,
+  fetchWarehouseDocumentsForAnalytics,
+  type ClientAnalyticsRow,
+  type TxAnalyticsRow,
+  type ProductAnalyticsRow,
+  type WarehouseDocRow
+} from '../lib/firebase/analyticsExtended';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import {
   BarChart3,
@@ -54,7 +64,10 @@ import {
   LayoutDashboard,
   Clock,
   Wrench,
-  X
+  X,
+  Building2,
+  Package,
+  Wallet
 } from 'lucide-react';
 import ru from '../locales/ru.json';
 import toast from 'react-hot-toast';
@@ -86,6 +99,10 @@ function fmtTime(ms: number): string {
 
 type SectionId =
   | 'director'
+  | 'ops'
+  | 'construction'
+  | 'txfinance'
+  | 'warehouse'
   | 'leads'
   | 'messaging'
   | 'managers'
@@ -108,6 +125,10 @@ export const AnalyticsPage: React.FC = () => {
   const [stageMeta, setStageMeta] = useState<{ id: string; name: string; type: string }[]>([]);
   const [liveFeed, setLiveFeed] = useState<MessageRow[]>([]);
   const [activeSection, setActiveSection] = useState<SectionId>('director');
+  const [clientsRows, setClientsRows] = useState<ClientAnalyticsRow[]>([]);
+  const [txRows, setTxRows] = useState<TxAnalyticsRow[]>([]);
+  const [productsRows, setProductsRows] = useState<ProductAnalyticsRow[]>([]);
+  const [whDocs, setWhDocs] = useState<WarehouseDocRow[]>([]);
 
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
@@ -245,6 +266,16 @@ export const AnalyticsPage: React.FC = () => {
         const since = Date.now() - 400 * MS_DAY;
         const msg = await fetchMessagesSince(companyId, since, 8000, !force, menuAccess);
         setMessages(msg);
+        const [cl, tx, pr, wh] = await Promise.all([
+          fetchClientsForAnalytics(companyId, menuAccess),
+          fetchTransactionsForAnalytics(companyId, 2800, menuAccess),
+          fetchProductsForAnalytics(companyId, menuAccess),
+          fetchWarehouseDocumentsForAnalytics(companyId, 900, menuAccess)
+        ]);
+        setClientsRows(cl);
+        setTxRows(tx);
+        setProductsRows(pr);
+        setWhDocs(wh);
         if (msg.length === 0 && d.length > 0) {
           toast(
             'Сообщения WhatsApp: нужен индекс Firestore. Выполните: firebase deploy --only firestore:indexes (коллекция whatsappMessages: companyId + createdAt).',
@@ -698,6 +729,10 @@ export const AnalyticsPage: React.FC = () => {
 
   const sections: { id: SectionId; label: string }[] = [
     { id: 'director', label: t.navDirector },
+    { id: 'ops', label: t.opsAnalytics },
+    { id: 'construction', label: t.navConstruction },
+    { id: 'txfinance', label: t.navTxFinance },
+    { id: 'warehouse', label: t.navWarehouse },
     { id: 'leads', label: t.navLeads },
     { id: 'messaging', label: t.navWhatsapp },
     { id: 'managers', label: t.navManagers },
@@ -705,6 +740,204 @@ export const AnalyticsPage: React.FC = () => {
     { id: 'finance', label: t.navFinance },
     { id: 'live', label: t.navLive }
   ];
+
+  const clientsInPeriod = useMemo(
+    () => clientsRows.filter((c) => c.createdAt >= fromMs && c.createdAt <= toMs),
+    [clientsRows, fromMs, toMs]
+  );
+  const constructionKpi = useMemo(() => {
+    const total = clientsRows.length;
+    const building = clientsRows.filter((c) => c.status === 'building').length;
+    const built = clientsRows.filter((c) => c.status === 'built').length;
+    const depositStatus = clientsRows.filter((c) => c.status === 'deposit').length;
+    const withDeposit = clientsRows.filter((c) => c.deposit > 0).length;
+    const completedMonth = clientsRows.filter(
+      (c) => c.status === 'built' && c.updatedAt >= monthStart && c.updatedAt <= monthEnd
+    ).length;
+    const newMonth = clientsRows.filter((c) => c.createdAt >= monthStart && c.createdAt <= monthEnd).length;
+    const newPeriod = clientsInPeriod.length;
+    let overdue = 0;
+    clientsRows.forEach((c) => {
+      if (c.status !== 'building' || !c.startDate) return;
+      const start = new Date(c.startDate).getTime();
+      if (!start) return;
+      const days = c.buildDays || 45;
+      const end = start + days * MS_DAY;
+      if (end < now) overdue++;
+    });
+    return {
+      total,
+      building,
+      built,
+      depositStatus,
+      waiting: depositStatus,
+      withDeposit,
+      completedMonth,
+      newMonth,
+      newPeriod,
+      overdue
+    };
+  }, [clientsRows, clientsInPeriod, monthStart, monthEnd, now]);
+
+  const clientsNewByDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (let t = fromMs; t <= toMs; t += MS_DAY) map.set(startOfDay(new Date(t)).toString(), 0);
+    clientsInPeriod.forEach((c) => {
+      const k = startOfDay(new Date(c.createdAt)).toString();
+      if (map.has(k)) map.set(k, (map.get(k) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([k, v]) => ({ date: fmtDate(Number(k)), count: v }));
+  }, [clientsInPeriod, fromMs, toMs]);
+
+  const builtByMonth = useMemo(() => {
+    const map = new Map<string, number>();
+    clientsRows
+      .filter((c) => c.status === 'built' && c.updatedAt > 0)
+      .forEach((c) => {
+        const d = new Date(c.updatedAt);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        map.set(key, (map.get(key) || 0) + 1);
+      });
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-14)
+      .map(([month, count]) => ({ month, count }));
+  }, [clientsRows]);
+
+  const activeBuildsRows = useMemo(() => {
+    return clientsRows
+      .filter((c) => c.status === 'building')
+      .map((c) => {
+        const start = c.startDate ? new Date(c.startDate).getTime() : 0;
+        const days = c.buildDays || 45;
+        const planEnd = start ? start + days * MS_DAY : 0;
+        let progress = 0;
+        if (start && planEnd > start) {
+          progress = Math.min(100, Math.round(((now - start) / (planEnd - start)) * 100));
+        }
+        return {
+          id: c.id,
+          client: c.name || '—',
+          object: c.objectName || '—',
+          status: t.statusBuilding,
+          progress: `${progress}%`,
+          start: c.startDate || '—',
+          planEnd: planEnd ? new Date(planEnd).toLocaleDateString('ru-RU') : '—'
+        };
+      })
+      .slice(0, 80);
+  }, [clientsRows, now, t.statusBuilding]);
+
+  const txInPeriod = useMemo(
+    () => txRows.filter((x) => x.dateMs >= fromMs && x.dateMs <= toMs),
+    [txRows, fromMs, toMs]
+  );
+  const txMonth = useMemo(
+    () => txRows.filter((x) => x.dateMs >= monthStart && x.dateMs <= monthEnd),
+    [txRows, monthStart, monthEnd]
+  );
+  const txFinanceKpiFixed = useMemo(() => {
+    const incomeToday = txRows.filter((x) => x.type === 'income' && x.dateMs >= todayStart).reduce((s, x) => s + x.amount, 0);
+    const incomeM = txMonth.filter((x) => x.type === 'income').reduce((s, x) => s + x.amount, 0);
+    const expenseM = txMonth.filter((x) => x.type === 'expense').reduce((s, x) => s + x.amount, 0);
+    const incCount = txMonth.filter((x) => x.type === 'income').length;
+    return {
+      incomeToday,
+      incomeMonth: incomeM,
+      expenseMonth: expenseM,
+      netProfit: incomeM - expenseM,
+      avgPayment: incCount ? Math.round(incomeM / incCount) : 0
+    };
+  }, [txRows, txMonth, todayStart]);
+
+  const incomeByDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (let t = fromMs; t <= toMs; t += MS_DAY) map.set(startOfDay(new Date(t)).toString(), 0);
+    txInPeriod.filter((x) => x.type === 'income').forEach((x) => {
+      const k = startOfDay(new Date(x.dateMs)).toString();
+      if (map.has(k)) map.set(k, (map.get(k) || 0) + x.amount);
+    });
+    return Array.from(map.entries())
+      .sort(([a], [b]) => Number(a) - Number(b))
+      .map(([k, v]) => ({ date: fmtDate(Number(k)), sum: v }));
+  }, [txInPeriod, fromMs, toMs]);
+
+  const incomeByMonthChart = useMemo(() => {
+    const map = new Map<string, number>();
+    txRows
+      .filter((x) => x.type === 'income')
+      .forEach((x) => {
+        const d = new Date(x.dateMs);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        map.set(key, (map.get(key) || 0) + x.amount);
+      });
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-12)
+      .map(([month, sum]) => ({ month, sum }));
+  }, [txRows]);
+
+  const recentTxTable = useMemo(() => {
+    return txInPeriod.slice(0, 25).map((x) => ({
+      id: x.id,
+      date: new Date(x.dateMs).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+      client: x.fromUser || x.toUser || '—',
+      type: x.type === 'income' ? t.incomeType : t.expenseType,
+      amount: x.amount,
+      comment: (x.description || '').slice(0, 80)
+    }));
+  }, [txInPeriod, t.incomeType, t.expenseType]);
+
+  const warehouseKpi = useMemo(() => {
+    const totalValue = productsRows.reduce((s, p) => s + p.quantity * (p.averagePurchasePrice || 0), 0);
+    const monthMs = monthStart;
+    const monthEndMs = monthEnd;
+    let purchases = 0;
+    let consumption = 0;
+    const usageByName = new Map<string, number>();
+    whDocs.forEach((doc) => {
+      if (doc.dateMs < monthMs || doc.dateMs > monthEndMs) return;
+      doc.items.forEach((it) => {
+        const sum = it.quantity * it.price;
+        if (doc.type === 'income') purchases += sum;
+        else {
+          consumption += sum;
+          const n = it.product?.name || '—';
+          usageByName.set(n, (usageByName.get(n) || 0) + it.quantity);
+        }
+      });
+    });
+    const topMaterials = Array.from(usageByName.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 15)
+      .map(([name, used]) => {
+        const prod = productsRows.find((p) => p.name === name);
+        const stock = prod?.quantity ?? 0;
+        const cost = stock * (prod?.averagePurchasePrice || 0);
+        return { name, used, stock, cost };
+      });
+    const lowStock = productsRows.filter((p) => p.quantity <= (p.minQuantity ?? 5));
+    return {
+      totalValue,
+      count: productsRows.length,
+      purchasesMonth: purchases,
+      consumptionMonth: consumption,
+      topMaterials,
+      lowStock
+    };
+  }, [productsRows, whDocs, monthStart, monthEnd]);
+
+  const opsKpi = useMemo(
+    () => ({
+      activeBuilds: clientsRows.filter((c) => c.status === 'building').length,
+      newClients: clientsInPeriod.length,
+      incomeMonth: txFinanceKpiFixed.incomeMonth,
+      materialsCount: productsRows.length
+    }),
+    [clientsRows, clientsInPeriod, txFinanceKpiFixed.incomeMonth, productsRows.length]
+  );
 
   const shell = (child: React.ReactNode) => (
     <div
@@ -1041,6 +1274,247 @@ export const AnalyticsPage: React.FC = () => {
                 ))}
               </div>
             </section>
+          </section>
+
+          {/* Операционная аналитика */}
+          <section id="sec-ops" className="space-y-3">
+            <h2 className={`text-sm font-bold uppercase tracking-widest ${dark ? 'text-cyan-400' : 'text-cyan-700'}`}>
+              {t.opsAnalytics}
+            </h2>
+            <div className="flex gap-3 overflow-x-auto pb-2 snap-x pl-1 pr-4 touch-pan-x">
+              {[
+                { label: t.activeBuilds, value: opsKpi.activeBuilds, icon: Building2, grad: 'from-amber-600 to-orange-700' },
+                { label: t.newClients, value: opsKpi.newClients, icon: Users, grad: 'from-cyan-600 to-blue-700' },
+                { label: t.incomeShort, value: `${(opsKpi.incomeMonth / 1000).toFixed(0)}k ₸`, sub: opsKpi.incomeMonth.toLocaleString('ru-RU') + ' ₸', icon: Wallet, grad: 'from-emerald-600 to-teal-700' },
+                { label: t.materialsOnStock, value: opsKpi.materialsCount, icon: Package, grad: 'from-violet-600 to-indigo-700' }
+              ].map((c) => (
+                <div key={c.label} className={`min-w-[150px] snap-start rounded-2xl p-4 text-white bg-gradient-to-br shrink-0 ${c.grad}`}>
+                  <c.icon className="w-7 h-7 mb-2 opacity-95" />
+                  <p className="text-[10px] font-bold uppercase opacity-90">{c.label}</p>
+                  <p className="text-2xl font-black mt-1">{c.value}</p>
+                  {'sub' in c && c.sub && <p className="text-[10px] opacity-85 mt-0.5">{c.sub}</p>}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Строительство */}
+          <section id="sec-construction" className="space-y-6">
+            <h2 className={`text-sm font-bold uppercase tracking-widest ${dark ? 'text-amber-400' : 'text-amber-700'}`}>
+              {t.navConstruction}
+            </h2>
+            <div className="flex gap-3 overflow-x-auto pb-2 snap-x pl-1 pr-4">
+              {[
+                { l: t.clientsTotal, v: constructionKpi.total },
+                { l: t.buildingNow, v: constructionKpi.building },
+                { l: t.builtTotal, v: constructionKpi.built },
+                { l: t.depositReceived, v: constructionKpi.depositStatus },
+                { l: t.waitingBuild, v: constructionKpi.waiting },
+                { l: t.buildingNowCard, v: constructionKpi.building },
+                { l: t.completedMonth, v: constructionKpi.completedMonth },
+                { l: t.newClientsMonth, v: constructionKpi.newMonth },
+                { l: t.clientsWithDeposit, v: constructionKpi.withDeposit },
+                { l: t.overdueProjects, v: constructionKpi.overdue }
+              ].map((x) => (
+                <div key={x.l} className={`min-w-[130px] snap-start rounded-xl border p-3 shrink-0 ${dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
+                  <p className={`text-[9px] font-bold uppercase ${dark ? 'text-slate-500' : 'text-slate-500'}`}>{x.l}</p>
+                  <p className="text-xl font-black tabular-nums">{x.v}</p>
+                </div>
+              ))}
+            </div>
+            <div className={`rounded-2xl border p-4 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <h3 className="font-bold mb-2">{t.newClientsByDay}</h3>
+              <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
+                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
+                  <LineChart data={clientsNewByDay}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
+                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <YAxis tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <Tooltip contentStyle={{ background: dark ? '#1e293b' : '#fff' }} />
+                    <Line type="monotone" dataKey="count" stroke="#f59e0b" strokeWidth={2} dot={false} name={t.newClients} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className={`rounded-2xl border p-4 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <h3 className="font-bold mb-2">{t.completedHomesByMonth}</h3>
+              <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
+                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
+                  <BarChart data={builtByMonth}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
+                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <YAxis tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <Tooltip contentStyle={{ background: dark ? '#1e293b' : '#fff' }} />
+                    <Bar dataKey="count" fill="#10b981" radius={[4, 4, 0, 0]} name={t.builtTotal} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className={`rounded-2xl border overflow-hidden ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <h3 className="font-bold p-4 pb-0">{t.activeBuildsTable}</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[720px]">
+                  <thead>
+                    <tr className={`border-b ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                      {[t.colClient, t.colObject, t.colStatus, t.colProgress, t.colStart, t.colPlanEnd].map((h) => (
+                        <th key={h} className="text-left py-2 px-3 text-xs font-bold whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activeBuildsRows.length === 0 ? (
+                      <tr><td colSpan={6} className="py-6 text-center text-slate-500">{t.noData}</td></tr>
+                    ) : (
+                      activeBuildsRows.map((r) => (
+                        <tr key={r.id} className={`border-b ${dark ? 'border-slate-800' : 'border-slate-100'}`}>
+                          <td className="py-2 px-3">{r.client}</td>
+                          <td className="py-2 px-3">{r.object}</td>
+                          <td className="py-2 px-3">{r.status}</td>
+                          <td className="py-2 px-3 tabular-nums">{r.progress}</td>
+                          <td className="py-2 px-3 whitespace-nowrap">{r.start}</td>
+                          <td className="py-2 px-3 whitespace-nowrap">{r.planEnd}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          {/* Финансы (транзакции) */}
+          <section id="sec-txfinance" className="space-y-6">
+            <h2 className={`text-sm font-bold uppercase tracking-widest ${dark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+              {t.navTxFinance}
+            </h2>
+            <div className="flex gap-3 overflow-x-auto pb-2 snap-x pl-1 pr-4">
+              {[
+                { l: t.incomeToday, v: txFinanceKpiFixed.incomeToday.toLocaleString('ru-RU') + ' ₸' },
+                { l: t.incomeMonth, v: txFinanceKpiFixed.incomeMonth.toLocaleString('ru-RU') + ' ₸' },
+                { l: t.expenseMonth, v: txFinanceKpiFixed.expenseMonth.toLocaleString('ru-RU') + ' ₸' },
+                { l: t.netProfit, v: txFinanceKpiFixed.netProfit.toLocaleString('ru-RU') + ' ₸' },
+                { l: t.avgPayment, v: txFinanceKpiFixed.avgPayment.toLocaleString('ru-RU') + ' ₸' }
+              ].map((x) => (
+                <div key={x.l} className={`min-w-[140px] snap-start rounded-xl border p-3 shrink-0 ${dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
+                  <p className={`text-[9px] font-bold uppercase ${dark ? 'text-slate-500' : 'text-slate-500'}`}>{x.l}</p>
+                  <p className="text-sm font-black tabular-nums leading-tight mt-1">{x.v}</p>
+                </div>
+              ))}
+            </div>
+            <div className={`rounded-2xl border p-4 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <h3 className="font-bold mb-2">{t.incomeByDay}</h3>
+              <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
+                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
+                  <LineChart data={incomeByDay}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
+                    <XAxis dataKey="date" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <YAxis tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <Tooltip contentStyle={{ background: dark ? '#1e293b' : '#fff' }} formatter={(v: number) => [v.toLocaleString('ru-RU') + ' ₸', '']} />
+                    <Line type="monotone" dataKey="sum" stroke="#10b981" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className={`rounded-2xl border p-4 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <h3 className="font-bold mb-2">{t.incomeByMonth}</h3>
+              <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
+                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
+                  <BarChart data={incomeByMonthChart}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
+                    <XAxis dataKey="month" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <YAxis tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
+                    <Tooltip formatter={(v: number) => [v.toLocaleString('ru-RU') + ' ₸', '']} />
+                    <Bar dataKey="sum" fill="#059669" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+            <div className={`rounded-2xl border overflow-hidden ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <h3 className="font-bold p-4 pb-0">{t.recentTx}</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[640px]">
+                  <thead>
+                    <tr className={`border-b ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                      {[t.colDate, t.colClient, t.colType, t.colAmount, t.colComment].map((h) => (
+                        <th key={h} className="text-left py-2 px-3 text-xs font-bold whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentTxTable.map((r) => (
+                      <tr key={r.id} className={`border-b ${dark ? 'border-slate-800' : 'border-slate-100'}`}>
+                        <td className="py-2 px-3 whitespace-nowrap text-xs">{r.date}</td>
+                        <td className="py-2 px-3 max-w-[120px] truncate">{r.client}</td>
+                        <td className="py-2 px-3">{r.type}</td>
+                        <td className="py-2 px-3 tabular-nums font-semibold">{r.amount.toLocaleString('ru-RU')} ₸</td>
+                        <td className="py-2 px-3 max-w-[200px] truncate text-xs">{r.comment}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          {/* Склад */}
+          <section id="sec-warehouse" className="space-y-6">
+            <h2 className={`text-sm font-bold uppercase tracking-widest ${dark ? 'text-lime-400' : 'text-lime-700'}`}>
+              {t.navWarehouse}
+            </h2>
+            <div className="flex gap-3 overflow-x-auto pb-2 snap-x pl-1 pr-4">
+              {[
+                { l: t.warehouseValue, v: warehouseKpi.totalValue.toLocaleString('ru-RU') + ' ₸' },
+                { l: t.materialsCount, v: warehouseKpi.count },
+                { l: t.purchasesMonth, v: warehouseKpi.purchasesMonth.toLocaleString('ru-RU') + ' ₸' },
+                { l: t.consumptionMonth, v: warehouseKpi.consumptionMonth.toLocaleString('ru-RU') + ' ₸' }
+              ].map((x) => (
+                <div key={x.l} className={`min-w-[150px] snap-start rounded-xl border p-3 shrink-0 ${dark ? 'bg-slate-900 border-slate-700' : 'bg-white border-slate-200'}`}>
+                  <p className={`text-[9px] font-bold uppercase ${dark ? 'text-slate-500' : 'text-slate-500'}`}>{x.l}</p>
+                  <p className="text-sm font-black mt-1">{x.v}</p>
+                </div>
+              ))}
+            </div>
+            <div className={`rounded-2xl border overflow-hidden ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
+              <h3 className="font-bold p-4 pb-0">{t.topMaterials}</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[560px]">
+                  <thead>
+                    <tr className={`border-b ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'}`}>
+                      {[t.colMaterial, t.colUsedMonth, t.colStock, t.colCost].map((h) => (
+                        <th key={h} className="text-left py-2 px-3 text-xs font-bold">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {warehouseKpi.topMaterials.length === 0 ? (
+                      <tr><td colSpan={4} className="py-6 text-center text-slate-500">{t.noData}</td></tr>
+                    ) : (
+                      warehouseKpi.topMaterials.map((r, i) => (
+                        <tr key={i} className={`border-b ${dark ? 'border-slate-800' : 'border-slate-100'}`}>
+                          <td className="py-2 px-3 font-medium">{r.name}</td>
+                          <td className="py-2 px-3 tabular-nums">{r.used.toLocaleString('ru-RU')}</td>
+                          <td className="py-2 px-3 tabular-nums">{r.stock.toLocaleString('ru-RU')}</td>
+                          <td className="py-2 px-3 tabular-nums">{r.cost.toLocaleString('ru-RU')} ₸</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {warehouseKpi.lowStock.length > 0 && (
+              <div className={`rounded-2xl border p-4 ${dark ? 'bg-amber-950/40 border-amber-900' : 'bg-amber-50 border-amber-200'}`}>
+                <h3 className={`font-bold mb-2 ${dark ? 'text-amber-200' : 'text-amber-900'}`}>{t.lowStockAlert}</h3>
+                <ul className="text-sm space-y-1">
+                  {warehouseKpi.lowStock.slice(0, 25).map((p) => (
+                    <li key={p.id} className="flex justify-between gap-2">
+                      <span>{p.name}</span>
+                      <span className="tabular-nums font-bold">{p.quantity} / мин. {p.minQuantity ?? 5}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </section>
 
           {/* График заявок + воронка */}
