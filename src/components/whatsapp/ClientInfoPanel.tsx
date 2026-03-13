@@ -313,6 +313,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       let rawBody = '';
       let data: {
         name?: string | null;
+        city?: string | null;
+        houseSummary?: string | null;
         leadTitle?: string | null;
         lead_title?: string | null;
         comment?: string | null;
@@ -367,6 +369,12 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
 
       const rawName =
         typeof data.name === 'string' ? data.name.trim() : data.name === null ? null : null;
+      const city =
+        typeof data.city === 'string' && data.city.trim().length > 0 ? data.city.trim() : null;
+      const houseSummary =
+        typeof data.houseSummary === 'string' && data.houseSummary.trim().length > 0
+          ? data.houseSummary.trim()
+          : null;
       const rawLeadTitle =
         typeof data.leadTitle === 'string'
           ? data.leadTitle.trim()
@@ -375,7 +383,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
           : data.leadTitle === null
           ? null
           : null;
-      const nextName = rawName && rawName.length > 0 ? rawName : rawLeadTitle && rawLeadTitle.length > 0 ? rawLeadTitle : null;
+      const typeAndArea = houseSummary || rawLeadTitle || null;
       const nextComment =
         typeof data.comment === 'string'
           ? data.comment.trim()
@@ -385,7 +393,22 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
           ? null
           : null;
 
-      const baseName = nextName && nextName.length > 0 ? nextName : AI_NAME_FALLBACKS[0];
+      /** Имя в CRM: город в имени всегда, если найден */
+      let baseName: string;
+      if (city) {
+        if (rawName) baseName = `${rawName} — ${city}`;
+        else if (typeAndArea && !/^лид/i.test(typeAndArea)) baseName = `${typeAndArea} — ${city}`;
+        else baseName = `Клиент — ${city}`;
+      } else {
+        const genericLead = /^лид\s/i.test(typeAndArea ?? '');
+        const nextName =
+          rawName && rawName.length > 0
+            ? rawName
+            : typeAndArea && typeAndArea.length > 0 && !genericLead
+              ? typeAndArea
+              : null;
+        baseName = nextName && nextName.length > 0 ? nextName : AI_NAME_FALLBACKS[0];
+      }
       let uniqueName = baseName;
       if (companyId) {
         try {

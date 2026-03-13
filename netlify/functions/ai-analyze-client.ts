@@ -63,13 +63,56 @@ function buildFallbackComment(messages: AiMessage[]): string {
   return `Запрос клиента: ${short}`;
 }
 
+/** Грубое извлечение города без AI (падежи → именительный по словарю) */
+function extractCityFallback(text: string): string | null {
+  const t = text.replace(/\s+/g, ' ');
+  const cityForms: Record<string, string> = {
+    семее: 'Семей',
+    семей: 'Семей',
+    астане: 'Астана',
+    астана: 'Астана',
+    алматы: 'Алматы',
+    алмаате: 'Алматы',
+    шымкенте: 'Шымкент',
+    шымкент: 'Шымкент',
+    караганде: 'Караганда',
+    караганда: 'Караганда',
+    актобе: 'Актобе',
+    павлодаре: 'Павлодар',
+    павлодар: 'Павлодар',
+    устькаменогорске: 'Усть-Каменогорск',
+    костанае: 'Костанай',
+    костанай: 'Костанай',
+    таразе: 'Тараз',
+    тараз: 'Тараз',
+    атырау: 'Атырау',
+    кызылорде: 'Кызылорда',
+    кызылорда: 'Кызылорда',
+    уральске: 'Уральск',
+    петропавловске: 'Петропавловск',
+  };
+  const m = t.match(
+    /(?:в|во|на|по|из)\s+([А-Яа-яЁёA-Za-z\-]+(?:\s+[А-Яа-яЁё]+)?)/i
+  );
+  if (!m?.[1]) return null;
+  const raw = m[1].trim().toLowerCase().replace(/^г\.?\s*/i, '');
+  return cityForms[raw] ?? (raw.length >= 3 ? m[1].trim().replace(/^./, (c) => c.toUpperCase()) : null);
+}
+
 function buildFallbackResult(messages: AiMessage[]) {
   const clientTexts = messages.filter((m) => m.role === 'client').map((m) => m.text);
+  const combined = clientTexts.join(' ');
   const firstName = clientTexts.map(extractNameFromText).find(Boolean) ?? null;
+  const city = extractCityFallback(combined);
   const comment = buildFallbackComment(messages);
+  const areaM = combined.match(/(\d+)\s*(?:кв\.?\s*м|м²|м2|кв\s*м)/i);
+  const houseSummary =
+    firstName || !areaM ? null : `Дом ~${areaM[1]}м²`;
   return {
     name: firstName,
-    leadTitle: firstName ? null : 'Лид из WhatsApp',
+    city,
+    houseSummary: houseSummary || (firstName ? null : 'Лид из WhatsApp'),
+    leadTitle: houseSummary || (firstName ? null : 'Лид из WhatsApp'),
     comment,
   };
 }
@@ -119,7 +162,13 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: null, leadTitle: null, comment: null }),
+      body: JSON.stringify({
+        name: null,
+        city: null,
+        houseSummary: null,
+        leadTitle: null,
+        comment: null,
+      }),
     });
   }
 
@@ -134,18 +183,15 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   const systemPrompt =
-    'Ты AI помощник CRM строительной компании.\n' +
-    'Твоя задача:\n' +
-    '1) найти имя клиента, если он представился;\n' +
-    '2) если имени нет — придумать короткое и понятное название лида (leadTitle) по контексту переписки;\n' +
-    '3) составить краткий полезный комментарий для менеджеров.\n\n' +
-    'Правила:\n' +
-    '- имя клиента бери только если он сам его назвал;\n' +
-    '- не используй имя менеджера;\n' +
-    '- если имя клиента отсутствует, сгенерируй leadTitle на основе типа объекта, площади, размеров, материала и т.п.;\n' +
-    '- leadTitle должен быть максимально коротким и понятным, например: "Дом SIP ~170м²", "Дом 12.5×35", "Каркас 30м²", "Баня ~40м²", "Дом 2 этажа ~140м²";\n' +
-    '- комментарий должен быть коротким, но информативным;\n' +
-    '- ответ верни строго в формате JSON с полями name, leadTitle и comment.\n';
+    'Ты AI помощник CRM строительной компании (Казахстан/СНГ). Извлекай из переписки структурированные поля.\n\n' +
+    'Поля JSON (все могут быть null):\n' +
+    '- name: имя клиента только если сам представился (одно слово или имя+отчество кратко).\n' +
+    '- city: город строительства/региона в ИМЕНИТЕЛЬНОМ падеже. Примеры нормализации: "в Семее"→"Семей", "в Астане"→"Астана", "в Алматы"→"Алматы", "строить в Караганде"→"Караганда". Если города нет — null.\n' +
+    '- areaSqm: число кв.м дома если явно указано (80, 100.5), иначе null.\n' +
+    '- houseSummary: короткая строка типа дома + площадь, если можно вывести из текста: "Дом SIP ~80м²", "Дом ~100м²", "Каркас 30м²". Если только площадь — "Дом ~Nм²". Если имени нет — обязательно заполни houseSummary или leadTitle по смыслу.\n' +
+    '- leadTitle: дублируй houseSummary или краткий лид без города (для совместимости).\n' +
+    '- comment: краткое описание запроса клиента для менеджера.\n\n' +
+    'Не используй имя менеджера. Ответ только JSON: name, city, areaSqm, houseSummary, leadTitle, comment.';
 
   const chatContext = {
     chatId,
@@ -156,17 +202,11 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   };
 
   const userPrompt =
-    'Вот переписка:\n\n' +
+    'Переписка:\n' +
     JSON.stringify(chatContext, null, 2) +
-    '\n\nОпредели:\n' +
-    '1) имя клиента (если он представился);\n' +
-    '2) если имени нет — короткое название лида leadTitle (по объекту, площади, материалу и т.п.);\n' +
-    '3) краткий комментарий о клиенте для CRM.\n\n' +
-    'Ответ:\n{\n' +
-    '"name": "Александр",\n' +
-    '"leadTitle": "Дом SIP ~170м²",\n' +
-    '"comment": "Интересуется строительством дома из SIP панелей около 170 м². Спрашивает стоимость панелей, монтаж и вентиляцию."\n' +
-    '}\n';
+    '\n\nВерни JSON:\n' +
+    '{"name":null,"city":null,"areaSqm":null,"houseSummary":null,"leadTitle":null,"comment":null}\n' +
+    'Заполни то, что можно извлечь. city всегда в именительном падеже.';
 
   try {
     log('Calling OpenAI for chatId', chatId, 'messages=', messages.length);
@@ -184,7 +224,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         ],
         response_format: { type: 'json_object' },
         temperature: 0.2,
-        max_tokens: 160,
+        max_tokens: 280,
       }),
     });
 
@@ -215,13 +255,28 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       return withCors({
         statusCode: 200,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: null, leadTitle: null, comment: null }),
+        body: JSON.stringify({
+          name: null,
+          city: null,
+          houseSummary: null,
+          leadTitle: null,
+          comment: null,
+        }),
       });
     }
 
     const content = data.choices?.[0]?.message?.content ?? '';
-    let parsed: { name?: string | null; leadTitle?: string | null; comment?: string | null } = {
+    let parsed: {
+      name?: string | null;
+      city?: string | null;
+      areaSqm?: number | null;
+      houseSummary?: string | null;
+      leadTitle?: string | null;
+      comment?: string | null;
+    } = {
       name: null,
+      city: null,
+      houseSummary: null,
       leadTitle: null,
       comment: null,
     };
@@ -233,19 +288,18 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       log('Failed to parse OpenAI JSON content, returning nulls:', e);
     }
 
-    const name =
-      typeof parsed.name === 'string'
-        ? parsed.name.trim() || null
-        : parsed.name === null
-          ? null
-          : null;
-
+    const str = (v: unknown) =>
+      typeof v === 'string' ? v.trim() || null : v === null ? null : null;
+    const name = str(parsed.name);
+    const city = str(parsed.city);
+    let houseSummary = str(parsed.houseSummary);
     const leadTitle =
-      typeof parsed.leadTitle === 'string'
-        ? parsed.leadTitle.trim() || null
-        : parsed.leadTitle === null
-          ? null
-          : null;
+      str(parsed.leadTitle) ||
+      houseSummary ||
+      (typeof parsed.areaSqm === 'number' && parsed.areaSqm > 0
+        ? `Дом ~${parsed.areaSqm}м²`
+        : null);
+    if (!houseSummary && leadTitle) houseSummary = leadTitle;
 
     const comment =
       typeof parsed.comment === 'string'
@@ -254,11 +308,11 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
           ? null
           : null;
 
-    log('Success:', { name, leadTitle, comment });
+    log('Success:', { name, city, houseSummary, leadTitle, comment });
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, leadTitle, comment }),
+      body: JSON.stringify({ name, city, houseSummary, leadTitle, comment }),
     });
   } catch (e) {
     log('OpenAI request failed:', e);
