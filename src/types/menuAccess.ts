@@ -86,6 +86,7 @@ export function canAccessSection(
 /** Определить section по pathname (для guard). */
 export function getSectionByPath(pathname: string): MenuSectionId | null {
   const normalized = pathname.split('?')[0].replace(/\/$/, '') || '/';
+  if (normalized === '/analytics') return 'deals';
   if (normalized === '/client-files' || /^\/clients\/[^/]+\/files/.test(normalized)) return 'clientFiles';
   const section = MENU_SECTIONS.find(
     (s) => s.id !== 'clientFiles' && (normalized === s.path || normalized.startsWith(s.path + '/'))

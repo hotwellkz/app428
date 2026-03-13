@@ -59,7 +59,7 @@ function docToStage(id: string, data: Record<string, unknown>): DealsPipelineSta
   };
 }
 
-function docToDeal(id: string, data: Record<string, unknown>): Deal {
+export function docToDeal(id: string, data: Record<string, unknown>): Deal {
   return {
     id,
     companyId: (data.companyId as string) ?? '',
