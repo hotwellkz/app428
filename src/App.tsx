@@ -96,6 +96,7 @@ const EditTemplate = lazy(withChunkErrorRecovery(() => import('./pages/EditTempl
 const CreateContractWithAdditionalWorks = lazy(withChunkErrorRecovery(() => import('./pages/CreateContractWithAdditionalWorks')));
 const FinishingMaterialsManager = lazy(withChunkErrorRecovery(() => import('./components/materials/FinishingMaterialsManager').then(module => ({ default: module.FinishingMaterialsManager }))));
 const DealsPage = lazy(withChunkErrorRecovery(() => import('./pages/DealsPage')));
+const DealsTrashPage = lazy(withChunkErrorRecovery(() => import('./pages/DealsTrashPage')));
 const KnowledgeBaseSettings = lazy(withChunkErrorRecovery(() => import('./pages/KnowledgeBaseSettings')));
 const QuickRepliesSettings = lazy(withChunkErrorRecovery(() => import('./pages/QuickRepliesSettings')));
 
@@ -267,6 +268,11 @@ const AppContent: React.FC = () => {
             <Route path="/deals" element={
               <ApprovalGuard>
                 <DealsPage />
+              </ApprovalGuard>
+            } />
+            <Route path="/deals/trash" element={
+              <ApprovalGuard>
+                <DealsTrashPage />
               </ApprovalGuard>
             } />
             <Route path="/warehouse/documents" element={

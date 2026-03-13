@@ -4,6 +4,7 @@ import {
   listPipelines,
   listStages,
   subscribeDeals,
+  subscribeTrashedDeals,
   ensureDefaultPipeline,
   listDealActivity
 } from '../lib/firebase/deals';
@@ -125,6 +126,37 @@ export function useDeals(companyId: string | null, pipelineId: string | null) {
     );
     return () => unsub();
   }, [companyId, pipelineId]);
+
+  return { deals, loading, error };
+}
+
+export function useTrashedDeals(companyId: string | null) {
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!companyId) {
+      setDeals([]);
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    setLoading(true);
+    const unsub = subscribeTrashedDeals(
+      companyId,
+      (items) => {
+        setDeals(items);
+        setLoading(false);
+        setError(null);
+      },
+      (err) => {
+        setError(err instanceof Error ? err.message : String(err));
+        setLoading(false);
+      }
+    );
+    return () => unsub();
+  }, [companyId]);
 
   return { deals, loading, error };
 }

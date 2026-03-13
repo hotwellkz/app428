@@ -55,6 +55,8 @@ export interface Deal {
   isArchived?: boolean;
   /** Диалог WhatsApp, привязанный к сделке */
   whatsappConversationId?: string | null;
+  /** Мягкое удаление (корзина); null / отсутствует — сделка активна */
+  deletedAt?: Date | Timestamp | null;
 }
 
 export type DealActivityType =

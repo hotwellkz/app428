@@ -172,6 +172,14 @@
       ]
     },
     {
+      "collectionGroup": "deals",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "deletedAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "deal_activity_log",
       "queryScope": "COLLECTION",
       "fields": [

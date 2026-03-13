@@ -3,6 +3,7 @@ import {
   doc,
   addDoc,
   updateDoc,
+  deleteDoc,
   getDocs,
   getDoc,
   query,
@@ -11,6 +12,7 @@ import {
   serverTimestamp,
   writeBatch,
   onSnapshot,
+  deleteField,
   type Unsubscribe
 } from 'firebase/firestore';
 import { db } from './config';
@@ -82,7 +84,8 @@ function docToDeal(id: string, data: Record<string, unknown>): Deal {
     stageChangedAt: (data.stageChangedAt as Deal['stageChangedAt']) ?? null,
     nextActionAt: (data.nextActionAt as Deal['nextActionAt']) ?? null,
     isArchived: Boolean(data.isArchived),
-    whatsappConversationId: (data.whatsappConversationId as string) ?? null
+    whatsappConversationId: (data.whatsappConversationId as string) ?? null,
+    deletedAt: (data.deletedAt as Deal['deletedAt']) ?? null
   };
 }
 
@@ -215,7 +218,9 @@ export function subscribeDeals(
   return onSnapshot(
     q,
     (snap) => {
-      const list = snap.docs.map((d) => docToDeal(d.id, d.data() as Record<string, unknown>));
+      const list = snap.docs
+        .map((d) => docToDeal(d.id, d.data() as Record<string, unknown>))
+        .filter((d) => d.deletedAt == null);
       if (import.meta.env.DEV) {
         console.log('[Deals] deals snapshot:', { companyId, pipelineId, count: list.length });
       }
@@ -223,6 +228,45 @@ export function subscribeDeals(
     },
     (err) => onError?.(err)
   );
+}
+
+/** Сделки в корзине (по компании). Индекс: companyId + deletedAt */
+export function subscribeTrashedDeals(
+  companyId: string,
+  callback: (deals: Deal[]) => void,
+  onError?: (err: unknown) => void
+): Unsubscribe {
+  const q = query(
+    collection(db, COLLECTION_DEALS),
+    where('companyId', '==', companyId),
+    where('deletedAt', '!=', null),
+    orderBy('deletedAt', 'desc')
+  );
+  return onSnapshot(
+    q,
+    (snap) => {
+      callback(snap.docs.map((d) => docToDeal(d.id, d.data() as Record<string, unknown>)));
+    },
+    (err) => onError?.(err)
+  );
+}
+
+export async function softDeleteDeal(dealId: string): Promise<void> {
+  await updateDoc(doc(db, COLLECTION_DEALS, dealId), {
+    deletedAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function restoreDeal(dealId: string): Promise<void> {
+  await updateDoc(doc(db, COLLECTION_DEALS, dealId), {
+    deletedAt: deleteField(),
+    updatedAt: serverTimestamp()
+  });
+}
+
+export async function permanentDeleteDeal(dealId: string): Promise<void> {
+  await deleteDoc(doc(db, COLLECTION_DEALS, dealId));
 }
 
 export async function createDeal(
@@ -263,7 +307,8 @@ export async function createDeal(
     updatedAt: now,
     stageChangedAt: now,
     nextActionAt: null,
-    isArchived: false
+    isArchived: false,
+    deletedAt: null
   });
   const snap = await getDoc(ref);
   const deal = docToDeal(ref.id, snap.data() as Record<string, unknown>);
