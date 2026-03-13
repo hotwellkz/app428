@@ -70,6 +70,21 @@
     "today": "Сегодня",
     "year": "Год",
     "days": "д",
-    "noData": "Нет данных"
+    "noData": "Нет данных",
+    "filtersButton": "Фильтры",
+    "filtersTitle": "Фильтры аналитики",
+    "applyFilters": "Применить",
+    "resetFilters": "Сбросить фильтры",
+    "periodLabel": "Период",
+    "managerLabel": "Менеджер",
+    "sourceLabel": "Источник",
+    "channelLabel": "Канал",
+    "allManagers": "Все менеджеры",
+    "noManager": "Без менеджера",
+    "sourceAll": "Источник: все",
+    "channelAll": "Канал: все",
+    "channelWhatsapp": "WhatsApp",
+    "channelInstagram": "Instagram (по источнику)",
+    "channelOther": "Без WA"
   }
 }

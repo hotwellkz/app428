@@ -52,7 +52,9 @@ import {
   Zap,
   Radio,
   LayoutDashboard,
-  Clock
+  Clock,
+  Wrench,
+  X
 } from 'lucide-react';
 import ru from '../locales/ru.json';
 import toast from 'react-hot-toast';
@@ -120,6 +122,90 @@ export const AnalyticsPage: React.FC = () => {
   const [salesTarget, setSalesTarget] = useState(() =>
     Number(localStorage.getItem(STORAGE_TARGET) || '0')
   );
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const defaultDateRange = useCallback(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 29);
+    return { from: d.toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) };
+  }, []);
+  const [draftFrom, setDraftFrom] = useState(dateFrom);
+  const [draftTo, setDraftTo] = useState(dateTo);
+  const [draftManager, setDraftManager] = useState(managerId);
+  const [draftSource, setDraftSource] = useState(sourceFilter);
+  const [draftChannel, setDraftChannel] = useState(channelFilter);
+  const [chartHMain, setChartHMain] = useState(320);
+  const [chartHMsg, setChartHMsg] = useState(256);
+  const [chartHPie, setChartHPie] = useState(288);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const apply = () => {
+      const m = mq.matches;
+      setChartHMain(m ? 240 : 320);
+      setChartHMsg(m ? 228 : 256);
+      setChartHPie(m ? 240 : 288);
+    };
+    apply();
+    mq.addEventListener('change', apply);
+    return () => mq.removeEventListener('change', apply);
+  }, []);
+
+  const openFilterSheet = useCallback(() => {
+    setDraftFrom(dateFrom);
+    setDraftTo(dateTo);
+    setDraftManager(managerId);
+    setDraftSource(sourceFilter);
+    setDraftChannel(channelFilter);
+    setMobileFiltersOpen(true);
+  }, [dateFrom, dateTo, managerId, sourceFilter, channelFilter]);
+
+  const applyFilterSheet = useCallback(() => {
+    setDateFrom(draftFrom);
+    setDateTo(draftTo);
+    setManagerId(draftManager);
+    setSourceFilter(draftSource);
+    setChannelFilter(draftChannel);
+    setMobileFiltersOpen(false);
+  }, [draftFrom, draftTo, draftManager, draftSource, draftChannel]);
+
+  const resetFilterSheet = useCallback(() => {
+    const { from, to } = defaultDateRange();
+    setDraftFrom(from);
+    setDraftTo(to);
+    setDraftManager('all');
+    setDraftSource('all');
+    setDraftChannel('all');
+    setDateFrom(from);
+    setDateTo(to);
+    setManagerId('all');
+    setSourceFilter('all');
+    setChannelFilter('all');
+    setMobileFiltersOpen(false);
+  }, [defaultDateRange]);
+
+  const filterChips = useMemo(() => {
+    const chips: { key: string; text: string }[] = [];
+    const df = new Date(dateFrom);
+    const dt = new Date(dateTo);
+    chips.push({
+      key: 'period',
+      text: `📅 ${df.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })} — ${dt.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: '2-digit' })}`
+    });
+    if (managerId === 'all') chips.push({ key: 'mgr', text: `👤 ${t.allManagers}` });
+    else if (managerId === 'none') chips.push({ key: 'mgr', text: `👤 ${t.noManager}` });
+    else
+      chips.push({
+        key: 'mgr',
+        text: `👤 ${managersList.find((m) => m.id === managerId)?.name ?? managerId}`
+      });
+    if (sourceFilter === 'all') chips.push({ key: 'src', text: `📊 ${t.sourceAll}` });
+    else chips.push({ key: 'src', text: `📊 ${t.sourceLabel}: ${sourceFilter}` });
+    if (channelFilter === 'all') chips.push({ key: 'ch', text: `📡 ${t.channelAll}` });
+    else if (channelFilter === 'whatsapp') chips.push({ key: 'ch', text: `📡 ${t.channelWhatsapp}` });
+    else if (channelFilter === 'instagram') chips.push({ key: 'ch', text: `📡 ${t.channelInstagram}` });
+    else chips.push({ key: 'ch', text: `📡 ${t.channelOther}` });
+    return chips;
+  }, [dateFrom, dateTo, managerId, sourceFilter, channelFilter, managersList]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
@@ -637,59 +723,47 @@ export const AnalyticsPage: React.FC = () => {
   return shell(
     <>
       <header
-        className={`sticky top-0 z-30 border-b backdrop-blur-md ${
-          dark ? 'bg-slate-900/90 border-slate-800' : 'bg-white/90 border-slate-200'
+        className={`sticky top-0 z-40 border-b backdrop-blur-md shadow-sm ${
+          dark ? 'bg-slate-900/95 border-slate-800' : 'bg-white/95 border-slate-200'
         }`}
       >
-        <div className="max-w-[1680px] mx-auto px-3 sm:px-5 py-3 flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg">
-                <BarChart3 className="w-6 h-6" />
+        <div className="max-w-[1680px] mx-auto px-3 sm:px-5 py-2 md:py-3 flex flex-col gap-2 md:gap-3">
+          <div className="flex flex-wrap items-center gap-2 md:gap-3">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="p-1.5 md:p-2 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg shrink-0">
+                <BarChart3 className="w-5 h-5 md:w-6 md:h-6" />
               </div>
-              <div>
-                <h1 className="text-lg font-bold tracking-tight">{t.pageTitle}</h1>
-                <p className={`text-xs ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
+              <div className="min-w-0">
+                <h1 className="text-base md:text-lg font-bold tracking-tight truncate">{t.pageTitle}</h1>
+                <p className={`text-[10px] md:text-xs truncate hidden sm:block ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
                   {t.pageSubtitle}
                 </p>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setDark(!dark)}
-              className={`p-2 rounded-xl border ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`}
-            >
+            <button type="button" onClick={() => setDark(!dark)} className={`p-2 rounded-xl border shrink-0 ${dark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-white'}`} aria-label="Тема">
               {dark ? <Sun className="w-5 h-5 text-amber-400" /> : <Moon className="w-5 h-5" />}
             </button>
-            <button
-              type="button"
-              onClick={() => load(true)}
-              className={`p-2 rounded-xl border ${dark ? 'border-slate-700' : 'border-slate-200'}`}
-            >
+            <button type="button" onClick={() => load(true)} className={`p-2 rounded-xl border shrink-0 ${dark ? 'border-slate-700' : 'border-slate-200'}`} aria-label="Обновить">
               <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <div className="flex flex-wrap gap-2 ml-auto">
-              <button
-                type="button"
-                onClick={exportCsv}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold border ${
-                  dark ? 'border-slate-600 bg-slate-800' : 'border-slate-200 bg-white'
-                }`}
-              >
+            <button
+              type="button"
+              onClick={openFilterSheet}
+              className={`md:hidden inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-bold border shrink-0 ${dark ? 'border-violet-500 bg-violet-950 text-violet-200' : 'border-violet-300 bg-violet-50 text-violet-800'}`}
+            >
+              <Wrench className="w-4 h-4" />
+              {t.filtersButton}
+            </button>
+            <div className="flex gap-1.5 md:gap-2 ml-auto shrink-0">
+              <button type="button" onClick={exportCsv} className={`inline-flex items-center gap-1 px-2.5 md:px-3 py-2 rounded-xl text-xs md:text-sm font-semibold border ${dark ? 'border-slate-600 bg-slate-800' : 'border-slate-200 bg-white'}`}>
                 <FileSpreadsheet className="w-4 h-4" /> CSV
               </button>
-              <button
-                type="button"
-                onClick={exportPdf}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md"
-              >
+              <button type="button" onClick={exportPdf} className="inline-flex items-center gap-1 px-2.5 md:px-3 py-2 rounded-xl text-xs md:text-sm font-semibold bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md">
                 <Download className="w-4 h-4" /> PDF
               </button>
             </div>
           </div>
-          <div
-            className={`flex flex-wrap gap-2 p-2 rounded-xl ${dark ? 'bg-slate-800/80' : 'bg-slate-50'}`}
-          >
+          <div className={`hidden md:flex flex-wrap gap-2 p-2 rounded-xl ${dark ? 'bg-slate-800/80' : 'bg-slate-50'}`}>
             <input
               type="date"
               value={dateFrom}
@@ -708,8 +782,8 @@ export const AnalyticsPage: React.FC = () => {
               onChange={(e) => setManagerId(e.target.value)}
               className={`rounded-lg px-2 py-1.5 text-sm border max-w-[160px] ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white'}`}
             >
-              <option value="all">Все менеджеры</option>
-              <option value="none">Без менеджера</option>
+              <option value="all">{t.allManagers}</option>
+              <option value="none">{t.noManager}</option>
               {managersList.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
@@ -721,7 +795,7 @@ export const AnalyticsPage: React.FC = () => {
               onChange={(e) => setSourceFilter(e.target.value)}
               className={`rounded-lg px-2 py-1.5 text-sm border ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white'}`}
             >
-              <option value="all">Источник: все</option>
+              <option value="all">{t.sourceAll}</option>
               <option value="WhatsApp">WhatsApp</option>
               <option value="Instagram">Instagram</option>
               <option value="Google">Google</option>
@@ -733,13 +807,13 @@ export const AnalyticsPage: React.FC = () => {
               onChange={(e) => setChannelFilter(e.target.value)}
               className={`rounded-lg px-2 py-1.5 text-sm border ${dark ? 'bg-slate-900 border-slate-600' : 'bg-white'}`}
             >
-              <option value="all">Канал: все</option>
+              <option value="all">{t.channelAll}</option>
               <option value="whatsapp">WhatsApp</option>
-              <option value="instagram">Instagram (по источнику)</option>
-              <option value="other">Без WA</option>
+              <option value="instagram">{t.channelInstagram}</option>
+              <option value="other">{t.channelOther}</option>
             </select>
           </div>
-          <nav className="flex gap-1 overflow-x-auto pb-1 scrollbar-none">
+          <nav className="flex gap-1 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1 touch-pan-x">
             {sections.map((s) => (
               <button
                 key={s.id}
@@ -763,6 +837,67 @@ export const AnalyticsPage: React.FC = () => {
         </div>
       </header>
 
+      {mobileFiltersOpen && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end md:hidden" role="dialog" aria-modal="true">
+          <button type="button" className="absolute inset-0 bg-black/50 backdrop-blur-sm" aria-label="Закрыть" onClick={() => setMobileFiltersOpen(false)} />
+          <div className={`relative rounded-t-2xl shadow-2xl max-h-[88vh] overflow-hidden flex flex-col ${dark ? 'bg-slate-900 border-t border-slate-700' : 'bg-white border-t border-slate-200'}`}>
+            <div className={`flex items-center justify-between px-4 py-3 border-b shrink-0 ${dark ? 'border-slate-700' : 'border-slate-200'}`}>
+              <h2 className="text-lg font-bold flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-violet-500" />
+                {t.filtersTitle}
+              </h2>
+              <button type="button" onClick={() => setMobileFiltersOpen(false)} className={`p-2 rounded-lg ${dark ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`} aria-label="Закрыть">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="overflow-y-auto flex-1 px-4 py-4 space-y-4 min-h-0">
+              <div>
+                <label className={`block text-xs font-bold mb-1 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{t.periodLabel}</label>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} className={`flex-1 min-w-[140px] rounded-xl px-3 py-2.5 text-sm border ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`} />
+                  <span className="text-slate-500">—</span>
+                  <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} className={`flex-1 min-w-[140px] rounded-xl px-3 py-2.5 text-sm border ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`} />
+                </div>
+              </div>
+              <div>
+                <label className={`block text-xs font-bold mb-1 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{t.managerLabel}</label>
+                <select value={draftManager} onChange={(e) => setDraftManager(e.target.value)} className={`w-full rounded-xl px-3 py-2.5 text-sm border ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`}>
+                  <option value="all">{t.allManagers}</option>
+                  <option value="none">{t.noManager}</option>
+                  {managersList.map((m) => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={`block text-xs font-bold mb-1 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{t.sourceLabel}</label>
+                <select value={draftSource} onChange={(e) => setDraftSource(e.target.value)} className={`w-full rounded-xl px-3 py-2.5 text-sm border ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`}>
+                  <option value="all">{t.sourceAll}</option>
+                  <option value="WhatsApp">WhatsApp</option>
+                  <option value="Instagram">Instagram</option>
+                  <option value="Google">Google</option>
+                  <option value="Звонок">Звонок</option>
+                  <option value="Сайт">Сайт</option>
+                </select>
+              </div>
+              <div>
+                <label className={`block text-xs font-bold mb-1 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{t.channelLabel}</label>
+                <select value={draftChannel} onChange={(e) => setDraftChannel(e.target.value)} className={`w-full rounded-xl px-3 py-2.5 text-sm border ${dark ? 'bg-slate-800 border-slate-600' : 'bg-slate-50 border-slate-200'}`}>
+                  <option value="all">{t.channelAll}</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="instagram">{t.channelInstagram}</option>
+                  <option value="other">{t.channelOther}</option>
+                </select>
+              </div>
+            </div>
+            <div className={`p-4 pt-2 border-t space-y-2 shrink-0 pb-[max(1rem,env(safe-area-inset-bottom))] ${dark ? 'border-slate-700 bg-slate-900' : 'border-slate-200 bg-slate-50'}`}>
+              <button type="button" onClick={applyFilterSheet} className="w-full py-3 rounded-xl bg-violet-600 text-white font-bold text-base shadow-lg">{t.applyFilters}</button>
+              <button type="button" onClick={resetFilterSheet} className={`w-full py-2.5 rounded-xl text-sm font-semibold border ${dark ? 'border-slate-600 text-slate-300' : 'border-slate-300 text-slate-700'}`}>{t.resetFilters}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {loading && !deals.length ? (
         <div className="flex justify-center py-32">
           <LoadingSpinner />
@@ -770,8 +905,18 @@ export const AnalyticsPage: React.FC = () => {
       ) : (
         <div
           ref={reportRef}
-          className="max-w-[1680px] mx-auto px-3 sm:px-5 py-6 space-y-10 pb-24"
+          className="max-w-[1680px] mx-auto px-3 sm:px-5 py-4 md:py-6 space-y-8 md:space-y-10 pb-24"
         >
+          <div className="md:hidden flex flex-wrap gap-2 py-2">
+            {filterChips.map((c, i) => (
+              <span
+                key={`${c.key}-${i}`}
+                className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-semibold max-w-full truncate border ${dark ? 'bg-slate-800 border-slate-600 text-slate-200' : 'bg-white border-slate-200 text-slate-800 shadow-sm'}`}
+              >
+                {c.text}
+              </span>
+            ))}
+          </div>
           {/* Директорская панель */}
           <section id="sec-director" className="space-y-4">
             <div className="flex flex-wrap items-end gap-2 justify-between">
@@ -789,7 +934,7 @@ export const AnalyticsPage: React.FC = () => {
                 </p>
               </div>
             </div>
-            <div className="flex gap-4 overflow-x-auto pb-3 snap-x scrollbar-thin -mx-1 px-1 w-full">
+            <div className="flex gap-3 sm:gap-4 overflow-x-auto pb-3 snap-x snap-mandatory scrollbar-thin pl-1 pr-4 -mx-1 w-full touch-pan-x [scrollbar-width:thin]">
               {[
                 {
                   label: t.applicationsToday,
@@ -862,7 +1007,7 @@ export const AnalyticsPage: React.FC = () => {
               ].map((c) => (
                 <div
                   key={c.label}
-                  className={`min-w-[168px] sm:min-w-[188px] lg:min-w-0 lg:flex-1 snap-start rounded-2xl p-5 text-white shadow-xl bg-gradient-to-br shrink-0 ${c.grad}`}
+                  className={`min-w-[152px] sm:min-w-[168px] md:min-w-[188px] lg:min-w-0 lg:flex-1 snap-start rounded-2xl p-4 sm:p-5 text-white shadow-xl bg-gradient-to-br shrink-0 ${c.grad}`}
                 >
                   <c.icon className="w-9 h-9 opacity-95 mb-3" />
                   <p className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wide opacity-90 leading-tight">
@@ -926,8 +1071,8 @@ export const AnalyticsPage: React.FC = () => {
                   ))}
                 </div>
               </div>
-              <div className="h-80 w-full min-w-0" style={{ minHeight: 320 }}>
-                <ResponsiveContainer width="100%" height={320} debounce={80}>
+              <div className="w-full min-w-0" style={{ minHeight: chartHMain }}>
+                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
                   <LineChart data={leadsDays}>
                     <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
                     <XAxis dataKey="date" tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
@@ -958,8 +1103,8 @@ export const AnalyticsPage: React.FC = () => {
             >
               <h2 className="text-base font-bold mb-1">{t.funnelTitle}</h2>
               <p className={`text-xs mb-4 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>{t.funnelHint}</p>
-              <div className="h-80 w-full min-w-0 shrink-0" style={{ minHeight: 320 }}>
-                <ResponsiveContainer width="100%" height={320} debounce={80}>
+              <div className="w-full min-w-0 shrink-0" style={{ minHeight: chartHMain }}>
+                <ResponsiveContainer width="100%" height={chartHMain} debounce={80}>
                   <BarChart data={funnelData} layout="vertical" margin={{ left: 4, right: 24 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
                     <XAxis type="number" tick={{ fill: dark ? '#94a3b8' : '#64748b', fontSize: 11 }} />
@@ -1025,8 +1170,8 @@ export const AnalyticsPage: React.FC = () => {
               className={`rounded-2xl border p-5 w-full ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
             >
               <h3 className="font-bold mb-4">{t.messageActivity}</h3>
-              <div className="h-64 w-full min-w-0" style={{ minHeight: 256 }}>
-                <ResponsiveContainer width="100%" height={256} debounce={80}>
+              <div className="w-full min-w-0" style={{ minHeight: chartHMsg }}>
+                <ResponsiveContainer width="100%" height={chartHMsg} debounce={80}>
                   <LineChart data={messagesPerDay}>
                     <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
                     <XAxis dataKey="date" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
@@ -1120,8 +1265,8 @@ export const AnalyticsPage: React.FC = () => {
               <h3 className="font-bold mb-4 flex items-center gap-2">
                 <PieIcon className="w-5 h-5 shrink-0" /> {t.leadSources}
               </h3>
-              <div className="h-72 w-full min-w-0 shrink-0" style={{ minHeight: 288 }}>
-                <ResponsiveContainer width="100%" height={288} debounce={80}>
+              <div className="w-full min-w-0 shrink-0" style={{ minHeight: chartHPie }}>
+                <ResponsiveContainer width="100%" height={chartHPie} debounce={80}>
                   <PieChart>
                     <Pie
                       data={sourcePie.length ? sourcePie : [{ name: t.noData, value: 1 }]}
