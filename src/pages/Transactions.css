@@ -1,4 +1,5 @@
-/* Страница транзакций: скролл без видимого scrollbar; dnd-kit видит этот контейнер как scroll ancestor */
+/* Скролл без полосы; dnd-kit + автоскролл при drag используют этот контейнер */
+.transactions-container.transactions-scroll-container,
 .transactions-scroll-container {
   overflow-y: auto;
   overflow-x: hidden;
@@ -8,6 +9,7 @@
   -ms-overflow-style: none;
 }
 
+.transactions-container::-webkit-scrollbar,
 .transactions-scroll-container::-webkit-scrollbar {
   display: none;
   width: 0;

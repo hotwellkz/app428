@@ -166,30 +166,75 @@ export const Transactions: React.FC = () => {
   );
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const pointerYRef = useRef<number | null>(null);
+  const autoScrollRafRef = useRef(0);
+
+  const trackPointer = useCallback((e: Event) => {
+    const ev = e as TouchEvent & MouseEvent;
+    if (ev.touches?.[0]) pointerYRef.current = ev.touches[0].clientY;
+    else if (typeof ev.clientY === 'number') pointerYRef.current = ev.clientY;
+  }, []);
+
+  const stopDragAutoScroll = useCallback(() => {
+    if (autoScrollRafRef.current) {
+      cancelAnimationFrame(autoScrollRafRef.current);
+      autoScrollRafRef.current = 0;
+    }
+    pointerYRef.current = null;
+    window.removeEventListener('touchmove', trackPointer, true);
+    window.removeEventListener('pointermove', trackPointer, true);
+  }, [trackPointer]);
+
+  const runDragAutoScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    const y = pointerYRef.current;
+    if (el && y != null) {
+      const rect = el.getBoundingClientRect();
+      const margin = 100;
+      const speed = 36;
+      if (y > rect.bottom - margin) el.scrollTop += speed;
+      else if (y < rect.top + margin) el.scrollTop -= speed;
+    }
+    autoScrollRafRef.current = requestAnimationFrame(runDragAutoScroll);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (autoScrollRafRef.current) cancelAnimationFrame(autoScrollRafRef.current);
+      window.removeEventListener('touchmove', trackPointer, true);
+      window.removeEventListener('pointermove', trackPointer, true);
+    },
+    [trackPointer]
+  );
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveId(event.active.id as string);
+    const ev = event.activatorEvent as TouchEvent | MouseEvent | undefined;
+    if (ev?.touches?.[0]) pointerYRef.current = ev.touches[0].clientY;
+    else if (ev && 'clientY' in ev) pointerYRef.current = ev.clientY;
+    window.addEventListener('touchmove', trackPointer, { capture: true, passive: true });
+    window.addEventListener('pointermove', trackPointer, { capture: true, passive: true });
+    autoScrollRafRef.current = requestAnimationFrame(runDragAutoScroll);
   };
 
-  /** Авто-прокрутка по нижнему/верхнему краю контейнера (позиция перетаскиваемой карточки) */
+  /** Доп. прокрутка по rect карточки (desktop / когда есть translated) */
   const handleDragMove = useCallback((event: DragMoveEvent) => {
     const el = scrollContainerRef.current;
     const translated = event.active.rect.current.translated;
     if (!el || !translated) return;
-    const clientY = translated.top + translated.height / 2;
+    pointerYRef.current = translated.top + translated.height / 2;
+    const clientY = pointerYRef.current;
     const rect = el.getBoundingClientRect();
     const margin = 80;
-    const speed = 26;
-    if (clientY > rect.bottom - margin) {
-      el.scrollTop += speed;
-    } else if (clientY < rect.top + margin) {
-      el.scrollTop -= speed;
-    }
+    const speed = 28;
+    if (clientY > rect.bottom - margin) el.scrollTop += speed;
+    else if (clientY < rect.top + margin) el.scrollTop -= speed;
   }, []);
 
   const navigate = useNavigate();
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    stopDragAutoScroll();
     const { active, over } = event;
     setActiveId(null);
     
@@ -349,7 +394,7 @@ export const Transactions: React.FC = () => {
 
       <div
         ref={scrollContainerRef}
-        className="transactions-scroll-container w-full"
+        className="transactions-container transactions-scroll-container w-full"
         style={{ height: '100dvh', maxHeight: '100vh' }}
       >
         <PendingTransactionsProvider>
@@ -364,7 +409,10 @@ export const Transactions: React.FC = () => {
             onDragStart={handleDragStart}
             onDragMove={handleDragMove}
             onDragEnd={handleDragEnd}
-            onDragCancel={() => setActiveId(null)}
+            onDragCancel={() => {
+              stopDragAutoScroll();
+              setActiveId(null);
+            }}
           >
             <div className="relative min-h-screen pb-8">
               <RayBackground theme="light" />
