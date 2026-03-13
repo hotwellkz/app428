@@ -118,7 +118,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
   mediaQuickReplies = [],
   onMediaQuickReplySelect
 }) => {
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  /** Мобильная камера: capture=environment → нативная камера */
+  const cameraCaptureRef = useRef<HTMLInputElement>(null);
+  /** ПК / fallback: без capture → обычный выбор файла */
+  const cameraPickerRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -235,9 +238,20 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const showSend = hasText || hasAttachment;
   const isBusy = sending;
 
+  const preferCameraCapture =
+    typeof window !== 'undefined' &&
+    (window.matchMedia('(pointer: coarse)').matches ||
+      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent));
+
   const openCamera = () => {
     setShowAttachmentSheet(false);
-    cameraInputRef.current?.click();
+    if (preferCameraCapture) cameraCaptureRef.current?.click();
+    else cameraPickerRef.current?.click();
+  };
+
+  const openCameraToolbar = () => {
+    if (preferCameraCapture) cameraCaptureRef.current?.click();
+    else cameraPickerRef.current?.click();
   };
   const openGallery = () => {
     setShowAttachmentSheet(false);
@@ -497,7 +511,33 @@ const ChatInput: React.FC<ChatInputProps> = ({
           </>
         )}
         {onCameraCapture && (
-          <input ref={cameraInputRef} type="file" accept={ACCEPT_CAMERA} capture="environment" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) onCameraCapture(f); e.target.value = ''; }} aria-label="Камера" />
+          <>
+            <input
+              ref={cameraCaptureRef}
+              type="file"
+              accept="image/*,video/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onCameraCapture(f);
+                e.target.value = '';
+              }}
+              aria-label="Камера"
+            />
+            <input
+              ref={cameraPickerRef}
+              type="file"
+              accept="image/*,video/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) onCameraCapture(f);
+                e.target.value = '';
+              }}
+              aria-label="Фото или видео с устройства"
+            />
+          </>
         )}
 
         {/* Контейнер ввода: [слева иконки] [textarea на всю ширину] [справа иконки + отправить] */}
@@ -637,7 +677,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   {onCameraCapture && showCameraButton && (
                     <button
                       type="button"
-                      onClick={() => cameraInputRef.current?.click()}
+                      onClick={openCameraToolbar}
                       disabled={disabled || isRecordingVoice}
                       title="Камера"
                       className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 md:h-auto md:w-auto md:p-2"

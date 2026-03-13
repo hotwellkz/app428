@@ -816,42 +816,99 @@ const WhatsAppChat: React.FC = () => {
     ]
   );
 
-  const handleCameraCapture = useCallback(
+  /** Сразу отправить фото/видео с камеры (тот же pipeline, что и вложение + отправить) */
+  const sendCameraMediaNow = useCallback(
     async (file: File) => {
+      if (incognitoMode) return;
+      const phone = selectedItem?.phone ?? selectedItem?.client?.phone;
+      if (!phone || phone === '…' || !companyId || !selectedId || uploadState !== 'idle') return;
+
       setSendError(null);
+      let uploadFile: File = file;
       const isImage = file.type.startsWith('image/');
       const isVideo = file.type.startsWith('video/');
+
       if (isImage) {
         setUploadState('uploading');
         try {
-          const compressed = await compressImage(file);
-          if (compressed.size > MAX_BYTES) {
+          uploadFile = await compressImage(file);
+          if (uploadFile.size > MAX_BYTES) {
             setSendError(`Файл слишком большой. Максимум ${MAX_ATTACHMENT_MB} МБ.`);
             setUploadState('idle');
             return;
           }
-          const preview = URL.createObjectURL(compressed);
-          setPendingAttachment({ file: compressed, preview });
         } catch (err) {
           console.error('Image compress error:', err);
           setSendError('Не удалось обработать фото.');
-        } finally {
           setUploadState('idle');
+          return;
         }
-        return;
-      }
-      if (isVideo) {
+      } else if (isVideo) {
         const validation = validateVideoFile(file, MAX_BYTES);
         if (!validation.ok) {
           setSendError(validation.error ?? 'Видео не подходит.');
           return;
         }
-        setPendingAttachment({ file });
+      } else {
+        setSendError('Выберите фото или видео.');
         return;
       }
-      setSendError('Выберите фото или видео.');
+
+      const caption = inputText.trim();
+      setUploadState('uploading');
+      try {
+        const path = `${companyId}/${WHATSAPP_MEDIA_PREFIX}/${selectedId}/${Date.now()}_${sanitizeFileName(uploadFile.name)}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from(CLIENTS_BUCKET)
+          .upload(path, uploadFile, { upsert: false });
+        if (uploadError) {
+          setSendError('Ошибка загрузки файла. Попробуйте ещё раз.');
+          return;
+        }
+        const { data: urlData } = supabase.storage.from(CLIENTS_BUCKET).getPublicUrl(uploadData.path);
+        setUploadState('sending');
+        const res = await fetch(SEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chatId: phone,
+            contentUri: urlData.publicUrl,
+            attachmentType: getAttachmentType(uploadFile),
+            fileName: uploadFile.name,
+            text: caption ? formatMessageForWhatsApp(caption) : undefined,
+            repliedToMessageId: replyToMessage?.id ?? undefined,
+            companyId: companyId ?? undefined
+          })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          setInputText('');
+          setSendError(null);
+          setReplyToMessage(null);
+        } else {
+          const d = data as { error?: string };
+          setSendError(d?.error ?? 'Не удалось отправить.');
+        }
+      } finally {
+        setUploadState('idle');
+      }
     },
-    []
+    [
+      incognitoMode,
+      selectedItem,
+      companyId,
+      selectedId,
+      uploadState,
+      inputText,
+      replyToMessage
+    ]
+  );
+
+  const handleCameraCapture = useCallback(
+    (file: File) => {
+      void sendCameraMediaNow(file);
+    },
+    [sendCameraMediaNow]
   );
 
   const sendVoiceBlobRef = useRef<(blob: Blob) => void>(() => {});
