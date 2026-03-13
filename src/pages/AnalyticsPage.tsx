@@ -155,9 +155,10 @@ export const AnalyticsPage: React.FC = () => {
         const msg = await fetchMessagesSince(companyId, since, 8000, !force, menuAccess);
         setMessages(msg);
         if (msg.length === 0 && d.length > 0) {
-          toast('Для графиков WhatsApp создайте индекс: whatsappMessages (companyId + createdAt)', {
-            duration: 5000
-          });
+          toast(
+            'Сообщения WhatsApp: нужен индекс Firestore. Выполните: firebase deploy --only firestore:indexes (коллекция whatsappMessages: companyId + createdAt).',
+            { duration: 8000 }
+          );
         }
       } catch (e) {
         if (e instanceof AnalyticsForbiddenError) {
@@ -853,8 +854,8 @@ export const AnalyticsPage: React.FC = () => {
               <p className={`text-xs mb-4 ${dark ? 'text-slate-400' : 'text-slate-500'}`}>
                 Этапы CRM · количество · конверсия между этапами (%)
               </p>
-              <div className="h-80 w-full min-w-0">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-80 w-full min-w-0 shrink-0" style={{ minHeight: 320 }}>
+                <ResponsiveContainer width="100%" height={320} debounce={80}>
                   <BarChart data={funnelData} layout="vertical" margin={{ left: 4, right: 24 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
                     <XAxis type="number" tick={{ fill: dark ? '#94a3b8' : '#64748b', fontSize: 11 }} />
@@ -909,8 +910,8 @@ export const AnalyticsPage: React.FC = () => {
                   ))}
                 </div>
               </div>
-              <div className="h-80 w-full min-w-0">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-80 w-full min-w-0 shrink-0" style={{ minHeight: 320 }}>
+                <ResponsiveContainer width="100%" height={320} debounce={80}>
                   <LineChart data={leadsDays}>
                     <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
                     <XAxis dataKey="date" tick={{ fontSize: 10, fill: dark ? '#94a3b8' : '#64748b' }} />
@@ -971,8 +972,8 @@ export const AnalyticsPage: React.FC = () => {
                 className={`rounded-2xl border p-5 ${dark ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}
               >
                 <h3 className="font-bold mb-4">Message activity — входящие / день</h3>
-                <div className="h-64 w-full min-w-0">
-                  <ResponsiveContainer width="100%" height="100%">
+                <div className="h-64 w-full min-w-0 shrink-0" style={{ minHeight: 256 }}>
+                  <ResponsiveContainer width="100%" height={256} debounce={80}>
                     <LineChart data={messagesPerDay}>
                       <CartesianGrid strokeDasharray="3 3" stroke={dark ? '#334155' : '#e2e8f0'} />
                       <XAxis dataKey="date" tick={{ fontSize: 9, fill: dark ? '#94a3b8' : '#64748b' }} />
@@ -1067,8 +1068,8 @@ export const AnalyticsPage: React.FC = () => {
               <h3 className="font-bold mb-4 flex items-center gap-2">
                 <PieIcon className="w-5 h-5" /> Lead Sources
               </h3>
-              <div className="h-72 w-full min-w-0">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-72 w-full min-w-0 shrink-0" style={{ minHeight: 288 }}>
+                <ResponsiveContainer width="100%" height={288} debounce={80}>
                   <PieChart>
                     <Pie
                       data={sourcePie.length ? sourcePie : [{ name: 'Нет данных', value: 1 }]}
