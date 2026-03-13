@@ -16,7 +16,37 @@
 |------------|----------|
 | `WAZZUP_API_KEY` | API Wazzup |
 | `WAZZUP_CHANNEL_ID` | Channel ID канала **WhatsApp** |
-| `WAZZUP_INSTAGRAM_CHANNEL_ID` | **Обязателен для ответов в Instagram.** UUID канала **Instagram** в Wazzup (кабинет → Каналы). Без него запрос уйдёт с WhatsApp `channelId` → ошибка **WRONG_TRANSPORT**. |
+| `WAZZUP_INSTAGRAM_CHANNEL_ID` | **Обязателен для ответов в Instagram.** UUID канала **Instagram** в Wazzup. Это **не** ID WhatsApp-канала. Без него — ошибка **WRONG_TRANSPORT**. |
+
+## Где взять `WAZZUP_INSTAGRAM_CHANNEL_ID`
+
+В статьях Wazzup ID канала в явном виде не подписан, но он — у **отдельной строки канала Instagram** в кабинете (у каждого мессенджера свой канал и свой UUID).
+
+### 1. Сначала должен быть канал Instagram
+
+По инструкции **[Как подключить Instagram API](https://wazzup24.ru/help/how-to-configurate/podkljuchit-instagram-api/)** (шаг 6): личный кабинет Wazzup → **«Каналы»** → **«Добавить канал»** → **Instagram** → авторизация Facebook/Meta → выбор аккаунта → **«Добавить»**. После этого в списке каналов появляется **отдельная строка Instagram** (директ и при необходимости комментарии) — это и есть тот канал, чей UUID нужен в env.
+
+Статья **[Настройка комментариев из Instagram](https://wazzup24.ru/help/how-to-configurate/nastrojka-kommentariev-iz-instagram/)** про то же место: **«Каналы»** → **шестерёнка** у строки канала → карточка настроек (комментарии, фильтры). Эта строка — ваш Instagram-канал; его UUID и есть `WAZZUP_INSTAGRAM_CHANNEL_ID`.
+
+### 2. Надёжный способ — API Wazzup
+
+С тем же ключом, что и `WAZZUP_API_KEY`, запросите список каналов (в документации Wazzup раздел **«Работа с каналами»**, API v3):
+
+```http
+GET https://api.wazzup24.com/v3/channels
+Authorization: Bearer <WAZZUP_API_KEY>
+```
+
+В ответе найдите объект канала, у которого тип/транспорт **Instagram** (не WhatsApp). Поле **`id`** (UUID вида `b96a353b-…`) скопируйте в Netlify как **`WAZZUP_INSTAGRAM_CHANNEL_ID`**.
+
+Альтернатива: в теле **входящего webhook** от Wazzup у сообщений из Instagram уже есть **`channelId`** — это как раз ID Instagram-канала (можно один раз посмотреть в логах после сообщения из Direct).
+
+### 3. Что не путать
+
+| Переменная | Канал в Wazzup |
+|------------|----------------|
+| `WAZZUP_CHANNEL_ID` | WhatsApp (или WABA) |
+| `WAZZUP_INSTAGRAM_CHANNEL_ID` | **Только** Instagram API (отдельная строка в «Каналы») |
 
 ## Настройка в кабинете Wazzup (вручную)
 
