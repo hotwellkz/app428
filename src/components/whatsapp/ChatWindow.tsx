@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause, User, Shield } from 'lucide-react';
+import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause, User, Shield, Send, Trash2 } from 'lucide-react';
 import ChatInput from './ChatInput';
 import { WhatsAppCalculatorDrawer } from './WhatsAppCalculatorDrawer';
 import MessageBubble from './MessageBubble';
@@ -44,6 +44,9 @@ interface ChatWindowProps {
   /** Время начала записи (Date.now()) для таймера */
   recordingStartedAt?: number | null;
   onVoiceRecordCancel?: () => void;
+  /** Запись закреплена свайпом вверх — отпускание не отправляет */
+  voiceRecordingLocked?: boolean;
+  onVoiceLock?: () => void;
   onCameraCapture?: (file: File) => void;
   showCameraButton?: boolean;
   /** Режим выбора сообщений */
@@ -113,36 +116,85 @@ interface ChatWindowProps {
 
 const CHAT_HEADER_HEIGHT = 56;
 
+function formatVoiceTimer(totalSec: number) {
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
 function VoiceRecordingStrip({
   recordingStartedAt,
-  onCancel
+  locked,
+  onCancel,
+  onSend
 }: {
   recordingStartedAt: number;
+  locked: boolean;
   onCancel?: () => void;
+  onSend?: () => void;
 }) {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
     const update = () => setSeconds(Math.floor((Date.now() - recordingStartedAt) / 1000));
     update();
-    const t = setInterval(update, 1000);
+    const t = setInterval(update, 250);
     return () => clearInterval(t);
   }, [recordingStartedAt]);
   return (
-    <div className="flex-none flex items-center gap-3 px-3 py-2 bg-red-50 border-t border-red-200 rounded-t-lg">
-      <span className="flex items-center gap-1.5 text-red-700 font-mono text-sm tabular-nums">
-        <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" aria-hidden />
-        {seconds} с
-      </span>
-      <span className="flex-1 text-xs text-red-600">Свайп влево для отмены</span>
-      {onCancel && (
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-xs font-medium text-red-700 hover:underline"
-        >
-          Отмена
-        </button>
-      )}
+    <div className="flex-none flex flex-col gap-2 px-3 py-3 bg-[#1e2a30] border-t border-[#2a3942] rounded-t-xl safe-area-pb">
+      <div className="flex items-center gap-3 min-h-[44px]">
+        <div className="flex items-center gap-2 text-white">
+          <span className="relative flex h-3 w-3">
+            <span className="absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75 animate-ping" />
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+          </span>
+          <span className="font-mono text-base tabular-nums font-semibold tracking-wide">
+            {formatVoiceTimer(seconds)}
+          </span>
+        </div>
+        <div className="flex-1 min-w-0">
+          {locked ? (
+            <p className="text-sm text-[#8696a0]">Запись закреплена · Отправьте или удалите</p>
+          ) : (
+            <p className="text-xs text-[#8696a0] leading-tight">
+              Отпустите — отправить · Тяните <span className="text-emerald-400">↑</span> — без удержания
+            </p>
+          )}
+        </div>
+        {locked && (
+          <div className="flex items-center gap-2 shrink-0">
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-[#2a3942] text-[#ea0038] hover:bg-[#3d4a54]"
+                aria-label="Удалить запись"
+              >
+                <Trash2 className="w-5 h-5" />
+              </button>
+            )}
+            {onSend && (
+              <button
+                type="button"
+                onClick={onSend}
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-[#00a884] text-white hover:bg-[#06cf9c]"
+                aria-label="Отправить голосовое"
+              >
+                <Send className="w-5 h-5" />
+              </button>
+            )}
+          </div>
+        )}
+        {!locked && onCancel && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="shrink-0 text-xs font-medium text-[#8696a0] hover:text-white underline"
+          >
+            Отмена
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -865,6 +917,8 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     isRecordingVoice = false,
     recordingStartedAt = null,
     onVoiceRecordCancel,
+    voiceRecordingLocked = false,
+    onVoiceLock,
     onCameraCapture,
     showCameraButton = false,
     selectedMessageIds = [],
@@ -1363,7 +1417,9 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
       {isRecordingVoice && recordingStartedAt != null && (
         <VoiceRecordingStrip
           recordingStartedAt={recordingStartedAt}
+          locked={voiceRecordingLocked}
           onCancel={onVoiceRecordCancel}
+          onSend={onStopVoice}
         />
       )}
       {pendingAttachment && (
@@ -1418,6 +1474,8 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
           isRecordingVoice={isRecordingVoice}
           recordingStartedAt={recordingStartedAt}
           onVoiceRecordCancel={onVoiceRecordCancel}
+          voiceRecordingLocked={voiceRecordingLocked}
+          onVoiceLock={onVoiceLock}
           onCameraCapture={onCameraCapture}
           showCameraButton={showCameraButton}
           onAiReply={incognitoMode ? undefined : handleAiReply}

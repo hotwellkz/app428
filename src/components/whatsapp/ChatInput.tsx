@@ -65,6 +65,9 @@ interface ChatInputProps {
   onStartVoice?: () => void;
   onStopVoice?: () => void;
   isRecordingVoice?: boolean;
+  voiceRecordingLocked?: boolean;
+  /** Свайп вверх во время удержания — закрепить запись */
+  onVoiceLock?: () => void;
   /** Съёмка фото/видео с камеры (на mobile — нативная камера) */
   onCameraCapture?: (file: File) => void;
   /** Показывать кнопку камеры (mobile WhatsApp-style) */
@@ -102,6 +105,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onStartVoice,
   onStopVoice,
   isRecordingVoice = false,
+  voiceRecordingLocked = false,
+  onVoiceLock,
   onCameraCapture,
   showCameraButton = false,
   onAiReply,
@@ -120,6 +125,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   const voicePointerUsedRef = useRef(false);
+  const voicePointerStartYRef = useRef<number | null>(null);
+  const voiceLockedLocalRef = useRef(false);
+  const SWIPE_LOCK_PX = 56;
   const [showAttachmentSheet, setShowAttachmentSheet] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [selectedQuickIndex, setSelectedQuickIndex] = useState(0);
@@ -396,13 +404,43 @@ const ChatInput: React.FC<ChatInputProps> = ({
     else if (!showSend && onStartVoice && !hasAttachment) onStartVoice();
   };
 
-  const handleVoicePointerDown = () => {
-    if (!onStartVoice || hasAttachment) return;
+  const handleVoicePointerDown = (e: React.PointerEvent) => {
+    if (!onStartVoice || !onStopVoice || hasAttachment) return;
+    e.preventDefault();
     voicePointerUsedRef.current = true;
+    voiceLockedLocalRef.current = false;
+    voicePointerStartYRef.current = e.clientY;
     onStartVoice();
-  };
-  const handleVoicePointerUp = () => {
-    if (onStopVoice && isRecordingVoice) onStopVoice();
+
+    const onDocMove = (ev: PointerEvent) => {
+      const y = ev.clientY;
+      const startY = voicePointerStartYRef.current;
+      if (
+        onVoiceLock &&
+        !voiceLockedLocalRef.current &&
+        startY != null &&
+        startY - y >= SWIPE_LOCK_PX
+      ) {
+        voiceLockedLocalRef.current = true;
+        onVoiceLock();
+      }
+    };
+
+    const teardown = () => {
+      document.removeEventListener('pointermove', onDocMove);
+      document.removeEventListener('pointerup', onDocUp);
+      document.removeEventListener('pointercancel', onDocUp);
+      voicePointerStartYRef.current = null;
+    };
+
+    const onDocUp = () => {
+      teardown();
+      if (!voiceLockedLocalRef.current && onStopVoice) onStopVoice();
+    };
+
+    document.addEventListener('pointermove', onDocMove, { passive: true });
+    document.addEventListener('pointerup', onDocUp, { passive: true });
+    document.addEventListener('pointercancel', onDocUp, { passive: true });
   };
 
   const handleEmojiClick = useCallback(
@@ -611,22 +649,40 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   <button
                     type="button"
                     onClick={(e) => handleActionClick(e)}
-                    onPointerDown={!showSend && onStartVoice && !hasAttachment ? handleVoicePointerDown : undefined}
-                    onPointerUp={onStopVoice && isRecordingVoice ? handleVoicePointerUp : undefined}
-                    onPointerLeave={onStopVoice && isRecordingVoice ? handleVoicePointerUp : undefined}
+                    onPointerDown={
+                      !showSend && onStartVoice && onStopVoice && !hasAttachment
+                        ? (ev) => handleVoicePointerDown(ev)
+                        : undefined
+                    }
                     disabled={
                       disabled ||
                       (isRecordingVoice ? false : showSend ? isBusy : !(onStartVoice && !hasAttachment))
                     }
                     title={
-                      isRecordingVoice ? 'Отпустите для отправки' : showSend ? 'Отправить' : 'Удерживайте для записи голосового'
+                      voiceRecordingLocked
+                        ? 'Запись закреплена — кнопки в панели'
+                        : isRecordingVoice
+                          ? 'Отпустите для отправки · Вверх — без удержания'
+                          : showSend
+                            ? 'Отправить'
+                            : 'Удерживайте для записи'
                     }
-                    className={`flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-full transition-[background-color,opacity,transform] duration-150 ease-out active:scale-95 md:h-11 md:w-11 ${
+                    className={`flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-full transition-[background-color,opacity,transform,box-shadow] duration-150 ease-out active:scale-95 md:h-11 md:w-11 touch-none select-none ${
                       isRecordingVoice
-                        ? 'bg-red-500 text-white hover:bg-red-600 disabled:opacity-70'
+                        ? voiceRecordingLocked
+                          ? 'bg-[#00a884] text-white ring-4 ring-[#00a884]/40'
+                          : 'bg-red-500 text-white ring-4 ring-red-400/50 animate-pulse'
                         : 'bg-[#25D366] text-white hover:bg-[#20bd5a] disabled:opacity-50 disabled:cursor-not-allowed'
                     }`}
-                    aria-label={isRecordingVoice ? 'Отпустите для отправки' : showSend ? 'Отправить' : 'Микрофон'}
+                    aria-label={
+                      voiceRecordingLocked
+                        ? 'Идёт запись'
+                        : isRecordingVoice
+                          ? 'Идёт запись'
+                          : showSend
+                            ? 'Отправить'
+                            : 'Удержать для голосового'
+                    }
                   >
                     <span className="inline-flex items-center justify-center transition-opacity duration-150">
                       {isBusy && showSend && !isRecordingVoice ? (

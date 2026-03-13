@@ -144,6 +144,9 @@ const WhatsAppChat: React.FC = () => {
   type ChatFilter = 'all' | 'waiting' | 'unread';
   const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  /** Свайп вверх — запись без удержания (как в WhatsApp) */
+  const [voiceRecordingLocked, setVoiceRecordingLocked] = useState(false);
+  const voiceRecordingLockedRef = useRef(false);
   const [recordingStartedAt, setRecordingStartedAt] = useState<number | null>(null);
   const voiceRecorderRef = useRef<{ start: () => void; stop: () => void } | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -852,9 +855,16 @@ const WhatsAppChat: React.FC = () => {
 
   const sendVoiceBlobRef = useRef<(blob: Blob) => void>(() => {});
 
+  const lockVoiceRecording = useCallback(() => {
+    voiceRecordingLockedRef.current = true;
+    setVoiceRecordingLocked(true);
+  }, []);
+
   const startVoiceRecording = useCallback(async () => {
     setSendError(null);
     voiceCancelledRef.current = false;
+    voiceRecordingLockedRef.current = false;
+    setVoiceRecordingLocked(false);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -883,6 +893,8 @@ const WhatsAppChat: React.FC = () => {
     voiceRecorderRef.current = null;
     setRecordingStartedAt(null);
     setIsRecordingVoice(false);
+    voiceRecordingLockedRef.current = false;
+    setVoiceRecordingLocked(false);
   }, []);
 
   const cancelVoiceRecording = useCallback(() => {
@@ -1746,6 +1758,8 @@ const WhatsAppChat: React.FC = () => {
               isRecordingVoice={isRecordingVoice}
               recordingStartedAt={recordingStartedAt}
               onVoiceRecordCancel={cancelVoiceRecording}
+              voiceRecordingLocked={voiceRecordingLocked}
+              onVoiceLock={lockVoiceRecording}
               onCameraCapture={handleCameraCapture}
               showCameraButton={isMobile}
               selectedMessageIds={selectedMessageIds}
