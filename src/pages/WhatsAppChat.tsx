@@ -178,6 +178,11 @@ const WhatsAppChat: React.FC = () => {
   const [crmNamesByPhone, setCrmNamesByPhone] = useState<Map<string, string>>(() => new Map());
   /** Поиск по имени клиента, номеру и превью сообщения */
   const [searchQuery, setSearchQuery] = useState('');
+  const [searchQueryDebounced, setSearchQueryDebounced] = useState('');
+  useEffect(() => {
+    const t = window.setTimeout(() => setSearchQueryDebounced(searchQuery), 280);
+    return () => window.clearTimeout(t);
+  }, [searchQuery]);
   /** Режим выбора сообщений и действия над ними */
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const [replyToMessage, setReplyToMessage] = useState<WhatsAppMessage | null>(null);
@@ -350,13 +355,25 @@ const WhatsAppChat: React.FC = () => {
   const setConversationsWithNotification = useCallback((newItems: ConversationListItem[]) => {
     const prev = prevConversationsRef.current;
     const selected = selectedIdRef.current;
+    const prevTime = (it: ConversationListItem | undefined) => {
+      const t = it?.lastMessageAt ?? it?.lastMessage?.createdAt;
+      if (!t) return 0;
+      if (typeof (t as { toMillis?: () => number }).toMillis === 'function') {
+        return (t as { toMillis: () => number }).toMillis();
+      }
+      if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) {
+        return ((t as { seconds: number }).seconds ?? 0) * 1000;
+      }
+      if (t instanceof Date) return t.getTime();
+      return 0;
+    };
     for (const item of newItems) {
       if (item.id === selected) continue;
       if (item.lastMessage?.direction !== 'incoming') continue;
       const prevItem = prev.find((p) => p.id === item.id);
-      const prevLastId = prevItem?.lastMessage?.id;
-      const newLastId = item.lastMessage?.id;
-      if (newLastId && newLastId !== prevLastId) {
+      const prevT = prevTime(prevItem);
+      const newT = prevTime(item);
+      if (newT > prevT && newT > 0) {
         playNewMessageSound();
         if (document.visibilityState !== 'visible') {
           showNewMessageBrowserNotification();
@@ -366,7 +383,17 @@ const WhatsAppChat: React.FC = () => {
     }
     prevConversationsRef.current = newItems;
     setConversations(newItems);
-  }, []);
+    try {
+      if (companyId && !selectedIdRef.current) {
+        sessionStorage.setItem(
+          `whatsapp_list_${companyId}`,
+          JSON.stringify({ t: Date.now(), items: newItems })
+        );
+      }
+    } catch {
+      /* ignore quota */
+    }
+  }, [companyId]);
 
   useEffect(() => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -374,10 +401,26 @@ const WhatsAppChat: React.FC = () => {
     }
   }, []);
 
+  const loadMoreConversationsRef = useRef<(() => Promise<void>) | null>(null);
+  const [conversationsLoadingMore, setConversationsLoadingMore] = useState(false);
+  const [conversationsHasMore, setConversationsHasMore] = useState(true);
+
   useEffect(() => {
     if (!companyId) {
       setConversations([]);
+      loadMoreConversationsRef.current = null;
       return;
+    }
+    try {
+      const raw = sessionStorage.getItem(`whatsapp_list_${companyId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { t?: number; items?: ConversationListItem[] };
+        if (parsed?.items?.length && Date.now() - (parsed.t ?? 0) < 120_000) {
+          setConversations(parsed.items);
+        }
+      }
+    } catch {
+      /* ignore */
     }
     if (import.meta.env.DEV) {
       console.log('[WhatsApp] subscribeConversationsList start', { companyId });
@@ -388,8 +431,20 @@ const WhatsAppChat: React.FC = () => {
         setIndexBuilding(true);
       }
     };
-    const unsub = subscribeConversationsList(companyId, setConversationsWithNotification, onError);
-    return unsub;
+    const sub = subscribeConversationsList(companyId, setConversationsWithNotification, onError);
+    loadMoreConversationsRef.current = async () => {
+      setConversationsLoadingMore(true);
+      try {
+        const { hasMore } = await sub.loadMore();
+        setConversationsHasMore(hasMore);
+      } finally {
+        setConversationsLoadingMore(false);
+      }
+    };
+    return () => {
+      sub.unsubscribe();
+      loadMoreConversationsRef.current = null;
+    };
   }, [companyId, setConversationsWithNotification]);
 
   useEffect(() => {
@@ -1638,7 +1693,7 @@ const WhatsAppChat: React.FC = () => {
   }, [listWithDisplayTitle]);
 
   const filteredList = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = searchQueryDebounced.trim().toLowerCase();
 
     let base = listWithDisplayTitle;
     if (q) {
@@ -1701,7 +1756,7 @@ const WhatsAppChat: React.FC = () => {
     }
 
     return result;
-  }, [listWithDisplayTitle, searchQuery, activeFilter, dealStatusFilter, managerFilter]);
+  }, [listWithDisplayTitle, searchQueryDebounced, activeFilter, dealStatusFilter, managerFilter]);
 
   const dealStatusCounts = useMemo(() => {
     const list = listWithDisplayTitle;
@@ -1923,6 +1978,9 @@ const WhatsAppChat: React.FC = () => {
             items={filteredList}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            loadingMore={conversationsLoadingMore}
+            hasMore={conversationsHasMore}
+            onLoadMore={() => loadMoreConversationsRef.current?.()}
             onConversationContextMenu={(id, x, y, source) => {
               if (import.meta.env.DEV) {
                 console.log('[WhatsApp] conversation context menu open', { conversationId: id, x, y, source });

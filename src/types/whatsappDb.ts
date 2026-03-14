@@ -54,6 +54,10 @@ export interface WhatsAppConversation {
   dealResponsibleName?: string | null;
   /** Канал диалога (Instagram — тот же список «Чаты») */
   channel?: 'whatsapp' | 'instagram';
+  /** Превью последнего сообщения (денормализация для списка без загрузки всех сообщений) */
+  lastMessagePreview?: string | null;
+  lastMessageMedia?: boolean;
+  awaitingReplyDismissedAt?: Date | Timestamp | null;
 }
 
 /** Направление сообщения */

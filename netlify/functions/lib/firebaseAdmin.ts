@@ -333,8 +333,14 @@ export async function saveMessage(
   if (options.forwarded === true) data.forwarded = true;
   const ref = await db.collection(COLLECTIONS.MESSAGES).add(data);
   const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
+  const preview =
+    options.attachments && options.attachments.length > 0
+      ? '[медиа]'
+      : (text || '').replace(/\s+/g, ' ').slice(0, 280) || '[медиа]';
   const convUpdate: Record<string, unknown> = {
-    lastMessageAt: now
+    lastMessageAt: now,
+    lastMessagePreview: preview,
+    lastMessageMedia: !!(options.attachments && options.attachments.length > 0)
   };
   if (direction === 'incoming') {
     convUpdate.lastIncomingAt = now;
@@ -392,7 +398,15 @@ export async function upsertMessageFromWebhook(
         await docRef.update(update);
       }
       const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
-      const convUpdate: Record<string, unknown> = { lastMessageAt: now };
+      const preview =
+        options.attachments && options.attachments.length > 0
+          ? '[медиа]'
+          : (text || '').replace(/\s+/g, ' ').slice(0, 280) || '[медиа]';
+      const convUpdate: Record<string, unknown> = {
+        lastMessageAt: now,
+        lastMessagePreview: preview,
+        lastMessageMedia: !!(options.attachments && options.attachments.length > 0)
+      };
       if (direction === 'incoming') {
         convUpdate.lastIncomingAt = now;
         convUpdate.lastClientMessageTime = now;

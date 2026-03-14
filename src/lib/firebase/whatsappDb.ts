@@ -9,11 +9,15 @@ import {
   query,
   where,
   orderBy,
+  limit,
+  startAfter,
   onSnapshot,
   serverTimestamp,
   arrayUnion,
   writeBatch,
-  type Unsubscribe
+  type Unsubscribe,
+  type QueryDocumentSnapshot,
+  type DocumentData
 } from 'firebase/firestore';
 import { db } from './config';
 import type {
@@ -130,7 +134,11 @@ function docToConversation(docId: string, data: Record<string, unknown>): WhatsA
     dealStageColor: (data.dealStageColor as string) ?? undefined,
     dealTitle: (data.dealTitle as string) ?? undefined,
     dealResponsibleName: (data.dealResponsibleName as string) ?? undefined,
-    channel: (data.channel as WhatsAppConversation['channel']) ?? undefined
+    channel: (data.channel as WhatsAppConversation['channel']) ?? undefined,
+    lastMessagePreview: (data.lastMessagePreview as string) ?? undefined,
+    lastMessageMedia: data.lastMessageMedia === true,
+    awaitingReplyDismissedAt:
+      (data.awaitingReplyDismissedAt as WhatsAppConversation['awaitingReplyDismissedAt']) ?? null
   };
 }
 
@@ -406,74 +414,99 @@ export async function markConversationAsUnread(conversationId: string): Promise<
   });
 }
 
+/** Размер первой страницы и шаг пагинации (ленивая загрузка). */
+export const CONVERSATIONS_PAGE_SIZE = 30;
+
+function conversationToListItem(
+  c: WhatsAppConversation,
+  client: WhatsAppClient | null
+): ConversationListItem {
+  const phone = client?.phone ?? c.phone ?? c.clientId;
+  const channel: ConversationListItem['channel'] =
+    c.channel ?? (phone.startsWith('instagram:') ? 'instagram' : 'whatsapp');
+  const createdAt = c.lastMessageAt ?? c.createdAt;
+  const preview = (c.lastMessagePreview ?? '').trim();
+  const hasMedia = c.lastMessageMedia === true;
+  const lastMessage: WhatsAppMessage | null =
+    preview || hasMedia || c.lastMessageAt
+      ? {
+          id: `${c.id}:preview`,
+          conversationId: c.id,
+          text: hasMedia && !preview ? '' : preview || '',
+          direction:
+            c.lastMessageSender === 'manager' ? 'outgoing' : 'incoming',
+          createdAt,
+          channel: channel === 'instagram' ? 'instagram' : 'whatsapp',
+          attachments: hasMedia ? [{ type: 'file' as const, url: '' }] : undefined
+        }
+      : null;
+  return {
+    id: c.id,
+    clientId: c.clientId,
+    phone,
+    channel,
+    client,
+    lastMessage,
+    lastMessageAt: c.lastMessageAt,
+    lastIncomingAt: c.lastIncomingAt,
+    lastOutgoingAt: c.lastOutgoingAt,
+    awaitingReplyDismissedAt: c.awaitingReplyDismissedAt ?? null,
+    unreadCount: c.unreadCount ?? 0,
+    dealId: c.dealId ?? null,
+    dealStageId: c.dealStageId ?? null,
+    dealStageName: c.dealStageName ?? null,
+    dealStageColor: c.dealStageColor ?? null,
+    dealTitle: c.dealTitle ?? null,
+    dealResponsibleName: c.dealResponsibleName ?? null
+  };
+}
+
+function sortConversationItems(items: ConversationListItem[]): void {
+  const getItemSortTime = (item: ConversationListItem): number => {
+    if (item.lastMessage) return getMessageTime(item.lastMessage);
+    const t = item.lastMessageAt;
+    if (!t) return 0;
+    if (typeof (t as { toMillis?: () => number }).toMillis === 'function') {
+      return (t as { toMillis: () => number }).toMillis();
+    }
+    if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) {
+      return ((t as { seconds: number }).seconds ?? 0) * 1000;
+    }
+    return new Date(t as string).getTime();
+  };
+  items.sort((a, b) => {
+    const unreadA = (a.unreadCount ?? 0) > 0 ? 1 : 0;
+    const unreadB = (b.unreadCount ?? 0) > 0 ? 1 : 0;
+    if (unreadB !== unreadA) return unreadB - unreadA;
+    return getItemSortTime(b) - getItemSortTime(a);
+  });
+}
+
+export interface SubscribeConversationsResult {
+  unsubscribe: Unsubscribe;
+  /** Подгрузить следующую порцию (после первой страницы). */
+  loadMore: () => Promise<{ appended: number; hasMore: boolean }>;
+  /** Есть ли ещё страницы (эвристика по размеру последней порции). */
+  getHasMore: () => boolean;
+}
+
 /**
- * Подписка на список диалогов с данными клиента и последним сообщением (realtime).
- * @param onError опционально вызывается при ошибке (например, индекс ещё строится)
- * @returns функция отписки
+ * Первая страница — realtime (limit), без подписки на все сообщения.
+ * Дальнейшие страницы — getDocs + startAfter.
  */
 export function subscribeConversationsList(
   companyId: string,
   callback: (items: ConversationListItem[]) => void,
   onError?: (err: unknown) => void
-): Unsubscribe {
+): SubscribeConversationsResult {
   const clientsById = new Map<string, WhatsAppClient>();
-  let conversations: WhatsAppConversation[] = [];
-  let messages: WhatsAppMessage[] = [];
-
-  function mergeAndEmit() {
-    const lastByConv = new Map<string, WhatsAppMessage>();
-    for (const m of messages) {
-      const mTime = getMessageTime(m);
-      const cur = lastByConv.get(m.conversationId);
-      if (!cur || mTime > getMessageTime(cur)) lastByConv.set(m.conversationId, m);
-    }
-    const items: ConversationListItem[] = conversations.map((c) => {
-      const client = clientsById.get(c.clientId) ?? null;
-      const lastMessage = lastByConv.get(c.id) ?? null;
-      const phone = client?.phone ?? c.phone ?? c.clientId;
-      const channel: ConversationListItem['channel'] =
-        c.channel ?? (phone.startsWith('instagram:') ? 'instagram' : 'whatsapp');
-      return {
-        id: c.id,
-        clientId: c.clientId,
-        phone,
-        channel,
-        client,
-        lastMessage,
-        lastMessageAt: c.lastMessageAt,
-        lastIncomingAt: c.lastIncomingAt,
-        lastOutgoingAt: c.lastOutgoingAt,
-        awaitingReplyDismissedAt: c.awaitingReplyDismissedAt ?? null,
-        unreadCount: c.unreadCount ?? 0,
-        dealId: c.dealId ?? null,
-        dealStageId: c.dealStageId ?? null,
-        dealStageName: c.dealStageName ?? null,
-        dealStageColor: c.dealStageColor ?? null,
-        dealTitle: c.dealTitle ?? null,
-        dealResponsibleName: c.dealResponsibleName ?? null
-      };
-    });
-    const getItemSortTime = (item: ConversationListItem): number => {
-      if (item.lastMessage) return getMessageTime(item.lastMessage);
-      const t = item.lastMessageAt;
-      if (!t) return 0;
-      if (typeof (t as { toMillis?: () => number }).toMillis === 'function') {
-        return (t as { toMillis: () => number }).toMillis();
-      }
-      if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) {
-        return ((t as { seconds: number }).seconds ?? 0) * 1000;
-      }
-      return new Date(t as string).getTime();
-    };
-    // Сначала непрочитанные, потом по lastMessageAt desc
-    items.sort((a, b) => {
-      const unreadA = (a.unreadCount ?? 0) > 0 ? 1 : 0;
-      const unreadB = (b.unreadCount ?? 0) > 0 ? 1 : 0;
-      if (unreadB !== unreadA) return unreadB - unreadA;
-      return getItemSortTime(b) - getItemSortTime(a);
-    });
-    callback(items);
-  }
+  let firstPageConversations: WhatsAppConversation[] = [];
+  let firstPageSnapDocs: QueryDocumentSnapshot<DocumentData>[] = [];
+  /** Документы последней загруженной порции (кроме первой) — цепочка курсоров */
+  let loadMoreCursors: QueryDocumentSnapshot<DocumentData>[] = [];
+  let extraItemsById = new Map<string, ConversationListItem>();
+  let loadingMore = false;
+  let hasMorePages = true;
 
   async function loadClients(clientIds: string[]) {
     const missing = clientIds.filter((id) => !clientsById.has(id));
@@ -488,48 +521,116 @@ export function subscribeConversationsList(
     );
   }
 
-  const conversationsQuery = query(
-    collection(db, COLLECTIONS.CONVERSATIONS),
-    where('companyId', '==', companyId),
-    orderBy('createdAt', 'desc')
-  );
+  function mergeAndEmit() {
+    const page1Ids = new Set(firstPageConversations.map((c) => c.id));
+    const merged: ConversationListItem[] = firstPageConversations.map((c) =>
+      conversationToListItem(c, clientsById.get(c.clientId) ?? null)
+    );
+    for (const [, item] of extraItemsById) {
+      if (!page1Ids.has(item.id)) merged.push(item);
+    }
+    sortConversationItems(merged);
+    callback(merged);
+  }
 
-  const unsubConv = onSnapshot(
-    conversationsQuery,
-    async (convSnapshot) => {
-      conversations = convSnapshot.docs.map((d) =>
+  const baseQuery = () =>
+    query(
+      collection(db, COLLECTIONS.CONVERSATIONS),
+      where('companyId', '==', companyId),
+      orderBy('lastMessageAt', 'desc'),
+      limit(CONVERSATIONS_PAGE_SIZE)
+    );
+
+  const fallbackQuery = () =>
+    query(
+      collection(db, COLLECTIONS.CONVERSATIONS),
+      where('companyId', '==', companyId),
+      orderBy('createdAt', 'desc'),
+      limit(CONVERSATIONS_PAGE_SIZE)
+    );
+
+  let useFallback = false;
+  let unsubFirst: Unsubscribe | null = null;
+
+  const attachSnapshot = (q: ReturnType<typeof baseQuery>) => {
+    unsubFirst = onSnapshot(
+      q,
+      async (convSnapshot) => {
+        firstPageSnapDocs = convSnapshot.docs;
+        firstPageConversations = convSnapshot.docs.map((d) =>
+          docToConversation(d.id, d.data() as Record<string, unknown>)
+        );
+        hasMorePages = convSnapshot.docs.length >= CONVERSATIONS_PAGE_SIZE;
+        const ids = [...new Set(firstPageConversations.map((c) => c.clientId))];
+        await loadClients(ids);
+        mergeAndEmit();
+      },
+      (err) => {
+        const msg = String((err as Error)?.message ?? err);
+        if (!useFallback && (msg.includes('index') || msg.includes('failed-precondition'))) {
+          useFallback = true;
+          if (unsubFirst) unsubFirst();
+          attachSnapshot(fallbackQuery() as ReturnType<typeof baseQuery>);
+          return;
+        }
+        onError?.(err);
+      }
+    );
+  };
+
+  attachSnapshot(baseQuery());
+
+  const loadMore = async (): Promise<{ appended: number; hasMore: boolean }> => {
+    if (loadingMore || !hasMorePages) return { appended: 0, hasMore: false };
+    const lastCursor =
+      loadMoreCursors.length > 0
+        ? loadMoreCursors[loadMoreCursors.length - 1]
+        : firstPageSnapDocs[firstPageSnapDocs.length - 1];
+    if (!lastCursor) return { appended: 0, hasMore: false };
+    loadingMore = true;
+    try {
+      const q = useFallback
+        ? query(
+            collection(db, COLLECTIONS.CONVERSATIONS),
+            where('companyId', '==', companyId),
+            orderBy('createdAt', 'desc'),
+            startAfter(lastCursor),
+            limit(CONVERSATIONS_PAGE_SIZE)
+          )
+        : query(
+            collection(db, COLLECTIONS.CONVERSATIONS),
+            where('companyId', '==', companyId),
+            orderBy('lastMessageAt', 'desc'),
+            startAfter(lastCursor),
+            limit(CONVERSATIONS_PAGE_SIZE)
+          );
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        hasMorePages = false;
+        return { appended: 0, hasMore: false };
+      }
+      loadMoreCursors.push(snap.docs[snap.docs.length - 1]);
+      hasMorePages = snap.docs.length >= CONVERSATIONS_PAGE_SIZE;
+      const convs = snap.docs.map((d) =>
         docToConversation(d.id, d.data() as Record<string, unknown>)
       );
-      if (import.meta.env.DEV) {
-        console.log('[WhatsApp] conversations snapshot:', conversations.length, 'items');
-        conversations.forEach((c) => {
-          console.log('[WhatsApp] conversation:', { id: c.id, unreadCount: c.unreadCount, lastReadAt: c.lastReadAt != null ? 'set' : 'null' });
-        });
+      await loadClients([...new Set(convs.map((c) => c.clientId))]);
+      for (const c of convs) {
+        extraItemsById.set(c.id, conversationToListItem(c, clientsById.get(c.clientId) ?? null));
       }
-      const ids = [...new Set(conversations.map((c) => c.clientId))];
-      await loadClients(ids);
       mergeAndEmit();
-    },
-    (err) => onError?.(err)
-  );
+      return { appended: snap.docs.length, hasMore: hasMorePages };
+    } finally {
+      loadingMore = false;
+    }
+  };
 
-  const unsubMsg = onSnapshot(
-    query(
-      collection(db, COLLECTIONS.MESSAGES),
-      orderBy('createdAt', 'asc')
-    ),
-    (msgSnapshot) => {
-      messages = msgSnapshot.docs.map((d) =>
-        docToMessage(d.id, d.data() as Record<string, unknown>)
-      );
-      mergeAndEmit();
+  return {
+    unsubscribe: () => {
+      unsubFirst?.();
     },
-    (err) => onError?.(err)
-  );
-
-  return () => {
-    unsubConv();
-    unsubMsg();
+    loadMore,
+    getHasMore: () => hasMorePages
   };
 }
 
