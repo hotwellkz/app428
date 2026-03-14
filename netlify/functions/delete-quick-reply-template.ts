@@ -7,7 +7,7 @@ const COLLECTION_COMPANY_USERS = 'company_users';
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Methods': 'DELETE, OPTIONS',
+  'Access-Control-Allow-Methods': 'DELETE, POST, OPTIONS',
   'Access-Control-Max-Age': '86400'
 };
 
@@ -20,15 +20,15 @@ function json(statusCode: number, body: Record<string, unknown>): HandlerRespons
 }
 
 /**
- * DELETE /api/templates/:id — удаление текстового шаблона быстрого ответа (quick_replies).
- * id передаётся query ?id= (редирект со splat) или в теле JSON { id }.
+ * DELETE /api/templates/:id или POST /api/templates-delete — удаление шаблона quick_replies.
+ * POST предпочтителен: многие прокси отдают 405 на DELETE к /api/templates/*.
  */
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS_HEADERS, body: '' };
   }
 
-  if (event.httpMethod !== 'DELETE') {
+  if (event.httpMethod !== 'DELETE' && event.httpMethod !== 'POST') {
     return json(405, { error: 'Method Not Allowed' });
   }
 

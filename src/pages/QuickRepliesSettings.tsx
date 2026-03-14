@@ -505,9 +505,13 @@ export const QuickRepliesSettings: React.FC = () => {
     setDeleteTemplateLoading(true);
     try {
       const token = await user.getIdToken();
-      const res = await fetch(`/api/templates/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+        const res = await fetch('/api/templates-delete', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ id })
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));

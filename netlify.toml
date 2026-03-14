@@ -34,10 +34,16 @@
   status = 200
   force = true
 
-# DELETE /api/templates/{id} — удаление текстового шаблона быстрого ответа
+# DELETE /api/templates/{id} — может давать 405 за прокси; клиент шлёт POST на /api/templates-delete
 [[redirects]]
   from = "/api/templates/*"
   to = "/.netlify/functions/delete-quick-reply-template?id=:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/templates-delete"
+  to = "/.netlify/functions/delete-quick-reply-template"
   status = 200
   force = true
 
