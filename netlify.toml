@@ -34,6 +34,13 @@
   status = 200
   force = true
 
+# DELETE /api/templates/{id} — удаление текстового шаблона быстрого ответа
+[[redirects]]
+  from = "/api/templates/*"
+  to = "/.netlify/functions/delete-quick-reply-template?id=:splat"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

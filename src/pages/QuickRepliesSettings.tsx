@@ -11,6 +11,8 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase/config';
+import { DeleteQuickReplyTemplateModal } from '../components/modals/DeleteQuickReplyTemplateModal';
+import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
 import { supabase } from '../lib/supabase/config';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
@@ -48,6 +50,10 @@ export const QuickRepliesSettings: React.FC = () => {
   type AttachedFileItem = QuickReplyFile | { file: File; id: string };
   const [attachedFiles, setAttachedFiles] = useState<AttachedFileItem[]>([]);
   const [attachmentUploading, setAttachmentUploading] = useState(false);
+  const [deleteTemplateModal, setDeleteTemplateModal] = useState<{ id: string; title: string } | null>(
+    null
+  );
+  const [deleteTemplateLoading, setDeleteTemplateLoading] = useState(false);
 
   const [mediaItems, setMediaItems] = useState<MediaQuickReply[]>([]);
   const [mediaLoading, setMediaLoading] = useState(false);
@@ -479,12 +485,44 @@ export const QuickRepliesSettings: React.FC = () => {
     resetForm();
   };
 
-  const handleDelete = async (id: string) => {
+  const openDeleteTemplateModal = (id: string, title: string) => {
     if (!canEdit) return;
-    if (!window.confirm('Удалить шаблон быстрого ответа?')) return;
-    const col = collection(db, 'quick_replies');
-    await deleteDoc(doc(col, id));
-    if (editingId === id) resetForm();
+    setDeleteTemplateModal({ id, title: title.trim() || 'Без названия' });
+  };
+
+  const closeDeleteTemplateModal = () => {
+    if (!deleteTemplateLoading) setDeleteTemplateModal(null);
+  };
+
+  const confirmDeleteTemplate = async () => {
+    if (!deleteTemplateModal || !canEdit) return;
+    const { id } = deleteTemplateModal;
+    const user = auth.currentUser;
+    if (!user) {
+      showErrorNotification('Войдите в систему');
+      return;
+    }
+    setDeleteTemplateLoading(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/templates/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || `Ошибка ${res.status}`);
+      }
+      setItems((prev) => prev.filter((x) => x.id !== id));
+      if (editingId === id) resetForm();
+      setDeleteTemplateModal(null);
+      showSuccessNotification('Шаблон успешно удалён');
+    } catch (e) {
+      console.error('Delete template failed', e);
+      showErrorNotification(e instanceof Error ? e.message : 'Не удалось удалить шаблон');
+    } finally {
+      setDeleteTemplateLoading(false);
+    }
   };
 
   const isEditing = useMemo(() => !!editingId, [editingId]);
@@ -499,6 +537,13 @@ export const QuickRepliesSettings: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full">
+      <DeleteQuickReplyTemplateModal
+        open={!!deleteTemplateModal}
+        templateTitle={deleteTemplateModal?.title ?? ''}
+        deleting={deleteTemplateLoading}
+        onCancel={closeDeleteTemplateModal}
+        onConfirm={confirmDeleteTemplate}
+      />
       <div className="flex-none px-4 py-3 border-b bg-white flex items-center justify-between">
         <h1 className="text-lg font-semibold text-gray-800">Быстрые ответы</h1>
         {!canEdit && (
@@ -660,7 +705,7 @@ export const QuickRepliesSettings: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleDelete(item.id)}
+                      onClick={() => openDeleteTemplateModal(item.id, item.title)}
                       className="p-1 rounded-md hover:bg-red-50 text-red-500"
                       title="Удалить"
                     >
