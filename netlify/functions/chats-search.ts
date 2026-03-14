@@ -18,7 +18,7 @@ const MAX_BATCHES = 50; // до ~25k чтений за запрос — верх
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Max-Age': '86400'
 };
 
@@ -120,29 +120,7 @@ function buildChatJson(
   };
 }
 
-/**
- * GET /api/chats/search?q=... — поиск по всем диалогам компании (телефон, имя клиента, превью).
- */
-export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: CORS, body: '' };
-  }
-  if (event.httpMethod !== 'GET') {
-    return json(405, { error: 'Method Not Allowed' });
-  }
-
-  const authHeader = event.headers.authorization || event.headers.Authorization;
-  const token = typeof authHeader === 'string' ? authHeader.replace(/^Bearer\s+/i, '') : '';
-  if (!token) return json(401, { error: 'Authorization required' });
-
-  let uid: string;
-  try {
-    uid = await verifyIdToken(token);
-  } catch {
-    return json(401, { error: 'Invalid token' });
-  }
-
-  const rawQ = (event.queryStringParameters?.q ?? '').trim();
+async function runSearch(uid: string, rawQ: string): Promise<HandlerResponse> {
   if (rawQ.length < 1) {
     return json(200, { chats: [], total: 0 });
   }
@@ -203,4 +181,39 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     scanned,
     capped: matches.length >= MAX_MATCHES || batches >= MAX_BATCHES
   });
+}
+
+/**
+ * GET /api/chats/search?q= или POST /api/chats-search { q } — поиск по диалогам.
+ * POST надёжнее за прокси (GET /api/chats/search часто отдаёт index.html).
+ */
+export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers: CORS, body: '' };
+  }
+  if (event.httpMethod !== 'GET' && event.httpMethod !== 'POST') {
+    return json(405, { error: 'Method Not Allowed' });
+  }
+
+  const authHeader = event.headers.authorization || event.headers.Authorization;
+  const token = typeof authHeader === 'string' ? authHeader.replace(/^Bearer\s+/i, '') : '';
+  if (!token) return json(401, { error: 'Authorization required' });
+
+  let uid: string;
+  try {
+    uid = await verifyIdToken(token);
+  } catch {
+    return json(401, { error: 'Invalid token' });
+  }
+
+  let rawQ = (event.queryStringParameters?.q ?? '').trim();
+  if (event.httpMethod === 'POST' && event.body) {
+    try {
+      const b = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
+      rawQ = String((b as { q?: string })?.q ?? '').trim();
+    } catch {
+      /* keep rawQ from query */
+    }
+  }
+  return runSearch(uid, rawQ);
 };

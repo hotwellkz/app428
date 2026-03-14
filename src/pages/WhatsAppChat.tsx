@@ -260,15 +260,30 @@ const WhatsAppChat: React.FC = () => {
           return;
         }
         const token = await user.getIdToken();
-        const q = encodeURIComponent(searchQueryDebounced.trim());
-        const res = await fetch(`/api/chats/search?q=${q}`, {
-          headers: { Authorization: `Bearer ${token}` }
+        const q = searchQueryDebounced.trim();
+        const res = await fetch('/api/chats-search', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ q })
         });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error((err as { error?: string }).error || res.statusText);
+        const text = await res.text();
+        if (text.trimStart().startsWith('<!') || text.trimStart().startsWith('<!doctype')) {
+          throw new Error(
+            'Поиск недоступен: запрос не доходит до API (нужен прокси POST /api/chats-search на Netlify Function chats-search).'
+          );
         }
-        const data = (await res.json()) as { chats?: unknown[] };
+        let data: { chats?: unknown[] };
+        try {
+          data = JSON.parse(text) as { chats?: unknown[] };
+        } catch {
+          throw new Error('Некорректный ответ сервера при поиске');
+        }
+        if (!res.ok) {
+          throw new Error((data as { error?: string }).error || res.statusText);
+        }
         if (cancelled) return;
         setSearchChats(parseChatsSearchApi(data.chats ?? []));
       } catch (e) {
