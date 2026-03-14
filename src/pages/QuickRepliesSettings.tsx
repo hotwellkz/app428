@@ -503,9 +503,15 @@ export const QuickRepliesSettings: React.FC = () => {
       return;
     }
     setDeleteTemplateLoading(true);
+    const applyDeleted = () => {
+      setItems((prev) => prev.filter((x) => x.id !== id));
+      if (editingId === id) resetForm();
+      setDeleteTemplateModal(null);
+      showSuccessNotification('Шаблон успешно удалён');
+    };
     try {
       const token = await user.getIdToken();
-        const res = await fetch('/api/templates-delete', {
+      const res = await fetch('/api/templates-delete', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -513,17 +519,30 @@ export const QuickRepliesSettings: React.FC = () => {
         },
         body: JSON.stringify({ id })
       });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error || `Ошибка ${res.status}`);
+      if (res.ok) {
+        applyDeleted();
+        return;
       }
-      setItems((prev) => prev.filter((x) => x.id !== id));
-      if (editingId === id) resetForm();
-      setDeleteTemplateModal(null);
-      showSuccessNotification('Шаблон успешно удалён');
+      // API не проксируется (404) или недоступен — удаление напрямую в Firestore (как до Netlify)
+      if (res.status === 404 || res.status === 405) {
+        await deleteDoc(doc(db, 'quick_replies', id));
+        applyDeleted();
+        return;
+      }
+      const err = await res.json().catch(() => ({}));
+      throw new Error((err as { error?: string }).error || `Ошибка ${res.status}`);
     } catch (e) {
-      console.error('Delete template failed', e);
-      showErrorNotification(e instanceof Error ? e.message : 'Не удалось удалить шаблон');
+      if (e instanceof Error && /permission|Permission/i.test(e.message)) {
+        showErrorNotification(e.message);
+        return;
+      }
+      try {
+        await deleteDoc(doc(db, 'quick_replies', id));
+        applyDeleted();
+      } catch (e2) {
+        console.error('Delete template failed', e, e2);
+        showErrorNotification(e instanceof Error ? e.message : 'Не удалось удалить шаблон');
+      }
     } finally {
       setDeleteTemplateLoading(false);
     }
