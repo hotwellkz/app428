@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import {
   collection,
   query,
@@ -14,7 +14,7 @@ import { db, auth } from '../lib/firebase/config';
 import { supabase } from '../lib/supabase/config';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
-import { Plus, Trash2, Edit3, Paperclip, X, ImageIcon, GripVertical } from 'lucide-react';
+import { Plus, Trash2, Edit3, Paperclip, X, ImageIcon } from 'lucide-react';
 import type { QuickReply, QuickReplyFile } from '../types/quickReplies';
 import type { MediaQuickReply } from '../types/mediaQuickReplies';
 
@@ -22,7 +22,6 @@ const QUICK_REPLY_ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024; // 20MB per file
 const MAX_QUICK_REPLY_FILES = 10;
 const MEDIA_IMAGE_MAX_BYTES = 10 * 1024 * 1024; // 10MB per image
 const MEDIA_IMAGE_MAX_COUNT = 10;
-const MEDIA_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp';
 const ALLOWED_ATTACHMENT_TYPES: Record<string, 'image' | 'video' | 'file'> = {
   'image/jpeg': 'image',
   'image/png': 'image',
@@ -56,8 +55,12 @@ export const QuickRepliesSettings: React.FC = () => {
   const [mediaEditingId, setMediaEditingId] = useState<string | null>(null);
   const [mediaTitle, setMediaTitle] = useState('');
   const [mediaKeywords, setMediaKeywords] = useState('');
-  const [mediaFiles, setMediaFiles] = useState<Array<{ url: string; order: number; fileName?: string } | { file: File }>>([]);
+  type MediaFileEntry =
+    | { url: string; order: number; fileName?: string }
+    | { file: File; previewUrl?: string };
+  const [mediaFiles, setMediaFiles] = useState<MediaFileEntry[]>([]);
   const [mediaUploading, setMediaUploading] = useState(false);
+  const mediaFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!companyId) {
@@ -248,12 +251,21 @@ export const QuickRepliesSettings: React.FC = () => {
     e.stopPropagation();
   };
 
+  const revokeMediaPreviews = useCallback((list: MediaFileEntry[]) => {
+    list.forEach((item) => {
+      if ('file' in item && item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+    });
+  }, []);
+
   const resetMediaForm = () => {
+    setMediaFiles((prev) => {
+      revokeMediaPreviews(prev);
+      return [];
+    });
     setShowMediaForm(false);
     setMediaEditingId(null);
     setMediaTitle('');
     setMediaKeywords('');
-    setMediaFiles([]);
   };
 
   const handleMediaEdit = (entry: MediaQuickReply) => {
@@ -266,16 +278,28 @@ export const QuickRepliesSettings: React.FC = () => {
     );
   };
 
+  const isAllowedMediaImage = (file: File): boolean => {
+    const mime = (file.type || '').toLowerCase();
+    if (mime === 'image/jpeg' || mime === 'image/jpg' || mime === 'image/png' || mime === 'image/webp') return true;
+    const name = (file.name || '').toLowerCase();
+    if (/\.(jpe?g|png|webp)$/i.test(name)) return true;
+    return false;
+  };
+
   const handleMediaAttachmentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const chosen = e.target.files;
-    e.target.value = '';
-    if (!chosen?.length) return;
-    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
-    const next: Array<{ url: string; order: number; fileName?: string } | { file: File }> = [...mediaFiles];
+    const input = e.target;
+    const chosen = input.files;
+    if (import.meta.env.DEV) console.log('[media template] FILES:', chosen?.length, chosen);
+    if (!chosen?.length) {
+      input.value = '';
+      return;
+    }
+    const next: MediaFileEntry[] = [...mediaFiles];
     for (let i = 0; i < chosen.length; i++) {
       const file = chosen[i];
-      if (!allowed.includes(file.type)) {
-        window.alert(`Файл "${file.name}": допустимы только JPG, PNG, WEBP.`);
+      if (import.meta.env.DEV) console.log('[media template] file', file.name, file.type, file.size);
+      if (!isAllowedMediaImage(file)) {
+        window.alert(`«${file.name}»: нужен JPG, PNG или WEBP (тип: ${file.type || 'не указан'}).`);
         continue;
       }
       if (file.size > MEDIA_IMAGE_MAX_BYTES) {
@@ -283,13 +307,21 @@ export const QuickRepliesSettings: React.FC = () => {
         continue;
       }
       if (next.length >= MEDIA_IMAGE_MAX_COUNT) break;
-      next.push({ file });
+      const previewUrl = URL.createObjectURL(file);
+      next.push({ file, previewUrl });
     }
     setMediaFiles(next.slice(0, MEDIA_IMAGE_MAX_COUNT));
+    requestAnimationFrame(() => {
+      input.value = '';
+    });
   };
 
   const handleRemoveMediaFile = (index: number) => {
-    setMediaFiles((prev) => prev.filter((_, i) => i !== index));
+    setMediaFiles((prev) => {
+      const item = prev[index];
+      if (item && 'file' in item && item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((_, i) => i !== index);
+    });
   };
 
   const moveMediaFile = (fromIndex: number, toIndex: number) => {
@@ -648,7 +680,16 @@ export const QuickRepliesSettings: React.FC = () => {
           {canEdit && !showMediaForm && (
             <button
               type="button"
-              onClick={() => { setShowMediaForm(true); setMediaEditingId(null); setMediaTitle(''); setMediaKeywords(''); setMediaFiles([]); }}
+              onClick={() => {
+                setMediaFiles((prev) => {
+                  revokeMediaPreviews(prev);
+                  return [];
+                });
+                setShowMediaForm(true);
+                setMediaEditingId(null);
+                setMediaTitle('');
+                setMediaKeywords('');
+              }}
               className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
             >
               <ImageIcon className="w-4 h-4" />
@@ -687,49 +728,67 @@ export const QuickRepliesSettings: React.FC = () => {
               </div>
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Изображения (1–10, JPG/PNG/WEBP, макс. 10 МБ на файл)</label>
+                {/* Не display:none — на части мобильных браузеров ломает выбор файла */}
                 <input
+                  ref={mediaFileInputRef}
                   type="file"
-                  accept={MEDIA_IMAGE_ACCEPT}
+                  accept="image/*"
                   multiple
                   onChange={handleMediaAttachmentChange}
-                  className="hidden"
-                  id="media-quick-reply-images"
+                  className="sr-only fixed w-px h-px opacity-0 pointer-events-none overflow-hidden"
+                  aria-label="Выбор изображений"
                 />
-                <label
-                  htmlFor="media-quick-reply-images"
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 cursor-pointer"
+                <button
+                  type="button"
+                  onClick={() => mediaFileInputRef.current?.click()}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 active:bg-gray-100 touch-manipulation min-h-[44px]"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-4 h-4 shrink-0" />
                   Добавить изображения
-                </label>
+                </button>
                 {mediaFiles.length > 0 && (
-                  <ul className="mt-2 space-y-1">
-                    {mediaFiles.map((item, index) => (
-                      <li key={index} className="flex items-center gap-2 rounded border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm">
-                        <span className="cursor-grab text-gray-400" title="Перетащите для смены порядка" onMouseDown={(ev) => ev.preventDefault()}>
-                          <GripVertical className="w-4 h-4" />
-                        </span>
-                        <span className="flex-1 truncate">
-                          {'file' in item ? item.file.name : (item.fileName || `Изображение ${index + 1}`)}
-                        </span>
-                        <div className="flex items-center gap-1">
-                          {index > 0 && (
-                            <button type="button" onClick={() => moveMediaFile(index, index - 1)} className="text-gray-500 hover:text-gray-700 text-xs">
-                              ↑
-                            </button>
-                          )}
-                          {index < mediaFiles.length - 1 && (
-                            <button type="button" onClick={() => moveMediaFile(index, index + 1)} className="text-gray-500 hover:text-gray-700 text-xs">
-                              ↓
-                            </button>
-                          )}
-                          <button type="button" onClick={() => handleRemoveMediaFile(index)} className="text-red-600 hover:text-red-700 text-xs">
-                            удалить
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="mt-3 preview-container">
+                    <ul className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {mediaFiles.map((item, index) => (
+                        <li
+                          key={'file' in item ? `${item.file.name}-${index}` : `${item.url}-${index}`}
+                          className="relative rounded-[14px] border border-gray-200 bg-gray-50 overflow-hidden shadow-sm"
+                        >
+                          <div className="aspect-square bg-gray-100 flex items-center justify-center">
+                            {'file' in item && item.previewUrl ? (
+                              <img src={item.previewUrl} alt="" className="w-full h-full object-cover" />
+                            ) : 'url' in item ? (
+                              <img src={item.url} alt="" className="w-full h-full object-cover" />
+                            ) : null}
+                          </div>
+                          <div className="p-2 flex flex-col gap-1 border-t border-gray-100 bg-white">
+                            <span className="text-[10px] text-gray-600 truncate" title={'file' in item ? item.file.name : item.fileName}>
+                              {'file' in item ? item.file.name : item.fileName || `№${index + 1}`}
+                            </span>
+                            <div className="flex flex-wrap items-center gap-1">
+                              {index > 0 && (
+                                <button type="button" onClick={() => moveMediaFile(index, index - 1)} className="text-gray-500 text-xs px-1 py-0.5 rounded border border-gray-200">
+                                  ↑
+                                </button>
+                              )}
+                              {index < mediaFiles.length - 1 && (
+                                <button type="button" onClick={() => moveMediaFile(index, index + 1)} className="text-gray-500 text-xs px-1 py-0.5 rounded border border-gray-200">
+                                  ↓
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveMediaFile(index)}
+                                className="text-red-600 text-xs px-2 py-0.5 rounded border border-red-100 bg-red-50"
+                              >
+                                Удалить
+                              </button>
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
               </div>
               <div className="flex justify-end gap-2 pt-2">
