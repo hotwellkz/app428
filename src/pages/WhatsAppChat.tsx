@@ -22,7 +22,7 @@ import {
 } from '../lib/firebase/whatsappDb';
 import { showErrorNotification } from '../utils/notifications';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase/config';
+import { db, auth } from '../lib/firebase/config';
 import type { WhatsAppMessage } from '../types/whatsappDb';
 import type { MediaQuickReply } from '../types/mediaQuickReplies';
 import ConversationList from '../components/whatsapp/ConversationList';
@@ -180,9 +180,111 @@ const WhatsAppChat: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchQueryDebounced, setSearchQueryDebounced] = useState('');
   useEffect(() => {
-    const t = window.setTimeout(() => setSearchQueryDebounced(searchQuery), 280);
+    const t = window.setTimeout(() => setSearchQueryDebounced(searchQuery), 300);
     return () => window.clearTimeout(t);
   }, [searchQuery]);
+
+  const [searchChats, setSearchChats] = useState<ConversationListItem[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchActive = searchQueryDebounced.trim().length > 0;
+  const searchQueryDebouncedRef = useRef('');
+  searchQueryDebouncedRef.current = searchQueryDebounced.trim();
+
+  /** Ответ GET /api/chats/search → элементы списка чатов */
+  const parseChatsSearchApi = useCallback((rows: unknown[]): ConversationListItem[] => {
+    return rows.map((row) => {
+      const r = row as Record<string, unknown>;
+      const lastMsg = r.lastMessage as Record<string, unknown> | null | undefined;
+      const cl = r.client as Record<string, unknown> | null | undefined;
+      return {
+        id: String(r.id),
+        clientId: String(r.clientId ?? ''),
+        phone: String(r.phone ?? ''),
+        channel: (r.channel as ConversationListItem['channel']) ?? 'whatsapp',
+        client: cl
+          ? {
+              id: String(cl.id ?? ''),
+              name: String(cl.name ?? ''),
+              phone: String(cl.phone ?? ''),
+              avatarUrl: (cl.avatarUrl as string | null) ?? null,
+              createdAt: cl.createdAt ?? new Date().toISOString()
+            }
+          : null,
+        lastMessage: lastMsg
+          ? {
+              id: String(lastMsg.id),
+              conversationId: String(lastMsg.conversationId ?? r.id),
+              text: String(lastMsg.text ?? ''),
+              direction: (lastMsg.direction as 'incoming' | 'outgoing') ?? 'incoming',
+              createdAt: (typeof lastMsg.createdAt === 'string'
+                ? lastMsg.createdAt
+                : new Date()) as ConversationListItem['lastMessage'] extends infer M
+                ? M extends { createdAt: infer A }
+                  ? A
+                  : never
+                : never,
+              channel: (lastMsg.channel as 'whatsapp' | 'instagram') ?? 'whatsapp',
+              attachments: Array.isArray(lastMsg.attachments)
+                ? (lastMsg.attachments as ConversationListItem['lastMessage'] extends { attachments?: infer A } ? A : never)
+                : undefined
+            }
+          : null,
+        lastMessageAt: r.lastMessageAt as ConversationListItem['lastMessageAt'],
+        lastIncomingAt: r.lastIncomingAt as ConversationListItem['lastIncomingAt'],
+        lastOutgoingAt: r.lastOutgoingAt as ConversationListItem['lastOutgoingAt'],
+        awaitingReplyDismissedAt: r.awaitingReplyDismissedAt as ConversationListItem['awaitingReplyDismissedAt'],
+        unreadCount: Number(r.unreadCount ?? 0),
+        dealId: (r.dealId as string) ?? null,
+        dealStageId: (r.dealStageId as string) ?? null,
+        dealStageName: (r.dealStageName as string) ?? null,
+        dealStageColor: (r.dealStageColor as string) ?? null,
+        dealTitle: (r.dealTitle as string) ?? null,
+        dealResponsibleName: (r.dealResponsibleName as string) ?? null
+      } as ConversationListItem;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!companyId || !searchActive) {
+      setSearchChats([]);
+      setSearchLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSearchLoading(true);
+    (async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user) {
+          setSearchChats([]);
+          return;
+        }
+        const token = await user.getIdToken();
+        const q = encodeURIComponent(searchQueryDebounced.trim());
+        const res = await fetch(`/api/chats/search?q=${q}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error((err as { error?: string }).error || res.statusText);
+        }
+        const data = (await res.json()) as { chats?: unknown[] };
+        if (cancelled) return;
+        setSearchChats(parseChatsSearchApi(data.chats ?? []));
+      } catch (e) {
+        if (!cancelled) {
+          console.error('[WhatsApp] chats search', e);
+          showErrorNotification(e instanceof Error ? e.message : 'Ошибка поиска');
+          setSearchChats([]);
+        }
+      } finally {
+        if (!cancelled) setSearchLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, searchActive, searchQueryDebounced, parseChatsSearchApi]);
   /** Режим выбора сообщений и действия над ними */
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const [replyToMessage, setReplyToMessage] = useState<WhatsAppMessage | null>(null);
@@ -289,7 +391,8 @@ const WhatsAppChat: React.FC = () => {
 
   const mobileChatContext = useMobileWhatsAppChat();
   const { toggle: toggleMobileSidebar } = useMobileSidebar();
-  const selectedItem = conversations.find((c) => c.id === selectedId);
+  /** Чат, открытый из поиска / не на первой странице ленты. */
+  const [stickySelectedChat, setStickySelectedChat] = useState<ConversationListItem | null>(null);
 
   // При открытии карточки клиента на mobile — начальная позиция 60% (peek)
   useEffect(() => {
@@ -384,7 +487,7 @@ const WhatsAppChat: React.FC = () => {
     prevConversationsRef.current = newItems;
     setConversations(newItems);
     try {
-      if (companyId && !selectedIdRef.current) {
+      if (companyId && !selectedIdRef.current && searchQueryDebouncedRef.current === '') {
         sessionStorage.setItem(
           `whatsapp_list_${companyId}`,
           JSON.stringify({ t: Date.now(), items: newItems })
@@ -789,7 +892,8 @@ const WhatsAppChat: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const dealIds = [...new Set(conversations.map((c) => c.dealId).filter(Boolean))] as string[];
+    const listSource = searchActive ? searchChats : conversations;
+    const dealIds = [...new Set(listSource.map((c) => c.dealId).filter(Boolean))] as string[];
     if (dealIds.length === 0) {
       setDealBadgeByConversationId({});
       return;
@@ -811,7 +915,7 @@ const WhatsAppChat: React.FC = () => {
       }
       if (cancelled) return;
       const byConv: Record<string, { name: string; color: string }> = {};
-      conversations.forEach((c) => {
+      listSource.forEach((c) => {
         if (c.dealId && byDeal.has(c.dealId)) byConv[c.id] = byDeal.get(c.dealId)!;
       });
       setDealBadgeByConversationId(byConv);
@@ -819,10 +923,12 @@ const WhatsAppChat: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [conversations]);
+  }, [conversations, searchChats, searchActive]);
+
+  const chatsListForSidebar = searchActive ? searchChats : conversations;
 
   const listWithDisplayTitle = useMemo(() => {
-    return conversations.map((c) => {
+    return chatsListForSidebar.map((c) => {
       const effectiveUnread = locallyReadChatIds.has(c.id) ? 0 : (c.unreadCount ?? 0);
       const normPhone = normalizePhone(c.phone ?? c.client?.phone ?? '');
       const statusId = normPhone ? dealStatusByPhone.get(normPhone) ?? null : null;
@@ -851,7 +957,7 @@ const WhatsAppChat: React.FC = () => {
       };
     });
   }, [
-    conversations,
+    chatsListForSidebar,
     locallyReadChatIds,
     crmNamesByPhone,
     dealStatusByPhone,
@@ -860,6 +966,23 @@ const WhatsAppChat: React.FC = () => {
     managers,
     dealBadgeByConversationId
   ]);
+
+  const selectConversation = useCallback(
+    (id: string) => {
+      const fromUi =
+        listWithDisplayTitle.find((c) => c.id === id) ||
+        searchChats.find((c) => c.id === id) ||
+        conversations.find((c) => c.id === id);
+      if (fromUi) setStickySelectedChat(fromUi);
+      setSelectedId(id);
+    },
+    [listWithDisplayTitle, searchChats, conversations]
+  );
+
+  const selectedItem: ConversationListItem | undefined =
+    conversations.find((c) => c.id === selectedId) ||
+    searchChats.find((c) => c.id === selectedId) ||
+    (stickySelectedChat?.id === selectedId ? stickySelectedChat : undefined);
 
   const handleFileSelect = useCallback(async (file: File) => {
     setSendError(null);
@@ -1693,18 +1816,7 @@ const WhatsAppChat: React.FC = () => {
   }, [listWithDisplayTitle]);
 
   const filteredList = useMemo(() => {
-    const q = searchQueryDebounced.trim().toLowerCase();
-
     let base = listWithDisplayTitle;
-    if (q) {
-      base = base.filter((item) => {
-        const preview = item.lastMessage?.attachments?.length
-          ? '[медиа]'
-          : (item.lastMessage?.text ?? '').slice(0, 200);
-        const searchable = [item.displayTitle ?? '', item.phone ?? '', preview].join(' ').toLowerCase();
-        return searchable.includes(q);
-      });
-    }
 
     if (dealStatusFilter !== 'all') {
       base = base.filter((item) => {
@@ -1756,7 +1868,7 @@ const WhatsAppChat: React.FC = () => {
     }
 
     return result;
-  }, [listWithDisplayTitle, searchQueryDebounced, activeFilter, dealStatusFilter, managerFilter]);
+  }, [listWithDisplayTitle, activeFilter, dealStatusFilter, managerFilter]);
 
   const dealStatusCounts = useMemo(() => {
     const list = listWithDisplayTitle;
@@ -1884,11 +1996,14 @@ const WhatsAppChat: React.FC = () => {
                 type="search"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Поиск по имени или номеру..."
+                placeholder="Поиск по всем чатам (имя, телефон, текст)…"
                 className="flex-1 min-w-0 py-2 px-2 text-sm rounded-lg border border-gray-200 bg-white focus:outline-none focus:ring-2 focus:ring-green-500/30 focus:border-green-400"
-                aria-label="Поиск по имени или номеру"
+                aria-label="Поиск по чатам"
               />
             </div>
+            {searchActive && searchLoading && (
+              <p className="px-3 pb-1.5 text-[11px] text-gray-500">Поиск по базе…</p>
+            )}
             <div className="flex flex-nowrap items-center gap-2.5 px-3 pb-2 text-[11px] md:text-xs overflow-x-auto">
               <button
                 type="button"
@@ -1977,10 +2092,10 @@ const WhatsAppChat: React.FC = () => {
           <ConversationList
             items={filteredList}
             selectedId={selectedId}
-            onSelect={setSelectedId}
-            loadingMore={conversationsLoadingMore}
-            hasMore={conversationsHasMore}
-            onLoadMore={() => loadMoreConversationsRef.current?.()}
+            onSelect={selectConversation}
+            loadingMore={searchActive ? false : conversationsLoadingMore}
+            hasMore={searchActive ? false : conversationsHasMore}
+            onLoadMore={searchActive ? undefined : () => loadMoreConversationsRef.current?.()}
             onConversationContextMenu={(id, x, y, source) => {
               if (import.meta.env.DEV) {
                 console.log('[WhatsApp] conversation context menu open', { conversationId: id, x, y, source });

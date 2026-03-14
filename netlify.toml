@@ -41,6 +41,13 @@
   status = 200
   force = true
 
+# GET /api/chats/search?q= — поиск чатов WhatsApp по всей базе компании
+[[redirects]]
+  from = "/api/chats/search"
+  to = "/.netlify/functions/chats-search"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
