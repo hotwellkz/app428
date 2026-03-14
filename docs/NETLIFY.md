@@ -18,7 +18,23 @@
 
 ---
 
-## 2. Переменные окружения (обязательно для Functions)
+## 2. Сборка: полнотекстовый поиск чатов (опционально)
+
+По умолчанию поиск в WhatsApp идёт **только по уже загруженным чатам** (без запроса к API — нет лишних 404 в консоли).
+
+Чтобы включить **серверный** поиск (`POST /api/chats-search` → Function `chats-search`):
+
+1. В Netlify: **Site configuration → Environment variables → Build** добавьте:
+   - **`VITE_CHATS_SEARCH_API`** = `true`
+2. Пересоберите сайт (**Deploy**).
+
+Файл **`public/_redirects`** дублирует маршруты API **выше** правила `/* → index.html`, иначе SPA перехватывает `/api/chats-search` и возможен **404**.
+
+Пока домен не отдаётся с Netlify (где есть Functions + `_redirects`), серверный поиск недоступен.
+
+---
+
+## 3. Переменные окружения (обязательно для Functions)
 
 **Site settings → Environment variables** (или **Project configuration → Environment variables**).
 
@@ -38,7 +54,7 @@
 
 ---
 
-## 3. Домен 2wix.ru (главное для API)
+## 4. Домен 2wix.ru (главное для API)
 
 ### Вариант A — сайт целиком на Netlify (рекомендуется)
 
@@ -86,7 +102,7 @@ location = /api/templates-delete {
 
 ---
 
-## 4. Какие URL уже настроены в `netlify.toml`
+## 5. Какие URL уже настроены в `netlify.toml`
 
 | URL | Function |
 |-----|----------|
@@ -104,7 +120,7 @@ location = /api/templates-delete {
 
 ---
 
-## 5. Firestore (отдельно от Netlify)
+## 6. Firestore (отдельно от Netlify)
 
 Индексы для WhatsApp (в т.ч. поиск чатов): после изменений в `firestore.indexes.json`:
 
@@ -120,7 +136,7 @@ npm run deploy:firestore-rules
 
 ---
 
-## 6. Проверка после деплоя
+## 7. Проверка после деплоя
 
 1. Открыть сайт **с того домена, где реально крутится Netlify** (или прокси настроен верно).
 2. В DevTools → Network:  
@@ -130,7 +146,7 @@ npm run deploy:firestore-rules
 
 ---
 
-## 7. Локально (как у Netlify)
+## 8. Локально (как у Netlify)
 
 ```bash
 npm run dev:full

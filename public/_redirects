@@ -1,1 +1,10 @@
+# API → Netlify Functions (должны быть ВЫШЕ catch-all, иначе SPA глотает /api/* → 404)
+/api/wazzup/webhook /.netlify/functions/wazzup-webhook 200
+/api/send-whatsapp-message /.netlify/functions/send-whatsapp-message 200
+/api/ai/analyze-client /.netlify/functions/ai-analyze-client 200
+/api/ai/generate-reply /.netlify/functions/ai-generate-reply 200
+/api/ai/transcribe-voice /.netlify/functions/ai-transcribe-voice 200
+/api/templates-delete /.netlify/functions/delete-quick-reply-template 200
+/api/chats/search /.netlify/functions/chats-search 200
+/api/chats-search /.netlify/functions/chats-search 200
 /* /index.html 200

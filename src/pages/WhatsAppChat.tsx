@@ -262,12 +262,24 @@ const WhatsAppChat: React.FC = () => {
   const conversationsForSearchRef = useRef(conversations);
   conversationsForSearchRef.current = conversations;
 
+  /** Серверный поиск при VITE_CHATS_SEARCH_API=true (сборка). Иначе — только по загруженным чатам. */
+  const useChatsSearchApi = import.meta.env.VITE_CHATS_SEARCH_API === 'true';
+
   useEffect(() => {
     if (!companyId || !searchActive) {
       setSearchChats([]);
       setSearchLoading(false);
       return;
     }
+    const q = searchQueryDebounced.trim();
+    if (!useChatsSearchApi) {
+      setSearchLoading(true);
+      const found = localSearchChats(conversationsForSearchRef.current, q);
+      setSearchChats(found);
+      setSearchLoading(false);
+      return;
+    }
+
     let cancelled = false;
     setSearchLoading(true);
     (async () => {
@@ -277,14 +289,16 @@ const WhatsAppChat: React.FC = () => {
           setSearchChats([]);
           return;
         }
-        const q = searchQueryDebounced.trim();
         const res = await fetch('/api/chats-search', {
           method: 'POST',
           headers: {
             Authorization: `Bearer ${await user.getIdToken()}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({ q })
+          body: JSON.stringify({
+            query: q,
+            companyId: companyId ?? undefined
+          })
         });
         const text = await res.text();
         const isHtml = /^\s*</i.test(text) && /doctype|html/i.test(text.slice(0, 200));
@@ -300,9 +314,9 @@ const WhatsAppChat: React.FC = () => {
           setSearchChats(found);
           toast(
             found.length
-              ? `Найдено среди загруженных: ${found.length}. Прокрутите список, чтобы догрузить чаты, или настройте API.`
-              : 'Поиск только по уже загруженным чатам. Прокрутите список вниз или настройте POST /api/chats-search.',
-            { duration: 4000, icon: 'ℹ️' }
+              ? `Найдено среди загруженных: ${found.length}. Прокрутите список или включите VITE_CHATS_SEARCH_API на Netlify.`
+              : 'Поиск по загруженным чатам. Прокрутите список вниз.',
+            { duration: 3500, icon: 'ℹ️' }
           );
           return;
         }
@@ -321,7 +335,6 @@ const WhatsAppChat: React.FC = () => {
       } catch (e) {
         if (!cancelled) {
           console.error('[WhatsApp] chats search', e);
-          const q = searchQueryDebounced.trim();
           const found = localSearchChats(conversationsForSearchRef.current, q);
           setSearchChats(found);
           if (found.length === 0) {
@@ -337,7 +350,14 @@ const WhatsAppChat: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [companyId, searchActive, searchQueryDebounced, parseChatsSearchApi, localSearchChats]);
+  }, [
+    companyId,
+    searchActive,
+    searchQueryDebounced,
+    parseChatsSearchApi,
+    localSearchChats,
+    useChatsSearchApi
+  ]);
   /** Режим выбора сообщений и действия над ними */
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const [replyToMessage, setReplyToMessage] = useState<WhatsAppMessage | null>(null);

@@ -120,7 +120,11 @@ function buildChatJson(
   };
 }
 
-async function runSearch(uid: string, rawQ: string): Promise<HandlerResponse> {
+async function runSearch(
+  uid: string,
+  rawQ: string,
+  companyIdFromClient: string | undefined
+): Promise<HandlerResponse> {
   if (rawQ.length < 1) {
     return json(200, { chats: [], total: 0 });
   }
@@ -132,6 +136,9 @@ async function runSearch(uid: string, rawQ: string): Promise<HandlerResponse> {
   const companyId = userData.companyId;
   if (!companyId) return json(403, { error: 'Forbidden' });
   if (userData.menuAccess?.whatsapp === false) return json(403, { error: 'Forbidden' });
+  if (companyIdFromClient && companyIdFromClient !== companyId) {
+    return json(403, { error: 'companyId mismatch' });
+  }
 
   const qLower = rawQ.toLowerCase();
   const qDigits = rawQ.replace(/\D/g, '');
@@ -184,8 +191,7 @@ async function runSearch(uid: string, rawQ: string): Promise<HandlerResponse> {
 }
 
 /**
- * GET /api/chats/search?q= или POST /api/chats-search { q } — поиск по диалогам.
- * POST надёжнее за прокси (GET /api/chats/search часто отдаёт index.html).
+ * POST /api/chats-search { query, companyId } — поиск по всей базе диалогов компании.
  */
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   if (event.httpMethod === 'OPTIONS') {
@@ -207,13 +213,16 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   let rawQ = (event.queryStringParameters?.q ?? '').trim();
+  let companyIdBody: string | undefined;
   if (event.httpMethod === 'POST' && event.body) {
     try {
       const b = typeof event.body === 'string' ? JSON.parse(event.body) : event.body;
-      rawQ = String((b as { q?: string })?.q ?? '').trim();
+      const body = b as { q?: string; query?: string; companyId?: string };
+      rawQ = String(body.query ?? body.q ?? '').trim();
+      companyIdBody = typeof body.companyId === 'string' ? body.companyId.trim() : undefined;
     } catch {
       /* keep rawQ from query */
     }
   }
-  return runSearch(uid, rawQ);
+  return runSearch(uid, rawQ, companyIdBody);
 };
