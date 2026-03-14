@@ -21,6 +21,7 @@ import {
   type ConversationListItem
 } from '../lib/firebase/whatsappDb';
 import { showErrorNotification } from '../utils/notifications';
+import toast from 'react-hot-toast';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase/config';
 import type { WhatsAppMessage } from '../types/whatsappDb';
@@ -244,6 +245,23 @@ const WhatsAppChat: React.FC = () => {
     });
   }, []);
 
+  const localSearchChats = useCallback((list: ConversationListItem[], qRaw: string): ConversationListItem[] => {
+    const q = qRaw.trim().toLowerCase();
+    if (!q) return [];
+    return list.filter((item) => {
+      const preview = item.lastMessage?.attachments?.length
+        ? '[медиа]'
+        : (item.lastMessage?.text ?? '').slice(0, 200);
+      const name = (item.client?.name ?? '').toLowerCase();
+      const phone = (item.phone ?? item.client?.phone ?? '').toLowerCase();
+      const searchable = [name, phone, preview].join(' ').toLowerCase();
+      return searchable.includes(q);
+    });
+  }, []);
+
+  const conversationsForSearchRef = useRef(conversations);
+  conversationsForSearchRef.current = conversations;
+
   useEffect(() => {
     if (!companyId || !searchActive) {
       setSearchChats([]);
@@ -259,38 +277,58 @@ const WhatsAppChat: React.FC = () => {
           setSearchChats([]);
           return;
         }
-        const token = await user.getIdToken();
         const q = searchQueryDebounced.trim();
         const res = await fetch('/api/chats-search', {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`,
+            Authorization: `Bearer ${await user.getIdToken()}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({ q })
         });
         const text = await res.text();
-        if (text.trimStart().startsWith('<!') || text.trimStart().startsWith('<!doctype')) {
-          throw new Error(
-            'Поиск недоступен: запрос не доходит до API (нужен прокси POST /api/chats-search на Netlify Function chats-search).'
+        const isHtml = /^\s*</i.test(text) && /doctype|html/i.test(text.slice(0, 200));
+        const useLocal =
+          res.status === 404 ||
+          res.status === 405 ||
+          isHtml ||
+          (res.status >= 500 && res.status < 600);
+
+        if (useLocal) {
+          if (cancelled) return;
+          const found = localSearchChats(conversationsForSearchRef.current, q);
+          setSearchChats(found);
+          toast(
+            found.length
+              ? `Найдено среди загруженных: ${found.length}. Прокрутите список, чтобы догрузить чаты, или настройте API.`
+              : 'Поиск только по уже загруженным чатам. Прокрутите список вниз или настройте POST /api/chats-search.',
+            { duration: 4000, icon: 'ℹ️' }
           );
+          return;
         }
-        let data: { chats?: unknown[] };
+
+        let data: { chats?: unknown[]; error?: string };
         try {
-          data = JSON.parse(text) as { chats?: unknown[] };
+          data = JSON.parse(text) as { chats?: unknown[]; error?: string };
         } catch {
           throw new Error('Некорректный ответ сервера при поиске');
         }
         if (!res.ok) {
-          throw new Error((data as { error?: string }).error || res.statusText);
+          throw new Error(data.error || res.statusText);
         }
         if (cancelled) return;
         setSearchChats(parseChatsSearchApi(data.chats ?? []));
       } catch (e) {
         if (!cancelled) {
           console.error('[WhatsApp] chats search', e);
-          showErrorNotification(e instanceof Error ? e.message : 'Ошибка поиска');
-          setSearchChats([]);
+          const q = searchQueryDebounced.trim();
+          const found = localSearchChats(conversationsForSearchRef.current, q);
+          setSearchChats(found);
+          if (found.length === 0) {
+            showErrorNotification(e instanceof Error ? e.message : 'Ошибка поиска');
+          } else {
+            toast('Показаны совпадения среди загруженных чатов.', { duration: 3500, icon: 'ℹ️' });
+          }
         }
       } finally {
         if (!cancelled) setSearchLoading(false);
@@ -299,7 +337,7 @@ const WhatsAppChat: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [companyId, searchActive, searchQueryDebounced, parseChatsSearchApi]);
+  }, [companyId, searchActive, searchQueryDebounced, parseChatsSearchApi, localSearchChats]);
   /** Режим выбора сообщений и действия над ними */
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const [replyToMessage, setReplyToMessage] = useState<WhatsAppMessage | null>(null);
