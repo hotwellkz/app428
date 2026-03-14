@@ -117,9 +117,12 @@ const feedCard = 'bg-white rounded-xl border border-gray-200 shadow-sm';
 const feedCardPad = `${feedCard} p-4 md:p-5`;
 const feedMuted = 'text-gray-500';
 
-/** Десктопный dashboard: 1 col мобилка → 2 (md) → 3 (1100) → 4 (1400) → 5 (1800), gap 16px */
+/** Моб. <360px 1 col; 360–767 две колонки gap 12px; md+ как десктоп */
 const DASHBOARD_GRID =
-  'grid w-full max-w-full gap-4 grid-cols-1 md:grid-cols-2 min-[1100px]:grid-cols-3 min-[1400px]:grid-cols-4 min-[1800px]:grid-cols-5';
+  'grid w-full max-w-full gap-3 grid-cols-1 min-[360px]:grid-cols-2 md:gap-4 md:grid-cols-2 min-[1100px]:grid-cols-3 min-[1400px]:grid-cols-4 min-[1800px]:grid-cols-5';
+/** Компактные KPI на мобиле: p-16px, radius 14px */
+const MOBILE_KPI_CARD =
+  'max-md:p-4 max-md:rounded-[14px] max-md:shadow-sm';
 /** Графики в ряд на md+ (каждый ~50% ширины при 2 колонках) */
 const CHART_PAIR_GRID = 'grid grid-cols-1 md:grid-cols-2 gap-4 w-full min-w-0';
 const chartGrid = '#e5e7eb';
@@ -161,6 +164,8 @@ export const AnalyticsPage: React.FC = () => {
   );
   /** Мобильный аккордеон фильтров (по умолчанию свёрнут) */
   const [filtersAccordionOpen, setFiltersAccordionOpen] = useState(false);
+  const [sectionNavOpen, setSectionNavOpen] = useState(false);
+  const sectionNavRef = useRef<HTMLDivElement>(null);
   const defaultDateRange = useCallback(() => {
     const d = new Date();
     d.setDate(d.getDate() - 29);
@@ -264,6 +269,15 @@ export const AnalyticsPage: React.FC = () => {
     else chips.push({ key: 'ch', text: `📡 ${t.channelOther}` });
     return chips;
   }, [dateFrom, dateTo, managerId, sourceFilter, channelFilter, managersList]);
+
+  useEffect(() => {
+    if (!sectionNavOpen) return;
+    const close = (e: MouseEvent) => {
+      if (sectionNavRef.current && !sectionNavRef.current.contains(e.target as Node)) setSectionNavOpen(false);
+    };
+    document.addEventListener('click', close, true);
+    return () => document.removeEventListener('click', close, true);
+  }, [sectionNavOpen]);
 
   useEffect(() => {
     if (!companyId || !auth.currentUser) return;
@@ -772,23 +786,6 @@ export const AnalyticsPage: React.FC = () => {
     { id: 'finance', label: t.navFinance },
     { id: 'live', label: t.navLive }
   ];
-  /** Мобильная навигация: две колонки (лев / прав) */
-  const navSectionsLeft: { id: SectionId; label: string }[] = [
-    { id: 'director', label: t.navDirector },
-    { id: 'construction', label: t.navConstruction },
-    { id: 'warehouse', label: t.navWarehouse },
-    { id: 'messaging', label: t.navWhatsapp },
-    { id: 'sources', label: t.navSources },
-    { id: 'live', label: t.navLive }
-  ];
-  const navSectionsRight: { id: SectionId; label: string }[] = [
-    { id: 'ops', label: t.opsAnalytics },
-    { id: 'txfinance', label: t.navTxFinance },
-    { id: 'leads', label: t.navLeads },
-    { id: 'managers', label: t.navManagers },
-    { id: 'finance', label: t.navFinance }
-  ];
-
   const clientsInPeriod = useMemo(
     () => clientsRows.filter((c) => c.createdAt >= fromMs && c.createdAt <= toMs),
     [clientsRows, fromMs, toMs]
@@ -1051,111 +1048,6 @@ export const AnalyticsPage: React.FC = () => {
             <span className="hidden min-[360px]:inline">PDF</span>
           </button>
         </div>
-        {/* Мобильные фильтры: одна строка + сворачиваемый блок */}
-        <div className="md:hidden border-b border-gray-100 bg-gray-50 max-w-full">
-          <button
-            type="button"
-            onClick={toggleFiltersAccordion}
-            className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold text-gray-800 active:bg-gray-100 transition-colors"
-            aria-expanded={filtersAccordionOpen}
-          >
-            <span className="flex items-center gap-2 min-w-0">
-              <Filter className="w-4 h-4 shrink-0 text-emerald-600" />
-              <span>
-                Фильтры {filtersAccordionOpen ? '🔼' : '🔽'}
-              </span>
-              {activeFiltersCount > 0 && (
-                <span className="shrink-0 rounded-full bg-emerald-500 text-white text-[10px] font-bold px-1.5 py-0.5 min-w-[1.25rem] text-center">
-                  {activeFiltersCount}
-                </span>
-              )}
-            </span>
-          </button>
-          <div
-            className={`filters-container ${filtersAccordionOpen ? 'open' : ''}`}
-          >
-            <div className="px-3 pb-3 pt-0 space-y-2 overflow-y-auto max-h-[380px] border-t border-gray-100 bg-white">
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block col-span-1">
-                  <span className="text-[10px] font-semibold text-gray-500 uppercase">{t.periodLabel} от</span>
-                  <input
-                    type="date"
-                    value={draftFrom}
-                    onChange={(e) => setDraftFrom(e.target.value)}
-                    className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs"
-                  />
-                </label>
-                <label className="block col-span-1">
-                  <span className="text-[10px] font-semibold text-gray-500 uppercase">до</span>
-                  <input
-                    type="date"
-                    value={draftTo}
-                    onChange={(e) => setDraftTo(e.target.value)}
-                    className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs"
-                  />
-                </label>
-              </div>
-              <label className="block">
-                <span className="text-[10px] font-semibold text-gray-500 uppercase">{t.managerLabel}</span>
-                <select
-                  value={draftManager}
-                  onChange={(e) => setDraftManager(e.target.value)}
-                  className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs"
-                >
-                  <option value="all">{t.allManagers}</option>
-                  <option value="none">{t.noManager}</option>
-                  {managersList.map((m) => (
-                    <option key={m.id} value={m.id}>{m.name}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-[10px] font-semibold text-gray-500 uppercase">{t.sourceLabel}</span>
-                <select
-                  value={draftSource}
-                  onChange={(e) => setDraftSource(e.target.value)}
-                  className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs"
-                >
-                  <option value="all">{t.sourceAll}</option>
-                  <option value="WhatsApp">WhatsApp</option>
-                  <option value="Instagram">Instagram</option>
-                  <option value="Google">Google</option>
-                  <option value="Звонок">Звонок</option>
-                  <option value="Сайт">Сайт</option>
-                </select>
-              </label>
-              <label className="block">
-                <span className="text-[10px] font-semibold text-gray-500 uppercase">{t.channelLabel}</span>
-                <select
-                  value={draftChannel}
-                  onChange={(e) => setDraftChannel(e.target.value)}
-                  className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs"
-                >
-                  <option value="all">{t.channelAll}</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="instagram">{t.channelInstagram}</option>
-                  <option value="other">{t.channelOther}</option>
-                </select>
-              </label>
-              <div className="flex gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={applyFilterSheet}
-                  className="flex-1 rounded-lg bg-emerald-500 py-2 text-xs font-bold text-white shadow-sm active:scale-[0.99]"
-                >
-                  {t.applyFilters}
-                </button>
-                <button
-                  type="button"
-                  onClick={resetFilterSheet}
-                  className="flex-1 rounded-lg border border-gray-300 bg-white py-2 text-xs font-semibold text-gray-700"
-                >
-                  {t.resetFilters}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
         <div className="hidden md:flex flex-wrap items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100 max-w-full">
           <input
             type="date"
@@ -1206,8 +1098,7 @@ export const AnalyticsPage: React.FC = () => {
             <option value="other">{t.channelOther}</option>
           </select>
         </div>
-        {/* Мобилка / планшет: 2 колонки; десктоп md+: 3 колонки; gap 10px */}
-        <nav className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-2.5 p-2 bg-white max-w-full overflow-x-hidden">
+        <nav className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-2.5 p-2 bg-white max-w-full overflow-x-hidden border-t border-gray-100">
           {sections.map((s) => (
             <button
               key={s.id}
@@ -1226,46 +1117,6 @@ export const AnalyticsPage: React.FC = () => {
             </button>
           ))}
         </nav>
-        <nav className="grid grid-cols-2 gap-2.5 p-2 bg-white max-w-full md:hidden">
-          <div className="flex flex-col gap-2.5 min-w-0">
-            {navSectionsLeft.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => {
-                  setActiveSection(s.id);
-                  document.getElementById(`sec-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                className={`min-h-9 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors text-center leading-tight ${
-                  activeSection === s.id
-                    ? 'bg-emerald-500 text-white shadow-sm'
-                    : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-          <div className="flex flex-col gap-2.5 min-w-0">
-            {navSectionsRight.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => {
-                  setActiveSection(s.id);
-                  document.getElementById(`sec-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }}
-                className={`min-h-9 px-2 py-1.5 rounded-md text-[10px] font-semibold transition-colors text-center leading-tight ${
-                  activeSection === s.id
-                    ? 'bg-emerald-500 text-white shadow-sm'
-                    : 'text-gray-600 bg-gray-100 hover:bg-gray-200'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </nav>
       </div>
 
       {loading && !deals.length ? (
@@ -1275,8 +1126,104 @@ export const AnalyticsPage: React.FC = () => {
       ) : (
         <div
           ref={reportRef}
-          className="analytics-dashboard-root flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-gray-100 w-full max-w-[100vw] md:max-w-[1800px] md:w-full md:mx-auto px-4 pt-[calc(11.5rem+env(safe-area-inset-top,0px))] min-[480px]:pt-[calc(10.5rem+env(safe-area-inset-top,0px))] md:pt-[calc(9.25rem+env(safe-area-inset-top,0px))] md:pl-[calc(16rem+2rem)] md:pr-8 pb-[max(6rem,env(safe-area-inset-bottom,0px)+4rem)] space-y-4 sm:space-y-6 box-border max-md:px-2"
+          className="analytics-dashboard-root flex-1 min-h-0 overflow-y-auto overflow-x-hidden bg-gray-100 w-full max-w-[100vw] md:max-w-[1800px] md:w-full md:mx-auto px-4 pt-[calc(3.25rem+env(safe-area-inset-top,0px))] md:pt-[calc(9.25rem+env(safe-area-inset-top,0px))] md:pl-[calc(16rem+2rem)] md:pr-8 pb-[max(6rem,env(safe-area-inset-bottom,0px)+4rem)] space-y-4 sm:space-y-6 box-border max-md:px-2"
         >
+          {/* Мобилка: sticky фильтры + компактный выбор раздела (высота строки ≤50px) */}
+          <div className="md:hidden sticky top-0 z-10 -mx-2 px-2 pt-1 pb-0 bg-gray-100/98 backdrop-blur-sm border-b border-gray-200/80 shadow-sm max-w-[100vw] overflow-x-hidden">
+            <div className="border border-gray-200 rounded-lg bg-gray-50 overflow-hidden max-w-full">
+              <button
+                type="button"
+                onClick={toggleFiltersAccordion}
+                className="w-full flex items-center justify-between gap-2 px-3 h-9 text-left text-xs font-semibold text-gray-800 active:bg-gray-100 border-b border-gray-100"
+                aria-expanded={filtersAccordionOpen}
+              >
+                <span className="flex items-center gap-2 min-w-0 truncate">
+                  <Filter className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+                  <span className="truncate">Фильтры {filtersAccordionOpen ? '▲' : '▼'}</span>
+                  {activeFiltersCount > 0 && (
+                    <span className="shrink-0 rounded-full bg-emerald-500 text-white text-[9px] font-bold px-1 py-0 min-w-[1rem] text-center leading-4">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                </span>
+              </button>
+              <div className={`filters-container ${filtersAccordionOpen ? 'open' : ''}`}>
+                <div className="px-3 pb-3 pt-2 space-y-2 overflow-y-auto max-h-[min(70vh,380px)] bg-white border-t border-gray-100">
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="text-[10px] font-semibold text-gray-500 uppercase">от</span>
+                      <input type="date" value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs" />
+                    </label>
+                    <label className="block">
+                      <span className="text-[10px] font-semibold text-gray-500 uppercase">до</span>
+                      <input type="date" value={draftTo} onChange={(e) => setDraftTo(e.target.value)} className="mt-0.5 w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs" />
+                    </label>
+                  </div>
+                  <select value={draftManager} onChange={(e) => setDraftManager(e.target.value)} className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs">
+                    <option value="all">{t.allManagers}</option>
+                    <option value="none">{t.noManager}</option>
+                    {managersList.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </select>
+                  <select value={draftSource} onChange={(e) => setDraftSource(e.target.value)} className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs">
+                    <option value="all">{t.sourceAll}</option>
+                    <option value="WhatsApp">WhatsApp</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Google">Google</option>
+                    <option value="Звонок">Звонок</option>
+                    <option value="Сайт">Сайт</option>
+                  </select>
+                  <select value={draftChannel} onChange={(e) => setDraftChannel(e.target.value)} className="w-full rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-xs">
+                    <option value="all">{t.channelAll}</option>
+                    <option value="whatsapp">WhatsApp</option>
+                    <option value="instagram">{t.channelInstagram}</option>
+                    <option value="other">{t.channelOther}</option>
+                  </select>
+                  <div className="flex gap-2">
+                    <button type="button" onClick={applyFilterSheet} className="flex-1 rounded-lg bg-emerald-500 py-2 text-xs font-bold text-white">{t.applyFilters}</button>
+                    <button type="button" onClick={resetFilterSheet} className="flex-1 rounded-lg border border-gray-300 bg-white py-2 text-xs font-semibold text-gray-700">{t.resetFilters}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div ref={sectionNavRef} className="relative mt-1.5 mb-1 max-w-full">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setSectionNavOpen((o) => !o); }}
+                className="flex h-[50px] max-h-[50px] w-full items-center justify-between gap-2 rounded-lg border border-gray-200 bg-white px-3 text-left text-sm font-semibold text-gray-900 shadow-sm"
+                aria-expanded={sectionNavOpen}
+                aria-haspopup="listbox"
+              >
+                <span className="min-w-0 truncate">
+                  Раздел: <span className="text-emerald-700">{sections.find((x) => x.id === activeSection)?.label ?? '—'}</span>
+                </span>
+                <span className="shrink-0 text-gray-500 text-xs">{sectionNavOpen ? '▲' : '▼'}</span>
+              </button>
+              {sectionNavOpen && (
+                <ul
+                  className="absolute left-0 right-0 top-[calc(100%+4px)] z-20 max-h-[min(55vh,320px)] overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg"
+                  role="listbox"
+                >
+                  {sections.map((s) => (
+                    <li key={s.id} role="option" aria-selected={activeSection === s.id}>
+                      <button
+                        type="button"
+                        className={`w-full px-3 py-2.5 text-left text-sm ${activeSection === s.id ? 'bg-emerald-50 font-semibold text-emerald-800' : 'text-gray-800 active:bg-gray-100'}`}
+                        onClick={() => {
+                          setActiveSection(s.id);
+                          setSectionNavOpen(false);
+                          setTimeout(() => document.getElementById(`sec-${s.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+                        }}
+                      >
+                        {s.label}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
           <div className="md:hidden flex flex-wrap gap-2 py-2 border-b border-gray-200">
             {filterChips.map((c, i) => (
               <span
@@ -1373,7 +1320,7 @@ export const AnalyticsPage: React.FC = () => {
               ].map((c) => (
                 <div
                   key={c.label}
-                  className={`rounded-xl p-2.5 sm:p-3 md:p-4 text-white shadow-md bg-gradient-to-br min-h-0 ${c.grad}`}
+                  className={`rounded-xl p-2.5 sm:p-3 md:p-4 text-white shadow-md bg-gradient-to-br min-h-0 ${MOBILE_KPI_CARD} ${c.grad}`}
                 >
                   <c.icon className="w-5 h-5 sm:w-6 sm:h-6 opacity-95 mb-1.5" />
                   <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-wide opacity-90 leading-tight line-clamp-2">
@@ -1417,7 +1364,7 @@ export const AnalyticsPage: React.FC = () => {
                 { label: t.incomeShort, value: `${(opsKpi.incomeMonth / 1000).toFixed(0)}k ₸`, sub: opsKpi.incomeMonth.toLocaleString('ru-RU') + ' ₸', icon: Wallet, grad: 'from-emerald-600 to-teal-700' },
                 { label: t.materialsOnStock, value: opsKpi.materialsCount, icon: Package, grad: 'from-violet-600 to-indigo-700' }
               ].map((c) => (
-                <div key={c.label} className={`rounded-xl p-2.5 sm:p-3 text-white bg-gradient-to-br shadow-md ${c.grad}`}>
+                <div key={c.label} className={`rounded-xl p-2.5 sm:p-3 text-white bg-gradient-to-br shadow-md ${MOBILE_KPI_CARD} ${c.grad}`}>
                   <c.icon className="w-5 h-5 mb-1 opacity-95" />
                   <p className="text-[9px] font-bold uppercase opacity-90 line-clamp-2">{c.label}</p>
                   <p className="text-lg sm:text-xl font-black mt-0.5 truncate">{c.value}</p>
@@ -1445,7 +1392,7 @@ export const AnalyticsPage: React.FC = () => {
                 { l: t.clientsWithDeposit, v: constructionKpi.withDeposit },
                 { l: t.overdueProjects, v: constructionKpi.overdue }
               ].map((x) => (
-                <div key={x.l} className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+                <div key={x.l} className={`rounded-lg border border-gray-200 bg-white shadow-sm ${MOBILE_KPI_CARD} p-2 md:p-2`}>
                   <p className="text-[8px] font-bold uppercase text-gray-500 line-clamp-2">{x.l}</p>
                   <p className="text-base font-black tabular-nums">{x.v}</p>
                 </div>
@@ -1543,7 +1490,7 @@ export const AnalyticsPage: React.FC = () => {
                 { l: t.netProfit, v: txFinanceKpiFixed.netProfit.toLocaleString('ru-RU') + ' ₸' },
                 { l: t.avgPayment, v: txFinanceKpiFixed.avgPayment.toLocaleString('ru-RU') + ' ₸' }
               ].map((x) => (
-                <div key={x.l} className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
+                <div key={x.l} className={`rounded-lg border border-gray-200 bg-white shadow-sm ${MOBILE_KPI_CARD} p-2 md:p-2`}>
                   <p className="text-[8px] font-bold uppercase text-gray-500 leading-tight line-clamp-2">{x.l}</p>
                   <p className="text-xs font-black tabular-nums mt-0.5 break-all">{x.v}</p>
                 </div>
@@ -1765,7 +1712,7 @@ export const AnalyticsPage: React.FC = () => {
               ].map((x) => (
                 <div
                   key={x.label}
-                  className="rounded-lg border border-gray-200 bg-white p-2 shadow-sm"
+                  className={`rounded-lg border border-gray-200 bg-white shadow-sm ${MOBILE_KPI_CARD} p-2 md:p-2`}
                 >
                   <x.icon className="w-4 h-4 mb-1 text-emerald-600" />
                   <p className="text-[9px] font-bold uppercase text-gray-500 line-clamp-2">
