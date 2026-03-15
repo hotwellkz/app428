@@ -15,6 +15,7 @@ import {
   VozmozhnostiPage,
   CenyPage,
   FaqPage,
+  UpravlenieKlientamiPage,
   KlientyPage,
   WhatsAppChatyPage,
   SdelkiVoronkaPage,
@@ -34,6 +35,7 @@ const PUBLIC_PATHS = [
   '/vozmozhnosti',
   '/ceny',
   '/faq',
+  '/upravlenie-klientami',
   '/klienty',
   '/whatsapp-i-chaty',
   '/sdelki-i-voronka',
@@ -84,6 +86,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
           <Route path="/vozmozhnosti" element={<VozmozhnostiPage />} />
           <Route path="/ceny" element={<CenyPage />} />
           <Route path="/faq" element={<FaqPage />} />
+          <Route path="/upravlenie-klientami" element={<UpravlenieKlientamiPage />} />
           <Route path="/klienty" element={<KlientyPage />} />
           <Route path="/whatsapp-i-chaty" element={<WhatsAppChatyPage />} />
           <Route path="/sdelki-i-voronka" element={<SdelkiVoronkaPage />} />

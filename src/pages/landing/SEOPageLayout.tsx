@@ -1,8 +1,6 @@
 import React from 'react';
-import { useLocation } from 'react-router-dom';
-import { LandingHeader } from './LandingHeader';
-import { LandingFooter } from './LandingFooter';
 import { PublicPageSEO } from '../../seo';
+import { PublicLayout } from '../../public';
 import type { BreadcrumbItem } from '../../seo';
 
 interface SEOPageLayoutProps {
@@ -27,22 +25,16 @@ export const SEOPageLayout: React.FC<SEOPageLayoutProps> = ({
   breadcrumbs,
   structuredData,
   children,
-}) => {
-  return (
-    <>
-      <PublicPageSEO
-        title={title}
-        description={description}
-        path={path}
-        ogImage={ogImage}
-        breadcrumbs={breadcrumbs}
-        structuredData={structuredData}
-      />
-      <div className="min-h-screen bg-white text-slate-900 antialiased">
-        <LandingHeader />
-        <main>{children}</main>
-        <LandingFooter />
-      </div>
-    </>
-  );
-};
+}) => (
+  <>
+    <PublicPageSEO
+      title={title}
+      description={description}
+      path={path}
+      ogImage={ogImage}
+      breadcrumbs={breadcrumbs}
+      structuredData={structuredData}
+    />
+    <PublicLayout>{children}</PublicLayout>
+  </>
+);

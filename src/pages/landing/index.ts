@@ -6,6 +6,7 @@ export { WhatsAppCrmPage } from './WhatsAppCrmPage';
 export { VozmozhnostiPage } from './VozmozhnostiPage';
 export { CenyPage } from './CenyPage';
 export { FaqPage } from './FaqPage';
+export { UpravlenieKlientamiPage } from './UpravlenieKlientamiPage';
 export {
   KlientyPage,
   WhatsAppChatyPage,
