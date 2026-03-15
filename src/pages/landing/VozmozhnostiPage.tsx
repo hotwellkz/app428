@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SEOPageLayout } from './SEOPageLayout';
 import { PublicCTA } from './PublicCTA';
+import { PublicProductPreview } from '../../public';
 import {
   Users,
   MessageSquare,
@@ -13,7 +14,6 @@ import {
   Shield,
   ArrowRight,
   Check,
-  LayoutDashboard,
 } from 'lucide-react';
 
 const TITLE = 'Возможности CRM 2wix — функции и модули для бизнеса';
@@ -103,11 +103,8 @@ export const VozmozhnostiPage: React.FC = () => {
               Создать компанию
             </button>
           </div>
-          <div className="mt-12 rounded-sfCard border border-sf-border bg-sf-surface/80 shadow-xl shadow-sfCard overflow-hidden max-w-4xl mx-auto">
-            <div className="aspect-video bg-gradient-to-br from-sf-borderLight to-sf-backgroundSection flex items-center justify-center p-8">
-              <LayoutDashboard className="w-20 h-20 text-sf-text-muted" />
-              <span className="sr-only">Интерфейс 2wix</span>
-            </div>
+          <div className="mt-12 max-w-3xl mx-auto">
+            <PublicProductPreview />
           </div>
         </div>
       </section>

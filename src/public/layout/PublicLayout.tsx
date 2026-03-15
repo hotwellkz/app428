@@ -11,13 +11,33 @@ interface PublicLayoutProps {
 /**
  * Прокрутка в начало страницы при любом переходе между публичными страницами.
  * Всегда scrollTop = 0, чтобы пользователь видел Hero/верх страницы.
- * Якоря (#section) внутри одной страницы работают через нативный браузерный скролл;
- * при переходе на новую страницу не прокручиваем к hash — только вверх.
+ * Прокручиваем и window, и #root (в index.css у #root overflow-y: auto — скролл идёт там).
+ * Отключаем history.scrollRestoration на время публичных страниц, чтобы браузер не восстанавливал старую позицию.
  */
 function usePublicScrollToTop() {
   const { pathname } = useLocation();
+
   useEffect(() => {
-    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    const scrollToTop = () => {
+      window.scrollTo(0, 0);
+      const root = document.getElementById('root');
+      if (root) {
+        root.scrollTop = 0;
+      }
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
+
+    scrollToTop();
+    const raf = requestAnimationFrame(scrollToTop);
+
+    const prevRestoration = history.scrollRestoration;
+    history.scrollRestoration = 'manual';
+
+    return () => {
+      cancelAnimationFrame(raf);
+      history.scrollRestoration = prevRestoration;
+    };
   }, [pathname]);
 }
 

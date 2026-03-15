@@ -8,4 +8,4 @@ export { publicTokens } from './theme';
 export type { PublicTokens } from './theme';
 
 export { PublicLayout, PublicHeader, PublicFooter, PublicContainer, PublicSection } from './layout';
-export { PublicButton, PublicSectionTitle, PublicCard, PublicCTASection, PublicNavLink } from './components';
+export { PublicButton, PublicSectionTitle, PublicCard, PublicCTASection, PublicNavLink, PublicProductPreview } from './components';
