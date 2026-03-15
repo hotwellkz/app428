@@ -21,6 +21,7 @@ export const SEO_PUBLIC_PATHS = [
   '/upravlenie-klientami',
   '/analitika-prodazh',
   '/kontrol-menedzherov',
+  '/upravlenie-zayavkami',
   '/klienty',
   '/whatsapp-i-chaty',
   '/sdelki-i-voronka',

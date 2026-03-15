@@ -7,6 +7,7 @@ const FOOTER_LINKS = [
   { label: 'Управление клиентами', to: '/upravlenie-klientami' },
   { label: 'Аналитика продаж', to: '/analitika-prodazh' },
   { label: 'Контроль менеджеров', to: '/kontrol-menedzherov' },
+  { label: 'Управление заявками', to: '/upravlenie-zayavkami' },
   { label: 'CRM для бизнеса', to: '/crm-dlya-biznesa' },
   { label: 'CRM для малого бизнеса', to: '/crm-dlya-malogo-biznesa' },
   { label: 'CRM для продаж', to: '/crm-dlya-prodazh' },

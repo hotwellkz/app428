@@ -9,6 +9,7 @@ export { FaqPage } from './FaqPage';
 export { UpravlenieKlientamiPage } from './UpravlenieKlientamiPage';
 export { AnalitikaProdazhPage } from './AnalitikaProdazhPage';
 export { KontrolMenedzherovPage } from './KontrolMenedzherovPage';
+export { UpravlenieZayavkamiPage } from './UpravlenieZayavkamiPage';
 export {
   KlientyPage,
   WhatsAppChatyPage,
