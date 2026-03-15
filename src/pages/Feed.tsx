@@ -185,7 +185,8 @@ export const Feed: React.FC = () => {
     return canModerate;
   }, [user?.email, user?.role, approvedEmails, companyUser?.role, companyUser?.permissions?.approveTransactions]);
 
-  const canDeleteTransaction = useCallback(
+  /** Синхронная проверка для отображения кнопки удаления в списке (без запроса в БД). */
+  const canShowDeleteForTransaction = useCallback(
     (t: { companyId?: string }) =>
       !!(
         user?.role === 'global_admin' ||
@@ -1192,7 +1193,7 @@ export const Feed: React.FC = () => {
                 onApprove={handleApprove}
                 onEdit={setEditingTransaction}
                 onDeleteRequest={setTransactionToDelete}
-                canDeleteTransaction={canDeleteTransaction}
+                canDeleteTransaction={canShowDeleteForTransaction}
                 approvingTransactionId={approvingId}
                 rejectingTransactionId={rejectingId}
                 hasMore={hasMore}
