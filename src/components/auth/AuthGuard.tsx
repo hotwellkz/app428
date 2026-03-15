@@ -29,6 +29,7 @@ import {
   RoliPravaPage,
   WhatsAppDlyaOtdelaProdazhPage,
   EdinayaBazaKlientovPage,
+  UchetKlientovPage,
 } from '../../pages/landing';
 
 const PUBLIC_PATHS = [
@@ -54,6 +55,7 @@ const PUBLIC_PATHS = [
   '/roli-i-prava',
   '/whatsapp-dlya-otdela-prodazh',
   '/edinaya-baza-klientov',
+  '/uchet-klientov',
 ];
 
 interface AuthGuardProps {
@@ -110,6 +112,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
           <Route path="/roli-i-prava" element={<RoliPravaPage />} />
           <Route path="/whatsapp-dlya-otdela-prodazh" element={<WhatsAppDlyaOtdelaProdazhPage />} />
           <Route path="/edinaya-baza-klientov" element={<EdinayaBazaKlientovPage />} />
+          <Route path="/uchet-klientov" element={<UchetKlientovPage />} />
         </Routes>
       );
     }
