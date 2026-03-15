@@ -31,6 +31,7 @@ export const SEO_PUBLIC_PATHS = [
   '/sklad-i-materialy',
   '/roli-i-prava',
   '/whatsapp-dlya-otdela-prodazh',
+  '/edinaya-baza-klientov',
 ] as const;
 
 /** Пути CRM и служебные — не индексировать. */

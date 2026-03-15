@@ -12,6 +12,7 @@ export { KontrolMenedzherovPage } from './KontrolMenedzherovPage';
 export { UpravlenieZayavkamiPage } from './UpravlenieZayavkamiPage';
 export { RoliPravaPage } from './RoliPravaPage';
 export { WhatsAppDlyaOtdelaProdazhPage } from './WhatsAppDlyaOtdelaProdazhPage';
+export { EdinayaBazaKlientovPage } from './EdinayaBazaKlientovPage';
 export {
   KlientyPage,
   WhatsAppChatyPage,
