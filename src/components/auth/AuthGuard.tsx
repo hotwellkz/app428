@@ -9,6 +9,7 @@ import { AcceptInvitePage } from '../../pages/AcceptInvitePage';
 import {
   LandingPage,
   CrmDlyaBiznesaPage,
+  CrmDlyaMalogoBiznesaPage,
   CrmDlyaProdazhPage,
   WhatsAppCrmPage,
   VozmozhnostiPage,
@@ -27,6 +28,7 @@ import {
 const PUBLIC_PATHS = [
   '/',
   '/crm-dlya-biznesa',
+  '/crm-dlya-malogo-biznesa',
   '/crm-dlya-prodazh',
   '/whatsapp-crm',
   '/vozmozhnosti',
@@ -76,6 +78,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
         <Routes>
           <Route path="/" element={<LandingPage onLoginSuccess={() => setIsAuthenticated(true)} />} />
           <Route path="/crm-dlya-biznesa" element={<CrmDlyaBiznesaPage />} />
+          <Route path="/crm-dlya-malogo-biznesa" element={<CrmDlyaMalogoBiznesaPage />} />
           <Route path="/crm-dlya-prodazh" element={<CrmDlyaProdazhPage />} />
           <Route path="/whatsapp-crm" element={<WhatsAppCrmPage />} />
           <Route path="/vozmozhnosti" element={<VozmozhnostiPage />} />

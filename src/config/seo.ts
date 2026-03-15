@@ -12,6 +12,7 @@ export { getCanonicalUrlFromSeo as getCanonicalUrl };
 export const SEO_PUBLIC_PATHS = [
   '/',
   '/crm-dlya-biznesa',
+  '/crm-dlya-malogo-biznesa',
   '/crm-dlya-prodazh',
   '/whatsapp-crm',
   '/vozmozhnosti',

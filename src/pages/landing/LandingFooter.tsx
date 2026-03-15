@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 const FOOTER_LINKS = [
   { label: 'Возможности', to: '/vozmozhnosti' },
   { label: 'CRM для бизнеса', to: '/crm-dlya-biznesa' },
+  { label: 'CRM для малого бизнеса', to: '/crm-dlya-malogo-biznesa' },
   { label: 'CRM для продаж', to: '/crm-dlya-prodazh' },
   { label: 'WhatsApp CRM', to: '/whatsapp-crm' },
   { label: 'Цены', to: '/ceny' },
