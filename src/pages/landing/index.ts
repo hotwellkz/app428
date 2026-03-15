@@ -14,6 +14,8 @@ export { RoliPravaPage } from './RoliPravaPage';
 export { WhatsAppDlyaOtdelaProdazhPage } from './WhatsAppDlyaOtdelaProdazhPage';
 export { EdinayaBazaKlientovPage } from './EdinayaBazaKlientovPage';
 export { UchetKlientovPage } from './UchetKlientovPage';
+export { CrmDlyaKomandyPage } from './CrmDlyaKomandyPage';
+export { CrmDlyaStroitelnoiKompaniiPage } from './CrmDlyaStroitelnoiKompaniiPage';
 export {
   KlientyPage,
   WhatsAppChatyPage,

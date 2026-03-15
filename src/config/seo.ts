@@ -33,6 +33,8 @@ export const SEO_PUBLIC_PATHS = [
   '/whatsapp-dlya-otdela-prodazh',
   '/edinaya-baza-klientov',
   '/uchet-klientov',
+  '/crm-dlya-komandy',
+  '/crm-dlya-stroitelnoi-kompanii',
 ] as const;
 
 /** Пути CRM и служебные — не индексировать. */
