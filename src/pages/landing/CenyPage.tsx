@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SEOPageLayout } from './SEOPageLayout';
+import { SEO_BASE_URL } from '../../config/seo';
 import {
   Check,
   ArrowRight,
@@ -173,7 +174,15 @@ export const CenyPage: React.FC = () => {
   }, []);
 
   return (
-    <SEOPageLayout title={TITLE} description={DESCRIPTION}>
+    <SEOPageLayout
+      title={TITLE}
+      description={DESCRIPTION}
+      path="/ceny"
+      breadcrumbs={[
+        { name: 'Главная', item: SEO_BASE_URL + '/' },
+        { name: 'Цены', item: SEO_BASE_URL + '/ceny' },
+      ]}
+    >
       {/* Hero */}
       <section className="relative pt-28 pb-16 md:pt-36 md:pb-24 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-white" />

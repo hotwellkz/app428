@@ -2,6 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { SEOPageLayout } from './SEOPageLayout';
+import { SEO_BASE_URL } from '../../config/seo';
 import { ArrowRight, ChevronDown } from 'lucide-react';
 
 const TITLE = 'Вопросы и ответы о 2wix — FAQ по CRM для бизнеса и продаж';
@@ -304,7 +305,15 @@ export const FaqPage: React.FC = () => {
   }, []);
 
   return (
-    <SEOPageLayout title={TITLE} description={DESCRIPTION}>
+    <SEOPageLayout
+      title={TITLE}
+      description={DESCRIPTION}
+      path="/faq"
+      breadcrumbs={[
+        { name: 'Главная', item: SEO_BASE_URL + '/' },
+        { name: 'Вопросы и ответы', item: SEO_BASE_URL + '/faq' },
+      ]}
+    >
       <Helmet>
         <script type="application/ld+json">{JSON.stringify(faqSchema)}</script>
       </Helmet>

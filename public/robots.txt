@@ -1,8 +1,32 @@
+# 2wix.ru — технический SEO
+# Публичные страницы (/, /vozmozhnosti, /crm-dlya-biznesa, /ceny, /faq и др.) индексируются.
+# Внутреннее приложение CRM и служебные маршруты закрыты от индексации.
+
 User-agent: *
 Allow: /
 
-# Публичные SEO-страницы доступны для индексации.
-# Внутреннее приложение CRM (/transactions, /feed, и т.д.) защищено авторизацией.
+Disallow: /transactions
+Disallow: /transaction-history
+Disallow: /feed
+Disallow: /clients
+Disallow: /client-files
+Disallow: /admin
+Disallow: /daily-report
+Disallow: /templates
+Disallow: /products
+Disallow: /warehouse
+Disallow: /employees
+Disallow: /calculator
+Disallow: /deals
+Disallow: /analytics
+Disallow: /whatsapp
+Disallow: /settings
+Disallow: /profile
+Disallow: /finishing-materials
+Disallow: /register
+Disallow: /register-company
+Disallow: /accept-invite
+Disallow: /login
 Disallow: /app
 
 Sitemap: https://2wix.ru/sitemap.xml

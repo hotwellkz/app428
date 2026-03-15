@@ -3,6 +3,7 @@ import { useLocation, Routes, Route } from 'react-router-dom';
 import { auth } from '../../lib/firebase/auth';
 import { LoginForm } from './LoginForm';
 import { LoadingSpinner } from '../LoadingSpinner';
+import { CrmNoIndex } from '../seo/CrmNoIndex';
 import { RegisterCompany } from '../../pages/RegisterCompany';
 import { AcceptInvitePage } from '../../pages/AcceptInvitePage';
 import {
@@ -98,5 +99,10 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <CrmNoIndex />
+      {children}
+    </>
+  );
 };
