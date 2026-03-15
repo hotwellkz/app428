@@ -10,6 +10,7 @@ export { UpravlenieKlientamiPage } from './UpravlenieKlientamiPage';
 export { AnalitikaProdazhPage } from './AnalitikaProdazhPage';
 export { KontrolMenedzherovPage } from './KontrolMenedzherovPage';
 export { UpravlenieZayavkamiPage } from './UpravlenieZayavkamiPage';
+export { RoliPravaPage } from './RoliPravaPage';
 export {
   KlientyPage,
   WhatsAppChatyPage,
@@ -18,5 +19,4 @@ export {
   AnalitikaPage,
   TranzakciiFinansyPage,
   SkladMaterialyPage,
-  RoliPravaPage,
 } from './FeaturePages';

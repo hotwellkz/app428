@@ -10,4 +10,3 @@ export const BystryeOtvetyPage: React.FC = () => <FeaturePage config={FEATURE_PA
 export const AnalitikaPage: React.FC = () => <FeaturePage config={FEATURE_PAGES.analitika} />;
 export const TranzakciiFinansyPage: React.FC = () => <FeaturePage config={FEATURE_PAGES['tranzakcii-i-finansy']} />;
 export const SkladMaterialyPage: React.FC = () => <FeaturePage config={FEATURE_PAGES['sklad-i-materialy']} />;
-export const RoliPravaPage: React.FC = () => <FeaturePage config={FEATURE_PAGES['roli-i-prava']} />;
