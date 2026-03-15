@@ -9,21 +9,16 @@ interface PublicLayoutProps {
 }
 
 /**
- * Прокрутка в начало страницы при переходе между публичными страницами.
- * При смене pathname: если в URL есть hash — прокрутка к якорю, иначе — в самый верх.
+ * Прокрутка в начало страницы при любом переходе между публичными страницами.
+ * Всегда scrollTop = 0, чтобы пользователь видел Hero/верх страницы.
+ * Якоря (#section) внутри одной страницы работают через нативный браузерный скролл;
+ * при переходе на новую страницу не прокручиваем к hash — только вверх.
  */
 function usePublicScrollToTop() {
-  const { pathname, hash } = useLocation();
+  const { pathname } = useLocation();
   useEffect(() => {
-    if (hash) {
-      const id = hash.slice(1);
-      requestAnimationFrame(() => {
-        document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
-      });
-    } else {
-      window.scrollTo(0, 0);
-    }
-  }, [pathname, hash]);
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  }, [pathname]);
 }
 
 /**
