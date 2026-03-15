@@ -14,6 +14,7 @@ export interface TransactionFile {
 
 export interface Transaction {
   id: string;
+  companyId?: string;
   fromUser: string;
   toUser: string;
   amount: number;

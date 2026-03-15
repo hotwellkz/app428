@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getSettingsFromCache, saveSettingsToCache } from '../lib/cache';
 import { deleteCategory } from '../lib/firebase/categories';
 
-// Ключ для кэша транзакций
 const TRANSACTIONS_CACHE_KEY = 'transactions_page_cache';
+
+const getTransactionsCacheKey = (companyId: string | null) =>
+  companyId ? `${TRANSACTIONS_CACHE_KEY}_${companyId}` : null;
 
 import { Helmet } from 'react-helmet-async';
 import { 
@@ -43,25 +45,46 @@ export const Transactions: React.FC = () => {
   const [fromCache, setFromCache] = useState(false);
   const [localLoading, setLocalLoading] = useState(true);
 
-  // При монтировании: сначала пробуем взять из кэша
+  // Сброс при смене компании: не показывать данные другой компании
   useEffect(() => {
+    if (!companyId) {
+      setCategories([]);
+      setFromCache(false);
+      setLocalLoading(false);
+      return;
+    }
+    setLocalLoading(true);
+  }, [companyId]);
+
+  // При наличии companyId: пробуем взять кэш только для этой компании
+  useEffect(() => {
+    if (!companyId) return;
     let mounted = true;
     (async () => {
-      const cached = await getSettingsFromCache(TRANSACTIONS_CACHE_KEY, null);
-      if (cached && mounted) {
+      const cacheKey = getTransactionsCacheKey(companyId);
+      if (!cacheKey) return;
+      const cached = await getSettingsFromCache(cacheKey, null);
+      if (cached && Array.isArray(cached) && mounted) {
         setCategories(cached);
         setFromCache(true);
-        setLocalLoading(false);
-      } else {
-        setLocalLoading(true); // Только если кэша нет, показываем лоадер
       }
+      if (mounted) setLocalLoading(false);
     })();
     return () => { mounted = false; };
-  }, []);
+  }, [companyId]);
 
-  // Когда пришли новые данные с сервера — проекты: сумма расхода SUM|amount|; остальные — categories.amount
+  // Когда пришли данные с сервера (useCategories с where companyId) — мержим суммы по проектам
   useEffect(() => {
-    if (!companyId || !loadedCategories?.length) return;
+    if (!companyId) {
+      setCategories([]);
+      return;
+    }
+    if (!loadedCategories?.length) {
+      setCategories([]);
+      setFromCache(false);
+      setLocalLoading(false);
+      return;
+    }
     let cancelled = false;
     const visible = loadedCategories.filter((c) => c.isVisible !== false);
     const projects = visible.filter((c) => isProjectCategory(c));
@@ -92,34 +115,39 @@ export const Transactions: React.FC = () => {
       }));
       setCategories(merged);
       setFromCache(false);
-      saveSettingsToCache(
-        TRANSACTIONS_CACHE_KEY,
-        merged.map(({ id, title, amount, color, row, isVisible, type }) => ({
-          id,
-          title,
-          amount,
-          color,
-          row,
-          isVisible,
-          type,
-        }))
-      );
+      const cacheKey = getTransactionsCacheKey(companyId);
+      if (cacheKey) {
+        saveSettingsToCache(
+          cacheKey,
+          merged.map(({ id, title, amount, color, row, isVisible, type }) => ({
+            id,
+            title,
+            amount,
+            color,
+            row,
+            isVisible,
+            type,
+          }))
+        );
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, [companyId, loadedCategories]);
 
-  // Экспортируем функцию обновления глобально для StickyNavigation
+  // Экспортируем функцию обновления глобально для StickyNavigation (очищаем кэш текущей компании)
   useEffect(() => {
     (window as any).refreshTransactionsPage = () => {
-      // Сброс кэша и форс-загрузка
-      localStorage.removeItem(TRANSACTIONS_CACHE_KEY);
-      caches.open('hotwell-settings-v1').then(cache => cache.delete(`/settings/${TRANSACTIONS_CACHE_KEY}`));
-      window.location.reload(); // Самый надёжный способ форс-обновления данных useCategories
+      const key = getTransactionsCacheKey(companyId);
+      if (key) {
+        localStorage.removeItem(key);
+        caches.open('hotwell-settings-v1').then(cache => cache.delete(`/settings/${key}`));
+      }
+      window.location.reload();
     };
     return () => { delete (window as any).refreshTransactionsPage; };
-  }, []);
+  }, [companyId]);
 
   // Диагностика дублей: один и тот же title с разными id (только dev). Вызов до любых return.
   useEffect(() => {
@@ -347,6 +375,16 @@ export const Transactions: React.FC = () => {
     focusKeyword: 'CRM система для строительных компаний'
   };
 
+  if (!companyId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center text-gray-500 p-4">
+          Загрузка компании…
+        </div>
+      </div>
+    );
+  }
+
   if (!fromCache && (localLoading || loading)) {
     return <LoadingSpinner />;
   }
@@ -372,6 +410,8 @@ export const Transactions: React.FC = () => {
   const employeeCategories = visibleCategories.filter(c => c.row === 2);
   const projectCategories = visibleCategories.filter(c => c.row === 3);
   const warehouseCategories = visibleCategories.filter(c => c.row === 4);
+
+  const hasNoObjects = visibleCategories.length === 0;
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -417,6 +457,19 @@ export const Transactions: React.FC = () => {
             <div className="relative min-h-screen pb-8">
               <RayBackground theme="light" />
               <div className="relative z-10 p-2 sm:p-3 space-y-2">
+              {hasNoObjects ? (
+                <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+                  <p className="text-gray-600 text-lg mb-4">У вас пока нет объектов</p>
+                  <button
+                    type="button"
+                    onClick={() => setShowAddWarehouseModal(true)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
+                  >
+                    Создать первый объект
+                  </button>
+                </div>
+              ) : (
+                <>
               <CategoryRow
                 title="Клиенты"
                 categories={clientCategories}
@@ -453,6 +506,8 @@ export const Transactions: React.FC = () => {
                 onAddCategory={() => setShowAddWarehouseModal(true)}
                 rowNumber={4}
               />
+                </>
+              )}
               </div>
 
             {showHistory && selectedCategory && (
