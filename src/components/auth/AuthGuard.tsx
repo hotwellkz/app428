@@ -32,6 +32,8 @@ import {
   UchetKlientovPage,
   CrmDlyaKomandyPage,
   CrmDlyaStroitelnoiKompaniiPage,
+  CrmDlyaProizvodstvaPage,
+  CrmDlyaUslugPage,
 } from '../../pages/landing';
 
 const PUBLIC_PATHS = [
@@ -60,6 +62,8 @@ const PUBLIC_PATHS = [
   '/uchet-klientov',
   '/crm-dlya-komandy',
   '/crm-dlya-stroitelnoi-kompanii',
+  '/crm-dlya-proizvodstva',
+  '/crm-dlya-uslug',
 ];
 
 interface AuthGuardProps {
@@ -119,6 +123,8 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
           <Route path="/uchet-klientov" element={<UchetKlientovPage />} />
           <Route path="/crm-dlya-komandy" element={<CrmDlyaKomandyPage />} />
           <Route path="/crm-dlya-stroitelnoi-kompanii" element={<CrmDlyaStroitelnoiKompaniiPage />} />
+          <Route path="/crm-dlya-proizvodstva" element={<CrmDlyaProizvodstvaPage />} />
+          <Route path="/crm-dlya-uslug" element={<CrmDlyaUslugPage />} />
         </Routes>
       );
     }

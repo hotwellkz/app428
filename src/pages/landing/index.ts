@@ -16,6 +16,8 @@ export { EdinayaBazaKlientovPage } from './EdinayaBazaKlientovPage';
 export { UchetKlientovPage } from './UchetKlientovPage';
 export { CrmDlyaKomandyPage } from './CrmDlyaKomandyPage';
 export { CrmDlyaStroitelnoiKompaniiPage } from './CrmDlyaStroitelnoiKompaniiPage';
+export { CrmDlyaProizvodstvaPage } from './CrmDlyaProizvodstvaPage';
+export { CrmDlyaUslugPage } from './CrmDlyaUslugPage';
 export {
   KlientyPage,
   WhatsAppChatyPage,
