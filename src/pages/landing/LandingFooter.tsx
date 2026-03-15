@@ -2,11 +2,13 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 
 const FOOTER_LINKS = [
-  { label: 'Возможности', href: '/#features' },
-  { label: 'Решения', href: '/#use-cases' },
-  { label: 'FAQ', href: '/#faq' },
-  { label: 'Вход', href: '/#hero' },
-  { label: 'Контакты', href: '/#footer' },
+  { label: 'Возможности', to: '/vozmozhnosti' },
+  { label: 'CRM для бизнеса', to: '/crm-dlya-biznesa' },
+  { label: 'CRM для продаж', to: '/crm-dlya-prodazh' },
+  { label: 'WhatsApp CRM', to: '/whatsapp-crm' },
+  { label: 'Цены', to: '/ceny' },
+  { label: 'FAQ', to: '/faq' },
+  { label: 'Вход', to: '/' },
 ];
 
 export const LandingFooter: React.FC = () => (
@@ -20,14 +22,14 @@ export const LandingFooter: React.FC = () => (
           2wix
         </Link>
         <nav className="flex flex-wrap gap-6">
-          {FOOTER_LINKS.map(({ label, href }) => (
-            <a
+          {FOOTER_LINKS.map(({ label, to }) => (
+            <Link
               key={label}
-              href={href}
+              to={to}
               className="text-sm font-medium text-slate-400 hover:text-white transition-colors"
             >
               {label}
-            </a>
+            </Link>
           ))}
         </nav>
       </div>

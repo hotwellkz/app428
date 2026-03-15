@@ -1,0 +1,8 @@
+User-agent: *
+Allow: /
+
+# Публичные SEO-страницы доступны для индексации.
+# Внутреннее приложение CRM (/transactions, /feed, и т.д.) защищено авторизацией.
+Disallow: /app
+
+Sitemap: https://2wix.ru/sitemap.xml

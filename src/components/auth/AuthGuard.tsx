@@ -1,11 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Routes, Route } from 'react-router-dom';
 import { auth } from '../../lib/firebase/auth';
 import { LoginForm } from './LoginForm';
 import { LoadingSpinner } from '../LoadingSpinner';
 import { RegisterCompany } from '../../pages/RegisterCompany';
 import { AcceptInvitePage } from '../../pages/AcceptInvitePage';
-import { LandingPage } from '../../pages/landing';
+import {
+  LandingPage,
+  CrmDlyaBiznesaPage,
+  CrmDlyaProdazhPage,
+  WhatsAppCrmPage,
+  VozmozhnostiPage,
+  CenyPage,
+  FaqPage,
+} from '../../pages/landing';
+
+const PUBLIC_PATHS = ['/', '/crm-dlya-biznesa', '/crm-dlya-prodazh', '/whatsapp-crm', '/vozmozhnosti', '/ceny', '/faq'];
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -36,8 +46,18 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
     if (location.pathname === '/register' || location.pathname === '/register-company') {
       return <RegisterCompany />;
     }
-    if (location.pathname === '/') {
-      return <LandingPage onLoginSuccess={() => setIsAuthenticated(true)} />;
+    if (PUBLIC_PATHS.includes(location.pathname)) {
+      return (
+        <Routes>
+          <Route path="/" element={<LandingPage onLoginSuccess={() => setIsAuthenticated(true)} />} />
+          <Route path="/crm-dlya-biznesa" element={<CrmDlyaBiznesaPage />} />
+          <Route path="/crm-dlya-prodazh" element={<CrmDlyaProdazhPage />} />
+          <Route path="/whatsapp-crm" element={<WhatsAppCrmPage />} />
+          <Route path="/vozmozhnosti" element={<VozmozhnostiPage />} />
+          <Route path="/ceny" element={<CenyPage />} />
+          <Route path="/faq" element={<FaqPage />} />
+        </Routes>
+      );
     }
     return (
       <LoginForm

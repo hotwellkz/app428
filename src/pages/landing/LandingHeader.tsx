@@ -1,24 +1,26 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Menu, X } from 'lucide-react';
 
-const NAV = [
-  { label: 'Возможности', href: '#features' },
-  { label: 'Решения', href: '#use-cases' },
-  { label: 'FAQ', href: '#faq' },
-  { label: 'Войти', href: '#hero', internal: true },
+const NAV_LINKS = [
+  { label: 'Возможности', to: '/vozmozhnosti' },
+  { label: 'Решения', to: '/crm-dlya-biznesa' },
+  { label: 'Цены', to: '/ceny' },
+  { label: 'FAQ', to: '/faq' },
 ];
 
 export const LandingHeader: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const handleNav = (item: (typeof NAV)[0]) => {
-    if (item.internal) {
-      const el = document.getElementById('hero');
-      el?.scrollIntoView({ behavior: 'smooth' });
-    }
+  const handleLogin = () => {
     setMobileOpen(false);
+    if (location.pathname === '/') {
+      document.getElementById('hero')?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      navigate('/');
+    }
   };
 
   return (
@@ -33,32 +35,21 @@ export const LandingHeader: React.FC = () => {
           </Link>
 
           <nav className="hidden md:flex items-center gap-8">
-            {NAV.map((item) =>
-              item.internal ? (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={() => handleNav(item)}
-                  className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
-                >
-                  {item.label}
-                </button>
-              ) : (
-                <a
-                  key={item.label}
-                  href={item.href}
-                  className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
-                >
-                  {item.label}
-                </a>
-              )
-            )}
+            {NAV_LINKS.map((item) => (
+              <Link
+                key={item.label}
+                to={item.to}
+                className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+              >
+                {item.label}
+              </Link>
+            ))}
           </nav>
 
           <div className="hidden md:flex items-center gap-3">
             <button
               type="button"
-              onClick={() => handleNav(NAV.find((n) => n.label === 'Войти')!)}
+              onClick={handleLogin}
               className="text-sm font-medium text-slate-600 hover:text-slate-900 px-4 py-2 transition-colors"
             >
               Войти
@@ -84,17 +75,24 @@ export const LandingHeader: React.FC = () => {
       </div>
 
       {mobileOpen && (
-        <div className="md:hidden border-t border-slate-200 bg-white/95 backdrop-blur-md px-4 py-4 space-y-2">
-          {NAV.map((item) => (
-            <button
+        <div className="md:hidden border-t border-slate-200 bg-white/95 backdrop-blur-md px-4 py-4 space-y-1">
+          {NAV_LINKS.map((item) => (
+            <Link
               key={item.label}
-              type="button"
-              onClick={() => handleNav(item)}
-              className="block w-full text-left py-2 text-sm font-medium text-slate-700"
+              to={item.to}
+              onClick={() => setMobileOpen(false)}
+              className="block py-2 text-sm font-medium text-slate-700"
             >
               {item.label}
-            </button>
+            </Link>
           ))}
+          <button
+            type="button"
+            onClick={handleLogin}
+            className="block w-full text-left py-2 text-sm font-medium text-slate-700"
+          >
+            Войти
+          </button>
           <button
             type="button"
             onClick={() => { navigate('/register-company'); setMobileOpen(false); }}
