@@ -18,6 +18,8 @@ export { CrmDlyaKomandyPage } from './CrmDlyaKomandyPage';
 export { CrmDlyaStroitelnoiKompaniiPage } from './CrmDlyaStroitelnoiKompaniiPage';
 export { CrmDlyaProizvodstvaPage } from './CrmDlyaProizvodstvaPage';
 export { CrmDlyaUslugPage } from './CrmDlyaUslugPage';
+export { ChtoTakoeCrmPage } from './ChtoTakoeCrmPage';
+export { KakVybratCrmPage } from './KakVybratCrmPage';
 export {
   KlientyPage,
   WhatsAppChatyPage,
