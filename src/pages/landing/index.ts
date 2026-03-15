@@ -11,6 +11,7 @@ export { AnalitikaProdazhPage } from './AnalitikaProdazhPage';
 export { KontrolMenedzherovPage } from './KontrolMenedzherovPage';
 export { UpravlenieZayavkamiPage } from './UpravlenieZayavkamiPage';
 export { RoliPravaPage } from './RoliPravaPage';
+export { WhatsAppDlyaOtdelaProdazhPage } from './WhatsAppDlyaOtdelaProdazhPage';
 export {
   KlientyPage,
   WhatsAppChatyPage,
