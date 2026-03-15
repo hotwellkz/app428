@@ -13,9 +13,33 @@ import {
   VozmozhnostiPage,
   CenyPage,
   FaqPage,
+  KlientyPage,
+  WhatsAppChatyPage,
+  SdelkiVoronkaPage,
+  BystryeOtvetyPage,
+  AnalitikaPage,
+  TranzakciiFinansyPage,
+  SkladMaterialyPage,
+  RoliPravaPage,
 } from '../../pages/landing';
 
-const PUBLIC_PATHS = ['/', '/crm-dlya-biznesa', '/crm-dlya-prodazh', '/whatsapp-crm', '/vozmozhnosti', '/ceny', '/faq'];
+const PUBLIC_PATHS = [
+  '/',
+  '/crm-dlya-biznesa',
+  '/crm-dlya-prodazh',
+  '/whatsapp-crm',
+  '/vozmozhnosti',
+  '/ceny',
+  '/faq',
+  '/klienty',
+  '/whatsapp-i-chaty',
+  '/sdelki-i-voronka',
+  '/bystrye-otvety',
+  '/analitika',
+  '/tranzakcii-i-finansy',
+  '/sklad-i-materialy',
+  '/roli-i-prava',
+];
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -56,6 +80,14 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
           <Route path="/vozmozhnosti" element={<VozmozhnostiPage />} />
           <Route path="/ceny" element={<CenyPage />} />
           <Route path="/faq" element={<FaqPage />} />
+          <Route path="/klienty" element={<KlientyPage />} />
+          <Route path="/whatsapp-i-chaty" element={<WhatsAppChatyPage />} />
+          <Route path="/sdelki-i-voronka" element={<SdelkiVoronkaPage />} />
+          <Route path="/bystrye-otvety" element={<BystryeOtvetyPage />} />
+          <Route path="/analitika" element={<AnalitikaPage />} />
+          <Route path="/tranzakcii-i-finansy" element={<TranzakciiFinansyPage />} />
+          <Route path="/sklad-i-materialy" element={<SkladMaterialyPage />} />
+          <Route path="/roli-i-prava" element={<RoliPravaPage />} />
         </Routes>
       );
     }

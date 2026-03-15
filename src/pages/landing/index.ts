@@ -5,3 +5,13 @@ export { WhatsAppCrmPage } from './WhatsAppCrmPage';
 export { VozmozhnostiPage } from './VozmozhnostiPage';
 export { CenyPage } from './CenyPage';
 export { FaqPage } from './FaqPage';
+export {
+  KlientyPage,
+  WhatsAppChatyPage,
+  SdelkiVoronkaPage,
+  BystryeOtvetyPage,
+  AnalitikaPage,
+  TranzakciiFinansyPage,
+  SkladMaterialyPage,
+  RoliPravaPage,
+} from './FeaturePages';
