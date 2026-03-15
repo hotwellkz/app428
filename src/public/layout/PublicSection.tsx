@@ -14,7 +14,7 @@ interface PublicSectionProps {
 const variantClasses: Record<SectionVariant, string> = {
   default: `${publicTokens.section.py} ${publicTokens.bg.page}`,
   subtle: `${publicTokens.section.py} ${publicTokens.bg.subtle}`,
-  dark: `${publicTokens.section.pyLg} ${publicTokens.bg.darkSection}`,
+  dark: 'py-20 md:py-[80px] bg-sf-primary',
   large: `${publicTokens.section.pyLg} ${publicTokens.bg.page}`,
 };
 

@@ -12,26 +12,26 @@ const REASONS = [
 ];
 
 export const Why2wixSection: React.FC = () => (
-  <section className="py-20 md:py-28 bg-slate-50/80">
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-      <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">
+  <section className="font-sans py-20 md:py-28 bg-sf-backgroundSection/80">
+    <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
+      <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">
         Почему 2wix
       </h2>
-      <p className="text-lg text-slate-600 text-center max-w-2xl mx-auto mb-14">
+      <p className="text-lg text-sf-text-secondary text-center max-w-2xl mx-auto mb-14">
         Платформа, которая растёт вместе с вашим бизнесом
       </p>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
         {REASONS.map(({ icon: Icon, title, text }) => (
           <div
             key={title}
-            className="flex gap-4 rounded-2xl bg-white border border-slate-200/80 p-6 shadow-sm hover:shadow-md transition-shadow"
+            className="flex gap-4 rounded-sfCard bg-sf-surface border border-sf-borderLight p-6 shadow-sfSm hover:shadow-sfMd transition-shadow"
           >
-            <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <div className="flex-shrink-0 w-11 h-11 rounded-sfCard bg-sf-primaryLight text-sf-accent flex items-center justify-center">
               <Icon className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-semibold text-slate-900 mb-1">{title}</h3>
-              <p className="text-sm text-slate-600 leading-relaxed">{text}</p>
+              <h3 className="font-semibold text-sf-text-primary mb-1">{title}</h3>
+              <p className="text-sm text-sf-text-secondary leading-relaxed">{text}</p>
             </div>
           </div>
         ))}

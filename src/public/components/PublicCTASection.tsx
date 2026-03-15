@@ -32,8 +32,8 @@ export const PublicCTASection: React.FC<PublicCTASectionProps> = ({
   return (
     <PublicSection variant="dark">
       <PublicContainer size="narrow" className="text-center">
-        <h2 className={`${publicTokens.typography.h2} text-white mb-4`}>{title}</h2>
-        <p className={`${publicTokens.text.inverseMuted} text-lg mb-10 max-w-xl mx-auto`}>{subtitle}</p>
+        <h2 className="font-sans text-3xl md:text-4xl font-bold text-white mb-4">{title}</h2>
+        <p className="text-white/95 text-lg mb-10 max-w-xl mx-auto">{subtitle}</p>
         <div className="flex flex-col sm:flex-row flex-wrap gap-4 justify-center">
           <button
             type="button"

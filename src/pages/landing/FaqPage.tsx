@@ -62,7 +62,7 @@ const FAQ_CATEGORIES: FaqCategory[] = [
         a: (
           <>
             Да. Есть роли, назначение ответственных, общая база клиентов и чатов. Несколько менеджеров могут работать в одном аккаунте без путаницы.{' '}
-            <Link to="/crm-dlya-prodazh" className="text-emerald-600 hover:text-emerald-700 font-medium">
+            <Link to="/crm-dlya-prodazh" className="text-sf-accent hover:text-sf-primary font-medium">
               Подробнее — CRM для продаж
             </Link>
             .
@@ -89,7 +89,7 @@ const FAQ_CATEGORIES: FaqCategory[] = [
         a: (
           <>
             Да. Единая база клиентов с контактами, комментариями и историей. К каждому клиенту привязываются переписка, сделки и файлы.{' '}
-            <Link to="/vozmozhnosti" className="text-emerald-600 hover:text-emerald-700 font-medium">
+            <Link to="/vozmozhnosti" className="text-sf-accent hover:text-sf-primary font-medium">
               Подробнее о возможностях
             </Link>
             .
@@ -128,7 +128,7 @@ const FAQ_CATEGORIES: FaqCategory[] = [
         a: (
           <>
             Да. В 2wix встроен WhatsApp CRM: переписка с клиентами в одном интерфейсе, без переключения в мессенджер. Заявки из чатов попадают в воронку.{' '}
-            <Link to="/whatsapp-crm" className="text-emerald-600 hover:text-emerald-700 font-medium">
+            <Link to="/whatsapp-crm" className="text-sf-accent hover:text-sf-primary font-medium">
               Подробнее — WhatsApp CRM
             </Link>
             .
@@ -251,7 +251,7 @@ const FAQ_CATEGORIES: FaqCategory[] = [
         a: (
           <>
             Да. Можем показать продукт онлайн, подсказать подходящий тариф и ответить на вопросы. Запросите демо через кнопку на сайте или напишите нам.{' '}
-            <Link to="/ceny" className="text-emerald-600 hover:text-emerald-700 font-medium">
+            <Link to="/ceny" className="text-sf-accent hover:text-sf-primary font-medium">
               Подробнее — Цены и тарифы
             </Link>
             .
@@ -316,23 +316,23 @@ export const FaqPage: React.FC = () => {
     >
       {/* Hero */}
       <section className="relative pt-28 pb-12 md:pt-36 md:pb-16 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-white" />
-        <div className="absolute top-20 right-0 w-[350px] h-[350px] bg-emerald-100/40 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
+        <div className="absolute inset-0 bg-gradient-to-b from-sf-backgroundSection via-sf-background to-sf-background" />
+        <div className="absolute top-20 right-0 w-[350px] h-[350px] bg-sf-primaryLight/40 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl font-bold text-slate-900 tracking-tight leading-tight">
+          <h1 className="text-4xl md:text-5xl font-bold text-sf-text-primary tracking-tight leading-tight">
             Ответы на частые вопросы о CRM 2wix
           </h1>
-          <p className="mt-6 text-xl text-slate-600 max-w-2xl mx-auto">
+          <p className="mt-6 text-xl text-sf-text-secondary max-w-2xl mx-auto">
             Всё, что нужно знать о возможностях, запуске, работе с командой, WhatsApp, сделках и аналитике в 2wix.
           </p>
-          <p className="mt-3 text-slate-500 text-sm max-w-xl mx-auto">
+          <p className="mt-3 text-sf-text-muted text-sm max-w-xl mx-auto">
             Если не нашли ответ — запросите демо или свяжитесь с нами.
           </p>
           <div className="mt-8 flex flex-col sm:flex-row gap-4 justify-center">
             <button
               type="button"
               onClick={() => navigate('/register-company')}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-lg transition-all"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-sfCard font-semibold text-sf-text-inverse bg-sf-primary hover:bg-sf-primaryHover shadow-lg transition-all"
             >
               Создать компанию
               <ArrowRight className="w-4 h-4" />
@@ -340,7 +340,7 @@ export const FaqPage: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate('/')}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-medium text-slate-700 bg-white border-2 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-sfCard font-medium text-sf-text-secondary bg-sf-surface border-2 border-sf-border hover:border-sf-cardBorder hover:bg-sf-primaryLight/50 transition-all"
             >
               Попробовать
             </button>
@@ -355,7 +355,7 @@ export const FaqPage: React.FC = () => {
             aria-label="Категории FAQ"
             className="lg:w-56 flex-shrink-0 lg:sticky lg:top-28 lg:self-start order-2 lg:order-1"
           >
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wider mb-4 hidden lg:block">
+            <h2 className="text-sm font-semibold text-sf-text-muted uppercase tracking-wider mb-4 hidden lg:block">
               Разделы
             </h2>
             <ul className="flex lg:flex-col gap-1 overflow-x-auto pb-2 lg:pb-0 lg:overflow-x-visible">
@@ -364,22 +364,22 @@ export const FaqPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => scrollToSection(id)}
-                    className="text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 w-full transition-colors whitespace-nowrap lg:whitespace-normal"
+                    className="text-left px-3 py-2 rounded-lg text-sm font-medium text-sf-text-secondary hover:text-sf-text-primary hover:bg-sf-borderLight w-full transition-colors whitespace-nowrap lg:whitespace-normal"
                   >
                     {title}
                   </button>
                 </li>
               ))}
             </ul>
-            <div className="mt-6 pt-6 border-t border-slate-200 hidden lg:block">
+            <div className="mt-6 pt-6 border-t border-sf-border hidden lg:block">
               <Link
                 to="/vozmozhnosti"
-                className="text-sm font-medium text-emerald-600 hover:text-emerald-700"
+                className="text-sm font-medium text-sf-accent hover:text-sf-primary"
               >
                 Возможности →
               </Link>
               <br />
-              <Link to="/ceny" className="text-sm font-medium text-emerald-600 hover:text-emerald-700 mt-1 inline-block">
+              <Link to="/ceny" className="text-sm font-medium text-sf-accent hover:text-sf-primary mt-1 inline-block">
                 Цены →
               </Link>
             </div>
@@ -396,19 +396,19 @@ export const FaqPage: React.FC = () => {
                 >
                   <h2
                     id={`faq-heading-${category.id}`}
-                    className="text-2xl font-bold text-slate-900 mb-6 pb-2 border-b border-slate-200"
+                    className="text-2xl font-bold text-sf-text-primary mb-6 pb-2 border-b border-sf-border"
                   >
                     {category.title}
                   </h2>
                   <ul className="space-y-3" role="list">
                     {category.items.map((item, i) => (
                       <li key={i}>
-                        <details className="group rounded-xl border border-slate-200 bg-white overflow-hidden hover:border-slate-300 transition-colors">
-                          <summary className="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer list-none font-medium text-slate-900 hover:bg-slate-50/50 transition-colors">
+                        <details className="group rounded-sfCard border border-sf-border bg-sf-surface overflow-hidden hover:border-sf-cardBorder transition-colors">
+                          <summary className="flex items-center justify-between gap-4 px-5 py-4 cursor-pointer list-none font-medium text-sf-text-primary hover:bg-sf-backgroundSection/50 transition-colors">
                             <span>{item.q}</span>
-                            <ChevronDown className="w-5 h-5 text-slate-400 flex-shrink-0 transition-transform group-open:rotate-180" />
+                            <ChevronDown className="w-5 h-5 text-sf-text-muted flex-shrink-0 transition-transform group-open:rotate-180" />
                           </summary>
-                          <div className="px-5 pb-4 pt-0 text-slate-600 text-sm leading-relaxed border-t border-slate-100">
+                          <div className="px-5 pb-4 pt-0 text-sf-text-secondary text-sm leading-relaxed border-t border-sf-borderLight">
                             <div className="pt-3">{item.a}</div>
                           </div>
                         </details>
@@ -418,8 +418,8 @@ export const FaqPage: React.FC = () => {
 
                   {/* Мягкие CTA после части секций */}
                   {[1, 2, 4, 8].includes(categoryIndex) && (
-                    <div className="mt-8 p-5 rounded-xl bg-slate-50 border border-slate-200">
-                      <p className="text-sm text-slate-600 mb-3">
+                    <div className="mt-8 p-5 rounded-sfCard bg-sf-backgroundSection border border-sf-border">
+                      <p className="text-sm text-sf-text-secondary mb-3">
                         {categoryIndex === 1 && 'Уже понятно, что 2wix подходит? Начните с бесплатного старта.'}
                         {categoryIndex === 2 && 'Хотите увидеть все функции в одном месте? Посмотрите обзор возможностей.'}
                         {categoryIndex === 4 && 'Нужна CRM с WhatsApp и сделками? Попробуйте 2wix.'}
@@ -431,14 +431,14 @@ export const FaqPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => navigate('/register-company')}
-                              className="text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+                              className="text-sm font-semibold text-sf-accent hover:text-sf-primary"
                             >
                               Создать компанию →
                             </button>
                           </>
                         )}
                         {categoryIndex === 2 && (
-                          <Link to="/vozmozhnosti" className="text-sm font-semibold text-emerald-600 hover:text-emerald-700">
+                          <Link to="/vozmozhnosti" className="text-sm font-semibold text-sf-accent hover:text-sf-primary">
                             Посмотреть возможности →
                           </Link>
                         )}
@@ -446,19 +446,19 @@ export const FaqPage: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => navigate('/register-company')}
-                            className="text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+                            className="text-sm font-semibold text-sf-accent hover:text-sf-primary"
                           >
                             Попробовать 2wix →
                           </button>
                         )}
                         {categoryIndex === 8 && (
                           <>
-                            <Link to="/ceny" className="text-sm font-semibold text-emerald-600 hover:text-emerald-700">
+                            <Link to="/ceny" className="text-sm font-semibold text-sf-accent hover:text-sf-primary">
                               Цены
                             </Link>
                             <a
                               href="mailto:info@2wix.ru?subject=Запрос демо 2wix"
-                              className="text-sm font-semibold text-emerald-600 hover:text-emerald-700"
+                              className="text-sm font-semibold text-sf-accent hover:text-sf-primary"
                             >
                               Запросить демо
                             </a>
@@ -474,20 +474,20 @@ export const FaqPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Финальный CTA */}
-      <section className="py-20 md:py-28 bg-slate-900">
+      {/* Финальный CTA — только onDark-токены для контраста на тёмном фоне */}
+      <section className="py-20 md:py-28 bg-sf-primary">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-inverse mb-4">
             Готовы попробовать 2wix?
           </h2>
-          <p className="text-lg text-slate-300 mb-10 max-w-xl mx-auto">
+          <p className="text-lg text-white/95 mb-10 max-w-xl mx-auto">
             Создайте компанию за минуту и начните вести клиентов, сделки и коммуникации в одном месте.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center flex-wrap">
             <button
               type="button"
               onClick={() => navigate('/register-company')}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-slate-900 bg-white hover:bg-slate-100 shadow-xl transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-semibold text-sf-text-primary bg-sf-surface hover:bg-sf-borderLight shadow-xl transition-all"
             >
               Создать компанию
               <ArrowRight className="w-5 h-5" />
@@ -495,36 +495,36 @@ export const FaqPage: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate('/')}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-medium text-slate-300 hover:text-white border border-slate-600 hover:border-slate-500 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-medium text-white/90 hover:text-white border border-white/40 hover:border-white/60 transition-all"
             >
               Войти
             </button>
             <a
               href="mailto:info@2wix.ru?subject=Запрос демо 2wix"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-medium text-slate-300 hover:text-white transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-medium text-white/90 hover:text-white transition-colors"
             >
               Запросить демо
             </a>
           </div>
-          <div className="mt-12 pt-12 border-t border-slate-700">
-            <p className="text-slate-400 text-sm mb-4">Полезные разделы</p>
+          <div className="mt-12 pt-12 border-t border-white/25">
+            <p className="text-white/90 text-sm mb-4">Полезные разделы</p>
             <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
-              <Link to="/" className="text-slate-400 hover:text-white text-sm transition-colors">
+              <Link to="/" className="text-white/90 hover:text-white text-sm transition-colors">
                 Главная
               </Link>
-              <Link to="/vozmozhnosti" className="text-slate-400 hover:text-white text-sm transition-colors">
+              <Link to="/vozmozhnosti" className="text-white/90 hover:text-white text-sm transition-colors">
                 Возможности
               </Link>
-              <Link to="/whatsapp-crm" className="text-slate-400 hover:text-white text-sm transition-colors">
+              <Link to="/whatsapp-crm" className="text-white/90 hover:text-white text-sm transition-colors">
                 WhatsApp CRM
               </Link>
-              <Link to="/crm-dlya-prodazh" className="text-slate-400 hover:text-white text-sm transition-colors">
+              <Link to="/crm-dlya-prodazh" className="text-white/90 hover:text-white text-sm transition-colors">
                 CRM для продаж
               </Link>
-              <Link to="/crm-dlya-biznesa" className="text-slate-400 hover:text-white text-sm transition-colors">
+              <Link to="/crm-dlya-biznesa" className="text-white/90 hover:text-white text-sm transition-colors">
                 CRM для бизнеса
               </Link>
-              <Link to="/ceny" className="text-slate-400 hover:text-white text-sm transition-colors">
+              <Link to="/ceny" className="text-white/90 hover:text-white text-sm transition-colors">
                 Цены
               </Link>
             </div>

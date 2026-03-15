@@ -1,0 +1,1072 @@
+{
+  "meta": {
+    "pageType": "landing",
+    "originalSite": "Salesforce CRM (salesforce.com)",
+    "layout": "multi-column",
+    "theme": "light",
+    "style": "corporate-friendly",
+    "colorSchemeOverride": "light-green (adapted from original Salesforce blue)"
+  },
+
+  "tokens": {
+    "colors": {
+      "primary": "#2D8653",
+      "primaryHover": "#236B42",
+      "primaryLight": "#E6F4EC",
+      "secondary": "#1A5C38",
+      "accent": "#4CAF78",
+      "accentLight": "#A8D9BC",
+      "background": "#FFFFFF",
+      "backgroundPage": "#F4FAF7",
+      "backgroundSection": "#EDF7F2",
+      "backgroundGradient": "linear-gradient(135deg, #EDF7F2 0%, #D6EEE3 100%)",
+      "surface": "#FFFFFF",
+      "surfaceElevated": "#F0F9F5",
+      "text": {
+        "primary": "#0D2B1E",
+        "secondary": "#1E5C3A",
+        "muted": "#5A8A72",
+        "inverse": "#FFFFFF",
+        "link": "#2D8653",
+        "linkHover": "#1A5C38",
+        "accent": "#4CAF78"
+      },
+      "border": "#B8DEC9",
+      "borderLight": "#D9EFE4",
+      "borderFocus": "#2D8653",
+      "cardBorder": "#C8E6D4",
+      "cardTopAccent": {
+        "green": "#4CAF78",
+        "teal": "#2DBFA0",
+        "mint": "#52C9A8",
+        "sage": "#7BC49A",
+        "lime": "#95D44A"
+      },
+      "error": "#D93025",
+      "success": "#2D8653",
+      "warning": "#F29900",
+      "info": "#1A73E8",
+      "checkmark": "#2D8653",
+      "chatBubble": "#2D8653",
+      "chatBubbleHover": "#236B42"
+    },
+
+    "typography": {
+      "fontFamilies": {
+        "heading": "Salesforce Sans, Arial, sans-serif",
+        "body": "Salesforce Sans, Arial, sans-serif",
+        "mono": null,
+        "note": "Salesforce uses their proprietary 'Salesforce Sans'. Fallback: 'Source Sans Pro' or 'Open Sans' from Google Fonts"
+      },
+      "fontSizes": {
+        "xs": "12px",
+        "sm": "14px",
+        "base": "16px",
+        "lg": "18px",
+        "xl": "20px",
+        "2xl": "24px",
+        "3xl": "28px",
+        "4xl": "32px",
+        "5xl": "40px",
+        "6xl": "48px",
+        "hero": "52px"
+      },
+      "fontWeights": {
+        "regular": 400,
+        "medium": 500,
+        "semibold": 600,
+        "bold": 700,
+        "extrabold": 800
+      },
+      "lineHeights": {
+        "tight": "1.1",
+        "snug": "1.25",
+        "normal": "1.5",
+        "relaxed": "1.65"
+      },
+      "letterSpacings": {
+        "tight": "-0.01em",
+        "normal": "0em",
+        "wide": "0.03em",
+        "wider": "0.08em"
+      }
+    },
+
+    "spacing": {
+      "unit": "8px",
+      "scale": ["4px", "8px", "12px", "16px", "20px", "24px", "32px", "40px", "48px", "64px", "80px", "96px", "128px"]
+    },
+
+    "borderRadius": {
+      "none": "0px",
+      "xs": "2px",
+      "sm": "4px",
+      "md": "8px",
+      "lg": "12px",
+      "xl": "16px",
+      "2xl": "20px",
+      "3xl": "24px",
+      "full": "9999px",
+      "card": "12px",
+      "button": "6px",
+      "badge": "4px",
+      "pill": "9999px"
+    },
+
+    "shadows": {
+      "sm": "0 1px 4px rgba(0,0,0,0.08)",
+      "md": "0 2px 8px rgba(0,0,0,0.1)",
+      "lg": "0 4px 16px rgba(0,0,0,0.12)",
+      "xl": "0 8px 32px rgba(0,0,0,0.14)",
+      "card": "0 2px 12px rgba(45, 134, 83, 0.1)",
+      "cardHover": "0 6px 24px rgba(45, 134, 83, 0.18)"
+    },
+
+    "breakpoints": {
+      "sm": "640px",
+      "md": "768px",
+      "lg": "1024px",
+      "xl": "1280px",
+      "2xl": "1536px"
+    },
+
+    "transitions": {
+      "fast": "all 0.15s ease",
+      "base": "all 0.2s ease",
+      "slow": "all 0.3s ease"
+    }
+  },
+
+  "layout": {
+    "maxWidth": "1440px",
+    "contentMaxWidth": "1200px",
+    "containerPadding": "24px",
+    "sectionPaddingY": "80px",
+    "grid": {
+      "columns": 12,
+      "gap": "24px",
+      "columnGap": "24px",
+      "rowGap": "32px"
+    },
+    "sections": [
+      {
+        "id": "top-utility-bar",
+        "type": "utility-bar",
+        "backgroundColor": "#FFFFFF",
+        "height": "48px",
+        "padding": { "top": "0px", "bottom": "0px", "left": "24px", "right": "24px" },
+        "layout": "flex space-between — contact info left, search center-right, CTA right",
+        "borderBottom": "1px solid #B8DEC9"
+      },
+      {
+        "id": "sub-navbar",
+        "type": "secondary-navbar",
+        "backgroundColor": "#FFFFFF",
+        "height": "56px",
+        "padding": { "top": "0px", "bottom": "0px", "left": "24px", "right": "24px" },
+        "layout": "CRM logo left, nav links center, CTA buttons right",
+        "borderBottom": "1px solid #D9EFE4"
+      },
+      {
+        "id": "hero",
+        "type": "hero",
+        "backgroundColor": "#FFFFFF",
+        "backgroundType": "solid with illustrated landscape on right edge",
+        "padding": { "top": "60px", "bottom": "60px", "left": "120px", "right": "60px" },
+        "layout": "left-aligned text (col 5), right media with video thumbnail (col 7)"
+      },
+      {
+        "id": "ai-chat-section",
+        "type": "cta-chat",
+        "backgroundColor": "#EDF7F2",
+        "padding": { "top": "40px", "bottom": "40px", "left": "auto", "right": "auto" },
+        "maxWidth": "720px",
+        "layout": "centered — heading above, AI chat input below with quick action buttons"
+      },
+      {
+        "id": "cards-3col",
+        "type": "features",
+        "backgroundColor": "#F4FAF7",
+        "padding": { "top": "64px", "bottom": "80px", "left": "80px", "right": "80px" },
+        "layout": "centered heading, 3-column card grid below, illustrated landscape background"
+      },
+      {
+        "id": "split-content-1",
+        "type": "feature-split",
+        "backgroundColor": "#FFFFFF",
+        "padding": { "top": "80px", "bottom": "80px", "left": "80px", "right": "80px" },
+        "layout": "left text col-5 (heading + body + CTA), right illustration col-7"
+      },
+      {
+        "id": "split-content-2",
+        "type": "feature-split",
+        "backgroundColor": "#FFFFFF",
+        "padding": { "top": "80px", "bottom": "80px", "left": "80px", "right": "80px" },
+        "layout": "left illustration col-7 (circular framed photo + decorative dots), right text col-5"
+      },
+      {
+        "id": "industry-split",
+        "type": "feature-split",
+        "backgroundColor": "#FFFFFF",
+        "padding": { "top": "80px", "bottom": "80px", "left": "80px", "right": "80px" },
+        "layout": "left text col-5, right collage of circular avatars + mascot illustration"
+      },
+      {
+        "id": "product-cards-grid",
+        "type": "products",
+        "backgroundColor": "#F4FAF7",
+        "padding": { "top": "64px", "bottom": "80px", "left": "80px", "right": "80px" },
+        "layout": "centered heading, grid of product cards — top row 3 cols, bottom row 2 cols centered"
+      },
+      {
+        "id": "pricing-cards",
+        "type": "pricing",
+        "backgroundColor": "linear-gradient(180deg, #EDF7F2 0%, #D4EDDF 100%)",
+        "padding": { "top": "64px", "bottom": "80px", "left": "80px", "right": "80px" },
+        "layout": "left side label text, right side 2 white cards side by side + single CTA button below"
+      },
+      {
+        "id": "customer-logos",
+        "type": "social-proof",
+        "backgroundColor": "#FFFFFF",
+        "padding": { "top": "64px", "bottom": "64px", "left": "80px", "right": "80px" },
+        "layout": "centered heading + CTA button, then 5 client logo tiles in a row"
+      },
+      {
+        "id": "resource-cards-3col",
+        "type": "resources",
+        "backgroundColor": "#F4FAF7",
+        "padding": { "top": "64px", "bottom": "80px", "left": "80px", "right": "80px" },
+        "layout": "left side-label text, right 3 content cards with image thumbnails + badges + links"
+      },
+      {
+        "id": "signup-form-page",
+        "type": "registration",
+        "backgroundColor": "#EDF7F2",
+        "padding": { "top": "0px", "bottom": "0px", "left": "0px", "right": "0px" },
+        "layout": "left half: logo + benefits list + product illustration; right half: form card on white"
+      },
+      {
+        "id": "signup-modal-step",
+        "type": "modal-form",
+        "backgroundColor": "#EDF7F2",
+        "padding": { "top": "0px", "bottom": "0px", "left": "0px", "right": "0px" },
+        "layout": "centered modal card on light green bg — logo top, heading, form fields, submit button"
+      },
+      {
+        "id": "chat-widget-fullscreen",
+        "type": "chat",
+        "backgroundColor": "linear-gradient(135deg, #F0F9F5 0%, #E6F4EC 100%)",
+        "padding": { "top": "32px", "bottom": "32px", "left": "32px", "right": "32px" },
+        "layout": "top-left: Agentforce label. Centered: heading. Chat messages below. Input fixed at bottom."
+      }
+    ]
+  },
+
+  "components": {
+    "navbar": {
+      "topBar": {
+        "present": true,
+        "height": "48px",
+        "backgroundColor": "#FFFFFF",
+        "borderBottom": "1px solid #D9EFE4",
+        "logo": {
+          "type": "image",
+          "description": "Salesforce cloud logo — replace with your logo",
+          "width": "32px",
+          "height": "32px"
+        },
+        "searchBar": {
+          "present": true,
+          "width": "380px",
+          "backgroundColor": "#FFFFFF",
+          "border": "1px solid #B8DEC9",
+          "borderRadius": "6px",
+          "padding": "8px 14px",
+          "fontSize": "14px",
+          "placeholderColor": "#5A8A72",
+          "iconColor": "#5A8A72"
+        },
+        "utilityLinks": {
+          "fontSize": "13px",
+          "color": "#1E5C3A",
+          "textDecoration": "underline"
+        },
+        "phoneNumber": {
+          "fontSize": "13px",
+          "color": "#0D2B1E",
+          "fontWeight": 400
+        },
+        "ctaButton": {
+          "text": "Start for free",
+          "backgroundColor": "#2D8653",
+          "textColor": "#FFFFFF",
+          "fontSize": "14px",
+          "fontWeight": 600,
+          "padding": "10px 20px",
+          "borderRadius": "6px"
+        }
+      },
+      "subNav": {
+        "present": true,
+        "height": "56px",
+        "backgroundColor": "#FFFFFF",
+        "borderBottom": "1px solid #D9EFE4",
+        "productLabel": {
+          "text": "CRM",
+          "fontSize": "20px",
+          "fontWeight": 700,
+          "color": "#0D2B1E"
+        },
+        "links": {
+          "items": ["Overview", "What is CRM?", "Solutions", "Resources", "Pricing"],
+          "fontSize": "14px",
+          "fontWeight": 400,
+          "color": "#0D2B1E",
+          "hoverColor": "#2D8653",
+          "gap": "32px",
+          "dropdownIndicator": "chevron down"
+        },
+        "buttons": {
+          "outline": {
+            "text": "Start for free",
+            "backgroundColor": "transparent",
+            "textColor": "#2D8653",
+            "border": "1px solid #2D8653",
+            "borderRadius": "6px",
+            "padding": "8px 18px",
+            "fontSize": "14px",
+            "fontWeight": 600
+          },
+          "solid": {
+            "text": "Take guided tour",
+            "backgroundColor": "#2D8653",
+            "textColor": "#FFFFFF",
+            "border": "none",
+            "borderRadius": "6px",
+            "padding": "8px 18px",
+            "fontSize": "14px",
+            "fontWeight": 600
+          }
+        }
+      }
+    },
+
+    "hero": {
+      "present": true,
+      "layout": "split — text left (40%), media right (55%)",
+      "backgroundColor": "#FFFFFF",
+      "superLabel": {
+        "text": "Salesforce CRM",
+        "fontSize": "14px",
+        "fontWeight": 400,
+        "color": "#5A8A72",
+        "marginBottom": "12px"
+      },
+      "heading": {
+        "fontSize": "48px",
+        "fontWeight": 700,
+        "colorBlack": "#0D2B1E",
+        "colorAccent": "#2D8653",
+        "lineHeight": "1.1",
+        "note": "Split color heading — first line plain dark, second line in primary green"
+      },
+      "subheading": {
+        "fontSize": "17px",
+        "fontWeight": 400,
+        "color": "#1E5C3A",
+        "lineHeight": "1.65",
+        "maxWidth": "480px",
+        "marginTop": "20px"
+      },
+      "buttons": {
+        "gap": "16px",
+        "marginTop": "32px",
+        "primary": {
+          "backgroundColor": "#2D8653",
+          "textColor": "#FFFFFF",
+          "padding": "14px 28px",
+          "borderRadius": "6px",
+          "fontSize": "15px",
+          "fontWeight": 600,
+          "icon": "external-link",
+          "iconPosition": "right"
+        },
+        "secondary": {
+          "backgroundColor": "transparent",
+          "textColor": "#2D8653",
+          "border": "1px solid #2D8653",
+          "padding": "14px 28px",
+          "borderRadius": "6px",
+          "fontSize": "15px",
+          "fontWeight": 600
+        }
+      },
+      "media": {
+        "present": true,
+        "type": "video-thumbnail",
+        "borderRadius": "12px",
+        "width": "560px",
+        "aspectRatio": "16/9",
+        "playButton": {
+          "backgroundColor": "rgba(0,0,0,0.6)",
+          "size": "64px",
+          "borderRadius": "9999px",
+          "iconColor": "#FFFFFF"
+        }
+      },
+      "socialShare": {
+        "present": true,
+        "label": "Share the story",
+        "labelFontSize": "14px",
+        "iconSize": "20px",
+        "gap": "12px",
+        "iconBorderRadius": "9999px",
+        "iconBorder": "1px solid #B8DEC9",
+        "iconPadding": "8px",
+        "iconColor": "#0D2B1E"
+      },
+      "decorativeBackground": {
+        "type": "illustrated landscape",
+        "position": "right edge, behind media",
+        "colors": ["#A8D9BC", "#6CC297", "#4CAF78", "#2D8653"]
+      }
+    },
+
+    "aiChatSection": {
+      "present": true,
+      "backgroundColor": "#2D8653",
+      "borderRadius": "12px",
+      "padding": "24px",
+      "maxWidth": "720px",
+      "heading": {
+        "fontSize": "32px",
+        "fontWeight": 700,
+        "color": "#FFFFFF",
+        "textAlign": "center",
+        "marginBottom": "20px"
+      },
+      "inputBar": {
+        "backgroundColor": "#FFFFFF",
+        "border": "none",
+        "borderRadius": "8px",
+        "padding": "14px 16px",
+        "fontSize": "15px",
+        "color": "#0D2B1E",
+        "placeholderColor": "#5A8A72",
+        "sparkleIcon": { "size": "18px", "color": "#2D8653" },
+        "sendButton": {
+          "backgroundColor": "transparent",
+          "iconColor": "#2D8653",
+          "size": "20px"
+        }
+      },
+      "quickActions": {
+        "marginTop": "12px",
+        "gap": "8px",
+        "buttons": {
+          "backgroundColor": "#FFFFFF",
+          "textColor": "#2D8653",
+          "fontSize": "13px",
+          "fontWeight": 500,
+          "padding": "8px 16px",
+          "borderRadius": "6px",
+          "border": "none"
+        }
+      }
+    },
+
+    "cards": {
+      "standard": {
+        "backgroundColor": "#FFFFFF",
+        "borderRadius": "12px",
+        "border": "1px solid #C8E6D4",
+        "padding": "0px",
+        "shadow": "0 2px 12px rgba(45, 134, 83, 0.1)",
+        "hoverShadow": "0 6px 24px rgba(45, 134, 83, 0.18)",
+        "hoverEffect": "lift",
+        "transition": "all 0.2s ease",
+        "imageArea": {
+          "height": "200px",
+          "borderRadius": "12px 12px 0 0",
+          "backgroundColor": "#EDF7F2",
+          "overflow": "hidden"
+        },
+        "contentArea": {
+          "padding": "24px"
+        }
+      },
+      "productCard": {
+        "backgroundColor": "#FFFFFF",
+        "borderRadius": "12px",
+        "border": "1px solid #C8E6D4",
+        "padding": "24px",
+        "shadow": "0 2px 8px rgba(0,0,0,0.08)",
+        "topAccentBar": {
+          "height": "5px",
+          "borderRadius": "12px 12px 0 0",
+          "colors": {
+            "agentforce": "#4CAF78",
+            "salesCloud": "#2DBFA0",
+            "serviceCloud": "#E05A6E",
+            "marketingCloud": "#F5A623",
+            "commerceCloud": "#52C9A8"
+          }
+        },
+        "title": {
+          "fontSize": "18px",
+          "fontWeight": 700,
+          "color": "#0D2B1E",
+          "marginBottom": "12px"
+        },
+        "body": {
+          "fontSize": "14px",
+          "color": "#1E5C3A",
+          "lineHeight": "1.6"
+        },
+        "link": {
+          "fontSize": "14px",
+          "color": "#2D8653",
+          "textDecoration": "underline",
+          "fontWeight": 400,
+          "marginTop": "auto"
+        }
+      },
+      "pricingCard": {
+        "backgroundColor": "#FFFFFF",
+        "borderRadius": "12px",
+        "border": "1px solid #B8DEC9",
+        "padding": "28px",
+        "shadow": "0 2px 12px rgba(45,134,83,0.1)",
+        "topAccentBar": {
+          "height": "4px",
+          "color": "#4CAF78",
+          "borderRadius": "12px 12px 0 0"
+        },
+        "title": {
+          "fontSize": "20px",
+          "fontWeight": 700,
+          "color": "#0D2B1E"
+        },
+        "body": {
+          "fontSize": "14px",
+          "color": "#1E5C3A",
+          "lineHeight": "1.6"
+        },
+        "link": {
+          "fontSize": "14px",
+          "color": "#2D8653",
+          "textDecoration": "underline"
+        }
+      },
+      "resourceCard": {
+        "backgroundColor": "#FFFFFF",
+        "borderRadius": "12px",
+        "border": "1px solid #C8E6D4",
+        "padding": "0px",
+        "shadow": "0 2px 12px rgba(45,134,83,0.08)",
+        "imageAreaHeight": "200px",
+        "contentPadding": "20px"
+      }
+    },
+
+    "buttons": {
+      "primary": {
+        "backgroundColor": "#2D8653",
+        "textColor": "#FFFFFF",
+        "fontSize": "15px",
+        "fontWeight": 600,
+        "padding": "12px 24px",
+        "borderRadius": "6px",
+        "border": "none",
+        "hoverBackgroundColor": "#236B42",
+        "transition": "all 0.2s ease",
+        "minHeight": "44px"
+      },
+      "outline": {
+        "backgroundColor": "transparent",
+        "textColor": "#2D8653",
+        "border": "1px solid #2D8653",
+        "fontSize": "15px",
+        "fontWeight": 600,
+        "padding": "12px 24px",
+        "borderRadius": "6px",
+        "hoverBackgroundColor": "#E6F4EC",
+        "transition": "all 0.2s ease",
+        "minHeight": "44px"
+      },
+      "ghost": {
+        "backgroundColor": "transparent",
+        "textColor": "#2D8653",
+        "border": "none",
+        "fontSize": "15px",
+        "fontWeight": 400,
+        "padding": "12px 0px"
+      },
+      "large": {
+        "padding": "14px 32px",
+        "fontSize": "16px",
+        "fontWeight": 600,
+        "borderRadius": "6px",
+        "minWidth": "180px"
+      },
+      "chatFAB": {
+        "backgroundColor": "#2D8653",
+        "textColor": "#FFFFFF",
+        "borderRadius": "9999px",
+        "padding": "12px 20px",
+        "fontSize": "14px",
+        "fontWeight": 600,
+        "gap": "8px",
+        "icon": "robot/bot avatar",
+        "iconSize": "24px",
+        "position": "fixed bottom-right",
+        "boxShadow": "0 4px 16px rgba(45,134,83,0.3)"
+      }
+    },
+
+    "typography": {
+      "h1": { "fontSize": "48px", "fontWeight": 700, "color": "#0D2B1E", "lineHeight": "1.1" },
+      "h2": { "fontSize": "36px", "fontWeight": 700, "color": "#0D2B1E", "lineHeight": "1.2" },
+      "h3": { "fontSize": "28px", "fontWeight": 700, "color": "#0D2B1E", "lineHeight": "1.25" },
+      "h4": { "fontSize": "20px", "fontWeight": 700, "color": "#0D2B1E", "lineHeight": "1.3" },
+      "h5": { "fontSize": "18px", "fontWeight": 700, "color": "#0D2B1E" },
+      "body": { "fontSize": "16px", "fontWeight": 400, "color": "#1E5C3A", "lineHeight": "1.65" },
+      "bodyLarge": { "fontSize": "18px", "fontWeight": 400, "color": "#1E5C3A", "lineHeight": "1.65" },
+      "small": { "fontSize": "14px", "fontWeight": 400, "color": "#5A8A72", "lineHeight": "1.5" },
+      "xs": { "fontSize": "12px", "fontWeight": 400, "color": "#5A8A72" },
+      "label": { "fontSize": "12px", "fontWeight": 600, "color": "#5A8A72", "letterSpacing": "0.05em", "textTransform": "uppercase" },
+      "superLabel": { "fontSize": "14px", "fontWeight": 400, "color": "#5A8A72" },
+      "link": { "color": "#2D8653", "decoration": "underline", "hoverColor": "#236B42" },
+      "linkWithIcon": { "color": "#2D8653", "decoration": "underline", "icon": "external-link", "iconSize": "14px" }
+    },
+
+    "badges": {
+      "present": true,
+      "default": {
+        "backgroundColor": "#EDF7F2",
+        "textColor": "#1E5C3A",
+        "fontSize": "12px",
+        "fontWeight": 500,
+        "padding": "4px 10px",
+        "borderRadius": "4px",
+        "border": "1px solid #B8DEC9"
+      },
+      "types": {
+        "Resource": { "backgroundColor": "#EDF7F2", "textColor": "#1E5C3A", "border": "1px solid #B8DEC9" },
+        "Blog": { "backgroundColor": "#EDF7F2", "textColor": "#1E5C3A", "border": "1px solid #B8DEC9" },
+        "FreeCRM": { "backgroundColor": "#E6F4EC", "textColor": "#2D8653", "border": "1px solid #A8D9BC" },
+        "Demo": { "backgroundColor": "#EDF7F2", "textColor": "#1E5C3A", "border": "1px solid #B8DEC9" },
+        "Guide": { "backgroundColor": "#EDF7F2", "textColor": "#1E5C3A", "border": "1px solid #B8DEC9" }
+      }
+    },
+
+    "forms": {
+      "present": true,
+      "layout": "two-column grid for registration page, single column for modal",
+      "container": {
+        "backgroundColor": "#FFFFFF",
+        "borderRadius": "12px",
+        "padding": "40px",
+        "boxShadow": "0 4px 24px rgba(45,134,83,0.12)"
+      },
+      "fieldGroup": {
+        "marginBottom": "20px"
+      },
+      "label": {
+        "fontSize": "13px",
+        "fontWeight": 400,
+        "color": "#0D2B1E",
+        "marginBottom": "6px",
+        "display": "block"
+      },
+      "input": {
+        "backgroundColor": "#FFFFFF",
+        "borderColor": "#B8DEC9",
+        "borderWidth": "1px",
+        "borderStyle": "solid",
+        "borderRadius": "6px",
+        "padding": "10px 14px",
+        "fontSize": "14px",
+        "color": "#0D2B1E",
+        "placeholderColor": "#5A8A72",
+        "height": "44px",
+        "focusBorderColor": "#2D8653",
+        "focusBoxShadow": "0 0 0 3px rgba(45,134,83,0.15)",
+        "validIcon": "checkmark green right side",
+        "validIconColor": "#2D8653"
+      },
+      "select": {
+        "backgroundColor": "#FFFFFF",
+        "borderColor": "#B8DEC9",
+        "borderRadius": "6px",
+        "padding": "10px 14px",
+        "fontSize": "14px",
+        "height": "44px",
+        "arrowIcon": "chevron-down",
+        "arrowColor": "#5A8A72"
+      },
+      "checkbox": {
+        "size": "18px",
+        "borderRadius": "4px",
+        "checkedBackground": "#2D8653",
+        "checkedBorder": "#2D8653",
+        "checkmarkColor": "#FFFFFF",
+        "uncheckedBorder": "1px solid #B8DEC9"
+      },
+      "submitButton": {
+        "width": "100%",
+        "backgroundColor": "#2D8653",
+        "textColor": "#FFFFFF",
+        "fontSize": "16px",
+        "fontWeight": 700,
+        "padding": "14px",
+        "borderRadius": "6px",
+        "height": "52px",
+        "textTransform": "uppercase",
+        "letterSpacing": "0.05em"
+      },
+      "helperText": {
+        "fontSize": "12px",
+        "color": "#5A8A72",
+        "marginTop": "8px"
+      },
+      "legalText": {
+        "fontSize": "12px",
+        "color": "#5A8A72",
+        "lineHeight": "1.5",
+        "linkColor": "#2D8653"
+      },
+      "stepIndicator": {
+        "fontSize": "13px",
+        "color": "#5A8A72",
+        "position": "bottom-right of modal"
+      }
+    },
+
+    "featureSplit": {
+      "layout": "alternating left-right across sections",
+      "textSide": {
+        "maxWidth": "520px",
+        "padding": "40px"
+      },
+      "heading": {
+        "fontSize": "36px",
+        "fontWeight": 700,
+        "color": "#0D2B1E",
+        "lineHeight": "1.2",
+        "marginBottom": "20px"
+      },
+      "body": {
+        "fontSize": "16px",
+        "color": "#1E5C3A",
+        "lineHeight": "1.65",
+        "marginBottom": "28px"
+      },
+      "cta": {
+        "style": "primary solid button"
+      },
+      "mediaSide": {
+        "borderRadius": "16px",
+        "backgroundColor": "#EDF7F2",
+        "overflow": "hidden",
+        "circularPhoto": {
+          "borderRadius": "9999px",
+          "border": "none",
+          "size": "320px"
+        },
+        "decorativeElements": {
+          "dots": { "color": "#2D8653", "sizes": ["8px", "14px", "20px"] },
+          "plusSigns": { "color": "#F5A623", "size": "16px" }
+        }
+      }
+    },
+
+    "logoBar": {
+      "present": true,
+      "gap": "24px",
+      "logoTile": {
+        "backgroundColor": "#FFFFFF",
+        "border": "1px solid #D9EFE4",
+        "borderRadius": "8px",
+        "padding": "20px 32px",
+        "height": "72px",
+        "filter": "grayscale(0)"
+      }
+    },
+
+    "chatWidget": {
+      "present": true,
+      "fullscreenMode": {
+        "backgroundColor": "linear-gradient(135deg, #F0F9F5 0%, #E6F4EC 100%)",
+        "header": {
+          "label": "Agentforce",
+          "fontSize": "16px",
+          "fontWeight": 600,
+          "color": "#0D2B1E"
+        },
+        "heading": {
+          "fontSize": "36px",
+          "fontWeight": 700,
+          "colorNormal": "#0D2B1E",
+          "colorAccent": "#2D8653"
+        },
+        "botAvatar": {
+          "backgroundColor": "#2D8653",
+          "size": "36px",
+          "borderRadius": "9999px",
+          "iconColor": "#FFFFFF"
+        },
+        "messages": {
+          "botMessage": {
+            "fontSize": "15px",
+            "color": "#0D2B1E",
+            "lineHeight": "1.6"
+          },
+          "timestamp": {
+            "fontSize": "12px",
+            "color": "#5A8A72"
+          },
+          "userMessage": {
+            "alignSelf": "flex-end",
+            "backgroundColor": "#F0F9F5",
+            "borderRadius": "12px 12px 0 12px",
+            "padding": "10px 16px",
+            "fontSize": "15px"
+          },
+          "quickReply": {
+            "backgroundColor": "#F0F9F5",
+            "border": "1px solid #C8E6D4",
+            "borderRadius": "8px",
+            "padding": "8px 16px",
+            "fontSize": "14px",
+            "color": "#0D2B1E"
+          }
+        },
+        "inputBar": {
+          "backgroundColor": "#FFFFFF",
+          "border": "1px solid #C8E6D4",
+          "borderRadius": "12px",
+          "padding": "14px 16px",
+          "fontSize": "15px",
+          "sendButton": {
+            "backgroundColor": "transparent",
+            "iconColor": "#2D8653"
+          }
+        }
+      }
+    },
+
+    "benefitsList": {
+      "present": true,
+      "item": {
+        "checkmark": {
+          "color": "#2D8653",
+          "size": "18px"
+        },
+        "text": {
+          "fontSize": "15px",
+          "color": "#0D2B1E",
+          "lineHeight": "1.5"
+        },
+        "marginBottom": "12px"
+      }
+    },
+
+    "illustrations": {
+      "style": "flat vector characters with circular backgrounds",
+      "circleBackground": {
+        "colors": ["#E6F4EC", "#EDF7F2", "#D6EEE3"],
+        "size": "320px",
+        "borderRadius": "9999px"
+      },
+      "mascot": {
+        "name": "Astro (replace with own character)",
+        "position": "decorative, various sections"
+      },
+      "landscape": {
+        "position": "right side of hero, bottom of cards sections",
+        "colors": ["#4CAF78", "#2D8653", "#A8D9BC", "#52C9A8", "#1A5C38"]
+      }
+    },
+
+    "icons": {
+      "library": "custom Salesforce icons + standard UI icons",
+      "style": "line icons with optional fill",
+      "size": { "sm": "16px", "md": "20px", "lg": "24px", "xl": "32px" },
+      "color": "#2D8653",
+      "secondaryColor": "#5A8A72",
+      "strokeWidth": "1.5"
+    },
+
+    "dividers": {
+      "color": "#D9EFE4",
+      "style": "solid",
+      "thickness": "1px"
+    },
+
+    "footer": {
+      "present": false,
+      "note": "Footer not visible in provided screenshots"
+    },
+
+    "animations": {
+      "pageLoad": "fade-in",
+      "scrollReveal": true,
+      "hoverTransitions": "0.2s ease",
+      "microInteractions": [
+        "button hover darkens background",
+        "card hover lifts with shadow increase",
+        "nav link hover color change to green",
+        "input focus border highlight",
+        "checkbox check animation",
+        "form validation checkmark appear"
+      ]
+    },
+
+    "customComponents": [
+      {
+        "name": "AISearchBar",
+        "description": "Prominent search/chat input with sparkle icon and send arrow",
+        "container": "#2D8653 rounded-xl p-6",
+        "input": "white bg, green accent icons",
+        "quickActions": "row of white pill buttons below"
+      },
+      {
+        "name": "SectionSideLabel",
+        "description": "Left side bold text label while cards appear on right",
+        "fontSize": "28px",
+        "fontWeight": 700,
+        "maxWidth": "280px",
+        "color": "#0D2B1E"
+      },
+      {
+        "name": "LandscapeIllustrationBackground",
+        "description": "SVG illustrated rolling green landscape behind content sections",
+        "colors": ["#4CAF78", "#A8D9BC", "#2D8653"]
+      },
+      {
+        "name": "SignupProgressIndicator",
+        "description": "Step X of Y text shown bottom-right of modal form",
+        "fontSize": "13px",
+        "color": "#5A8A72"
+      },
+      {
+        "name": "CircularAvatarCollage",
+        "description": "Multiple circular clipped photos overlapping with color circle backgrounds",
+        "circleColors": ["#F4C7C3", "#F5D770", "#5BC4D0"],
+        "avatarBorderRadius": "9999px",
+        "avatarSize": "120px"
+      }
+    ]
+  },
+
+  "cssVariables": {
+    "--color-primary": "#2D8653",
+    "--color-primary-hover": "#236B42",
+    "--color-primary-light": "#E6F4EC",
+    "--color-secondary": "#1A5C38",
+    "--color-accent": "#4CAF78",
+    "--color-accent-light": "#A8D9BC",
+    "--color-bg": "#FFFFFF",
+    "--color-bg-page": "#F4FAF7",
+    "--color-bg-section": "#EDF7F2",
+    "--color-surface": "#FFFFFF",
+    "--color-surface-elevated": "#F0F9F5",
+    "--color-text": "#0D2B1E",
+    "--color-text-secondary": "#1E5C3A",
+    "--color-text-muted": "#5A8A72",
+    "--color-text-inverse": "#FFFFFF",
+    "--color-border": "#B8DEC9",
+    "--color-border-light": "#D9EFE4",
+    "--color-border-focus": "#2D8653",
+    "--color-success": "#2D8653",
+    "--color-error": "#D93025",
+    "--color-warning": "#F29900",
+    "--font-heading": "'Salesforce Sans', 'Source Sans Pro', Arial, sans-serif",
+    "--font-body": "'Salesforce Sans', 'Source Sans Pro', Arial, sans-serif",
+    "--radius-xs": "2px",
+    "--radius-sm": "4px",
+    "--radius-md": "8px",
+    "--radius-lg": "12px",
+    "--radius-xl": "16px",
+    "--radius-full": "9999px",
+    "--shadow-sm": "0 1px 4px rgba(0,0,0,0.08)",
+    "--shadow-md": "0 2px 8px rgba(0,0,0,0.1)",
+    "--shadow-lg": "0 4px 16px rgba(0,0,0,0.12)",
+    "--shadow-card": "0 2px 12px rgba(45, 134, 83, 0.1)",
+    "--shadow-card-hover": "0 6px 24px rgba(45, 134, 83, 0.18)",
+    "--transition": "all 0.2s ease",
+    "--transition-slow": "all 0.3s ease",
+    "--navbar-height-top": "48px",
+    "--navbar-height-sub": "56px",
+    "--section-padding-y": "80px",
+    "--container-max-width": "1200px",
+    "--container-padding": "24px"
+  },
+
+  "tailwindConfig": {
+    "extend": {
+      "colors": {
+        "primary": {
+          "DEFAULT": "#2D8653",
+          "hover": "#236B42",
+          "light": "#E6F4EC",
+          "foreground": "#FFFFFF"
+        },
+        "secondary": {
+          "DEFAULT": "#1A5C38",
+          "foreground": "#FFFFFF"
+        },
+        "accent": {
+          "DEFAULT": "#4CAF78",
+          "light": "#A8D9BC",
+          "foreground": "#0D2B1E"
+        },
+        "background": "#FFFFFF",
+        "page": "#F4FAF7",
+        "section": "#EDF7F2",
+        "surface": "#FFFFFF",
+        "border": "#B8DEC9",
+        "borderLight": "#D9EFE4",
+        "muted": {
+          "DEFAULT": "#EDF7F2",
+          "foreground": "#5A8A72"
+        },
+        "text": {
+          "primary": "#0D2B1E",
+          "secondary": "#1E5C3A",
+          "muted": "#5A8A72"
+        }
+      },
+      "fontFamily": {
+        "heading": ["Salesforce Sans", "Source Sans Pro", "Arial", "sans-serif"],
+        "body": ["Salesforce Sans", "Source Sans Pro", "Arial", "sans-serif"]
+      },
+      "borderRadius": {
+        "xs": "2px",
+        "sm": "4px",
+        "md": "8px",
+        "lg": "12px",
+        "xl": "16px",
+        "2xl": "20px",
+        "card": "12px",
+        "button": "6px"
+      },
+      "boxShadow": {
+        "card": "0 2px 12px rgba(45, 134, 83, 0.1)",
+        "cardHover": "0 6px 24px rgba(45, 134, 83, 0.18)",
+        "input": "0 0 0 3px rgba(45, 134, 83, 0.15)"
+      }
+    }
+  },
+
+  "notes": {
+    "designObservations": "Salesforce CRM page uses a dual-navbar pattern (utility bar + product subnav). Sections alternate between white and very light green (#F4FAF7/#EDF7F2) backgrounds. Cards use a distinctive colored top accent bar to differentiate product categories. Hero section uses split-color heading (dark + brand green). AI chatbot FAB is persistent bottom-right. Product illustrations use flat vector characters on circular colored backgrounds. Decorative SVG landscapes appear between sections.",
+    "recommendedFonts": ["Source Sans Pro", "Inter", "DM Sans"],
+    "googleFontsURL": "https://fonts.googleapis.com/css2?family=Source+Sans+Pro:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap",
+    "animationLibraries": ["css-only", "framer-motion for scroll reveals"],
+    "componentLibrary": "custom (or shadcn/ui as base)",
+    "implementationNotes": "1) Implement dual navbar — sticky sub-nav after scroll. 2) Use CSS custom properties from cssVariables section. 3) Card top accent bars use different green/teal shades per product. 4) All interactive states need transition: all 0.2s ease. 5) Form validation shows green checkmark inside input on valid. 6) Chat FAB is fixed position bottom-right. 7) Section backgrounds alternate #FFFFFF and #EDF7F2. 8) Replace Salesforce Sans with Source Sans Pro or Inter from Google Fonts."
+  }
+}

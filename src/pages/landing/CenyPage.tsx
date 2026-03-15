@@ -185,23 +185,23 @@ export const CenyPage: React.FC = () => {
     >
       {/* Hero */}
       <section className="relative pt-28 pb-16 md:pt-36 md:pb-24 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-white" />
-        <div className="absolute top-20 right-0 w-[400px] h-[400px] bg-emerald-100/50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
+        <div className="absolute inset-0 bg-gradient-to-b from-sf-backgroundSection via-sf-background to-sf-background" />
+        <div className="absolute top-20 right-0 w-[400px] h-[400px] bg-sf-primaryLight/50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
         <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 tracking-tight leading-tight">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-sf-text-primary tracking-tight leading-tight">
             Выберите формат работы с 2wix
           </h1>
-          <p className="mt-6 text-xl text-slate-600 max-w-2xl mx-auto">
+          <p className="mt-6 text-xl text-sf-text-secondary max-w-2xl mx-auto">
             CRM для бизнеса, продаж, WhatsApp-коммуникаций и процессов — с понятным стартом и возможностью масштабирования.
           </p>
-          <p className="mt-4 text-slate-500 max-w-xl mx-auto">
+          <p className="mt-4 text-sf-text-muted max-w-xl mx-auto">
             Подходит как для небольших команд, так и для компаний с несколькими менеджерами и сложными процессами.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
             <button
               type="button"
               onClick={scrollToPlans}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-lg shadow-slate-900/20 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-semibold text-sf-text-inverse bg-sf-primary hover:bg-sf-primaryHover shadow-lg shadow-sfMd transition-all"
             >
               Смотреть тарифы
               <ArrowRight className="w-5 h-5" />
@@ -209,7 +209,7 @@ export const CenyPage: React.FC = () => {
             <button
               type="button"
               onClick={scrollToDemo}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-slate-700 bg-white border-2 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-semibold text-sf-text-secondary bg-sf-surface border-2 border-sf-border hover:border-sf-cardBorder hover:bg-sf-primaryLight/50 transition-all"
             >
               Запросить демо
             </button>
@@ -218,43 +218,43 @@ export const CenyPage: React.FC = () => {
       </section>
 
       {/* Тарифные блоки */}
-      <section id="tarify" className="py-16 md:py-24 bg-white scroll-mt-24">
+      <section id="tarify" className="py-16 md:py-24 bg-sf-surface scroll-mt-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">
             Тарифы 2wix
           </h2>
-          <p className="text-slate-600 text-center max-w-2xl mx-auto mb-14">
+          <p className="text-sf-text-secondary text-center max-w-2xl mx-auto mb-14">
             Начните с бесплатного старта или выберите план под размер команды и задачи.
           </p>
           <div className="grid md:grid-cols-3 gap-8 lg:gap-10">
             {PLANS.map((plan) => (
               <div
                 key={plan.id}
-                className={`relative rounded-2xl border-2 p-8 flex flex-col transition-all hover:shadow-xl ${
+                className={`relative rounded-sfCard border-2 p-8 flex flex-col transition-all hover:shadow-xl ${
                   plan.highlighted
-                    ? 'border-emerald-500 bg-gradient-to-b from-emerald-50/80 to-white shadow-lg shadow-emerald-500/10 scale-[1.02] md:scale-105 z-10'
-                    : 'border-slate-200 bg-slate-50/30 hover:border-slate-300'
+                    ? 'border-sf-primary bg-gradient-to-b from-sf-primaryLight/80 to-sf-background shadow-lg shadow-sfCard scale-[1.02] md:scale-105 z-10'
+                    : 'border-sf-border bg-sf-backgroundSection/30 hover:border-sf-cardBorder'
                 }`}
               >
                 {plan.highlighted && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-emerald-500 text-white text-sm font-semibold">
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-sf-primary text-sf-text-inverse text-sm font-semibold">
                     Популярный
                   </div>
                 )}
-                <h3 className="text-2xl font-bold text-slate-900">{plan.name}</h3>
-                <p className="mt-1 text-emerald-700 font-medium text-sm">{plan.tagline}</p>
-                <p className="mt-3 text-slate-600 text-sm">{plan.description}</p>
+                <h3 className="text-2xl font-bold text-sf-text-primary">{plan.name}</h3>
+                <p className="mt-1 text-sf-primary font-medium text-sm">{plan.tagline}</p>
+                <p className="mt-3 text-sf-text-secondary text-sm">{plan.description}</p>
                 <div className="mt-6">
                   {plan.price != null ? (
-                    <span className="text-3xl font-bold text-slate-900">{plan.price}</span>
+                    <span className="text-3xl font-bold text-sf-text-primary">{plan.price}</span>
                   ) : (
-                    <span className="text-lg font-semibold text-slate-700">{plan.priceNote}</span>
+                    <span className="text-lg font-semibold text-sf-text-secondary">{plan.priceNote}</span>
                   )}
                 </div>
                 <ul className="mt-6 space-y-3 flex-1">
                   {plan.features.map((f) => (
-                    <li key={f} className="flex items-start gap-2 text-sm text-slate-700">
-                      <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                    <li key={f} className="flex items-start gap-2 text-sm text-sf-text-secondary">
+                      <Check className="w-4 h-4 text-sf-accent flex-shrink-0 mt-0.5" />
                       {f}
                     </li>
                   ))}
@@ -265,10 +265,10 @@ export const CenyPage: React.FC = () => {
                     onClick={() =>
                       plan.id === 'start' ? navigate('/register-company') : scrollToDemo()
                     }
-                    className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-semibold transition-all ${
+                    className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-sfCard font-semibold transition-all ${
                       plan.highlighted
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                        : 'bg-slate-900 text-white hover:bg-slate-800'
+                        ? 'bg-sf-primary text-sf-text-inverse hover:bg-sf-primaryHover'
+                        : 'bg-sf-primary text-sf-text-inverse hover:bg-sf-primaryHover'
                     }`}
                   >
                     {plan.cta}
@@ -278,7 +278,7 @@ export const CenyPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={scrollToDemo}
-                      className="w-full py-3 rounded-xl font-medium text-slate-600 border border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all"
+                      className="w-full py-3 rounded-sfCard font-medium text-sf-text-secondary border border-sf-border hover:border-sf-cardBorder hover:bg-sf-primaryLight/50 transition-all"
                     >
                       {plan.ctaSecondary}
                     </button>
@@ -291,31 +291,31 @@ export const CenyPage: React.FC = () => {
       </section>
 
       {/* Что входит в 2wix */}
-      <section className="py-16 md:py-24 bg-slate-50/80">
+      <section className="py-16 md:py-24 bg-sf-backgroundSection/80">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">
             Что входит в 2wix
           </h2>
-          <p className="text-slate-600 text-center max-w-2xl mx-auto mb-12">
+          <p className="text-sf-text-secondary text-center max-w-2xl mx-auto mb-12">
             Единая система для клиентов, продаж, коммуникаций и операционного контроля — не набор разрозненных сервисов.
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
             {WHAT_INCLUDED.map(({ label, icon: Icon }) => (
               <div
                 key={label}
-                className="flex flex-col items-center gap-2 p-4 rounded-xl bg-white border border-slate-200 hover:border-emerald-200 hover:shadow-md transition-all"
+                className="flex flex-col items-center gap-2 p-4 rounded-sfCard bg-sf-surface border border-sf-border hover:border-sf-cardBorder hover:shadow-md transition-all"
               >
-                <div className="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600">
+                <div className="w-10 h-10 rounded-lg bg-sf-primaryLight flex items-center justify-center text-sf-accent">
                   <Icon className="w-5 h-5" />
                 </div>
-                <span className="text-sm font-medium text-slate-700 text-center">{label}</span>
+                <span className="text-sm font-medium text-sf-text-secondary text-center">{label}</span>
               </div>
             ))}
           </div>
           <p className="mt-8 text-center">
             <Link
               to="/vozmozhnosti"
-              className="text-emerald-600 font-medium hover:text-emerald-700 hover:underline"
+              className="text-sf-accent font-medium hover:text-sf-primary hover:underline"
             >
               Подробнее о возможностях →
             </Link>
@@ -326,22 +326,22 @@ export const CenyPage: React.FC = () => {
       {/* Как выбрать тариф */}
       <section className="py-16 md:py-24 bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">
             Как выбрать тариф
           </h2>
-          <p className="text-slate-600 text-center mb-12">
+          <p className="text-sf-text-secondary text-center mb-12">
             Подберите формат под вашу команду и задачи.
           </p>
           <div className="grid md:grid-cols-3 gap-6">
             {HOW_TO_CHOOSE.map((item) => (
               <div
                 key={item.planId}
-                className="p-6 rounded-2xl border border-slate-200 bg-slate-50/50 hover:border-emerald-200 hover:bg-emerald-50/30 transition-all"
+                className="p-6 rounded-sfCard border border-sf-border bg-sf-backgroundSection/50 hover:border-sf-cardBorder hover:bg-sf-primaryLight/30 transition-all"
               >
-                <h3 className="text-lg font-bold text-slate-900">{item.title}</h3>
-                <p className="mt-2 text-slate-600 text-sm">{item.desc}</p>
+                <h3 className="text-lg font-bold text-sf-text-primary">{item.title}</h3>
+                <p className="mt-2 text-sf-text-secondary text-sm">{item.desc}</p>
                 <p className="mt-4">
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 text-sm font-semibold">
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sf-primaryLight text-sf-primary text-sm font-semibold">
                     <Sparkles className="w-4 h-4" />
                     {item.plan}
                   </span>
@@ -353,32 +353,32 @@ export const CenyPage: React.FC = () => {
       </section>
 
       {/* Почему нужно запросить демо */}
-      <section id="zapros-demo" className="py-16 md:py-24 bg-gradient-to-b from-emerald-50/80 to-slate-50/80 scroll-mt-24">
+      <section id="zapros-demo" className="py-16 md:py-24 bg-gradient-to-b from-sf-primaryLight/80 to-sf-backgroundSection/80 scroll-mt-24">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary mb-4">
             Не уверены, какой формат вам подходит?
           </h2>
-          <p className="text-lg text-slate-600 mb-8">
+          <p className="text-lg text-sf-text-secondary mb-8">
             Покажем продукт в действии, подскажем подходящий тариф и поможем подобрать решение под ваш бизнес.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
               type="button"
               onClick={() => navigate('/register-company')}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-white bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/25 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-semibold text-sf-text-inverse bg-sf-primary hover:bg-sf-primaryHover shadow-lg shadow-sfMd transition-all"
             >
               Создать компанию
               <ArrowRight className="w-5 h-5" />
             </button>
             <a
               href="mailto:info@2wix.ru?subject=Запрос демо 2wix"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-slate-700 bg-white border-2 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-semibold text-sf-text-secondary bg-sf-surface border-2 border-sf-border hover:border-sf-cardBorder hover:bg-sf-primaryLight/50 transition-all"
             >
               Запросить демо
             </a>
             <Link
               to="/"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-medium text-slate-600 hover:text-slate-900 transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-medium text-sf-text-secondary hover:text-sf-text-primary transition-colors"
             >
               На главную
             </Link>
@@ -389,31 +389,31 @@ export const CenyPage: React.FC = () => {
       {/* Сравнение тарифов */}
       <section className="py-16 md:py-24 bg-white">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">
             Сравнение тарифов
           </h2>
-          <p className="text-slate-600 text-center mb-12">
+          <p className="text-sf-text-secondary text-center mb-12">
             Все возможности по планам в одной таблице.
           </p>
-          <div className="overflow-x-auto rounded-2xl border border-slate-200 shadow-lg">
+          <div className="overflow-x-auto rounded-sfCard border border-sf-border shadow-lg">
             <table className="w-full min-w-[640px] text-left">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="px-6 py-4 font-semibold text-slate-900">Возможность</th>
-                  <th className="px-6 py-4 font-semibold text-slate-900 text-center">Start</th>
-                  <th className="px-6 py-4 font-semibold text-slate-900 text-center bg-emerald-50/80">Business</th>
-                  <th className="px-6 py-4 font-semibold text-slate-900 text-center">Enterprise</th>
+                <tr className="bg-sf-backgroundSection border-b border-sf-border">
+                  <th className="px-6 py-4 font-semibold text-sf-text-primary">Возможность</th>
+                  <th className="px-6 py-4 font-semibold text-sf-text-primary text-center">Start</th>
+                  <th className="px-6 py-4 font-semibold text-sf-text-primary text-center bg-sf-primaryLight/80">Business</th>
+                  <th className="px-6 py-4 font-semibold text-sf-text-primary text-center">Enterprise</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-sf-borderLight">
                 {COMPARISON_ROWS.map((row, i) => (
-                  <tr key={i} className="hover:bg-slate-50/50">
-                    <td className="px-6 py-3.5 text-slate-700 font-medium">{row.feature}</td>
-                    <td className="px-6 py-3.5 text-slate-600 text-center text-sm">{row.start}</td>
-                    <td className="px-6 py-3.5 text-slate-700 text-center text-sm bg-emerald-50/30 font-medium">
+                  <tr key={i} className="hover:bg-sf-backgroundSection/50">
+                    <td className="px-6 py-3.5 text-sf-text-secondary font-medium">{row.feature}</td>
+                    <td className="px-6 py-3.5 text-sf-text-secondary text-center text-sm">{row.start}</td>
+                    <td className="px-6 py-3.5 text-sf-text-secondary text-center text-sm bg-sf-primaryLight/30 font-medium">
                       {row.business}
                     </td>
-                    <td className="px-6 py-3.5 text-slate-600 text-center text-sm">{row.enterprise}</td>
+                    <td className="px-6 py-3.5 text-sf-text-secondary text-center text-sm">{row.enterprise}</td>
                   </tr>
                 ))}
               </tbody>
@@ -423,25 +423,25 @@ export const CenyPage: React.FC = () => {
       </section>
 
       {/* FAQ */}
-      <section className="py-16 md:py-24 bg-slate-50/80">
+      <section className="py-16 md:py-24 bg-sf-backgroundSection/80">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">
             Вопросы о тарифах
           </h2>
-          <p className="text-slate-600 text-center mb-12">
+          <p className="text-sf-text-secondary text-center mb-12">
             Частые вопросы о стоимости и форматах работы с 2wix.
           </p>
           <div className="space-y-4">
             {FAQ_ITEMS.map(({ q, a }, i) => (
               <details
                 key={i}
-                className="group rounded-xl border border-slate-200 bg-white overflow-hidden"
+                className="group rounded-sfCard border border-sf-border bg-sf-surface overflow-hidden"
               >
-                <summary className="flex items-center justify-between gap-4 px-6 py-4 cursor-pointer list-none font-medium text-slate-900 hover:bg-slate-50/50 transition-colors">
+                <summary className="flex items-center justify-between gap-4 px-6 py-4 cursor-pointer list-none font-medium text-sf-text-primary hover:bg-sf-backgroundSection/50 transition-colors">
                   <span>{q}</span>
-                  <ChevronDown className="w-5 h-5 text-slate-400 flex-shrink-0 transition-transform group-open:rotate-180" />
+                  <ChevronDown className="w-5 h-5 text-sf-text-muted flex-shrink-0 transition-transform group-open:rotate-180" />
                 </summary>
-                <div className="px-6 pb-4 pt-0 text-slate-600 text-sm leading-relaxed">
+                <div className="px-6 pb-4 pt-0 text-sf-text-secondary text-sm leading-relaxed">
                   {a}
                 </div>
               </details>
@@ -450,7 +450,7 @@ export const CenyPage: React.FC = () => {
           <p className="mt-10 text-center">
             <Link
               to="/faq"
-              className="inline-flex items-center gap-2 text-emerald-600 font-medium hover:text-emerald-700 hover:underline"
+              className="inline-flex items-center gap-2 text-sf-accent font-medium hover:text-sf-primary hover:underline"
             >
               <HelpCircle className="w-4 h-4" />
               Все вопросы и ответы
@@ -459,20 +459,20 @@ export const CenyPage: React.FC = () => {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-20 md:py-28 bg-slate-900">
+      {/* CTA — только onDark-токены для контраста на тёмном фоне */}
+      <section className="py-20 md:py-28 bg-sf-primary">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-inverse mb-4">
             Начните работать в 2wix в формате, который подходит вашему бизнесу
           </h2>
-          <p className="text-lg text-slate-300 mb-10 max-w-xl mx-auto">
+          <p className="text-lg text-white/95 mb-10 max-w-xl mx-auto">
             Создайте компанию, запросите демо или войдите в аккаунт — выберите удобный шаг.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center flex-wrap">
             <button
               type="button"
               onClick={() => navigate('/register-company')}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-slate-900 bg-white hover:bg-slate-100 shadow-xl transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-semibold text-sf-text-primary bg-sf-surface hover:bg-sf-borderLight shadow-xl transition-all"
             >
               Создать компанию
               <ArrowRight className="w-5 h-5" />
@@ -480,34 +480,34 @@ export const CenyPage: React.FC = () => {
             <button
               type="button"
               onClick={scrollToDemo}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-white border-2 border-slate-500 hover:border-slate-400 hover:bg-slate-800/50 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-semibold text-sf-text-inverse border-2 border-white/40 hover:border-white/60 hover:bg-white/10 transition-all"
             >
               Запросить демо
             </button>
             <button
               type="button"
               onClick={() => navigate('/')}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-medium text-slate-300 hover:text-white transition-colors"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-medium text-white/90 hover:text-white border border-white/40 hover:border-white/60 transition-all"
             >
               Войти
             </button>
           </div>
-          <div className="mt-12 pt-12 border-t border-slate-700">
-            <p className="text-slate-400 text-sm mb-4">Полезные разделы</p>
+          <div className="mt-12 pt-12 border-t border-white/25">
+            <p className="text-white/90 text-sm mb-4">Полезные разделы</p>
             <div className="flex flex-wrap justify-center gap-x-6 gap-y-2">
-              <Link to="/crm-dlya-biznesa" className="text-slate-400 hover:text-white text-sm transition-colors">
+              <Link to="/crm-dlya-biznesa" className="text-white/90 hover:text-white text-sm transition-colors">
                 CRM для бизнеса
               </Link>
-              <Link to="/crm-dlya-prodazh" className="text-slate-400 hover:text-white text-sm transition-colors">
+              <Link to="/crm-dlya-prodazh" className="text-white/90 hover:text-white text-sm transition-colors">
                 CRM для продаж
               </Link>
-              <Link to="/whatsapp-crm" className="text-slate-400 hover:text-white text-sm transition-colors">
+              <Link to="/whatsapp-crm" className="text-white/90 hover:text-white text-sm transition-colors">
                 WhatsApp CRM
               </Link>
-              <Link to="/vozmozhnosti" className="text-slate-400 hover:text-white text-sm transition-colors">
+              <Link to="/vozmozhnosti" className="text-white/90 hover:text-white text-sm transition-colors">
                 Возможности
               </Link>
-              <Link to="/faq" className="text-slate-400 hover:text-white text-sm transition-colors">
+              <Link to="/faq" className="text-white/90 hover:text-white text-sm transition-colors">
                 FAQ
               </Link>
             </div>

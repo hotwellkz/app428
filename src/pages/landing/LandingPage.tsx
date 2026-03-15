@@ -19,7 +19,7 @@ interface LandingPageProps {
   onLoginSuccess: () => void;
 }
 
-const linkButtonClass = 'px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-medium hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors text-sm';
+const linkButtonClass = 'px-4 py-2.5 rounded-sfButton bg-sf-surface border border-sf-border text-sf-text-secondary font-medium hover:border-sf-cardBorder hover:bg-sf-primaryLight/50 transition-colors text-sm';
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => (
   <>
@@ -32,9 +32,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => (
       <UseCasesSection />
       <ScreenshotsSection />
       <FAQSection />
-      <section className="py-16 md:py-20 bg-slate-50/80">
+      <section className="font-sans py-16 md:py-20 bg-sf-backgroundSection/80">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-2xl font-bold text-slate-900 mb-8">Подробнее о 2wix</h2>
+          <h2 className="text-2xl font-bold text-sf-text-primary mb-8">Подробнее о 2wix</h2>
           <div className="flex flex-wrap justify-center gap-3">
             <Link to="/crm-dlya-biznesa" className={linkButtonClass}>CRM для бизнеса</Link>
             <Link to="/crm-dlya-prodazh" className={linkButtonClass}>CRM для продаж</Link>

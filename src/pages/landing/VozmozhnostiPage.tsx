@@ -77,20 +77,20 @@ export const VozmozhnostiPage: React.FC = () => {
     <SEOPageLayout title={TITLE} description={DESCRIPTION}>
       {/* Hero */}
       <section className="relative pt-28 pb-20 md:pt-36 md:pb-28 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-white" />
-        <div className="absolute top-20 right-0 w-[400px] h-[400px] bg-emerald-100/40 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
+        <div className="absolute inset-0 bg-gradient-to-b from-sf-backgroundSection via-sf-background to-sf-background" />
+        <div className="absolute top-20 right-0 w-[400px] h-[400px] bg-sf-primaryLight/40 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 tracking-tight">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-sf-text-primary tracking-tight">
             Все возможности 2wix в одной CRM-системе
           </h1>
-          <p className="mt-6 text-lg md:text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed">
+          <p className="mt-6 text-lg md:text-xl text-sf-text-secondary max-w-3xl mx-auto leading-relaxed">
             Управление клиентами, WhatsApp, сделками, аналитикой, сотрудниками, финансами и операционными процессами в одной системе.
           </p>
           <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
             <button
               type="button"
               onClick={() => navigate('/register-company')}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-lg transition-all"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-sfCard font-semibold text-sf-text-inverse bg-sf-primary hover:bg-sf-primaryHover shadow-lg transition-all"
             >
               Попробовать
               <ArrowRight className="w-4 h-4" />
@@ -98,14 +98,14 @@ export const VozmozhnostiPage: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate('/register-company')}
-              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-slate-700 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-sfCard font-semibold text-sf-text-secondary bg-sf-surface border border-sf-border hover:border-sf-cardBorder hover:bg-sf-backgroundSection transition-all"
             >
               Создать компанию
             </button>
           </div>
-          <div className="mt-12 rounded-2xl border border-slate-200 bg-white/80 shadow-xl shadow-slate-200/50 overflow-hidden max-w-4xl mx-auto">
-            <div className="aspect-video bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center p-8">
-              <LayoutDashboard className="w-20 h-20 text-slate-300" />
+          <div className="mt-12 rounded-sfCard border border-sf-border bg-sf-surface/80 shadow-xl shadow-sfCard overflow-hidden max-w-4xl mx-auto">
+            <div className="aspect-video bg-gradient-to-br from-sf-borderLight to-sf-backgroundSection flex items-center justify-center p-8">
+              <LayoutDashboard className="w-20 h-20 text-sf-text-muted" />
               <span className="sr-only">Интерфейс 2wix</span>
             </div>
           </div>
@@ -115,34 +115,34 @@ export const VozmozhnostiPage: React.FC = () => {
       {/* Короткий обзор */}
       <section className="py-16 md:py-20 bg-white">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-2xl md:text-3xl font-bold text-slate-900 mb-6">Один продукт — полный цикл</h2>
-          <p className="text-slate-600 leading-relaxed">
+          <h2 className="text-2xl md:text-3xl font-bold text-sf-text-primary mb-6">Один продукт — полный цикл</h2>
+          <p className="text-sf-text-secondary leading-relaxed">
             2wix объединяет клиентскую базу, коммуникации в WhatsApp, воронку продаж, аналитику, финансы и склад в одной платформе. Вы не переключаетесь между сервисами: заявка из чата становится сделкой, операция фиксируется в финансах, а отчёты показывают результат. Система подходит для разных отраслей — от отдела продаж до производства и строительства.
           </p>
         </div>
       </section>
 
       {/* 8 функциональных блоков — grid */}
-      <section className="py-16 md:py-24 bg-slate-50/80">
+      <section className="py-16 md:py-24 bg-sf-backgroundSection/80">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">Ключевые блоки продукта</h2>
-          <p className="text-lg text-slate-600 text-center max-w-2xl mx-auto mb-14">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">Ключевые блоки продукта</h2>
+          <p className="text-lg text-sf-text-secondary text-center max-w-2xl mx-auto mb-14">
             Всё необходимое для продаж, коммуникаций и операционного управления
           </p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {FEATURE_BLOCKS.map(({ icon: Icon, title, to, desc }) => (
               <div
                 key={title}
-                className="group rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-lg hover:border-slate-300 transition-all duration-200"
+                className="group rounded-sfCard border border-sf-border bg-sf-surface p-6 shadow-sm hover:shadow-lg hover:border-sf-cardBorder transition-all duration-200"
               >
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4 group-hover:bg-emerald-100 transition-colors">
+                <div className="w-12 h-12 rounded-sfCard bg-sf-primaryLight text-sf-accent flex items-center justify-center mb-4 group-hover:bg-sf-primaryLight transition-colors">
                   <Icon className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
-                <p className="text-slate-600 text-sm leading-relaxed mb-4">{desc}</p>
+                <h3 className="text-lg font-semibold text-sf-text-primary mb-2">{title}</h3>
+                <p className="text-sf-text-secondary text-sm leading-relaxed mb-4">{desc}</p>
                 <Link
                   to={to}
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-600 hover:text-emerald-700"
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-sf-accent hover:text-sf-primary"
                 >
                   Подробнее
                   <ArrowRight className="w-4 h-4" />
@@ -156,23 +156,23 @@ export const VozmozhnostiPage: React.FC = () => {
       {/* Подробные секции по каждому блоку */}
       <section className="py-16 md:py-24 bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-slate-900 text-center mb-14">Подробнее о каждом блоке</h2>
+          <h2 className="text-3xl font-bold text-sf-text-primary text-center mb-14">Подробнее о каждом блоке</h2>
           <div className="space-y-20">
             {DETAIL_SECTIONS.map(({ id, title, to, desc, bullets }) => (
               <div key={id} id={id} className="scroll-mt-28">
-                <h3 className="text-2xl font-bold text-slate-900 mb-4">{title}</h3>
-                <p className="text-slate-600 leading-relaxed mb-6">{desc}</p>
+                <h3 className="text-2xl font-bold text-sf-text-primary mb-4">{title}</h3>
+                <p className="text-sf-text-secondary leading-relaxed mb-6">{desc}</p>
                 <ul className="space-y-2 mb-6">
                   {bullets.map((b) => (
-                    <li key={b} className="flex items-center gap-2 text-slate-700">
-                      <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    <li key={b} className="flex items-center gap-2 text-sf-text-secondary">
+                      <Check className="w-4 h-4 text-sf-accent flex-shrink-0" />
                       {b}
                     </li>
                   ))}
                 </ul>
                 <Link
                   to={to}
-                  className="inline-flex items-center gap-2 text-sm font-medium text-emerald-600 hover:text-emerald-700"
+                  className="inline-flex items-center gap-2 text-sm font-medium text-sf-accent hover:text-sf-primary"
                 >
                   Узнать больше
                   <ArrowRight className="w-4 h-4" />
@@ -184,24 +184,24 @@ export const VozmozhnostiPage: React.FC = () => {
       </section>
 
       {/* Как это работает вместе */}
-      <section className="py-20 md:py-28 bg-slate-50/80">
+      <section className="py-20 md:py-28 bg-sf-backgroundSection/80">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">Как это работает вместе</h2>
-          <p className="text-lg text-slate-600 text-center max-w-2xl mx-auto mb-14">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">Как это работает вместе</h2>
+          <p className="text-lg text-sf-text-secondary text-center max-w-2xl mx-auto mb-14">
             2wix — не набор разрозненных функций, а единая система. От обращения до результата.
           </p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-5 gap-4 md:gap-6">
             {FLOW_STEPS.map((step, i) => (
               <div key={step.title} className="relative">
-                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm h-full">
-                  <span className="inline-flex w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 font-semibold text-sm items-center justify-center mb-3">
+                <div className="rounded-sfCard border border-sf-border bg-sf-surface p-5 shadow-sm h-full">
+                  <span className="inline-flex w-8 h-8 rounded-lg bg-sf-primaryLight text-sf-primary font-semibold text-sm items-center justify-center mb-3">
                     {i + 1}
                   </span>
-                  <h3 className="font-semibold text-slate-900 mb-1">{step.title}</h3>
-                  <p className="text-sm text-slate-600">{step.sub}</p>
+                  <h3 className="font-semibold text-sf-text-primary mb-1">{step.title}</h3>
+                  <p className="text-sm text-sf-text-secondary">{step.sub}</p>
                 </div>
                 {i < FLOW_STEPS.length - 1 && (
-                  <div className="hidden lg:block absolute top-1/2 -right-3 w-6 h-0.5 bg-slate-200 -translate-y-1/2 z-0" />
+                  <div className="hidden lg:block absolute top-1/2 -right-3 w-6 h-0.5 bg-sf-border -translate-y-1/2 z-0" />
                 )}
               </div>
             ))}
@@ -212,15 +212,15 @@ export const VozmozhnostiPage: React.FC = () => {
       {/* Для каких задач подходит */}
       <section className="py-16 md:py-24 bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-slate-900 text-center mb-4">Для каких задач подходит</h2>
-          <p className="text-slate-600 text-center mb-12">
+          <h2 className="text-3xl font-bold text-sf-text-primary text-center mb-4">Для каких задач подходит</h2>
+          <p className="text-sf-text-secondary text-center mb-12">
             Система закрывает ключевые бизнес-задачи продаж и операционного управления
           </p>
           <ul className="grid sm:grid-cols-2 gap-3">
             {TASKS.map((task) => (
-              <li key={task} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3">
-                <Check className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                <span className="font-medium text-slate-800">{task}</span>
+              <li key={task} className="flex items-center gap-3 rounded-sfCard border border-sf-border bg-sf-backgroundSection/50 px-4 py-3">
+                <Check className="w-5 h-5 text-sf-accent flex-shrink-0" />
+                <span className="font-medium text-sf-text-primary">{task}</span>
               </li>
             ))}
           </ul>
@@ -228,26 +228,26 @@ export const VozmozhnostiPage: React.FC = () => {
       </section>
 
       {/* CTA */}
-      <section className="py-20 md:py-28 bg-slate-900">
+      <section className="py-20 md:py-28 bg-sf-primary">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-inverse mb-4">
             Попробуйте 2wix и соберите продажи, WhatsApp и процессы в одной системе
           </h2>
-          <p className="text-lg text-slate-300 mb-10">
+          <p className="text-lg text-white/95 mb-10">
             Создайте компанию за минуту и начните вести клиентов, сделки и коммуникации в одном месте.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <button
               type="button"
               onClick={() => navigate('/register-company')}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-slate-900 bg-white hover:bg-slate-100 shadow-xl transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-semibold text-sf-text-primary bg-sf-surface hover:bg-sf-borderLight shadow-xl transition-all"
             >
               Создать компанию
               <ArrowRight className="w-5 h-5" />
             </button>
             <Link
               to="/"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-white border-2 border-slate-500 hover:border-slate-400 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-sfCard font-semibold text-sf-text-inverse border-2 border-sf-border hover:border-sf-borderLight transition-all"
             >
               Войти
             </Link>
@@ -256,19 +256,19 @@ export const VozmozhnostiPage: React.FC = () => {
       </section>
 
       {/* FAQ mini-block */}
-      <section className="py-16 md:py-24 bg-slate-50/80">
+      <section className="py-16 md:py-24 bg-sf-backgroundSection/80">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-slate-900 text-center mb-12">Частые вопросы о возможностях</h2>
+          <h2 className="text-3xl font-bold text-sf-text-primary text-center mb-12">Частые вопросы о возможностях</h2>
           <ul className="space-y-6">
             {FAQ_ITEMS.map(({ q, a }) => (
-              <li key={q} className="rounded-2xl border border-slate-200 bg-white p-6">
-                <h3 className="font-semibold text-slate-900 mb-2">{q}</h3>
-                <p className="text-slate-600 text-sm leading-relaxed">{a}</p>
+              <li key={q} className="rounded-sfCard border border-sf-border bg-sf-surface p-6">
+                <h3 className="font-semibold text-sf-text-primary mb-2">{q}</h3>
+                <p className="text-sf-text-secondary text-sm leading-relaxed">{a}</p>
               </li>
             ))}
           </ul>
           <div className="mt-10 text-center">
-            <Link to="/faq" className="text-emerald-600 font-medium hover:text-emerald-700">
+            <Link to="/faq" className="text-sf-accent font-medium hover:text-sf-primary">
               Все вопросы и ответы →
             </Link>
           </div>

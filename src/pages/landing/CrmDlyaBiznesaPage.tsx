@@ -112,44 +112,44 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
     <SEOPageLayout title={TITLE} description={DESCRIPTION}>
       {/* Hero */}
       <section className="relative pt-28 pb-20 md:pt-36 md:pb-28 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-white" />
-        <div className="absolute top-20 right-0 w-[500px] h-[500px] bg-emerald-100/40 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
+        <div className="absolute inset-0 bg-gradient-to-b from-sf-backgroundSection via-sf-background to-sf-background" />
+        <div className="absolute top-20 right-0 w-[500px] h-[500px] bg-sf-primaryLight/40 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4" />
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
             <div>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-slate-900 tracking-tight leading-tight">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-sf-text-primary tracking-tight leading-tight">
                 Соберите клиентов, сделки, WhatsApp и аналитику в одной CRM
               </h1>
-              <p className="mt-6 text-lg md:text-xl text-slate-600 max-w-xl leading-relaxed">
+              <p className="mt-6 text-lg md:text-xl text-sf-text-secondary max-w-xl leading-relaxed">
                 2wix помогает бизнесу работать с клиентами, продажами, коммуникациями и внутренними процессами в одной системе.
               </p>
               <div className="mt-10 flex flex-col sm:flex-row gap-4">
                 <button
                   type="button"
                   onClick={() => navigate('/register-company')}
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-white bg-slate-900 hover:bg-slate-800 shadow-lg transition-all"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-sf-text-inverse bg-sf-primary hover:bg-sf-primaryHover shadow-lg transition-all"
                 >
                   Попробовать
                   <ArrowRight className="w-4 h-4" />
                 </button>
                 <Link
                   to="/vozmozhnosti"
-                  className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-slate-700 bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all"
+                  className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-sf-text-secondary bg-sf-surface border border-sf-border hover:border-sf-cardBorder hover:bg-sf-backgroundSection transition-all"
                 >
                   Посмотреть возможности
                 </Link>
               </div>
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-200/50 overflow-hidden">
-              <div className="aspect-video bg-gradient-to-br from-slate-50 to-emerald-50/30 flex items-center justify-center p-8">
-                <div className="w-full max-w-sm rounded-xl bg-white border border-slate-200 shadow-lg p-4">
-                  <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
-                    <LayoutDashboard className="w-5 h-5 text-emerald-600" />
-                    <span className="font-semibold text-slate-900">Рабочий стол</span>
+            <div className="rounded-sfCard border border-sf-border bg-sf-surface shadow-xl shadow-sfCard overflow-hidden">
+              <div className="aspect-video bg-gradient-to-br from-sf-backgroundSection to-sf-primaryLight/30 flex items-center justify-center p-8">
+                <div className="w-full max-w-sm rounded-xl bg-sf-surface border border-sf-border shadow-lg p-4">
+                  <div className="flex items-center gap-2 mb-4 pb-3 border-b border-sf-borderLight">
+                    <LayoutDashboard className="w-5 h-5 text-sf-accent" />
+                    <span className="font-semibold text-sf-text-primary">Рабочий стол</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     {['Клиенты', 'Сделки', 'Чаты', 'Аналитика'].map((label) => (
-                      <div key={label} className="rounded-lg bg-slate-50 py-2 px-3 text-center text-sm font-medium text-slate-700">
+                      <div key={label} className="rounded-lg bg-sf-backgroundSection py-2 px-3 text-center text-sm font-medium text-sf-text-secondary">
                         {label}
                       </div>
                     ))}
@@ -162,19 +162,19 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
       </section>
 
       {/* Зачем бизнесу нужна CRM */}
-      <section className="py-16 md:py-24 bg-white">
+      <section className="py-16 md:py-24 bg-sf-surface">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">Зачем бизнесу нужна CRM</h2>
-          <p className="text-lg text-slate-600 text-center max-w-2xl mx-auto mb-14">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">Зачем бизнесу нужна CRM</h2>
+          <p className="text-lg text-sf-text-secondary text-center max-w-2xl mx-auto mb-14">
             Без системы заявки, клиенты и коммуникации живут в хаосе. CRM возвращает порядок и контроль.
           </p>
           <div className="grid md:grid-cols-2 gap-6">
             {WHY_CRM.map(({ title, text }) => (
-              <div key={title} className="flex items-start gap-4 rounded-2xl border border-slate-200 bg-slate-50/50 p-6">
+              <div key={title} className="flex items-start gap-4 rounded-sfCard border border-sf-border bg-sf-backgroundSection/50 p-6">
                 <AlertCircle className="w-6 h-6 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <h3 className="font-semibold text-slate-900 mb-2">{title}</h3>
-                  <p className="text-slate-600 text-sm leading-relaxed">{text}</p>
+                  <h3 className="font-semibold text-sf-text-primary mb-2">{title}</h3>
+                  <p className="text-sf-text-secondary text-sm leading-relaxed">{text}</p>
                 </div>
               </div>
             ))}
@@ -183,20 +183,20 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
       </section>
 
       {/* Что закрывает 2wix */}
-      <section className="py-16 md:py-24 bg-slate-50/80">
+      <section className="py-16 md:py-24 bg-sf-backgroundSection/80">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">Что закрывает 2wix</h2>
-          <p className="text-lg text-slate-600 text-center max-w-2xl mx-auto mb-14">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">Что закрывает 2wix</h2>
+          <p className="text-lg text-sf-text-secondary text-center max-w-2xl mx-auto mb-14">
             Не только «про клиентов» — рабочая система для управления бизнесом
           </p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {WHAT_CLOSES.map(({ icon: Icon, title, text }) => (
-              <div key={title} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
-                <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4">
+              <div key={title} className="rounded-sfCard border border-sf-border bg-sf-surface p-6 shadow-sm hover:shadow-md transition-shadow">
+                <div className="w-12 h-12 rounded-xl bg-sf-primaryLight text-sf-accent flex items-center justify-center mb-4">
                   <Icon className="w-6 h-6" />
                 </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
-                <p className="text-slate-600 text-sm leading-relaxed">{text}</p>
+                <h3 className="text-lg font-semibold text-sf-text-primary mb-2">{title}</h3>
+                <p className="text-sf-text-secondary text-sm leading-relaxed">{text}</p>
               </div>
             ))}
           </div>
@@ -204,15 +204,15 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
       </section>
 
       {/* Для каких компаний подходит */}
-      <section className="py-16 md:py-24 bg-white">
+      <section className="py-16 md:py-24 bg-sf-surface">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">Для каких компаний подходит</h2>
-          <p className="text-slate-600 text-center mb-12">Универсальная CRM для разных типов бизнеса и отраслей</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">Для каких компаний подходит</h2>
+          <p className="text-sf-text-secondary text-center mb-12">Универсальная CRM для разных типов бизнеса и отраслей</p>
           <ul className="grid sm:grid-cols-2 gap-3">
             {FOR_COMPANIES.map((item) => (
-              <li key={item} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-5 py-4">
-                <Check className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                <span className="font-medium text-slate-800">{item}</span>
+              <li key={item} className="flex items-center gap-3 rounded-xl border border-sf-border bg-sf-backgroundSection/50 px-5 py-4">
+                <Check className="w-5 h-5 text-sf-accent flex-shrink-0" />
+                <span className="font-medium text-sf-text-primary">{item}</span>
               </li>
             ))}
           </ul>
@@ -220,15 +220,15 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
       </section>
 
       {/* Как это работает */}
-      <section className="py-16 md:py-24 bg-slate-50/80">
+      <section className="py-16 md:py-24 bg-sf-backgroundSection/80">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">Как это работает</h2>
-          <p className="text-slate-600 text-center mb-14">Простая логика: от заявки до результата в одной системе</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">Как это работает</h2>
+          <p className="text-sf-text-secondary text-center mb-14">Простая логика: от заявки до результата в одной системе</p>
           <ol className="space-y-4">
             {FLOW_STEPS.map((step, i) => (
-              <li key={step} className="flex items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5">
-                <span className="flex-shrink-0 w-10 h-10 rounded-xl bg-emerald-600 text-white font-bold flex items-center justify-center">{i + 1}</span>
-                <span className="font-medium text-slate-900">{step}</span>
+              <li key={step} className="flex items-center gap-4 rounded-sfCard border border-sf-border bg-sf-surface p-5">
+                <span className="flex-shrink-0 w-10 h-10 rounded-xl bg-sf-primary text-sf-text-inverse font-bold flex items-center justify-center">{i + 1}</span>
+                <span className="font-medium text-sf-text-primary">{step}</span>
               </li>
             ))}
           </ol>
@@ -236,15 +236,15 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
       </section>
 
       {/* Чем 2wix полезен руководителю */}
-      <section className="py-16 md:py-24 bg-white">
+      <section className="py-16 md:py-24 bg-sf-surface">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">Чем 2wix полезен руководителю</h2>
-          <p className="text-slate-600 text-center mb-12">Что получает владелец бизнеса от внедрения CRM</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">Чем 2wix полезен руководителю</h2>
+          <p className="text-sf-text-secondary text-center mb-12">Что получает владелец бизнеса от внедрения CRM</p>
           <ul className="grid sm:grid-cols-2 gap-4">
             {FOR_LEADER.map((item) => (
-              <li key={item} className="flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50/50 px-5 py-4">
-                <Check className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                <span className="font-medium text-slate-800">{item}</span>
+              <li key={item} className="flex items-center gap-3 rounded-sfCard border border-sf-cardBorder bg-sf-primaryLight/50 px-5 py-4">
+                <Check className="w-5 h-5 text-sf-accent flex-shrink-0" />
+                <span className="font-medium text-sf-text-primary">{item}</span>
               </li>
             ))}
           </ul>
@@ -252,20 +252,20 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
       </section>
 
       {/* Screenshots / Product Preview */}
-      <section className="py-16 md:py-24 bg-slate-50/80">
+      <section className="py-16 md:py-24 bg-sf-backgroundSection/80">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">Интерфейс продукта</h2>
-          <p className="text-slate-600 text-center mb-14">Клиенты, WhatsApp, сделки, аналитика и права — в одном продукте</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">Интерфейс продукта</h2>
+          <p className="text-sf-text-secondary text-center mb-14">Клиенты, WhatsApp, сделки, аналитика и права — в одном продукте</p>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {PREVIEW_ITEMS.map(({ label, icon: Icon }) => (
-              <div key={label} className="rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
-                <div className="aspect-video bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center p-6">
-                  <div className="w-16 h-16 rounded-2xl bg-white border border-slate-200 shadow flex items-center justify-center text-slate-500">
+              <div key={label} className="rounded-sfCard border border-sf-border bg-sf-surface overflow-hidden shadow-lg hover:shadow-xl transition-shadow">
+                <div className="aspect-video bg-gradient-to-br from-sf-borderLight to-sf-backgroundSection flex items-center justify-center p-6">
+                  <div className="w-16 h-16 rounded-sfCard bg-sf-surface border border-sf-border shadow flex items-center justify-center text-sf-text-muted">
                     <Icon className="w-8 h-8" />
                   </div>
                 </div>
-                <div className="p-4 border-t border-slate-100">
-                  <p className="font-medium text-slate-900 text-center">{label}</p>
+                <div className="p-4 border-t border-sf-borderLight">
+                  <p className="font-medium text-sf-text-primary text-center">{label}</p>
                 </div>
               </div>
             ))}
@@ -274,20 +274,20 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
       </section>
 
       {/* Почему 2wix */}
-      <section className="py-16 md:py-24 bg-white">
+      <section className="py-16 md:py-24 bg-sf-surface">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">Почему 2wix</h2>
-          <p className="text-lg text-slate-600 text-center max-w-2xl mx-auto mb-14">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">Почему 2wix</h2>
+          <p className="text-lg text-sf-text-secondary text-center max-w-2xl mx-auto mb-14">
             Преимущества системы для бизнеса
           </p>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {WHY_2WIX.map(({ icon: Icon, title, text }) => (
-              <div key={title} className="rounded-2xl border border-slate-200 bg-slate-50/50 p-6">
-                <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4">
+              <div key={title} className="rounded-sfCard border border-sf-border bg-sf-backgroundSection/50 p-6">
+                <div className="w-11 h-11 rounded-xl bg-sf-primaryLight text-sf-accent flex items-center justify-center mb-4">
                   <Icon className="w-5 h-5" />
                 </div>
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">{title}</h3>
-                <p className="text-slate-600 text-sm leading-relaxed">{text}</p>
+                <h3 className="text-lg font-semibold text-sf-text-primary mb-2">{title}</h3>
+                <p className="text-sf-text-secondary text-sm leading-relaxed">{text}</p>
               </div>
             ))}
           </div>
@@ -295,19 +295,19 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
       </section>
 
       {/* CTA */}
-      <section className="py-20 md:py-28 bg-slate-900">
+      <section className="py-20 md:py-28 bg-sf-primary">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-inverse mb-4">
             Запустите CRM, которая собирает клиентов, продажи и процессы в одной системе
           </h2>
-          <p className="text-lg text-slate-300 mb-10">
+          <p className="text-lg text-white/95 mb-10">
             Начните бесплатно — создайте компанию и пригласите команду.
           </p>
           <div className="flex flex-col sm:flex-row flex-wrap gap-4 justify-center">
             <button
               type="button"
               onClick={() => navigate('/register-company')}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-slate-900 bg-white hover:bg-slate-100 shadow-xl transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-sf-text-primary bg-sf-surface hover:bg-sf-surfaceElevated shadow-xl transition-all"
             >
               Создать компанию
               <ArrowRight className="w-5 h-5" />
@@ -315,13 +315,13 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
             <button
               type="button"
               onClick={() => navigate('/register-company')}
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-slate-300 border-2 border-slate-600 hover:border-slate-500 hover:text-white transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-white/95 border-2 border-white/40 hover:border-white/50 hover:text-sf-text-inverse transition-all"
             >
               Попробовать
             </button>
             <Link
               to="/"
-              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-white border-2 border-slate-500 hover:border-slate-400 transition-all"
+              className="inline-flex items-center justify-center gap-2 px-8 py-4 rounded-xl font-semibold text-sf-text-inverse border-2 border-white/50 hover:border-white/60 transition-all"
             >
               Войти
             </Link>
@@ -330,20 +330,20 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
       </section>
 
       {/* FAQ */}
-      <section className="py-16 md:py-24 bg-slate-50/80">
+      <section className="py-16 md:py-24 bg-sf-backgroundSection/80">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl md:text-4xl font-bold text-slate-900 text-center mb-4">Вопросы и ответы</h2>
-          <p className="text-slate-600 text-center mb-14">Частые вопросы о CRM для бизнеса в 2wix</p>
+          <h2 className="text-3xl md:text-4xl font-bold text-sf-text-primary text-center mb-4">Вопросы и ответы</h2>
+          <p className="text-sf-text-secondary text-center mb-14">Частые вопросы о CRM для бизнеса в 2wix</p>
           <ul className="space-y-6">
             {FAQ_ITEMS.map(({ q, a }) => (
-              <li key={q} className="rounded-2xl border border-slate-200 bg-white p-6">
-                <h3 className="font-semibold text-slate-900 mb-2">{q}</h3>
-                <p className="text-slate-600 text-sm leading-relaxed">{a}</p>
+              <li key={q} className="rounded-sfCard border border-sf-border bg-sf-surface p-6">
+                <h3 className="font-semibold text-sf-text-primary mb-2">{q}</h3>
+                <p className="text-sf-text-secondary text-sm leading-relaxed">{a}</p>
               </li>
             ))}
           </ul>
           <div className="mt-10 text-center">
-            <Link to="/faq" className="text-emerald-600 font-medium hover:text-emerald-700">
+            <Link to="/faq" className="text-sf-accent font-medium hover:text-sf-primaryHover">
               Все вопросы и ответы →
             </Link>
           </div>
@@ -351,26 +351,26 @@ export const CrmDlyaBiznesaPage: React.FC = () => {
       </section>
 
       {/* Перелинковка */}
-      <section className="py-16 md:py-24 bg-white">
+      <section className="py-16 md:py-24 bg-sf-surface">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold text-slate-900 text-center mb-10">Полезные разделы</h2>
+          <h2 className="text-2xl font-bold text-sf-text-primary text-center mb-10">Полезные разделы</h2>
           <div className="flex flex-wrap justify-center gap-4">
-            <Link to="/" className="px-5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors">
+            <Link to="/" className="px-5 py-2.5 rounded-xl bg-sf-backgroundSection border border-sf-border text-sf-text-secondary font-medium hover:border-sf-cardBorder hover:bg-sf-primaryLight/50 transition-colors">
               Главная
             </Link>
-            <Link to="/vozmozhnosti" className="px-5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors">
+            <Link to="/vozmozhnosti" className="px-5 py-2.5 rounded-xl bg-sf-backgroundSection border border-sf-border text-sf-text-secondary font-medium hover:border-sf-cardBorder hover:bg-sf-primaryLight/50 transition-colors">
               Возможности
             </Link>
-            <Link to="/crm-dlya-prodazh" className="px-5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors">
+            <Link to="/crm-dlya-prodazh" className="px-5 py-2.5 rounded-xl bg-sf-backgroundSection border border-sf-border text-sf-text-secondary font-medium hover:border-sf-cardBorder hover:bg-sf-primaryLight/50 transition-colors">
               CRM для продаж
             </Link>
-            <Link to="/whatsapp-crm" className="px-5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors">
+            <Link to="/whatsapp-crm" className="px-5 py-2.5 rounded-xl bg-sf-backgroundSection border border-sf-border text-sf-text-secondary font-medium hover:border-sf-cardBorder hover:bg-sf-primaryLight/50 transition-colors">
               WhatsApp CRM
             </Link>
-            <Link to="/ceny" className="px-5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors">
+            <Link to="/ceny" className="px-5 py-2.5 rounded-xl bg-sf-backgroundSection border border-sf-border text-sf-text-secondary font-medium hover:border-sf-cardBorder hover:bg-sf-primaryLight/50 transition-colors">
               Цены
             </Link>
-            <Link to="/faq" className="px-5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium hover:border-emerald-300 hover:bg-emerald-50/50 transition-colors">
+            <Link to="/faq" className="px-5 py-2.5 rounded-xl bg-sf-backgroundSection border border-sf-border text-sf-text-secondary font-medium hover:border-sf-cardBorder hover:bg-sf-primaryLight/50 transition-colors">
               FAQ
             </Link>
           </div>
