@@ -51,6 +51,8 @@ const FOOTER_GROUPS = [
     links: [
       { label: 'Что такое CRM', to: '/chto-takoe-crm' },
       { label: 'Как выбрать CRM', to: '/kak-vybrat-crm' },
+      { label: 'Зачем нужна CRM', to: '/zachem-nuzhna-crm' },
+      { label: 'CRM или Excel', to: '/crm-ili-excel' },
     ],
   },
 ];
