@@ -7,6 +7,8 @@ export { VozmozhnostiPage } from './VozmozhnostiPage';
 export { CenyPage } from './CenyPage';
 export { FaqPage } from './FaqPage';
 export { UpravlenieKlientamiPage } from './UpravlenieKlientamiPage';
+export { AnalitikaProdazhPage } from './AnalitikaProdazhPage';
+export { KontrolMenedzherovPage } from './KontrolMenedzherovPage';
 export {
   KlientyPage,
   WhatsAppChatyPage,

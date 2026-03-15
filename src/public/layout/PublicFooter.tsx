@@ -5,6 +5,8 @@ import { publicTokens } from '../theme';
 const FOOTER_LINKS = [
   { label: 'Возможности', to: '/vozmozhnosti' },
   { label: 'Управление клиентами', to: '/upravlenie-klientami' },
+  { label: 'Аналитика продаж', to: '/analitika-prodazh' },
+  { label: 'Контроль менеджеров', to: '/kontrol-menedzherov' },
   { label: 'CRM для бизнеса', to: '/crm-dlya-biznesa' },
   { label: 'CRM для малого бизнеса', to: '/crm-dlya-malogo-biznesa' },
   { label: 'CRM для продаж', to: '/crm-dlya-prodazh' },

@@ -43,6 +43,18 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://2wix.ru/analitika-prodazh</loc>
+    <lastmod>2025-03-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://2wix.ru/kontrol-menedzherov</loc>
+    <lastmod>2025-03-08</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://2wix.ru/klienty</loc>
     <lastmod>2025-03-08</lastmod>
     <changefreq>monthly</changefreq>
