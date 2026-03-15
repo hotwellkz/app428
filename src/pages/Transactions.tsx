@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { getSettingsFromCache, saveSettingsToCache } from '../lib/cache';
 import { deleteCategory } from '../lib/firebase/categories';
+import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
 
 const TRANSACTIONS_CACHE_KEY = 'transactions_page_cache';
 
@@ -45,7 +46,7 @@ export const Transactions: React.FC = () => {
   const [fromCache, setFromCache] = useState(false);
   const [localLoading, setLocalLoading] = useState(true);
 
-  // Сброс при смене компании: не показывать данные другой компании
+  // Сброс при смене компании: сразу очищаем список, чтобы не показывать чужие данные
   useEffect(() => {
     if (!companyId) {
       setCategories([]);
@@ -53,24 +54,16 @@ export const Transactions: React.FC = () => {
       setLocalLoading(false);
       return;
     }
+    setCategories([]);
+    setFromCache(false);
     setLocalLoading(true);
   }, [companyId]);
 
-  // При наличии companyId: пробуем взять кэш только для этой компании
+  // Кэш отключён как источник категорий: только Firestore (loadedCategories).
+  // Иначе при переключении компании из кэша могли подмешиваться чужие данные.
   useEffect(() => {
     if (!companyId) return;
-    let mounted = true;
-    (async () => {
-      const cacheKey = getTransactionsCacheKey(companyId);
-      if (!cacheKey) return;
-      const cached = await getSettingsFromCache(cacheKey, null);
-      if (cached && Array.isArray(cached) && mounted) {
-        setCategories(cached);
-        setFromCache(true);
-      }
-      if (mounted) setLocalLoading(false);
-    })();
-    return () => { mounted = false; };
+    setLocalLoading(false);
   }, [companyId]);
 
   // Когда пришли данные с сервера (useCategories с where companyId) — мержим суммы по проектам
@@ -86,7 +79,10 @@ export const Transactions: React.FC = () => {
       return;
     }
     let cancelled = false;
-    const visible = loadedCategories.filter((c) => c.isVisible !== false);
+    // Строгая изоляция: только категории текущей компании (companyId обязателен)
+    const visible = loadedCategories.filter(
+      (c) => c.isVisible !== false && c.companyId === companyId
+    );
     const projects = visible.filter((c) => isProjectCategory(c));
 
     (async () => {
@@ -102,24 +98,32 @@ export const Transactions: React.FC = () => {
       );
       if (cancelled) return;
 
-      const merged = loadedCategories.map((c) => ({
-        ...c,
-        amount: isProjectCategory(c)
-          ? String(
-              Math.round(
-                absById[c.id] ??
-                  (parseFloat(String(c.amount).replace(/[^\d.-]/g, '')) || 0)
+      const merged = loadedCategories
+        .filter((c) => c.companyId === companyId)
+        .map((c) => ({
+          ...c,
+          amount: isProjectCategory(c)
+            ? String(
+                Math.round(
+                  absById[c.id] ??
+                    (parseFloat(String(c.amount).replace(/[^\d.-]/g, '')) || 0)
+                )
               )
-            )
-          : c.amount,
-      }));
-      setCategories(merged);
+            : c.amount,
+        }));
+      const bad = merged.filter((c) => c.companyId !== companyId);
+      if (bad.length > 0) {
+        console.error('[transactions] merged contained wrong companyId', { companyId, bad });
+        setCategories([]);
+      } else {
+        setCategories(merged);
+      }
       setFromCache(false);
       const cacheKey = getTransactionsCacheKey(companyId);
       if (cacheKey) {
         saveSettingsToCache(
           cacheKey,
-          merged.map(({ id, title, amount, color, row, isVisible, type }) => ({
+          merged.map(({ id, title, amount, color, row, isVisible, type, companyId: catCompanyId }) => ({
             id,
             title,
             amount,
@@ -127,6 +131,7 @@ export const Transactions: React.FC = () => {
             row,
             isVisible,
             type,
+            companyId: catCompanyId ?? companyId,
           }))
         );
       }
@@ -347,9 +352,10 @@ export const Transactions: React.FC = () => {
     try {
       setDeleteInProgress(true);
       await deleteCategory(category.id, category.title, false, companyId);
-      console.log('Категория удалена успешно:', category.id);
+      showSuccessNotification('Объект удалён');
     } catch (error) {
       console.error('Error deleting category:', error);
+      showErrorNotification(error instanceof Error ? error.message : 'Ошибка удаления');
     } finally {
       setDeleteInProgress(false);
     }
@@ -403,8 +409,10 @@ export const Transactions: React.FC = () => {
   // Можно добавить индикатор: {fromCache && <span>Данные из кэша</span>}
 
 
-  // Фильтруем категории по видимости
-  const visibleCategories = categories.filter(c => c.isVisible !== false);
+  // Финальная изоляция: показываем только категории текущей компании (запрет показа без/с чужим companyId)
+  const visibleCategories = categories.filter(
+    (c) => c.isVisible !== false && c.companyId === companyId
+  );
 
   const clientCategories = visibleCategories.filter(c => c.row === 1);
   const employeeCategories = visibleCategories.filter(c => c.row === 2);
@@ -412,6 +420,54 @@ export const Transactions: React.FC = () => {
   const warehouseCategories = visibleCategories.filter(c => c.row === 4);
 
   const hasNoObjects = visibleCategories.length === 0;
+
+  // Runtime debug: источник данных для каждой категории и отдельно для "Склад"
+  if (import.meta.env?.DEV) {
+    const rawCategories = categories.map((c) => ({
+      id: c.id,
+      title: c.title,
+      row: c.row,
+      amount: c.amount,
+      companyId: c.companyId ?? '(null)',
+      source: fromCache ? 'cache' : 'live',
+      whyIncluded: c.companyId === companyId ? 'companyId match' : 'EXCLUDED'
+    }));
+    const loadedSnapshot = (loadedCategories ?? []).map((c) => ({
+      id: c.id,
+      title: c.title,
+      row: c.row,
+      amount: c.amount,
+      companyId: c.companyId ?? '(null)'
+    }));
+    const displayedSnapshot = visibleCategories.map((c) => ({
+      id: c.id,
+      title: c.title,
+      row: c.row,
+      amount: c.amount,
+      companyId: c.companyId ?? '(null)',
+      source: fromCache ? 'cache' : 'live',
+      whyIncluded: 'companyId === currentCompanyId'
+    }));
+    console.log('[transactions-debug]', {
+      currentCompanyId: companyId,
+      rawCategories,
+      loadedCategories: loadedSnapshot,
+      visibleCategories: displayedSnapshot,
+      fromCache
+    });
+    const stockAll = categories.filter((c) => c.title === 'Склад' || (c.row === 4 && c.title?.includes('Склад')));
+    if (stockAll.length > 0) {
+      console.log('[transactions-stock-debug]', {
+        currentCompanyId: companyId,
+        foundCategoryIds: stockAll.map((c) => c.id),
+        foundTitles: stockAll.map((c) => c.title),
+        foundCompanyIds: stockAll.map((c) => c.companyId ?? '(null)'),
+        foundAmounts: stockAll.map((c) => c.amount),
+        finalChosen: visibleCategories.filter((c) => c.title === 'Склад' || (c.row === 4 && c.title?.includes('Склад'))),
+        chosenBecause: 'visibleCategories = filter by companyId === currentCompanyId'
+      });
+    }
+  }
 
   return (
     <div className="container mx-auto px-4 py-8">

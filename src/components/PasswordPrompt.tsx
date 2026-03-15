@@ -26,7 +26,9 @@ export const PasswordPrompt: React.FC<PasswordPromptProps> = ({
 
       try {
         const role = await getUserRole(user.uid);
-        if (role === 'admin') {
+        const isAdminOrOwner =
+          role === 'admin' || role === 'global_admin' || role === 'superAdmin';
+        if (isAdminOrOwner) {
           onSuccess();
         } else {
           showErrorNotification('Доступ запрещен. Только для администраторов.');

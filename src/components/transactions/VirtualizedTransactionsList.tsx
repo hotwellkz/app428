@@ -104,6 +104,7 @@ const TransactionRowContent = memo(function TransactionRowContent({
   onApprove,
   onEdit,
   onDeleteRequest,
+  canDeleteTransaction,
   approvingTransactionId,
   rejectingTransactionId
 }: {
@@ -116,6 +117,7 @@ const TransactionRowContent = memo(function TransactionRowContent({
   onApprove?: (t: TransactionCardTransaction) => void;
   onEdit?: (t: TransactionCardTransaction) => void;
   onDeleteRequest?: (t: TransactionCardTransaction) => void;
+  canDeleteTransaction?: (t: TransactionCardTransaction) => boolean;
   approvingTransactionId?: string | null;
   rejectingTransactionId?: string | null;
 }) {
@@ -125,6 +127,7 @@ const TransactionRowContent = memo(function TransactionRowContent({
   if (isFooterRow(row)) {
     return <ListFooter loading={row.loading} allLoaded={row.allLoaded} />;
   }
+  const showDelete = !canDeleteTransaction || canDeleteTransaction(row.transaction);
   return (
     <div className="px-0 pb-2">
       <TransactionCard
@@ -140,7 +143,7 @@ const TransactionRowContent = memo(function TransactionRowContent({
         onWaybillClick={onWaybillClick}
         onApprove={onApprove}
         onEdit={onEdit}
-        onDeleteRequest={onDeleteRequest}
+        onDeleteRequest={showDelete ? onDeleteRequest : undefined}
         approvingTransactionId={approvingTransactionId}
         rejectingTransactionId={rejectingTransactionId}
       />
@@ -161,6 +164,7 @@ export interface VirtualizedTransactionsListProps {
   onApprove?: (t: TransactionCardTransaction) => void;
   onEdit?: (t: TransactionCardTransaction) => void;
   onDeleteRequest?: (t: TransactionCardTransaction) => void;
+  canDeleteTransaction?: (t: TransactionCardTransaction) => boolean;
   approvingTransactionId?: string | null;
   rejectingTransactionId?: string | null;
   hasMore: boolean;
@@ -184,6 +188,7 @@ function VirtualizedTransactionsListInner({
   onApprove,
   onEdit,
   onDeleteRequest,
+  canDeleteTransaction,
   approvingTransactionId,
   rejectingTransactionId,
   hasMore,
@@ -295,6 +300,7 @@ function VirtualizedTransactionsListInner({
               onApprove={onApprove}
               onEdit={onEdit}
               onDeleteRequest={onDeleteRequest}
+              canDeleteTransaction={canDeleteTransaction}
               approvingTransactionId={approvingTransactionId}
               rejectingTransactionId={rejectingTransactionId}
             />

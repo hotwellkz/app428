@@ -107,6 +107,20 @@ service cloud.firestore {
       allow read, write: if isAuthenticated();
     }
 
+    // Employees: доступ только по companyId пользователя или global_admin
+    match /employees/{employeeId} {
+      allow read, update, delete: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || isGlobalAdmin()
+      );
+    }
+
     // Clients: доступ только по companyId пользователя или global_admin
     match /clients/{clientId} {
       allow read, update, delete: if isAuthenticated() && (

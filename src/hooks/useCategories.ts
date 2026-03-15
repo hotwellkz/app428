@@ -50,6 +50,7 @@ interface ProcessedCategory {
   row: number;
   isVisible: boolean;
   type?: string;
+  companyId?: string;
 }
 
 export const useCategories = () => {
@@ -79,7 +80,8 @@ export const useCategories = () => {
           color: data.color || 'bg-emerald-500',
           row: parseInt(data.row) || 1,
           isVisible: data.isVisible !== undefined ? data.isVisible : true,
-          type: data.type
+          type: data.type,
+          companyId: data.companyId as string | undefined
         });
       }
     });
@@ -114,20 +116,24 @@ export const useCategories = () => {
     });
   }, []);
 
-  // Мемоизированные производные значения
+  // Жёсткая изоляция: наружу отдаём только категории текущей компании (никогда чужие)
+  const safeCategories = useMemo(
+    () => (companyId ? categories.filter((c) => c.companyId === companyId) : []),
+    [categories, companyId]
+  );
+
   const derivedValues = useMemo(() => {
-    const visibleCategories = categories.filter(c => c.isVisible !== false);
-    
+    const visibleCategories = safeCategories.filter(c => c.isVisible !== false);
     return {
       visibleCategories,
       clientCategories: visibleCategories.filter(c => c.row === 1),
       employeeCategories: visibleCategories.filter(c => c.row === 2),
       projectCategories: visibleCategories.filter(c => c.row === 3),
       warehouseCategories: visibleCategories.filter(c => c.row === 4),
-      totalCategories: categories.length,
+      totalCategories: safeCategories.length,
       visibleCount: visibleCategories.length
     };
-  }, [categories]);
+  }, [safeCategories]);
 
   useEffect(() => {
     if (!companyId) {
@@ -136,6 +142,11 @@ export const useCategories = () => {
       setError(null);
       return () => {};
     }
+
+    // Критично: при смене компании сразу очищаем список, иначе docChanges()
+    // будет мержиться со старым состоянием и в списке останутся категории другой компании.
+    setCategories([]);
+    setLoading(true);
 
     let unsubscribe: () => void;
 
@@ -149,16 +160,27 @@ export const useCategories = () => {
         q,
         (snapshot) => {
           try {
-            const changes = snapshot.docChanges();
-            
-            if (changes.length === 0) {
-              setLoading(false);
-              return;
-            }
-
-            const updates = processChanges(changes);
-            updateCategories(updates);
-            
+            // Всегда заменяем список полным набором из snapshot, а не мержим docChanges.
+            // Иначе при смене компании старые категории оставались в состоянии и смешивались с новыми.
+            const fullList: CategoryCardType[] = snapshot.docs
+              .filter((docSnap) => (docSnap.data().companyId as string) === companyId)
+              .map((docSnap) => {
+                const data = docSnap.data();
+                const icon = createCachedIcon(data.icon);
+                return {
+                  id: docSnap.id,
+                  title: data.title || 'Без названия',
+                  amount: String(data.amount || 0),
+                  icon,
+                  iconName: data.icon || 'Home',
+                  color: data.color || 'bg-emerald-500',
+                  row: parseInt(data.row) || 1,
+                  isVisible: data.isVisible !== undefined ? data.isVisible : true,
+                  type: data.type,
+                  companyId: data.companyId as string | undefined
+                } as CategoryCardType;
+              });
+            setCategories(fullList.sort((a, b) => (a.row || 0) - (b.row || 0)));
             setLoading(false);
             setError(null);
           } catch (snapshotError) {
@@ -182,17 +204,16 @@ export const useCategories = () => {
     return () => unsubscribe?.();
   }, [processChanges, updateCategories, companyId]);
 
-  // Функции для работы с категориями
   const getCategoryById = useCallback((id: string) => {
-    return categories.find(cat => cat.id === id);
-  }, [categories]);
+    return safeCategories.find(cat => cat.id === id);
+  }, [safeCategories]);
 
   const getCategoriesByRow = useCallback((row: number) => {
-    return categories.filter(cat => cat.row === row && cat.isVisible !== false);
-  }, [categories]);
+    return safeCategories.filter(cat => cat.row === row && cat.isVisible !== false);
+  }, [safeCategories]);
 
   return { 
-    categories, 
+    categories: safeCategories, 
     loading, 
     error,
     ...derivedValues,

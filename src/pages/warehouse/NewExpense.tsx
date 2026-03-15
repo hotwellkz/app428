@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Search, Barcode, Plus, Trash2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp, writeBatch, getDocs, query, where } from 'firebase/firestore';
+import { getTransactionStatusForCompany } from '../../lib/firebase/transactions';
 import { getNextDocumentNumber } from '../../utils/documentUtils';
 import { db } from '../../lib/firebase';
 import { useCompanyId } from '../../contexts/CompanyContext';
@@ -190,12 +191,18 @@ export const NewExpense: React.FC = () => {
 
     setLoading(true);
     try {
+      const txStatus = await getTransactionStatusForCompany(companyId);
       const batch = writeBatch(db);
 
-      // Получаем информацию о проекте
+      // Получаем информацию о проекте и складе (только своей компании)
       const [projectDoc, warehouseQuery] = await Promise.all([
         getDoc(doc(db, 'categories', selectedProject)),
-        getDocs(query(collection(db, 'categories'), where('title', '==', 'Склад'), where('row', '==', 4)))
+        getDocs(query(
+          collection(db, 'categories'),
+          where('companyId', '==', companyId),
+          where('title', '==', 'Склад'),
+          where('row', '==', 4)
+        ))
       ]);
 
       if (!projectDoc.exists()) {
@@ -229,16 +236,17 @@ export const NewExpense: React.FC = () => {
       const totalAmount = items.reduce((sum, item) => 
         sum + (item.quantity * resolveExpenseItemPrice(item)), 0);
       
-      // Обновляем балансы
-      batch.update(warehouseCategoryRef, {
-        amount: `${warehouseAmount - totalAmount} ₸`,
-        updatedAt: timestamp
-      });
-      
-      batch.update(projectRef, {
-        amount: `${projectAmount + totalAmount} ₸`,
-        updatedAt: timestamp
-      });
+      // Обновляем балансы только для одобренных транзакций (owner/superAdmin)
+      if (txStatus === 'approved') {
+        batch.update(warehouseCategoryRef, {
+          amount: `${warehouseAmount - totalAmount} ₸`,
+          updatedAt: timestamp
+        });
+        batch.update(projectRef, {
+          amount: `${projectAmount + totalAmount} ₸`,
+          updatedAt: timestamp
+        });
+      }
 
       // Создаем транзакцию расхода для склада
       const warehouseTransactionRef = doc(collection(db, 'transactions'));
@@ -283,7 +291,8 @@ export const NewExpense: React.FC = () => {
         date: timestamp,
         isWarehouseOperation: true,
         relatedTransactionId: projectTransactionRef.id,
-        companyId
+        companyId,
+        status: txStatus
       });
 
       batch.set(projectTransactionRef, { 
@@ -312,7 +321,8 @@ export const NewExpense: React.FC = () => {
         date: timestamp,
         isWarehouseOperation: true,
         relatedTransactionId: warehouseTransactionRef.id,
-        companyId
+        companyId,
+        status: txStatus
       });
 
       // Обновляем количество товаров на складе

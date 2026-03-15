@@ -11,6 +11,8 @@ export interface CategoryCardType {
   isVisible?: boolean;
   /** project | employee | system | client — влияет на сумму на иконке (проект = SUM|amount|). */
   type?: string;
+  /** companyId для строгой изоляции данных между компаниями */
+  companyId?: string;
 }
 
 export interface TopStatType {

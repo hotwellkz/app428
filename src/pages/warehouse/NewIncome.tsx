@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Search, Barcode, Plus, Trash2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { collection, doc, updateDoc, serverTimestamp, writeBatch, addDoc, getDoc, getDocs, query, where } from 'firebase/firestore';
+import { getTransactionStatusForCompany } from '../../lib/firebase/transactions';
 import { db } from '../../lib/firebase';
 import { useCompanyId } from '../../contexts/CompanyContext';
 import { getNextDocumentNumber } from '../../utils/documentUtils';
@@ -222,18 +223,21 @@ export const NewIncome: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      const txStatus = await getTransactionStatusForCompany(companyId);
       const batch = writeBatch(db);
       const timestamp = serverTimestamp();
 
-      // Получаем информацию о сотруднике и складе
+      // Получаем информацию о сотруднике и складе (только своей компании)
       const [supplierQuery, warehouseQuery] = await Promise.all([
         getDocs(query(
           collection(db, 'categories'),
+          where('companyId', '==', companyId),
           where('title', '==', supplier),
           where('row', '==', 2)
         )),
         getDocs(query(
           collection(db, 'categories'),
+          where('companyId', '==', companyId),
           where('title', '==', 'Склад'),
           where('row', '==', 4)
         ))
@@ -261,6 +265,14 @@ export const NewIncome: React.FC = () => {
       const totalAmount = items.reduce((sum, item) => 
         sum + (item.quantity * item.price), 0);
 
+      // Обновляем баланс сотрудника только для одобренных транзакций (owner/superAdmin)
+      if (txStatus === 'approved') {
+        batch.update(doc(db, 'categories', supplierCategory.id), {
+          amount: `${supplierAmount - totalAmount} ₸`,
+          updatedAt: timestamp
+        });
+      }
+
       const waybillRef = await addDoc(collection(db, 'warehouseDocuments'), {
         documentNumber,
         date,
@@ -278,12 +290,6 @@ export const NewIncome: React.FC = () => {
         type: 'income',
         companyId,
         createdAt: timestamp
-      });
-      
-      // Обновляем баланс сотрудника
-      batch.update(doc(db, 'categories', supplierCategory.id), {
-        amount: `${supplierAmount - totalAmount} ₸`,
-        updatedAt: timestamp
       });
       
       // Создаем транзакцию расхода для сотрудника
@@ -316,7 +322,8 @@ export const NewIncome: React.FC = () => {
         date: timestamp,
         isWarehouseOperation: true,
         relatedTransactionId: warehouseTransactionRef.id,
-        companyId
+        companyId,
+        status: txStatus
       });
 
       batch.set(warehouseTransactionRef, {
@@ -345,7 +352,8 @@ export const NewIncome: React.FC = () => {
         date: timestamp,
         isWarehouseOperation: true,
         relatedTransactionId: supplierTransactionRef.id,
-        companyId
+        companyId,
+        status: txStatus
       });
       // Обновляем количество и цены товаров
       for (const item of items) {

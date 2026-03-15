@@ -1,4 +1,4 @@
-import { collection, addDoc, deleteDoc, doc, updateDoc, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, getDoc, updateDoc, query, where, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore';
 import { db } from './config';
 import { CategoryData } from '../../types';
 
@@ -46,6 +46,16 @@ export const deleteCategory = async (
   deleteAll: boolean,
   companyId: string
 ) => {
+  const categoryRef = doc(db, 'categories', categoryId);
+  const categorySnap = await getDoc(categoryRef);
+  if (!categorySnap.exists()) {
+    throw new Error('Категория не найдена');
+  }
+  const categoryCompanyId = categorySnap.data()?.companyId as string | undefined;
+  if (categoryCompanyId !== companyId) {
+    throw new Error('Нет прав на удаление объекта другой компании');
+  }
+
   const batch = writeBatch(db);
 
   try {
@@ -72,8 +82,7 @@ export const deleteCategory = async (
 
       await batch.commit();
     } else {
-      // Удаляем только текущую категорию
-      await deleteDoc(doc(db, 'categories', categoryId));
+      await deleteDoc(categoryRef);
     }
   } catch (error) {
     console.error('Error deleting category:', error);

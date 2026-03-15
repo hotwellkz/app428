@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
+import { useCompanyId } from '../../contexts/CompanyContext';
 
 interface Project {
   id: string;
@@ -13,17 +14,28 @@ interface ProjectSelectorProps {
 }
 
 export const ProjectSelector: React.FC<ProjectSelectorProps> = ({ value, onChange }) => {
+  const companyId = useCompanyId();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!companyId) {
+      setProjects([]);
+      setLoading(false);
+      return;
+    }
     const loadProjectsAndWarehouseCategories = async () => {
       try {
-        // Получаем категории проектов и категорию "Общ Расх"
+        // Категории только текущей компании (изоляция по companyId)
         const [projectsQuery, warehouseQuery] = [
-          query(collection(db, 'categories'), where('row', '==', 3)),
           query(
             collection(db, 'categories'),
+            where('companyId', '==', companyId),
+            where('row', '==', 3)
+          ),
+          query(
+            collection(db, 'categories'),
+            where('companyId', '==', companyId),
             where('row', '==', 4),
             where('title', '==', 'Общ Расх')
           )
@@ -60,7 +72,7 @@ export const ProjectSelector: React.FC<ProjectSelectorProps> = ({ value, onChang
     };
 
     loadProjectsAndWarehouseCategories();
-  }, []);
+  }, [companyId]);
 
   return (
     <select

@@ -15,7 +15,7 @@ import { ChevronDown, ChevronUp, Calendar, Filter, ArrowLeft, BarChart2, Downloa
 import { useMobileSidebar } from '../contexts/MobileSidebarContext';
 import { HeaderSearchBar } from '../components/HeaderSearchBar';
 import clsx from 'clsx';
-import { deleteTransaction, secureDeleteTransaction } from '../lib/firebase';
+import { deleteTransaction, secureDeleteTransaction, canDeleteTransaction } from '../lib/firebase';
 import { auth } from '../lib/firebase';
 import { useTransactionsPaginated } from '../hooks/useTransactionsPaginated';
 import { useAuth } from '../hooks/useAuth';
@@ -170,7 +170,10 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
   const [categoryTitle, setCategoryTitle] = useState('');
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
   const [showDeletePasswordModal, setShowDeletePasswordModal] = useState(false);
+  const [showOwnerDeleteConfirm, setShowOwnerDeleteConfirm] = useState(false);
+  const [pendingDeleteTransaction, setPendingDeleteTransaction] = useState<Transaction | null>(null);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [swipedTransactionId, setSwipedTransactionId] = useState<string | null>(null);
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null);
   const [showWaybill, setShowWaybill] = useState(false);
@@ -430,27 +433,48 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
     trackMouse: true,
   });
 
+  useEffect(() => {
+    if (!pendingDeleteTransaction) return;
+    let cancelled = false;
+    canDeleteTransaction(pendingDeleteTransaction.id).then((perm) => {
+      if (cancelled) return;
+      if (!perm.allowed) {
+        showErrorNotification('Доступ запрещен. Только для администраторов или владельца компании.');
+        setPendingDeleteTransaction(null);
+        return;
+      }
+      setSelectedTransaction(pendingDeleteTransaction);
+      setPendingDeleteTransaction(null);
+      if (perm.requiresPassword) {
+        setShowPasswordPrompt(true);
+      } else {
+        setShowOwnerDeleteConfirm(true);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingDeleteTransaction?.id]);
+
   const handleDelete = useCallback(async (password: string) => {
     if (!selectedTransaction) {
+      setShowDeletePasswordModal(false);
       setShowPasswordPrompt(false);
       setSelectedTransaction(null);
       setSwipedTransactionId(null);
       setSwipeDirection(null);
       return;
     }
+    setIsDeleting(true);
     try {
-      console.log('[UI DELETE CONFIRM]', {
-        selectedTransactionId: selectedTransaction.id,
-        categoryId,
-        page: 'project history',
-        route: window.location.pathname
-      });
       await secureDeleteTransaction(selectedTransaction.id, password);
       showSuccessNotification('Операция успешно удалена');
     } catch (error) {
       console.error('Error deleting transaction:', error);
       showErrorNotification(error instanceof Error ? error.message : 'Ошибка при удалении операции');
     } finally {
+      setIsDeleting(false);
+      setShowDeletePasswordModal(false);
       setShowPasswordPrompt(false);
       setSelectedTransaction(null);
       setSwipedTransactionId(null);
@@ -458,15 +482,27 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
     }
   }, [selectedTransaction]);
 
+  const handleOwnerDeleteConfirm = useCallback(async () => {
+    if (!selectedTransaction || !user?.uid) return;
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await deleteTransaction(selectedTransaction.id, user.uid);
+      showSuccessNotification('Операция успешно удалена');
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      showErrorNotification(error instanceof Error ? error.message : 'Ошибка при удалении операции');
+    } finally {
+      setIsDeleting(false);
+      setShowOwnerDeleteConfirm(false);
+      setSelectedTransaction(null);
+      setSwipedTransactionId(null);
+      setSwipeDirection(null);
+    }
+  }, [selectedTransaction, user?.uid, isDeleting]);
+
   const handleDeleteClick = useCallback((transaction: Transaction) => {
-    console.log('[UI DELETE CLICK]', {
-      selectedTransactionId: transaction.id,
-      categoryId,
-      page: 'project history',
-      route: window.location.pathname
-    });
-    setSelectedTransaction(transaction);
-    setShowPasswordPrompt(true);
+    setPendingDeleteTransaction(transaction);
   }, []);
 
   const handleWaybillClick = useCallback((transaction: Transaction) => {
@@ -723,7 +759,7 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
       </div>
 
       {/* Модальные окна */}
-      {showPasswordPrompt && (
+      {showPasswordPrompt && selectedTransaction && (
         <PasswordPrompt
           isOpen={showPasswordPrompt}
           onClose={() => {
@@ -739,8 +775,9 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
 
       {showDeletePasswordModal && selectedTransaction && (
         <DeletePasswordModal
-          isOpen={true}
+          isOpen
           onClose={() => {
+            if (isDeleting) return;
             setShowDeletePasswordModal(false);
             setSelectedTransaction(null);
             setSwipedTransactionId(null);
@@ -748,6 +785,39 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
           }}
           onConfirm={handleDelete}
         />
+      )}
+
+      {showOwnerDeleteConfirm && selectedTransaction && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[1000] p-4" role="dialog" aria-modal="true">
+          <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-[420px] p-5">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Удалить транзакцию?</h2>
+            <p className="text-sm text-gray-600 mb-4">Это действие нельзя отменить.</p>
+            <div className="flex gap-3 justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  if (isDeleting) return;
+                  setShowOwnerDeleteConfirm(false);
+                  setSelectedTransaction(null);
+                  setSwipedTransactionId(null);
+                  setSwipeDirection(null);
+                }}
+                disabled={isDeleting}
+                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleOwnerDeleteConfirm}
+                disabled={isDeleting}
+                className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {isDeleting ? 'Удаление…' : 'Удалить'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       <AttachmentViewerModal

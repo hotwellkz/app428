@@ -8,6 +8,7 @@ import { deleteFileFromSupabase } from '../../utils/supabaseStorageUtils';
 import { updateClientAggregatesOnTransaction, updateClientAggregatesOnDelete } from '../../utils/clientAggregates';
 import { incrementExpenseCategoryUsage } from './expenseCategories';
 import { getCanonicalCategoryId } from '../canonicalCategoryId';
+import { getCompanyUser } from './companies';
 
 interface TransactionPhoto {
   name: string;
@@ -32,16 +33,41 @@ const getCurrentUserRole = async (): Promise<string | undefined> => {
   }
 };
 
-/** Статус новой транзакции: только global_admin получает approved, все остальные — pending (на одобрение). */
-const getTransactionStatusForCurrentUser = async (): Promise<TransactionStatus> => {
-  const role = await getCurrentUserRole();
-  return role === 'global_admin' ? 'approved' : 'pending';
+/**
+ * Статус новой транзакции при создании.
+ * approved: global_admin всегда; owner — только для транзакций своей компании (companyId совпадает).
+ * Иначе pending (требует одобрения).
+ * Экспортируется для использования в NewIncome/NewExpense.
+ */
+export const getTransactionStatusForCompany = async (transactionCompanyId: string): Promise<TransactionStatus> => {
+  const globalRole = await getCurrentUserRole();
+  if (globalRole === 'global_admin') return 'approved';
+
+  const uid = auth.currentUser?.uid;
+  if (!uid) return 'pending';
+  try {
+    const cu = await getCompanyUser(uid);
+    if (cu?.role === 'owner' && cu.companyId === transactionCompanyId) return 'approved';
+  } catch {
+    // ignore
+  }
+  return 'pending';
 };
 
-/** Может ли текущий пользователь одобрять/отклонять транзакции (только global_admin). */
-const canApproveRejectTransactions = async (): Promise<boolean> => {
-  const role = await getCurrentUserRole();
-  return role === 'global_admin';
+/** Может ли текущий пользователь одобрять/отклонять транзакции: global_admin или owner своей компании. */
+const canApproveRejectTransactions = async (transactionCompanyId?: string): Promise<boolean> => {
+  const globalRole = await getCurrentUserRole();
+  if (globalRole === 'global_admin') return true;
+
+  if (!transactionCompanyId) return false;
+  const uid = auth.currentUser?.uid;
+  if (!uid) return false;
+  try {
+    const cu = await getCompanyUser(uid);
+    return cu?.role === 'owner' && cu.companyId === transactionCompanyId;
+  } catch {
+    return false;
+  }
 };
 
 const DELETE_PASSWORD = (import.meta.env.VITE_TRANSACTION_DELETE_PASSWORD || '').trim();
@@ -127,7 +153,7 @@ export const transferFunds = async ({
   }
 
   try {
-    const status: TransactionStatus = await getTransactionStatusForCurrentUser();
+    const status: TransactionStatus = await getTransactionStatusForCompany(companyId);
 
     await runTransaction(db, async (transaction) => {
       const sourceRef = doc(db, 'categories', sourceCategory.id);
@@ -686,7 +712,12 @@ export const editFeedTransaction = async (params: {
 export const approveTransaction = async (transactionId: string): Promise<void> => {
   if (!transactionId) throw new Error('ID транзакции обязателен');
 
-  const canApprove = await canApproveRejectTransactions();
+  const expenseRef = doc(db, 'transactions', transactionId);
+  const expenseSnapForCheck = await getDoc(expenseRef);
+  if (!expenseSnapForCheck.exists()) throw new Error('Транзакция не найдена');
+  const transactionCompanyId = (expenseSnapForCheck.data() as any)?.companyId as string | undefined;
+
+  const canApprove = await canApproveRejectTransactions(transactionCompanyId);
   if (!canApprove) {
     throw new Error('У вас нет прав для одобрения транзакций');
   }
@@ -807,7 +838,12 @@ export const approveTransaction = async (transactionId: string): Promise<void> =
 export const rejectTransaction = async (transactionId: string): Promise<void> => {
   if (!transactionId) throw new Error('ID транзакции обязателен');
 
-  const canReject = await canApproveRejectTransactions();
+  const txRefForCheck = doc(db, 'transactions', transactionId);
+  const txSnapForCheck = await getDoc(txRefForCheck);
+  if (!txSnapForCheck.exists()) throw new Error('Транзакция не найдена');
+  const transactionCompanyId = (txSnapForCheck.data() as any)?.companyId as string | undefined;
+
+  const canReject = await canApproveRejectTransactions(transactionCompanyId);
   if (!canReject) {
     throw new Error('У вас нет прав для отклонения транзакций');
   }
@@ -855,6 +891,38 @@ export const rejectTransaction = async (transactionId: string): Promise<void> =>
     }
   });
 };
+/**
+ * Проверка: может ли текущий пользователь удалить транзакцию.
+ * allowed: true если global_admin или owner компании транзакции.
+ * requiresPassword: true только для global_admin (owner удаляет без пароля).
+ */
+export const canDeleteTransaction = async (
+  transactionId: string
+): Promise<{ allowed: boolean; requiresPassword: boolean }> => {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return { allowed: false, requiresPassword: false };
+
+  const transactionSnap = await getDoc(doc(db, 'transactions', transactionId));
+  if (!transactionSnap.exists()) return { allowed: false, requiresPassword: false };
+  const transactionCompanyId = (transactionSnap.data() as any)?.companyId as string | undefined;
+
+  const globalRole = await getCurrentUserRole();
+  if (globalRole === 'global_admin' || globalRole === 'superAdmin' || globalRole === 'admin') {
+    return { allowed: true, requiresPassword: true };
+  }
+
+  if (!transactionCompanyId) return { allowed: false, requiresPassword: false };
+  try {
+    const cu = await getCompanyUser(uid);
+    if (cu?.role === 'owner' && cu.companyId === transactionCompanyId) {
+      return { allowed: true, requiresPassword: false };
+    }
+  } catch {
+    // ignore
+  }
+  return { allowed: false, requiresPassword: false };
+};
+
 export const deleteTransaction = async (transactionId: string, userId: string): Promise<void> => {
   if (!transactionId) {
     throw new Error('ID транзакции обязателен');
@@ -869,18 +937,7 @@ export const deleteTransaction = async (transactionId: string, userId: string): 
       transactionId,
       userId
     });
-    // Проверяем роль пользователя
-    const userDoc = await getDoc(doc(db, 'users', userId));
-    if (!userDoc.exists()) {
-      throw new Error('Пользователь не найден');
-    }
 
-    const userRole = userDoc.data().role;
-    if (userRole !== 'admin') {
-      throw new Error('Только администратор может удалять транзакции');
-    }
-
-    const batch = writeBatch(db);
     const transactionRef = doc(db, 'transactions', transactionId);
     const transactionSnap = await getDoc(transactionRef);
 
@@ -889,6 +946,30 @@ export const deleteTransaction = async (transactionId: string, userId: string): 
     }
 
     const transactionData = transactionSnap.data();
+    const transactionCompanyId = transactionData.companyId as string | undefined;
+
+    const userDoc = await getDoc(doc(db, 'users', userId));
+    if (!userDoc.exists()) {
+      throw new Error('Пользователь не найден');
+    }
+    const globalRole = userDoc.data().role as string | undefined;
+
+    let mayDelete = false;
+    if (globalRole === 'global_admin' || globalRole === 'superAdmin' || globalRole === 'admin') {
+      mayDelete = true;
+    } else if (transactionCompanyId) {
+      try {
+        const cu = await getCompanyUser(userId);
+        if (cu?.role === 'owner' && cu.companyId === transactionCompanyId) mayDelete = true;
+      } catch {
+        // ignore
+      }
+    }
+    if (!mayDelete) {
+      throw new Error('Доступ запрещен. Только для администраторов или владельца компании.');
+    }
+
+    const batch = writeBatch(db);
     const relatedTransactionId = transactionData.relatedTransactionId;
     const categoryId = transactionData.categoryId;
     const amount = Number(transactionData.amount);
@@ -1024,11 +1105,12 @@ export const deleteTransaction = async (transactionId: string, userId: string): 
       (transactionData && transactionData.isWarehouseOperation) ||
       (relatedTransaction && relatedTransaction.isWarehouseOperation);
 
-    if (isPotentialWarehouseOp) {
-      // Находим все категории склада (обычно одна)
+    if (isPotentialWarehouseOp && companyId) {
+      // Находим категории склада только текущей компании (изоляция по companyId)
       const warehouseCategoriesSnap = await getDocs(
         query(
           collection(db, 'categories'),
+          where('companyId', '==', companyId),
           where('title', '==', 'Склад'),
           where('row', '==', 4)
         )
@@ -1074,9 +1156,10 @@ export const deleteTransaction = async (transactionId: string, userId: string): 
             const qty = Number(item.quantity) || 0;
             if (!name || !unit || !qty) return;
 
-            // Ищем товар по имени и единице измерения
+            // Ищем товар по имени и единице измерения только в рамках компании
             const productsQuery = query(
               collection(db, 'products'),
+              where('companyId', '==', companyId),
               where('name', '==', name),
               where('unit', '==', unit)
             );

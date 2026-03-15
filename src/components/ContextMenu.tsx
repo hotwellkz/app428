@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { Edit2, Trash2, History, Info } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
+import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
 import { showErrorNotification } from '../utils/notifications';
 
 interface ContextMenuProps {
@@ -30,6 +31,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 }) => {
   const menuRef = useRef<HTMLDivElement>(null);
   const { user, isAdmin } = useAuth();
+  const { companyUser } = useCurrentCompanyUser();
   const approvedEmails = useMemo(
     () =>
       (import.meta.env.VITE_APPROVED_EMAILS || '')
@@ -44,8 +46,16 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     return !!email && approvedEmails.includes(email.toLowerCase());
   }, [user, approvedEmails]);
 
-  // Кнопки "Редактировать" и "Удалить" для категорий: только admin по роли ИЛИ email в APPROVED_EMAILS (не зависим от adminMode / feed-edit пароля)
+  // Редактирование: admin по роли ИЛИ email в APPROVED_EMAILS
   const canEdit = isAdmin || isApprovedEmail;
+  // Удаление объекта: superAdmin (global_admin) ИЛИ owner своей компании
+  const canDelete = useMemo(
+    () =>
+      user?.role === 'global_admin' ||
+      user?.role === 'superAdmin' ||
+      companyUser?.role === 'owner',
+    [user?.role, companyUser?.role]
+  );
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -160,11 +170,10 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         </button>
       )}
 
-      {!hideDelete && onDelete && canEdit && (
+      {!hideDelete && onDelete && canDelete && (
         <button
-          onClick={(e) => handleClick(e, onDelete, true)}
-          className={`w-full px-4 py-2 text-left text-sm flex items-center gap-2 
-            ${canEdit ? 'text-red-600 hover:bg-red-50' : 'text-gray-400 cursor-not-allowed'}`}
+          onClick={(e) => handleClick(e, onDelete, false)}
+          className="w-full px-4 py-2 text-left text-sm flex items-center gap-2 text-red-600 hover:bg-red-50"
         >
           <Trash2 className="w-4 h-4" />
           Удалить

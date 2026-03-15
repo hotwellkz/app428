@@ -5,6 +5,7 @@ import { WaybillModal } from '../components/waybills/WaybillModal';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
 import { exportFeedToExcel } from '../utils/exportFeedToExcel';
 import { showErrorNotification, showSuccessNotification } from '../utils/notifications';
 import { useFeedPaginated } from '../hooks/useFeedPaginated';
@@ -12,7 +13,14 @@ import { API_CONFIG } from '../config/api';
 import { useCategories } from '../hooks/useCategories';
 import { useExpenseCategories } from '../hooks/useExpenseCategories';
 import { CategoryCardType } from '../types';
-import { editFeedTransaction, approveTransaction, rejectTransaction, secureDeleteTransaction } from '../lib/firebase/transactions';
+import {
+  editFeedTransaction,
+  approveTransaction,
+  rejectTransaction,
+  secureDeleteTransaction,
+  canDeleteTransaction,
+  deleteTransaction
+} from '../lib/firebase/transactions';
 import { useSwipeable } from 'react-swipeable';
 import { DeletePasswordModal } from '../components/transactions/DeletePasswordModal';
 import { useMobileSidebar } from '../contexts/MobileSidebarContext';
@@ -163,16 +171,30 @@ export const Feed: React.FC = () => {
     []
   );
 
+  const { companyUser } = useCurrentCompanyUser();
   const isTrustedForApproval = useMemo(() => {
     const email = user?.email || '';
-    const canModerate = !!email && approvedEmails.includes(email.toLowerCase());
+    const byEmail = !!email && approvedEmails.includes(email.toLowerCase());
+    const byGlobalAdmin = user?.role === 'global_admin';
+    const byOwner = companyUser?.role === 'owner';
+    const canModerate = byEmail || byGlobalAdmin || byOwner;
     if (import.meta.env.DEV) {
       console.log('[Feed] USER EMAIL:', user?.email ?? '(none)');
-      console.log('[Feed] APPROVED EMAILS:', approvedEmails);
-      console.log('[Feed] CAN MODERATE (Одобрить/Отклонить):', canModerate);
+      console.log('[Feed] CAN MODERATE (Одобрить/Отклонить):', canModerate, { byEmail, byGlobalAdmin, byOwner });
     }
     return canModerate;
-  }, [user, approvedEmails]);
+  }, [user?.email, user?.role, approvedEmails, companyUser?.role]);
+
+  const canDeleteTransaction = useCallback(
+    (t: { companyId?: string }) =>
+      !!(
+        user?.role === 'global_admin' ||
+        user?.role === 'superAdmin' ||
+        user?.role === 'admin' ||
+        (companyUser?.role === 'owner' && t.companyId === companyUser?.companyId)
+      ),
+    [user?.role, companyUser?.role, companyUser?.companyId]
+  );
 
   const { toggle: toggleMobileSidebar } = useMobileSidebar();
   
@@ -584,7 +606,32 @@ export const Feed: React.FC = () => {
   };
 
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+  const [deletePermission, setDeletePermission] = useState<{
+    allowed: boolean;
+    requiresPassword: boolean;
+  } | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (!transactionToDelete) {
+      setDeletePermission(null);
+      return;
+    }
+    let cancelled = false;
+    canDeleteTransaction(transactionToDelete.id).then((perm) => {
+      if (cancelled) return;
+      if (!perm.allowed) {
+        showErrorNotification('Доступ запрещен. Только для администраторов или владельца компании.');
+        setTransactionToDelete(null);
+        setDeletePermission(null);
+        return;
+      }
+      setDeletePermission(perm);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [transactionToDelete?.id]);
 
   const handleDeleteConfirm = useCallback(
     async (password: string) => {
@@ -596,6 +643,7 @@ export const Feed: React.FC = () => {
         await secureDeleteTransaction(transactionToDelete.id, password);
         showSuccessNotification('Транзакция успешно удалена');
         setTransactionToDelete(null);
+        setDeletePermission(null);
         refresh();
       } catch (error) {
         console.error('Error deleting transaction from feed:', error);
@@ -609,6 +657,26 @@ export const Feed: React.FC = () => {
     },
     [transactionToDelete, isDeleting, refresh]
   );
+
+  const handleOwnerDeleteConfirm = useCallback(async () => {
+    if (!transactionToDelete || !user?.uid) return;
+    if (isDeleting) return;
+    setIsDeleting(true);
+    try {
+      await deleteTransaction(transactionToDelete.id, user.uid);
+      showSuccessNotification('Транзакция успешно удалена');
+      setTransactionToDelete(null);
+      setDeletePermission(null);
+      refresh();
+    } catch (error) {
+      console.error('Error deleting transaction from feed:', error);
+      showErrorNotification(
+        error instanceof Error ? error.message : 'Ошибка при удалении транзакции'
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [transactionToDelete, user?.uid, isDeleting, refresh]);
 
   const grouped = useMemo(() => groupTransactionsByDate(), [filteredTransactions]);
 
@@ -1124,6 +1192,7 @@ export const Feed: React.FC = () => {
                 onApprove={handleApprove}
                 onEdit={setEditingTransaction}
                 onDeleteRequest={setTransactionToDelete}
+                canDeleteTransaction={canDeleteTransaction}
                 approvingTransactionId={approvingId}
                 rejectingTransactionId={rejectingId}
                 hasMore={hasMore}
@@ -1235,15 +1304,47 @@ export const Feed: React.FC = () => {
         </div>
       </div>
 
-        {transactionToDelete && (
+        {transactionToDelete && deletePermission?.allowed && deletePermission.requiresPassword && (
           <DeletePasswordModal
-            isOpen={!!transactionToDelete}
+            isOpen
             onClose={() => {
               if (isDeleting) return;
               setTransactionToDelete(null);
+              setDeletePermission(null);
             }}
             onConfirm={handleDeleteConfirm}
           />
+        )}
+
+        {transactionToDelete && deletePermission?.allowed && !deletePermission.requiresPassword && (
+          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[1000] p-4" role="dialog" aria-modal="true">
+            <div className="bg-white rounded-2xl shadow-xl w-[90%] max-w-[420px] p-5">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Удалить транзакцию?</h2>
+              <p className="text-sm text-gray-600 mb-4">Это действие нельзя отменить.</p>
+              <div className="flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isDeleting) return;
+                    setTransactionToDelete(null);
+                    setDeletePermission(null);
+                  }}
+                  disabled={isDeleting}
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOwnerDeleteConfirm}
+                  disabled={isDeleting}
+                  className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+                >
+                  {isDeleting ? 'Удаление…' : 'Удалить'}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {showWaybill && selectedWaybill && createPortal(
