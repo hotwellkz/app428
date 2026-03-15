@@ -1,10 +1,14 @@
 /**
- * Технический SEO: базовый URL и список публичных страниц для индексации.
- * Используется для canonical, sitemap, robots.
+ * Технический SEO: списки путей для robots/sitemap и обратная совместимость.
+ * Базовый URL и хелперы — в src/seo/ (seoConfig, seoHelpers).
  */
-export const SEO_BASE_URL = 'https://2wix.ru';
+import { SEO_CONFIG } from '../seo/seoConfig';
+import { getCanonicalUrl as getCanonicalUrlFromSeo } from '../seo/seoHelpers';
 
-/** Публичные SEO-страницы (индексируемые). Остальные маршруты — noindex / disallow. */
+export const SEO_BASE_URL = SEO_CONFIG.baseUrl;
+export { getCanonicalUrlFromSeo as getCanonicalUrl };
+
+/** Публичные SEO-страницы (индексируемые). */
 export const SEO_PUBLIC_PATHS = [
   '/',
   '/crm-dlya-biznesa',
@@ -23,7 +27,7 @@ export const SEO_PUBLIC_PATHS = [
   '/roli-i-prava',
 ] as const;
 
-/** Пути CRM и служебные — не индексировать (Disallow в robots, noindex в meta). */
+/** Пути CRM и служебные — не индексировать. */
 export const SEO_DISALLOW_PATHS = [
   '/transactions',
   '/transaction-history',
@@ -49,9 +53,3 @@ export const SEO_DISALLOW_PATHS = [
   '/login',
   '/app',
 ];
-
-export function getCanonicalUrl(path: string): string {
-  const base = SEO_BASE_URL.replace(/\/$/, '');
-  const p = path === '/' ? '' : path.startsWith('/') ? path : `/${path}`;
-  return `${base}${p || ''}`;
-}

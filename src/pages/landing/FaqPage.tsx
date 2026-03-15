@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
 import { SEOPageLayout } from './SEOPageLayout';
 import { SEO_BASE_URL } from '../../config/seo';
 import { ArrowRight, ChevronDown } from 'lucide-react';
@@ -313,10 +312,8 @@ export const FaqPage: React.FC = () => {
         { name: 'Главная', item: SEO_BASE_URL + '/' },
         { name: 'Вопросы и ответы', item: SEO_BASE_URL + '/faq' },
       ]}
+      structuredData={[faqSchema]}
     >
-      <Helmet>
-        <script type="application/ld+json">{JSON.stringify(faqSchema)}</script>
-      </Helmet>
       {/* Hero */}
       <section className="relative pt-28 pb-12 md:pt-36 md:pb-16 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-slate-50 via-white to-white" />

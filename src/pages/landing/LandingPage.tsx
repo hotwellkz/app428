@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
+import { PublicPageSEO } from '../../seo';
 import { LandingHeader } from './LandingHeader';
 import { HeroSection } from './HeroSection';
 import { ForWhoSection } from './ForWhoSection';
@@ -22,13 +22,11 @@ interface LandingPageProps {
 
 export const LandingPage: React.FC<LandingPageProps> = ({ onLoginSuccess }) => (
   <>
-    <Helmet>
-      <title>{META_TITLE}</title>
-      <meta name="description" content={META_DESCRIPTION} />
-      <meta property="og:title" content={META_TITLE} />
-      <meta property="og:description" content={META_DESCRIPTION} />
-      <link rel="canonical" href="https://2wix.ru/" />
-    </Helmet>
+    <PublicPageSEO
+      title={META_TITLE}
+      description={META_DESCRIPTION}
+      path="/"
+    />
     <div className="min-h-screen bg-white text-slate-900 antialiased">
       <LandingHeader />
       <main>
