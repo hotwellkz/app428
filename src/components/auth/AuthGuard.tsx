@@ -5,6 +5,7 @@ import { LoginForm } from './LoginForm';
 import { LoadingSpinner } from '../LoadingSpinner';
 import { RegisterCompany } from '../../pages/RegisterCompany';
 import { AcceptInvitePage } from '../../pages/AcceptInvitePage';
+import { LandingPage } from '../../pages/landing';
 
 interface AuthGuardProps {
   children: React.ReactNode;
@@ -34,6 +35,9 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
     }
     if (location.pathname === '/register' || location.pathname === '/register-company') {
       return <RegisterCompany />;
+    }
+    if (location.pathname === '/') {
+      return <LandingPage onLoginSuccess={() => setIsAuthenticated(true)} />;
     }
     return (
       <LoginForm
