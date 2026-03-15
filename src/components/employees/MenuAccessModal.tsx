@@ -7,7 +7,7 @@ import {
   type MenuAccess,
   type MenuSectionId
 } from '../../types/menuAccess';
-import { getCompanyUser, updateCompanyUserMenuAccess } from '../../lib/firebase/companies';
+import { getCompanyUser, updateCompanyUserMenuAccess, updateCompanyUserPermissions } from '../../lib/firebase/companies';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 
 interface MenuAccessModalProps {
@@ -28,6 +28,7 @@ export const MenuAccessModal: React.FC<MenuAccessModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [access, setAccess] = useState<MenuAccess>({ ...DEFAULT_MENU_ACCESS });
+  const [approveTransactions, setApproveTransactions] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !userId) return;
@@ -37,8 +38,12 @@ export const MenuAccessModal: React.FC<MenuAccessModalProps> = ({
         const base = defaultMenuAccessForRole(cu?.role ?? 'member');
         if (cu?.menuAccess) setAccess({ ...base, ...cu.menuAccess });
         else setAccess(base);
+        setApproveTransactions(cu?.permissions?.approveTransactions === true);
       })
-      .catch(() => setAccess({ ...DEFAULT_MENU_ACCESS }))
+      .catch(() => {
+        setAccess({ ...DEFAULT_MENU_ACCESS });
+        setApproveTransactions(false);
+      })
       .finally(() => setLoading(false));
   }, [isOpen, userId]);
 
@@ -68,6 +73,7 @@ export const MenuAccessModal: React.FC<MenuAccessModalProps> = ({
     setSaving(true);
     try {
       await updateCompanyUserMenuAccess(userId, access);
+      await updateCompanyUserPermissions(userId, { approveTransactions });
       showSuccessNotification('Права доступа сохранены');
       onSaved?.();
       onClose();
@@ -129,6 +135,21 @@ export const MenuAccessModal: React.FC<MenuAccessModalProps> = ({
                   </li>
                 ))}
               </ul>
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Дополнительные права</p>
+                <li className="flex items-center gap-3 list-none">
+                  <input
+                    type="checkbox"
+                    id="permission-approve-transactions"
+                    checked={approveTransactions}
+                    onChange={() => setApproveTransactions((v) => !v)}
+                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <label htmlFor="permission-approve-transactions" className="text-sm font-medium text-gray-700 cursor-pointer">
+                    Одобрение транзакций
+                  </label>
+                </li>
+              </div>
             </>
           )}
         </div>

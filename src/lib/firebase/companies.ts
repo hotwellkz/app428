@@ -30,12 +30,20 @@ export interface CompanyRow {
   status?: CompanyStatus;
 }
 
+/** Дополнительные права пользователя в компании (назначаются владельцем). */
+export interface CompanyUserPermissions {
+  /** Право одобрять/отклонять транзакции (в рамках своей компании). */
+  approveTransactions?: boolean;
+}
+
 export interface CompanyUserRow {
   id: string;
   companyId: string;
   userId: string;
   role: CompanyUserRole;
   menuAccess?: MenuAccess;
+  /** Права, назначаемые владельцем (например, одобрение транзакций). */
+  permissions?: CompanyUserPermissions;
   email?: string;
 }
 
@@ -170,6 +178,20 @@ export async function updateCompanyUserMenuAccess(
   });
 }
 
+/** Обновить дополнительные права пользователя в компании (merge с существующими). */
+export async function updateCompanyUserPermissions(
+  userId: string,
+  permissions: CompanyUserPermissions
+): Promise<void> {
+  const ref = doc(db, COMPANY_USERS, userId);
+  const snap = await getDoc(ref);
+  const existing = snap.exists() ? (snap.data()?.permissions as CompanyUserPermissions | undefined) : undefined;
+  await updateDoc(ref, {
+    permissions: { ...(existing ?? {}), ...permissions },
+    updatedAt: serverTimestamp()
+  });
+}
+
 /** Получить документ company_users для пользователя (role + menuAccess). */
 export async function getCompanyUser(userId: string): Promise<CompanyUserRow | null> {
   const ref = doc(db, COMPANY_USERS, userId);
@@ -182,6 +204,7 @@ export async function getCompanyUser(userId: string): Promise<CompanyUserRow | n
     userId: (data.userId as string) ?? snap.id,
     role: (data.role as CompanyUserRole) ?? 'member',
     menuAccess: data.menuAccess as MenuAccess | undefined,
+    permissions: data.permissions as CompanyUserRow['permissions'],
     email: data.email as string | undefined
   };
 }

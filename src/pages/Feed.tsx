@@ -177,13 +177,13 @@ export const Feed: React.FC = () => {
     const byEmail = !!email && approvedEmails.includes(email.toLowerCase());
     const byGlobalAdmin = user?.role === 'global_admin';
     const byOwner = companyUser?.role === 'owner';
-    const canModerate = byEmail || byGlobalAdmin || byOwner;
+    const byPermission = companyUser?.permissions?.approveTransactions === true;
+    const canModerate = byEmail || byGlobalAdmin || byOwner || byPermission;
     if (import.meta.env.DEV) {
-      console.log('[Feed] USER EMAIL:', user?.email ?? '(none)');
-      console.log('[Feed] CAN MODERATE (Одобрить/Отклонить):', canModerate, { byEmail, byGlobalAdmin, byOwner });
+      console.log('[Feed] CAN MODERATE (Одобрить/Отклонить):', canModerate, { byEmail, byGlobalAdmin, byOwner, byPermission });
     }
     return canModerate;
-  }, [user?.email, user?.role, approvedEmails, companyUser?.role]);
+  }, [user?.email, user?.role, approvedEmails, companyUser?.role, companyUser?.permissions?.approveTransactions]);
 
   const canDeleteTransaction = useCallback(
     (t: { companyId?: string }) =>

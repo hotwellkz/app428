@@ -54,7 +54,7 @@ export const getTransactionStatusForCompany = async (transactionCompanyId: strin
   return 'pending';
 };
 
-/** Может ли текущий пользователь одобрять/отклонять транзакции: global_admin или owner своей компании. */
+/** Может ли текущий пользователь одобрять/отклонять транзакции: global_admin, owner своей компании или право approveTransactions. */
 const canApproveRejectTransactions = async (transactionCompanyId?: string): Promise<boolean> => {
   const globalRole = await getCurrentUserRole();
   if (globalRole === 'global_admin') return true;
@@ -64,7 +64,9 @@ const canApproveRejectTransactions = async (transactionCompanyId?: string): Prom
   if (!uid) return false;
   try {
     const cu = await getCompanyUser(uid);
-    return cu?.role === 'owner' && cu.companyId === transactionCompanyId;
+    if (!cu || cu.companyId !== transactionCompanyId) return false;
+    if (cu.role === 'owner') return true;
+    return cu.permissions?.approveTransactions === true;
   } catch {
     return false;
   }
