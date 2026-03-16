@@ -23,6 +23,8 @@ import {
   upsertMessageFromWebhook,
   syncConversationWazzupRouting,
   getCompanyIdByWazzupChannelId,
+  findSingleCompanyWithEmptyWazzupChannel,
+  setWazzupIntegration,
   DEFAULT_COMPANY_ID,
   type MessageAttachmentRow
 } from './lib/firebaseAdmin';
@@ -316,7 +318,32 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   for (const msg of messages) {
     const chatType = msg.chatType ?? '';
     const channelId = String(msg.channelId ?? '').trim();
-    const companyId = channelId ? (await getCompanyIdByWazzupChannelId(channelId)) ?? DEFAULT_COMPANY_ID : DEFAULT_COMPANY_ID;
+    let companyId: string = channelId ? (await getCompanyIdByWazzupChannelId(channelId)) ?? DEFAULT_COMPANY_ID : DEFAULT_COMPANY_ID;
+    if (channelId && companyId === DEFAULT_COMPANY_ID) {
+      const transport = isInstagramChatType(chatType) ? 'instagram' : 'whatsapp';
+      const single = await findSingleCompanyWithEmptyWazzupChannel(transport);
+      if (single) {
+        try {
+          if (transport === 'whatsapp') {
+            await setWazzupIntegration(single.companyId, {
+              apiKey: single.integration.apiKey,
+              whatsappChannelId: channelId,
+              instagramChannelId: single.integration.instagramChannelId
+            });
+          } else {
+            await setWazzupIntegration(single.companyId, {
+              apiKey: single.integration.apiKey,
+              whatsappChannelId: single.integration.whatsappChannelId,
+              instagramChannelId: channelId
+            });
+          }
+          companyId = single.companyId;
+          log('wazzup_channel_auto_linked', { channelId, companyId, transport });
+        } catch (e) {
+          log('wazzup_channel_auto_link_fail', channelId, e);
+        }
+      }
+    }
     if (debugPayload) {
       log('Message item:', {
         messageId: msg.messageId,

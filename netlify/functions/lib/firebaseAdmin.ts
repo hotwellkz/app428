@@ -158,6 +158,60 @@ export async function getCompanyIdByWazzupChannelId(channelId: string): Promise<
   return null;
 }
 
+/**
+ * Найти единственную компанию с интеграцией Wazzup, у которой сохранён API-ключ,
+ * но не указан channelId для данного транспорта (при первом входящем сообщении привязываем канал).
+ */
+export async function findSingleCompanyWithEmptyWazzupChannel(
+  transport: 'whatsapp' | 'instagram'
+): Promise<{ companyId: string; integration: WazzupIntegrationRow } | null> {
+  const db = getDb();
+  const snap = await db.collection(COLLECTIONS.WAZZUP_INTEGRATIONS).get();
+  const withKeyNoChannel: { companyId: string; integration: WazzupIntegrationRow }[] = [];
+  for (const d of snap.docs) {
+    const data = d.data();
+    const apiKey = (data.apiKey as string) ?? '';
+    if (!apiKey.trim()) continue;
+    const wa = (data.whatsappChannelId as string) ?? '';
+    const ig = (data.instagramChannelId as string) ?? '';
+    const waEmpty = !wa.trim();
+    const igEmpty = !ig.trim();
+    if (transport === 'whatsapp' && waEmpty) {
+      withKeyNoChannel.push({
+        companyId: d.id,
+        integration: {
+          companyId: d.id,
+          apiKey: apiKey.trim(),
+          whatsappChannelId: null,
+          instagramChannelId: ig.trim() || null,
+          connectionStatus: (data.connectionStatus as 'ok' | 'error') ?? null,
+          connectionError: (data.connectionError as string) ?? null,
+          lastCheckedAt: (data.lastCheckedAt as Timestamp) ?? null,
+          createdAt: data.createdAt as Timestamp,
+          updatedAt: data.updatedAt as Timestamp
+        }
+      });
+    } else if (transport === 'instagram' && igEmpty) {
+      withKeyNoChannel.push({
+        companyId: d.id,
+        integration: {
+          companyId: d.id,
+          apiKey: apiKey.trim(),
+          whatsappChannelId: wa.trim() || null,
+          instagramChannelId: null,
+          connectionStatus: (data.connectionStatus as 'ok' | 'error') ?? null,
+          connectionError: (data.connectionError as string) ?? null,
+          lastCheckedAt: (data.lastCheckedAt as Timestamp) ?? null,
+          createdAt: data.createdAt as Timestamp,
+          updatedAt: data.updatedAt as Timestamp
+        }
+      });
+    }
+  }
+  if (withKeyNoChannel.length !== 1) return null;
+  return withKeyNoChannel[0];
+}
+
 /** Сохранить или обновить настройки Wazzup для компании. */
 export async function setWazzupIntegration(
   companyId: string,

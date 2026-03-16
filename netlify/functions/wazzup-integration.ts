@@ -89,15 +89,31 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   const apiKey = typeof body.apiKey === 'string' ? body.apiKey.trim() : '';
   if (!apiKey) return json(400, { error: 'Укажите API ключ Wazzup' });
 
+  const rawWa = typeof body.whatsappChannelId === 'string' ? body.whatsappChannelId.trim() : '';
+  const rawIg = typeof body.instagramChannelId === 'string' ? body.instagramChannelId.trim() : '';
+  const looksLikeEmail = (s: string) => /@/.test(s);
+  const whatsappChannelId = rawWa && !looksLikeEmail(rawWa) ? rawWa : null;
+  const instagramChannelId = rawIg && !looksLikeEmail(rawIg) ? rawIg : null;
+  if (rawWa && looksLikeEmail(rawWa)) {
+    console.warn('[wazzup-integration] whatsappChannelId looks like email, saving as null:', rawWa);
+  }
+  if (rawIg && looksLikeEmail(rawIg)) {
+    console.warn('[wazzup-integration] instagramChannelId looks like email, saving as null:', rawIg);
+  }
+
   try {
     await setWazzupIntegration(companyId, {
       apiKey,
-      whatsappChannelId: body.whatsappChannelId ?? null,
-      instagramChannelId: body.instagramChannelId ?? null
+      whatsappChannelId,
+      instagramChannelId
     });
+    const msg =
+      whatsappChannelId === null && rawWa
+        ? 'Настройки сохранены. В поле ID канала был указан email — сохраняем как пусто; канал привяжется при первом входящем сообщении.'
+        : 'Настройки сохранены. После первого входящего сообщения канал будет привязан к диалогам.';
     return json(200, {
       success: true,
-      message: 'Настройки сохранены. После первого входящего сообщения канал будет привязан к диалогам.'
+      message: msg
     });
   } catch (e) {
     console.error('[wazzup-integration] save failed:', e);

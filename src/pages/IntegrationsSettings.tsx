@@ -6,6 +6,8 @@ import { Plug, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Loader2 } from 
 const API_INTEGRATION = '/.netlify/functions/wazzup-integration';
 const API_VERIFY = '/.netlify/functions/wazzup-verify';
 
+const looksLikeEmail = (s: string) => /@/.test(s.trim());
+
 interface IntegrationState {
   configured: boolean;
   apiKeyMasked: string | null;
@@ -67,10 +69,12 @@ export const IntegrationsSettings: React.FC = () => {
         lastCheckedAt: data.lastCheckedAt ?? null
       });
       if (data.configured && !form.apiKey) {
+        const wa = data.whatsappChannelId ?? '';
+        const ig = data.instagramChannelId ?? '';
         setForm((f) => ({
           ...f,
-          whatsappChannelId: data.whatsappChannelId ?? '',
-          instagramChannelId: data.instagramChannelId ?? ''
+          whatsappChannelId: typeof wa === 'string' && !looksLikeEmail(wa) ? wa : '',
+          instagramChannelId: typeof ig === 'string' && !looksLikeEmail(ig) ? ig : ''
         }));
       }
     } catch (e) {
@@ -109,6 +113,9 @@ export const IntegrationsSettings: React.FC = () => {
       const data = await res.json();
       if (data.ok) {
         setSuccess('Подключение успешно. Ключ действителен.');
+        if (data.channelId && typeof data.channelId === 'string' && !looksLikeEmail(data.channelId)) {
+          setForm((f) => ({ ...f, whatsappChannelId: data.channelId }));
+        }
       } else {
         setError(data.error || 'Проверка не пройдена');
       }
@@ -202,6 +209,15 @@ export const IntegrationsSettings: React.FC = () => {
                   )}
                 </div>
               )}
+              {(looksLikeEmail(form.whatsappChannelId) || looksLikeEmail(form.instagramChannelId)) && (
+                <div className="flex gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-sm text-amber-800">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    В поле ID канала указан email. Нужен идентификатор канала из ЛК Wazzup (не email).
+                    Оставьте поле пустым — канал привяжется при первом входящем сообщении.
+                  </span>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -224,7 +240,7 @@ export const IntegrationsSettings: React.FC = () => {
                   type="text"
                   value={form.whatsappChannelId}
                   onChange={(e) => setForm((f) => ({ ...f, whatsappChannelId: e.target.value }))}
-                  placeholder="Опционально — подставится из первого входящего сообщения"
+                  placeholder="ID канала из ЛК Wazzup (не email). Можно оставить пустым"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
                 />
               </div>
@@ -237,7 +253,7 @@ export const IntegrationsSettings: React.FC = () => {
                   type="text"
                   value={form.instagramChannelId}
                   onChange={(e) => setForm((f) => ({ ...f, instagramChannelId: e.target.value }))}
-                  placeholder="Опционально — подставится из первого входящего сообщения"
+                  placeholder="ID канала из ЛК Wazzup (не email). Можно оставить пустым"
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
                 />
               </div>
@@ -296,9 +312,9 @@ export const IntegrationsSettings: React.FC = () => {
                 Скопируйте API ключ и вставьте в поле выше.
               </p>
               <p>
-                <strong>ID канала WhatsApp / Instagram:</strong> можно не заполнять — при первом входящем сообщении
-                CRM сохранит канал автоматически. Если у вас несколько каналов и вы хотите указать их заранее,
-                найдите ID канала в настройках канала в Wazzup.
+                <strong>ID канала WhatsApp / Instagram:</strong> это идентификатор канала из личного кабинета Wazzup
+                (не email и не номер телефона). Можно оставить пустым — при первом входящем сообщении CRM привяжет
+                канал автоматически (если компания одна). ID канала можно посмотреть в настройках канала в Wazzup.
               </p>
               <p>
                 После сохранения укажите в Wazzup URL вебхука вашего CRM (вам подскажет поддержка или документация

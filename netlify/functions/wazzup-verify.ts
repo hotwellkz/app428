@@ -80,9 +80,21 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     }
 
     if (res.status >= 200 && res.status < 300) {
+      let channelId: string | null = null;
+      try {
+        const data = await res.json();
+        const channels = Array.isArray(data?.channels) ? data.channels : [];
+        const wa = channels.find((c: { type?: string }) => (c?.type ?? '').toLowerCase() === 'whatsapp');
+        const ig = channels.find((c: { type?: string }) => (c?.type ?? '').toLowerCase() === 'instagram');
+        channelId = (wa?.id ?? ig?.id ?? channels[0]?.id) ?? null;
+        if (channelId && typeof channelId !== 'string') channelId = null;
+      } catch {
+        /* ignore */
+      }
       return json(200, {
         ok: true,
-        message: 'Подключение успешно. Канал доступен.'
+        message: 'Подключение успешно. Канал доступен.',
+        ...(channelId ? { channelId } : {})
       });
     }
 
