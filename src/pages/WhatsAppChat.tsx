@@ -24,6 +24,7 @@ import { showErrorNotification } from '../utils/notifications';
 import toast from 'react-hot-toast';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase/config';
+import { getAuthToken } from '../lib/firebase/auth';
 import type { WhatsAppMessage } from '../types/whatsappDb';
 import type { MediaQuickReply } from '../types/mediaQuickReplies';
 import ConversationList from '../components/whatsapp/ConversationList';
@@ -357,15 +358,17 @@ const WhatsAppChat: React.FC = () => {
     setSearchLoading(true);
     (async () => {
       try {
-        const user = auth.currentUser;
-        if (!user) {
-          setSearchChats([]);
+        const token = await getAuthToken();
+        if (!token) {
+          if (cancelled) return;
+          const found = localSearchChats(conversationsForSearchRef.current, q);
+          setSearchChats(found);
           return;
         }
         const res = await fetch('/api/chats-search', {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${await user.getIdToken()}`,
+            Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({

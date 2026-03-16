@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
+import { getAuthToken } from '../lib/firebase/auth';
 import { Plug, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Loader2 } from 'lucide-react';
 
 const API_INTEGRATION = '/.netlify/functions/wazzup-integration';
@@ -45,7 +46,11 @@ export const IntegrationsSettings: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const token = await user.getIdToken();
+      const token = await getAuthToken();
+      if (!token) {
+        setError('Ошибка авторизации. Обновите страницу и повторите попытку.');
+        return;
+      }
       const res = await fetch(API_INTEGRATION, {
         method: 'GET',
         headers: { Authorization: `Bearer ${token}` }
@@ -69,7 +74,9 @@ export const IntegrationsSettings: React.FC = () => {
         }));
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось загрузить настройки');
+      const msg = e instanceof Error ? e.message : 'Не удалось загрузить настройки';
+      setError(msg);
+      if (import.meta.env.DEV) console.warn('[IntegrationsSettings] fetchIntegration', e);
     } finally {
       setLoading(false);
     }
@@ -89,7 +96,11 @@ export const IntegrationsSettings: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      const token = await user.getIdToken();
+      const token = await getAuthToken();
+      if (!token) {
+        setError('Ошибка авторизации. Обновите страницу и повторите попытку.');
+        return;
+      }
       const res = await fetch(API_VERIFY, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -102,7 +113,8 @@ export const IntegrationsSettings: React.FC = () => {
         setError(data.error || 'Проверка не пройдена');
       }
     } catch (e) {
-      setError('Не удалось проверить подключение');
+      setError('Не удалось проверить подключение. Проверьте ключ и соединение.');
+      if (import.meta.env.DEV) console.warn('[IntegrationsSettings] handleVerify', e);
     } finally {
       setVerifying(false);
     }
@@ -118,7 +130,12 @@ export const IntegrationsSettings: React.FC = () => {
     setError(null);
     setSuccess(null);
     try {
-      const token = await user.getIdToken();
+      const token = await getAuthToken();
+      if (!token) {
+        setError('Ошибка авторизации. Обновите страницу и повторите попытку.');
+        setSaving(false);
+        return;
+      }
       const res = await fetch(API_INTEGRATION, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -134,7 +151,9 @@ export const IntegrationsSettings: React.FC = () => {
       setForm((f) => ({ ...f, apiKey: '' }));
       fetchIntegration();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Не удалось сохранить');
+      const msg = e instanceof Error ? e.message : 'Не удалось сохранить интеграцию. Попробуйте ещё раз.';
+      setError(msg);
+      if (import.meta.env.DEV) console.warn('[IntegrationsSettings] handleSave', e);
     } finally {
       setSaving(false);
     }

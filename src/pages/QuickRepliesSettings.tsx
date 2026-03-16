@@ -11,6 +11,7 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase/config';
+import { getAuthToken } from '../lib/firebase/auth';
 import { DeleteQuickReplyTemplateModal } from '../components/modals/DeleteQuickReplyTemplateModal';
 import { showSuccessNotification, showErrorNotification } from '../utils/notifications';
 import { supabase } from '../lib/supabase/config';
@@ -497,9 +498,9 @@ export const QuickRepliesSettings: React.FC = () => {
   const confirmDeleteTemplate = async () => {
     if (!deleteTemplateModal || !canEdit) return;
     const { id } = deleteTemplateModal;
-    const user = auth.currentUser;
-    if (!user) {
-      showErrorNotification('Войдите в систему');
+    const token = await getAuthToken();
+    if (!token) {
+      showErrorNotification('Ошибка авторизации. Обновите страницу и повторите попытку.');
       return;
     }
     setDeleteTemplateLoading(true);
@@ -510,7 +511,6 @@ export const QuickRepliesSettings: React.FC = () => {
       showSuccessNotification('Шаблон успешно удалён');
     };
     try {
-      const token = await user.getIdToken();
       const res = await fetch('/api/templates-delete', {
         method: 'POST',
         headers: {

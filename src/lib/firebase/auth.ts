@@ -6,6 +6,21 @@ import { createCompany, addCompanyUser } from './companies';
 
 export const auth = getAuth(app);
 
+/**
+ * Возвращает ID-токен текущего пользователя Firebase Auth.
+ * Использовать для Authorization в API (не useAuth().user — там объект из Firestore без getIdToken).
+ */
+export async function getAuthToken(): Promise<string | null> {
+  const u = auth.currentUser;
+  if (!u) return null;
+  try {
+    return await u.getIdToken();
+  } catch (e) {
+    if (import.meta.env.DEV) console.warn('[auth] getAuthToken failed', e);
+    return null;
+  }
+}
+
 const DEV_LOG = import.meta.env.DEV;
 function devLog(...args: unknown[]) {
   if (DEV_LOG) console.log('[RegisterCompany]', ...args);
