@@ -272,7 +272,11 @@ const ConversationList: React.FC<ConversationListProps> = ({
   }, [hasMore, loadingMore, onLoadMore]);
 
   return (
-    <div ref={parentRef} className="flex-1 min-h-0 overflow-y-auto" onScroll={onScroll}>
+    <div
+      ref={parentRef}
+      className="chats-list-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+      onScroll={onScroll}
+    >
       {items.length === 0 && !loadingMore && (
         <div className="p-4 text-sm text-gray-500 text-center md:p-4">Нет диалогов</div>
       )}

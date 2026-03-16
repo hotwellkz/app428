@@ -49,6 +49,15 @@ body.whatsapp-chat-mobile-open {
   vertical-align: middle;
 }
 
+/* Список чатов слева: скрытый scrollbar, прокрутка сохраняется (мышь, тач, колесо) */
+.chats-list-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.chats-list-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* CRM: карточка сделки на канбане */
 .deal-card {
   contain: content;
