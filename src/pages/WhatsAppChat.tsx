@@ -9,6 +9,7 @@ import { useMobileSidebar } from '../contexts/MobileSidebarContext';
 import {
   subscribeConversationsList,
   subscribeMessages,
+  sortConversationItems,
   clearUnreadCount,
   dismissAwaitingReply,
   markConversationAsUnread,
@@ -646,6 +647,36 @@ const WhatsAppChat: React.FC = () => {
       /* ignore quota */
     }
   }, [companyId]);
+
+  /** Оптимистичное обновление: после отправки сообщения сразу поднимаем чат в списке по lastMessageAt. */
+  const moveConversationToTopByActivity = useCallback((conversationId: string) => {
+    setConversations((prev) => {
+      const now = new Date();
+      const next = prev.map((c) =>
+        c.id === conversationId
+          ? {
+              ...c,
+              lastMessageAt: now,
+              lastOutgoingAt: now,
+              lastMessageSender: 'manager' as const,
+              lastMessage: c.lastMessage
+                ? { ...c.lastMessage, createdAt: now, direction: 'outgoing' as const }
+                : {
+                    id: `${c.id}:preview`,
+                    conversationId: c.id,
+                    text: (c.lastMessagePreview ?? '').slice(0, 200),
+                    direction: 'outgoing' as const,
+                    createdAt: now,
+                    channel: (c.channel === 'instagram' ? 'instagram' : 'whatsapp') as 'whatsapp' | 'instagram',
+                    attachments: undefined
+                  }
+            }
+          : c
+      );
+      sortConversationItems(next);
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -1549,6 +1580,7 @@ const WhatsAppChat: React.FC = () => {
             if (p?.preview) URL.revokeObjectURL(p.preview);
             return null;
           });
+          if (selectedId) moveConversationToTopByActivity(selectedId);
         } else {
           const d = data as { error?: string; status?: number; detail?: any };
           let message = 'Сообщение не отправлено: проверьте номер, текст или вложение.';
@@ -1631,6 +1663,7 @@ const WhatsAppChat: React.FC = () => {
         }
         setSendError(null);
         setReplyToMessage(null);
+        if (selectedId) moveConversationToTopByActivity(selectedId);
       }
 
       for (let i = 0; i < filesToSend.length; i++) {
@@ -1653,6 +1686,7 @@ const WhatsAppChat: React.FC = () => {
           setSending(false);
           return;
         }
+        if (selectedId) moveConversationToTopByActivity(selectedId);
       }
     } finally {
       setUploadState('idle');
@@ -1703,6 +1737,7 @@ const WhatsAppChat: React.FC = () => {
           return;
         }
         setSendError(null);
+        if (selectedId) moveConversationToTopByActivity(selectedId);
 
         // Небольшая задержка, чтобы WhatsApp корректно показывал порядок сообщений
         await new Promise((r) => setTimeout(r, 300));
@@ -1727,7 +1762,7 @@ const WhatsAppChat: React.FC = () => {
         setUploadState('idle');
       }
     },
-    [companyId, selectedId, listWithDisplayTitle, incognitoMode]
+    [companyId, selectedId, listWithDisplayTitle, incognitoMode, moveConversationToTopByActivity]
   );
 
   const closeSelectionAndOverlays = useCallback(() => {
@@ -1920,11 +1955,12 @@ const WhatsAppChat: React.FC = () => {
             } else {
               payload.text = formatMessageForWhatsApp(msg.text || '[медиа]');
             }
-            await fetch(SEND_API, {
+            const res = await fetch(SEND_API, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(wazzupSendBody(targetPhone, payload))
             });
+            if (res.ok) moveConversationToTopByActivity(convId);
           }
         }
         setForwardDialogOpen(false);
@@ -1933,7 +1969,7 @@ const WhatsAppChat: React.FC = () => {
         setForwardLoading(false);
       }
     },
-    [selectedId, companyId, messages, selectedMessageIds, conversations, closeSelectionAndOverlays]
+    [selectedId, companyId, messages, selectedMessageIds, conversations, closeSelectionAndOverlays, moveConversationToTopByActivity]
   );
 
   const showListOnly = isMobile && !selectedId;

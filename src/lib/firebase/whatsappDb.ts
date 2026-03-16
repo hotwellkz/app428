@@ -475,8 +475,8 @@ function toMillis(v: ConversationListItem['lastMessageAt'] | ConversationListIte
   return new Date(v as string).getTime();
 }
 
-/** Сортировка по последней активности: непрочитанные выше, затем по lastMessageAt (и lastIncomingAt) по убыванию. */
-function sortConversationItems(items: ConversationListItem[]): void {
+/** Сортировка по последней активности: непрочитанные выше, затем по lastMessageAt (и lastIncomingAt) по убыванию. Экспорт для optimistic update после отправки. */
+export function sortConversationItems(items: ConversationListItem[]): void {
   const getItemSortTime = (item: ConversationListItem): number => {
     if (item.lastMessage) return getMessageTime(item.lastMessage);
     const lastMsg = toMillis(item.lastMessageAt);
