@@ -437,7 +437,15 @@ export async function updateDeal(
   >
 ): Promise<void> {
   const ref = doc(db, COLLECTION_DEALS, id);
-  await updateDoc(ref, { ...data, updatedAt: serverTimestamp() });
+  const payload: Record<string, unknown> = { updatedAt: serverTimestamp() };
+  for (const [key, value] of Object.entries(data)) {
+    if (value === undefined) {
+      payload[key] = deleteField();
+    } else {
+      payload[key] = value;
+    }
+  }
+  await updateDoc(ref, payload);
 }
 
 const COLLECTION_WHATSAPP_CONVERSATIONS = 'whatsappConversations';
