@@ -22,6 +22,8 @@ import {
   instagramClientKey,
   upsertMessageFromWebhook,
   syncConversationWazzupRouting,
+  getCompanyIdByWazzupChannelId,
+  DEFAULT_COMPANY_ID,
   type MessageAttachmentRow
 } from './lib/firebaseAdmin';
 
@@ -94,7 +96,7 @@ function wazzupTransportFromMessage(msg: WazzupMessage, instagram: boolean): str
   return instagram ? 'instagram' : 'whatsapp';
 }
 
-async function handleInstagramMessage(msg: WazzupMessage, debugPayload: boolean): Promise<'ok' | 'skip' | 'err'> {
+async function handleInstagramMessage(msg: WazzupMessage, companyId: string, debugPayload: boolean): Promise<'ok' | 'skip' | 'err'> {
   const chatId = String(msg.chatId ?? '').trim();
   if (!chatId) {
     logIg('skip_no_chatId', msg.messageId);
@@ -110,27 +112,27 @@ async function handleInstagramMessage(msg: WazzupMessage, debugPayload: boolean)
   const extKey = instagramClientKey(chatId);
 
   try {
-    logIg('incoming', { chatId, direction, username, messageId: msg.messageId });
+    logIg('incoming', { chatId, direction, username, messageId: msg.messageId, companyId });
 
-    let crm = await findCrmClientByExternalKey(extKey);
+    let crm = await findCrmClientByExternalKey(extKey, companyId);
     if (!crm) {
-      await createCrmClientInstagram(chatId, username);
+      await createCrmClientInstagram(chatId, username, companyId);
       logIg('crm_client_created', extKey);
     } else {
       await updateCrmClientLastMessageAt(crm.id);
     }
 
-    let deal = await findDealByClientKey(extKey);
+    let deal = await findDealByClientKey(extKey, companyId);
     if (!deal) {
-      await createDealInstagram(chatId);
+      await createDealInstagram(chatId, companyId);
       logIg('deal_created', extKey);
     }
 
-    let client = await findClientByInstagramChatId(chatId);
+    let client = await findClientByInstagramChatId(chatId, companyId);
     if (!client) {
-      const clientId = await createInstagramClient(chatId, username, avatarUri ?? null);
+      const clientId = await createInstagramClient(chatId, username, avatarUri ?? null, companyId);
       logIg('wa_client_created', clientId);
-      client = await findClientByInstagramChatId(chatId);
+      client = await findClientByInstagramChatId(chatId, companyId);
       if (!client) {
         logIg('error_load_client', clientId);
         return 'err';
@@ -147,17 +149,18 @@ async function handleInstagramMessage(msg: WazzupMessage, debugPayload: boolean)
     const transport = wazzupTransportFromMessage(msg, true);
     const wazzupChatId = chatId;
 
-    let conversation = await findConversationByClientId(client.id);
+    let conversation = await findConversationByClientId(client.id, companyId);
     if (!conversation) {
       const convId = await createConversation(client.id, chatId, {
         channel: 'instagram',
         displayPhone: `@${username}`,
+        companyId,
         ...(channelId
           ? { wazzupChannelId: channelId, wazzupTransport: transport, wazzupChatId }
           : {})
       });
       logIg('conversation_created', convId);
-      conversation = await findConversationByClientId(client.id);
+      conversation = await findConversationByClientId(client.id, companyId);
       if (!conversation) return 'err';
     } else if (channelId) {
       try {
@@ -175,7 +178,8 @@ async function handleInstagramMessage(msg: WazzupMessage, debugPayload: boolean)
     const { id: savedId, created } = await upsertMessageFromWebhook(conversation.id, text, direction, {
       providerMessageId: msg.messageId ?? undefined,
       attachments: attachments.length ? attachments : undefined,
-      channel: 'instagram'
+      channel: 'instagram',
+      companyId
     });
     if (direction === 'incoming' && created) {
       await incrementUnreadCount(conversation.id);
@@ -188,7 +192,7 @@ async function handleInstagramMessage(msg: WazzupMessage, debugPayload: boolean)
   }
 }
 
-async function handleWhatsAppMessage(msg: WazzupMessage, debugPayload: boolean): Promise<'ok' | 'skip' | 'err'> {
+async function handleWhatsAppMessage(msg: WazzupMessage, companyId: string, debugPayload: boolean): Promise<'ok' | 'skip' | 'err'> {
   const phone = msg.chatId ?? msg.contact?.phone ?? '';
   if (!phone) return 'skip';
   const normalizedPhone = normalizePhone(phone);
@@ -200,19 +204,19 @@ async function handleWhatsAppMessage(msg: WazzupMessage, debugPayload: boolean):
   const authorName = msg.contact?.name ?? '';
   const avatarUri = msg.contact?.avatarUri ?? undefined;
   try {
-    let crmClient = await findCrmClientByPhone(normalizedPhone);
+    let crmClient = await findCrmClientByPhone(normalizedPhone, companyId);
     if (!crmClient) {
-      await createCrmClient(normalizedPhone);
+      await createCrmClient(normalizedPhone, companyId);
     } else {
       await updateCrmClientLastMessageAt(crmClient.id);
     }
-    const deal = await findDealByClientPhone(normalizedPhone);
-    if (!deal) await createDeal(normalizedPhone);
+    const deal = await findDealByClientPhone(normalizedPhone, companyId);
+    if (!deal) await createDeal(normalizedPhone, companyId);
 
-    let client = await findClientByPhone(normalizedPhone);
+    let client = await findClientByPhone(normalizedPhone, companyId);
     if (!client) {
-      await createClient(normalizedPhone, authorName, avatarUri ?? null);
-      client = await findClientByPhone(normalizedPhone);
+      await createClient(normalizedPhone, authorName, avatarUri ?? null, companyId);
+      client = await findClientByPhone(normalizedPhone, companyId);
       if (!client) return 'err';
     } else if (avatarUri && !client.avatarUrl) {
       try {
@@ -225,15 +229,16 @@ async function handleWhatsAppMessage(msg: WazzupMessage, debugPayload: boolean):
     const transport = wazzupTransportFromMessage(msg, false);
     const wazzupChatId = String(msg.chatId ?? normalizedPhone).trim();
 
-    let conversation = await findConversationByClientId(client.id);
+    let conversation = await findConversationByClientId(client.id, companyId);
     if (!conversation) {
       await createConversation(client.id, normalizedPhone, {
         channel: 'whatsapp',
+        companyId,
         ...(channelId
           ? { wazzupChannelId: channelId, wazzupTransport: transport, wazzupChatId }
           : {})
       });
-      conversation = await findConversationByClientId(client.id);
+      conversation = await findConversationByClientId(client.id, companyId);
       if (!conversation) return 'err';
     } else if (channelId) {
       try {
@@ -250,7 +255,8 @@ async function handleWhatsAppMessage(msg: WazzupMessage, debugPayload: boolean):
     const { created } = await upsertMessageFromWebhook(conversation.id, text, direction, {
       providerMessageId: msg.messageId ?? undefined,
       attachments: attachments.length ? attachments : undefined,
-      channel: 'whatsapp'
+      channel: 'whatsapp',
+      companyId
     });
     if (direction === 'incoming' && created) await incrementUnreadCount(conversation.id);
     return 'ok';
@@ -309,17 +315,21 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
   for (const msg of messages) {
     const chatType = msg.chatType ?? '';
+    const channelId = String(msg.channelId ?? '').trim();
+    const companyId = channelId ? (await getCompanyIdByWazzupChannelId(channelId)) ?? DEFAULT_COMPANY_ID : DEFAULT_COMPANY_ID;
     if (debugPayload) {
       log('Message item:', {
         messageId: msg.messageId,
         chatType,
         chatId: msg.chatId,
+        channelId,
+        companyId,
         isEcho: msg.isEcho
       });
     }
 
     if (isInstagramChatType(chatType)) {
-      const r = await handleInstagramMessage(msg, debugPayload);
+      const r = await handleInstagramMessage(msg, companyId, debugPayload);
       if (r === 'ok') processed++;
       else if (r === 'skip') skipped++;
       else errors++;
@@ -332,7 +342,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       continue;
     }
 
-    const r = await handleWhatsAppMessage(msg, debugPayload);
+    const r = await handleWhatsAppMessage(msg, companyId, debugPayload);
     if (r === 'ok') processed++;
     else if (r === 'skip') skipped++;
     else errors++;

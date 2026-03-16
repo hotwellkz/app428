@@ -1905,7 +1905,8 @@ const WhatsAppChat: React.FC = () => {
           if (!targetPhone) continue;
           for (const msg of toSend) {
             const payload: Record<string, unknown> = {
-              forwarded: true
+              forwarded: true,
+              companyId: companyId ?? undefined
             };
             if (msg.deleted) continue;
             if (msg.attachments?.length && msg.attachments[0].url) {
@@ -2068,7 +2069,7 @@ const WhatsAppChat: React.FC = () => {
             )}
             <div className="header-title flex min-w-0 flex-1 items-center gap-2 md:flex-initial">
               <MessageSquare className="h-5 w-5 shrink-0 text-green-600" />
-              <h1 className="truncate text-lg font-semibold text-gray-800">WhatsApp</h1>
+              <h1 className="truncate text-lg font-semibold text-gray-800">Чаты</h1>
             </div>
             <div className="header-right flex shrink-0 items-center gap-2 md:gap-2.5">
               <button

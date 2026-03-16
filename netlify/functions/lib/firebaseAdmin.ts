@@ -11,7 +11,8 @@ const COLLECTIONS = {
   COMPANY_INVITES: 'company_invites',
   COMPANIES: 'companies',
   COMPANY_USERS: 'company_users',
-  USERS: 'users'
+  USERS: 'users',
+  WAZZUP_INTEGRATIONS: 'wazzupIntegrations'
 } as const;
 
 function normalizePhone(phone: string): string {
@@ -81,10 +82,16 @@ export interface WhatsAppConversationRow {
   lastMessageSender?: 'client' | 'manager';
 }
 
-export async function findClientByPhone(phone: string): Promise<WhatsAppClientRow | null> {
+export async function findClientByPhone(phone: string, companyId?: string): Promise<WhatsAppClientRow | null> {
   const db = getDb();
   const normalized = normalizePhone(phone);
-  const snap = await db.collection(COLLECTIONS.CLIENTS).where('phone', '==', normalized).limit(1).get();
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
+  const q = db
+    .collection(COLLECTIONS.CLIENTS)
+    .where('companyId', '==', cid)
+    .where('phone', '==', normalized)
+    .limit(1);
+  const snap = await q.get();
   if (snap.empty) return null;
   const d = snap.docs[0];
   const data = d.data();
@@ -99,15 +106,117 @@ export async function findClientByPhone(phone: string): Promise<WhatsAppClientRo
 
 export const DEFAULT_COMPANY_ID = 'hotwell';
 
+/** Настройки интеграции Wazzup для компании (self-service onboarding). */
+export interface WazzupIntegrationRow {
+  companyId: string;
+  apiKey: string;
+  whatsappChannelId: string | null;
+  instagramChannelId: string | null;
+  connectionStatus: 'ok' | 'error' | null;
+  connectionError: string | null;
+  lastCheckedAt: Timestamp | null;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export async function getWazzupIntegration(companyId: string): Promise<WazzupIntegrationRow | null> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.WAZZUP_INTEGRATIONS).doc(companyId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const d = snap.data()!;
+  return {
+    companyId,
+    apiKey: (d.apiKey as string) ?? '',
+    whatsappChannelId: (d.whatsappChannelId as string) ?? null,
+    instagramChannelId: (d.instagramChannelId as string) ?? null,
+    connectionStatus: (d.connectionStatus as 'ok' | 'error') ?? null,
+    connectionError: (d.connectionError as string) ?? null,
+    lastCheckedAt: (d.lastCheckedAt as Timestamp) ?? null,
+    createdAt: d.createdAt as Timestamp,
+    updatedAt: d.updatedAt as Timestamp
+  };
+}
+
+/** По channelId из webhook Wazzup определить companyId (по сохранённым настройкам интеграции). */
+export async function getCompanyIdByWazzupChannelId(channelId: string): Promise<string | null> {
+  const db = getDb();
+  const cid = String(channelId ?? '').trim();
+  if (!cid) return null;
+  const snap = await db
+    .collection(COLLECTIONS.WAZZUP_INTEGRATIONS)
+    .where('whatsappChannelId', '==', cid)
+    .limit(1)
+    .get();
+  if (!snap.empty) return snap.docs[0].id;
+  const snapIg = await db
+    .collection(COLLECTIONS.WAZZUP_INTEGRATIONS)
+    .where('instagramChannelId', '==', cid)
+    .limit(1)
+    .get();
+  if (!snapIg.empty) return snapIg.docs[0].id;
+  return null;
+}
+
+/** Сохранить или обновить настройки Wazzup для компании. */
+export async function setWazzupIntegration(
+  companyId: string,
+  data: {
+    apiKey: string;
+    whatsappChannelId?: string | null;
+    instagramChannelId?: string | null;
+    connectionStatus?: 'ok' | 'error' | null;
+    connectionError?: string | null;
+    lastCheckedAt?: Timestamp | null;
+  }
+): Promise<void> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.WAZZUP_INTEGRATIONS).doc(companyId);
+  const snap = await ref.get();
+  const now = Timestamp.now();
+  const payload: Record<string, unknown> = {
+    apiKey: data.apiKey.trim(),
+    whatsappChannelId: data.whatsappChannelId?.trim() || null,
+    instagramChannelId: data.instagramChannelId?.trim() || null,
+    connectionStatus: data.connectionStatus ?? null,
+    connectionError: data.connectionError ?? null,
+    lastCheckedAt: data.lastCheckedAt ?? null,
+    updatedAt: now
+  };
+  if (!snap.exists) {
+    payload.companyId = companyId;
+    payload.createdAt = now;
+    await ref.set(payload);
+  } else {
+    await ref.update(payload);
+  }
+}
+
+/** Получить API-ключ для отправки сообщений: из интеграции компании или из env (для DEFAULT_COMPANY_ID). */
+export async function getWazzupApiKeyForCompany(companyId: string): Promise<string | null> {
+  const integration = await getWazzupIntegration(companyId);
+  if (integration?.apiKey?.trim()) return integration.apiKey.trim();
+  if (companyId === DEFAULT_COMPANY_ID && process.env.WAZZUP_API_KEY?.trim()) {
+    return process.env.WAZZUP_API_KEY.trim();
+  }
+  return null;
+}
+
 /** Стабильный ключ контакта Instagram (Wazzup chatId потока). */
 export function instagramClientKey(chatId: string): string {
   return `instagram:${String(chatId).trim()}`;
 }
 
-export async function findClientByInstagramChatId(chatId: string): Promise<WhatsAppClientRow | null> {
+export async function findClientByInstagramChatId(chatId: string, companyId?: string): Promise<WhatsAppClientRow | null> {
   const db = getDb();
   const key = instagramClientKey(chatId);
-  const snap = await db.collection(COLLECTIONS.CLIENTS).where('phone', '==', key).limit(1).get();
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
+  const snap = await db
+    .collection(COLLECTIONS.CLIENTS)
+    .where('companyId', '==', cid)
+    .where('phone', '==', key)
+    .limit(1)
+    .get();
   if (snap.empty) return null;
   const d = snap.docs[0];
   const data = d.data();
@@ -123,31 +232,34 @@ export async function findClientByInstagramChatId(chatId: string): Promise<Whats
 export async function createInstagramClient(
   chatId: string,
   name: string = '',
-  avatarUrl?: string | null
+  avatarUrl?: string | null,
+  companyId?: string
 ): Promise<string> {
   const db = getDb();
   const key = instagramClientKey(chatId);
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
   const ref = await db.collection(COLLECTIONS.CLIENTS).add({
     name: name || key,
     phone: key,
     avatarUrl: avatarUrl ?? null,
     createdAt: Timestamp.now(),
-    companyId: DEFAULT_COMPANY_ID,
+    companyId: cid,
     channel: 'instagram',
     source: 'Instagram'
   });
   return ref.id;
 }
 
-export async function createClient(phone: string, name: string = '', avatarUrl?: string | null): Promise<string> {
+export async function createClient(phone: string, name: string = '', avatarUrl?: string | null, companyId?: string): Promise<string> {
   const db = getDb();
   const normalized = normalizePhone(phone);
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
   const ref = await db.collection(COLLECTIONS.CLIENTS).add({
     name: name || normalized,
     phone: normalized,
     avatarUrl: avatarUrl ?? null,
     createdAt: Timestamp.now(),
-    companyId: DEFAULT_COMPANY_ID
+    companyId: cid
   });
   return ref.id;
 }
@@ -158,10 +270,12 @@ export async function updateClientAvatar(clientId: string, avatarUrl: string): P
   await ref.update({ avatarUrl });
 }
 
-export async function findConversationByClientId(clientId: string): Promise<WhatsAppConversationRow | null> {
+export async function findConversationByClientId(clientId: string, companyId?: string): Promise<WhatsAppConversationRow | null> {
   const db = getDb();
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
   const snap = await db
     .collection(COLLECTIONS.CONVERSATIONS)
+    .where('companyId', '==', cid)
     .where('clientId', '==', clientId)
     .where('status', '==', 'active')
     .limit(1)
@@ -194,6 +308,7 @@ export async function createConversation(
     wazzupChannelId?: string;
     wazzupTransport?: string;
     wazzupChatId?: string;
+    companyId?: string;
   }
 ): Promise<string> {
   const db = getDb();
@@ -201,6 +316,7 @@ export async function createConversation(
   const channel = options?.channel ?? 'whatsapp';
   const phoneStored =
     channel === 'instagram' ? instagramClientKey(phone.replace(/^instagram:/, '')) : normalizePhone(phone);
+  const cid = options?.companyId ?? DEFAULT_COMPANY_ID;
   const payload: Record<string, unknown> = {
     clientId,
     phone: options?.displayPhone ?? phoneStored,
@@ -213,7 +329,7 @@ export async function createConversation(
     lastClientMessageTime: null,
     lastManagerMessageTime: null,
     lastMessageSender: null,
-    companyId: DEFAULT_COMPANY_ID,
+    companyId: cid,
     channel,
     chatType: channel === 'instagram' ? 'instagram' : 'whatsapp'
   };
@@ -305,6 +421,7 @@ export interface SaveMessageOptions {
   forwarded?: boolean;
   /** Канал сообщения (WhatsApp / Instagram). */
   channel?: 'whatsapp' | 'instagram';
+  companyId?: string;
 }
 
 export async function saveMessage(
@@ -321,7 +438,7 @@ export async function saveMessage(
     direction,
     createdAt: now,
     channel: options.channel ?? 'whatsapp',
-    companyId: DEFAULT_COMPANY_ID
+    companyId: options.companyId ?? DEFAULT_COMPANY_ID
   };
   if (options.status != null) data.status = options.status;
   if (options.providerMessageId != null) data.providerMessageId = options.providerMessageId;
@@ -476,12 +593,13 @@ export interface CrmClientRow {
   lastMessageAt: Timestamp;
 }
 
-export async function findCrmClientByPhone(phone: string): Promise<CrmClientRow | null> {
+export async function findCrmClientByPhone(phone: string, companyId?: string): Promise<CrmClientRow | null> {
   const db = getDb();
   const normalized = normalizePhone(phone);
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
   const snap = await db
     .collection(COLLECTIONS.CRM_CLIENTS)
-    .where('companyId', '==', DEFAULT_COMPANY_ID)
+    .where('companyId', '==', cid)
     .where('phone', '==', normalized)
     .limit(1)
     .get();
@@ -498,9 +616,10 @@ export async function findCrmClientByPhone(phone: string): Promise<CrmClientRow 
   };
 }
 
-export async function createCrmClient(phone: string): Promise<string> {
+export async function createCrmClient(phone: string, companyId?: string): Promise<string> {
   const db = getDb();
   const normalized = normalizePhone(phone);
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
   const now = Timestamp.now();
   const ref = await db.collection(COLLECTIONS.CRM_CLIENTS).add({
     phone: normalized,
@@ -508,16 +627,17 @@ export async function createCrmClient(phone: string): Promise<string> {
     source: 'whatsapp',
     createdAt: now,
     lastMessageAt: now,
-    companyId: DEFAULT_COMPANY_ID
+    companyId: cid
   });
   return ref.id;
 }
 
-export async function findCrmClientByExternalKey(key: string): Promise<CrmClientRow | null> {
+export async function findCrmClientByExternalKey(key: string, companyId?: string): Promise<CrmClientRow | null> {
   const db = getDb();
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
   const snap = await db
     .collection(COLLECTIONS.CRM_CLIENTS)
-    .where('companyId', '==', DEFAULT_COMPANY_ID)
+    .where('companyId', '==', cid)
     .where('phone', '==', key)
     .limit(1)
     .get();
@@ -534,9 +654,10 @@ export async function findCrmClientByExternalKey(key: string): Promise<CrmClient
   };
 }
 
-export async function createCrmClientInstagram(chatId: string, displayName: string): Promise<string> {
+export async function createCrmClientInstagram(chatId: string, displayName: string, companyId?: string): Promise<string> {
   const db = getDb();
   const key = instagramClientKey(chatId);
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
   const now = Timestamp.now();
   const ref = await db.collection(COLLECTIONS.CRM_CLIENTS).add({
     phone: key,
@@ -545,7 +666,7 @@ export async function createCrmClientInstagram(chatId: string, displayName: stri
     channel: 'instagram',
     createdAt: now,
     lastMessageAt: now,
-    companyId: DEFAULT_COMPANY_ID
+    companyId: cid
   });
   return ref.id;
 }
@@ -568,12 +689,13 @@ export interface DealRow {
   updatedAt: Timestamp;
 }
 
-export async function findDealByClientPhone(phone: string): Promise<DealRow | null> {
+export async function findDealByClientPhone(phone: string, companyId?: string): Promise<DealRow | null> {
   const db = getDb();
   const normalized = normalizePhone(phone);
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
   const snap = await db
     .collection(COLLECTIONS.DEALS)
-    .where('companyId', '==', DEFAULT_COMPANY_ID)
+    .where('companyId', '==', cid)
     .where('clientPhone', '==', normalized)
     .limit(1)
     .get();
@@ -590,9 +712,10 @@ export async function findDealByClientPhone(phone: string): Promise<DealRow | nu
   };
 }
 
-export async function createDeal(phone: string): Promise<string> {
+export async function createDeal(phone: string, companyId?: string): Promise<string> {
   const db = getDb();
   const normalized = normalizePhone(phone);
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
   const now = Timestamp.now();
   const ref = await db.collection(COLLECTIONS.DEALS).add({
     clientPhone: normalized,
@@ -600,16 +723,17 @@ export async function createDeal(phone: string): Promise<string> {
     source: 'whatsapp',
     createdAt: now,
     updatedAt: now,
-    companyId: DEFAULT_COMPANY_ID
+    companyId: cid
   });
   return ref.id;
 }
 
-export async function findDealByClientKey(clientKey: string): Promise<DealRow | null> {
+export async function findDealByClientKey(clientKey: string, companyId?: string): Promise<DealRow | null> {
   const db = getDb();
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
   const snap = await db
     .collection(COLLECTIONS.DEALS)
-    .where('companyId', '==', DEFAULT_COMPANY_ID)
+    .where('companyId', '==', cid)
     .where('clientPhone', '==', clientKey)
     .limit(1)
     .get();
@@ -626,9 +750,10 @@ export async function findDealByClientKey(clientKey: string): Promise<DealRow | 
   };
 }
 
-export async function createDealInstagram(chatId: string): Promise<string> {
+export async function createDealInstagram(chatId: string, companyId?: string): Promise<string> {
   const db = getDb();
   const key = instagramClientKey(chatId);
+  const cid = companyId ?? DEFAULT_COMPANY_ID;
   const now = Timestamp.now();
   const ref = await db.collection(COLLECTIONS.DEALS).add({
     clientPhone: key,
@@ -636,7 +761,7 @@ export async function createDealInstagram(chatId: string): Promise<string> {
     source: 'Instagram',
     createdAt: now,
     updatedAt: now,
-    companyId: DEFAULT_COMPANY_ID
+    companyId: cid
   });
   return ref.id;
 }

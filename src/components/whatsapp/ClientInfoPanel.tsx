@@ -15,6 +15,7 @@ import {
   deleteField
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase/config';
+import { getChatAiAnalysis, setChatAiAnalysis } from '../../lib/firebase/chatAiAnalysis';
 import { useCompanyId } from '../../contexts/CompanyContext';
 import { createDeal, ensureDefaultPipeline, listStages, moveDealToStage } from '../../lib/firebase/deals';
 import type { Deal } from '../../types/deals';
@@ -274,6 +275,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [creatingPipelineDeal, setCreatingPipelineDeal] = useState(false);
   const [pipelineStageModal, setPipelineStageModal] = useState(false);
   const [salesAnalysisCache, setSalesAnalysisCache] = useState<Record<string, SalesAnalysisResult>>({});
+  const [analyzedAtByConversation, setAnalyzedAtByConversation] = useState<Record<string, Date | null>>({});
 
   const loadPipelineDeal = useCallback(async () => {
     if (!conversationDealId || !companyId) {
@@ -417,6 +419,28 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     }
     loadClientAndDeal();
   }, [phone, loadClientAndDeal]);
+
+  // Загрузка сохранённого AI-разбора при открытии чата
+  useEffect(() => {
+    if (!companyId || !conversationId) return;
+    let cancelled = false;
+    getChatAiAnalysis(companyId, conversationId).then((saved) => {
+      if (cancelled || !saved) return;
+      setSalesAnalysisCache((prev) => ({ ...prev, [conversationId]: saved.result }));
+      setAnalyzedAtByConversation((prev) => ({ ...prev, [conversationId]: saved.analyzedAt }));
+    });
+    return () => { cancelled = true; };
+  }, [companyId, conversationId]);
+
+  const handleSalesAnalysisCacheResult = useCallback((convId: string, result: SalesAnalysisResult) => {
+    setSalesAnalysisCache((prev) => ({ ...prev, [convId]: result }));
+    setAnalyzedAtByConversation((prev) => ({ ...prev, [convId]: new Date() }));
+    if (companyId) {
+      setChatAiAnalysis(companyId, convId, result).catch((err) => {
+        if (import.meta.env.DEV) console.warn('[ClientInfoPanel] save chat AI analysis', err);
+      });
+    }
+  }, [companyId]);
 
   useEffect(() => {
     if (!statusContextMenu) return;
@@ -1158,7 +1182,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                 phone={phone}
                 conversationId={conversationId ?? null}
                 cachedResult={conversationId ? salesAnalysisCache[conversationId] ?? null : null}
-                onCacheResult={(id, result) => setSalesAnalysisCache((prev) => ({ ...prev, [id]: result }))}
+                analyzedAt={conversationId ? analyzedAtByConversation[conversationId] ?? null : null}
+                onCacheResult={handleSalesAnalysisCacheResult}
                 compact={embeddedInSheet}
               />
             </>

@@ -21,7 +21,8 @@ export const MenuAccessGuard: React.FC<{ children: React.ReactNode }> = ({ child
   const firstAllowedPath = useMemo(() => {
     const access = menuAccess ?? DEFAULT_MENU_ACCESS;
     const first = MENU_SECTIONS.find((s) => access[s.id]);
-    return first?.path ?? FALLBACK_PATH;
+    const path = first?.path ?? FALLBACK_PATH;
+    return typeof path === 'string' ? path : FALLBACK_PATH;
   }, [menuAccess]);
 
   if (loading) return <>{children}</>;
@@ -31,7 +32,7 @@ export const MenuAccessGuard: React.FC<{ children: React.ReactNode }> = ({ child
       return <Navigate to="/deals" replace />;
     }
     toast.error('У вас нет доступа к этому разделу');
-    return <Navigate to={firstAllowedPath} replace />;
+    return <Navigate to={String(firstAllowedPath)} replace />;
   }
 
   return <>{children}</>;

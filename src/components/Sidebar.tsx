@@ -22,7 +22,8 @@ import {
   ChevronRight,
   BarChart3,
   Pin,
-  PinOff
+  PinOff,
+  Plug
 } from 'lucide-react';
 import { useUnapprovedCount } from '../hooks/useUnapprovedCount';
 import { useWhatsAppFloatingButtonState } from '../hooks/useWhatsAppFloatingButtonState';
@@ -218,9 +219,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
     { icon: <FileText className="w-5 h-5" />, label: 'Шаблоны договоров', path: '/templates', sectionId: 'templates', isActive: location.pathname === '/templates' },
     { icon: <Package className="w-5 h-5" />, label: 'Товары и цены', path: '/products', sectionId: 'products', isActive: location.pathname === '/products' },
     { icon: <Users className="w-5 h-5" />, label: 'Сотрудники', path: '/employees', sectionId: 'employees', isActive: location.pathname === '/employees' },
-    { icon: <MessageSquare className="w-5 h-5" />, label: 'WhatsApp', path: '/whatsapp', sectionId: 'whatsapp', isActive: location.pathname === '/whatsapp', badgeCount: whatsAppBadgeCount > 0 ? whatsAppBadgeCount : undefined },
+    { icon: <MessageSquare className="w-5 h-5" />, label: 'Чаты', path: '/whatsapp', sectionId: 'whatsapp', isActive: location.pathname === '/whatsapp', badgeCount: whatsAppBadgeCount > 0 ? whatsAppBadgeCount : undefined },
     { icon: <Shield className="w-5 h-5" />, label: 'AI База знаний', path: '/settings/knowledge', sectionId: 'knowledgeBase', isActive: location.pathname === '/settings/knowledge' },
     { icon: <MessageSquare className="w-5 h-5" />, label: 'Быстрые ответы', path: '/settings/quick-replies', sectionId: 'quickReplies', isActive: location.pathname === '/settings/quick-replies' },
+    { icon: <Plug className="w-5 h-5" />, label: 'Интеграции', path: '/settings/integrations', sectionId: 'integrations', isActive: location.pathname === '/settings/integrations' },
     { icon: <Building2 className="w-5 h-5" />, label: 'Сделки', path: '/deals', sectionId: 'deals', isActive: location.pathname === '/deals' || location.pathname.startsWith('/deals/') },
     { icon: <BarChart3 className="w-5 h-5" />, label: 'Аналитика', path: '/analytics', sectionId: 'analytics', isActive: location.pathname === '/analytics' },
   ];

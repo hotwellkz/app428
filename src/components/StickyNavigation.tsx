@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Warehouse, ArrowLeftRight, UserCircle, List } from 'lucide-react';
 import { FaWhatsapp } from 'react-icons/fa';
@@ -9,6 +9,8 @@ import { useWhatsAppFloatingButtonState } from '../hooks/useWhatsAppFloatingButt
 import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
 
 const MOBILE_BREAKPOINT = 768;
+const DESKTOP_COLLAPSE_DELAY_MS = 220;
+const EDGE_ZONE_WIDTH_PX = 14;
 
 interface StickyNavigationProps {
   onNavigate: (page: string) => void;
@@ -26,8 +28,10 @@ export const StickyNavigation: React.FC<StickyNavigationProps> = ({ onNavigate }
   const canAccessWarehouse = !accessLoading && canAccess('warehouse');
   const canAccessTransactions = !accessLoading && canAccess('transactions');
 
-  // Важно: если WhatsApp запрещён — не показываем индикаторы и не запускаем подписку
   const waState = useWhatsAppFloatingButtonState(canAccessWhatsApp);
+
+  const [desktopExpanded, setDesktopExpanded] = useState(false);
+  const collapseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const isMobileDevice = () => {
     const userAgent = navigator.userAgent.toLowerCase();
@@ -40,97 +44,159 @@ export const StickyNavigation: React.FC<StickyNavigationProps> = ({ onNavigate }
   const { isMenuVisible } = useMenuVisibility();
   const shouldBeVisible = (!isMobileDevice() || isMenuVisible) && !hideForMobileChat;
 
-  // Mobile: bottom 100px чтобы не перекрывать ChatInput. Desktop: аккуратный отступ от края.
-  const containerClass = [
-    'fixed z-[1000] flex flex-col items-center transition-all duration-300 ease-in-out',
-    isMobile ? 'right-2 bottom-[100px] gap-1.5' : 'right-6 bottom-7 gap-3',
-    shouldBeVisible ? 'opacity-100 translate-x-0 pointer-events-auto' : 'opacity-0 translate-x-4 pointer-events-none',
-  ].join(' ');
+  const scheduleCollapse = useCallback(() => {
+    if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current);
+    collapseTimerRef.current = setTimeout(() => {
+      collapseTimerRef.current = null;
+      setDesktopExpanded(false);
+    }, DESKTOP_COLLAPSE_DELAY_MS);
+  }, []);
 
-  // Mobile оставляем компактным. Desktop — фиксируем размеры, чтобы кнопки не "сплющивались" и не плясали.
+  const cancelCollapse = useCallback(() => {
+    if (collapseTimerRef.current) {
+      clearTimeout(collapseTimerRef.current);
+      collapseTimerRef.current = null;
+    }
+  }, []);
+
+  const handlePanelMouseEnter = useCallback(() => {
+    if (isMobile) return;
+    cancelCollapse();
+    setDesktopExpanded(true);
+  }, [isMobile, cancelCollapse]);
+
+  const handlePanelMouseLeave = useCallback(() => {
+    if (isMobile) return;
+    scheduleCollapse();
+  }, [isMobile, scheduleCollapse]);
+
+  useEffect(() => {
+    return () => {
+      if (collapseTimerRef.current) clearTimeout(collapseTimerRef.current);
+    };
+  }, []);
+
   const btnClass = isMobile
     ? 'w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-200 shadow text-white'
     : 'w-11 h-11 flex items-center justify-center rounded-full bg-white text-gray-700 hover:text-gray-900 hover:bg-gray-50 transition-colors duration-200 shadow';
 
-  // Desktop: WhatsApp крупнее вторичных кнопок.
   const whatsappBtnClass = isMobile
     ? `${btnClass} bg-[#25D366] hover:bg-[#20bd5a] text-white`
-    : 'w-14 h-14 flex items-center justify-center rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white shadow transition-colors duration-200';
+    : 'w-12 h-12 flex items-center justify-center rounded-full bg-[#25D366] hover:bg-[#20bd5a] text-white shadow transition-colors duration-200';
 
   const unreadBadgeText = waState.unreadChatsCount > 99 ? '99+' : String(waState.unreadChatsCount);
   const showUnreadBadge = waState.unreadChatsCount > 0;
   const showAwaitingGlow = waState.hasAwaitingReply;
 
+  const showAsCollapsed = !isMobile && !desktopExpanded && canAccessWhatsApp;
+
   return (
-    <div className={containerClass}>
-      {canAccessWhatsApp && (
-        <button
-          onClick={() => navigate('/whatsapp')}
-          className={[
-            whatsappBtnClass,
-            'relative',
-            // awaiting reply: мягкая подсветка/пульсация (ненавязчиво)
-            showAwaitingGlow ? 'ring-2 ring-amber-400/60 shadow-[0_0_0_4px_rgba(251,191,36,0.15)] animate-pulse motion-reduce:animate-none' : ''
-          ].join(' ')}
-          title="WhatsApp"
-        >
-          <FaWhatsapp className={isMobile ? 'w-4 h-4' : 'w-6 h-6'} />
-          {showUnreadBadge && (
-            <span
-              className={[
-                'absolute bg-red-500 text-white font-semibold text-center shadow rounded-full',
-                // mobile
-                'min-w-[18px] h-[18px] px-1 text-[10px] leading-[18px] -top-1 -right-1',
-                // desktop: чуть крупнее + белая окантовка, чтобы badge выглядел чище
-                'md:min-w-[20px] md:h-[20px] md:px-1.5 md:text-[11px] md:leading-[20px] md:-top-1 md:-right-1 md:ring-2 md:ring-white'
-              ].join(' ')}
-              aria-label={`Непрочитанные чаты: ${waState.unreadChatsCount}`}
-            >
-              {unreadBadgeText}
-            </span>
-          )}
-        </button>
+    <>
+      {/* Desktop: тонкая зона у правого края — наведение раскрывает панель */}
+      {!isMobile && shouldBeVisible && (
+        <div
+          className="fixed right-0 top-0 bottom-0 z-[999]"
+          style={{ width: EDGE_ZONE_WIDTH_PX }}
+          onMouseEnter={handlePanelMouseEnter}
+          aria-hidden
+        />
       )}
 
-      {canAccessFeed && (
-        <button
-          onClick={() => onNavigate('feed')}
-          className={isMobile ? `${btnClass} bg-white` : btnClass}
-          title="Список"
-        >
-          <List className={isMobile ? 'w-3.5 h-3.5 text-gray-700' : 'w-4 h-4'} />
-        </button>
-      )}
+      <div
+        className={[
+          'fixed z-[1000] flex flex-col items-center transition-all duration-200 ease-out',
+          isMobile ? 'right-2 bottom-[100px] gap-1.5' : 'right-4 bottom-7 gap-2.5',
+          shouldBeVisible ? 'opacity-100 translate-x-0 pointer-events-auto' : 'opacity-0 translate-x-4 pointer-events-none',
+        ].join(' ')}
+        onMouseEnter={handlePanelMouseEnter}
+        onMouseLeave={handlePanelMouseLeave}
+      >
+        {/* Свёрнутый режим (desktop): только триггер с бейджем */}
+        {showAsCollapsed && (
+          <div className="flex flex-col items-center rounded-2xl bg-white/95 backdrop-blur border border-gray-200/80 shadow-lg p-1.5">
+            {canAccessWhatsApp && (
+              <button
+                onClick={() => navigate('/whatsapp')}
+                className={[
+                  whatsappBtnClass,
+                  'relative',
+                  showAwaitingGlow ? 'ring-2 ring-amber-400/50 shadow-[0_0_0_3px_rgba(251,191,36,0.12)]' : '',
+                ].join(' ')}
+                title="Чаты"
+              >
+                <FaWhatsapp className="w-5 h-5" />
+                {showUnreadBadge && (
+                  <span
+                    className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[10px] font-semibold ring-2 ring-white"
+                    aria-label={`Непрочитанные: ${waState.unreadChatsCount}`}
+                  >
+                    {unreadBadgeText}
+                  </span>
+                )}
+              </button>
+            )}
+          </div>
+        )}
 
-      {canAccessClients && (
-        <button
-          onClick={() => onNavigate('clients')}
-          className={isMobile ? `${btnClass} bg-white` : btnClass}
-          title="Клиенты"
-        >
-          <UserCircle className={isMobile ? 'w-3.5 h-3.5 text-gray-700' : 'w-4 h-4'} />
-        </button>
-      )}
+        {/* Полная панель: mobile всегда, desktop — когда раскрыта */}
+        {(!showAsCollapsed || isMobile) && (
+          <div
+            className={[
+              'flex flex-col items-center',
+              !isMobile ? 'rounded-2xl bg-white/95 backdrop-blur border border-gray-200/80 shadow-lg p-2 gap-2' : 'gap-1.5',
+            ].join(' ')}
+          >
+            {canAccessWhatsApp && (
+              <button
+                onClick={() => navigate('/whatsapp')}
+                className={[
+                  whatsappBtnClass,
+                  'relative',
+                  showAwaitingGlow ? 'ring-2 ring-amber-400/50 shadow-[0_0_0_3px_rgba(251,191,36,0.12)] motion-reduce:animate-none' : '',
+                ].join(' ')}
+                title="Чаты"
+              >
+                <FaWhatsapp className={isMobile ? 'w-4 h-4' : 'w-5 h-5'} />
+                {showUnreadBadge && (
+                  <span
+                    className={[
+                      'absolute bg-red-500 text-white font-semibold text-center shadow rounded-full ring-2 ring-white',
+                      isMobile ? 'min-w-[18px] h-[18px] px-1 text-[10px] leading-[18px] -top-1 -right-1' : 'min-w-[18px] h-[18px] px-1 text-[10px] -top-0.5 -right-0.5',
+                    ].join(' ')}
+                    aria-label={`Непрочитанные чаты: ${waState.unreadChatsCount}`}
+                  >
+                    {unreadBadgeText}
+                  </span>
+                )}
+              </button>
+            )}
 
-      {canAccessWarehouse && (
-        <button
-          onClick={() => onNavigate('warehouse')}
-          className={isMobile ? `${btnClass} bg-white` : btnClass}
-          title="Склад"
-        >
-          <Warehouse className={isMobile ? 'w-3.5 h-3.5 text-gray-700' : 'w-4 h-4'} />
-        </button>
-      )}
+            {canAccessFeed && (
+              <button onClick={() => onNavigate('feed')} className={isMobile ? `${btnClass} bg-white` : btnClass} title="Список">
+                <List className={isMobile ? 'w-3.5 h-3.5 text-gray-700' : 'w-4 h-4'} />
+              </button>
+            )}
 
-      {canAccessTransactions && (
-        <button
-          onClick={() => onNavigate('transactions')}
-          className={isMobile ? `${btnClass} bg-white` : btnClass}
-          title="Транзакции"
-        >
-          <ArrowLeftRight className={isMobile ? 'w-3.5 h-3.5 text-gray-700' : 'w-4 h-4'} />
-        </button>
-      )}
-    </div>
+            {canAccessClients && (
+              <button onClick={() => onNavigate('clients')} className={isMobile ? `${btnClass} bg-white` : btnClass} title="Клиенты">
+                <UserCircle className={isMobile ? 'w-3.5 h-3.5 text-gray-700' : 'w-4 h-4'} />
+              </button>
+            )}
+
+            {canAccessWarehouse && (
+              <button onClick={() => onNavigate('warehouse')} className={isMobile ? `${btnClass} bg-white` : btnClass} title="Склад">
+                <Warehouse className={isMobile ? 'w-3.5 h-3.5 text-gray-700' : 'w-4 h-4'} />
+              </button>
+            )}
+
+            {canAccessTransactions && (
+              <button onClick={() => onNavigate('transactions')} className={isMobile ? `${btnClass} bg-white` : btnClass} title="Транзакции">
+                <ArrowLeftRight className={isMobile ? 'w-3.5 h-3.5 text-gray-700' : 'w-4 h-4'} />
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </>
   );
 };

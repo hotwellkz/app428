@@ -28,13 +28,26 @@ const BADGE_LABELS: Record<string, string> = {
   weakNeedDiscovery: 'Слабое выявление потребности',
 };
 
+function formatAnalyzedAt(d: Date): string {
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return 'только что';
+  if (diffMins < 60) return `${diffMins} ${diffMins === 1 ? 'минуту' : diffMins < 5 ? 'минуты' : 'минут'} назад`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? 'час' : diffHours < 5 ? 'часа' : 'часов'} назад`;
+  return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
 interface ChatSalesAnalysisBlockProps {
   messages: WhatsAppMessage[];
   phone: string | null;
   conversationId: string | null;
-  /** Результат анализа для текущего чата (из кэша родителя) */
+  /** Результат анализа для текущего чата (из кэша/БД) */
   cachedResult: SalesAnalysisResult | null;
-  /** Сохранить результат по conversationId */
+  /** Дата последнего сохранённого анализа */
+  analyzedAt?: Date | null;
+  /** Сохранить результат по conversationId (и в БД в родителе) */
   onCacheResult: (conversationId: string, result: SalesAnalysisResult) => void;
   /** Компактный/мобильный вид: блок можно свернуть */
   compact?: boolean;
@@ -45,6 +58,7 @@ export function ChatSalesAnalysisBlock({
   phone,
   conversationId,
   cachedResult,
+  analyzedAt = null,
   onCacheResult,
   compact = false,
 }: ChatSalesAnalysisBlockProps) {
@@ -201,6 +215,11 @@ export function ChatSalesAnalysisBlock({
 
       {hasResult && (
         <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
+          {analyzedAt && (
+            <p className="text-xs text-gray-500">
+              Последний анализ: {formatAnalyzedAt(analyzedAt)}
+            </p>
+          )}
           {cachedResult!.badges && cachedResult!.badges.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {cachedResult!.badges!.map((b) => (
@@ -245,8 +264,8 @@ export function ChatSalesAnalysisBlock({
               disabled={!canRun}
               className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Обновить анализ
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+              {loading ? 'Обновляем анализ…' : 'Обновить'}
             </button>
             <button
               type="button"

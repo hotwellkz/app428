@@ -40,6 +40,18 @@
   status = 200
   force = true
 
+[[redirects]]
+  from = "/api/wazzup-integration"
+  to = "/.netlify/functions/wazzup-integration"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/wazzup-verify"
+  to = "/.netlify/functions/wazzup-verify"
+  status = 200
+  force = true
+
 # DELETE /api/templates/{id} — может давать 405 за прокси; клиент шлёт POST на /api/templates-delete
 [[redirects]]
   from = "/api/templates/*"

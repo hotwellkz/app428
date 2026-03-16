@@ -8,7 +8,8 @@ import {
   createConversation,
   saveMessage,
   normalizePhone,
-  DEFAULT_COMPANY_ID
+  DEFAULT_COMPANY_ID,
+  getWazzupApiKeyForCompany
 } from './lib/firebaseAdmin';
 
 const WAZZUP_MESSAGE_URL = 'https://api.wazzup24.com/v3/message';
@@ -59,15 +60,6 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     return withCors({ statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed' }) });
   }
 
-  const apiKey = process.env.WAZZUP_API_KEY;
-  if (!apiKey?.trim()) {
-    log('Missing env: WAZZUP_API_KEY');
-    return withCors({
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Server configuration error: WAZZUP_API_KEY' })
-    });
-  }
 
   let body: SendMessageBody;
   try {
@@ -103,11 +95,15 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
   const normalizedPhone = isInstagram ? chatId : normalizePhone(chatId);
   const effectiveCompanyId = (companyId ?? DEFAULT_COMPANY_ID).trim();
-  if (effectiveCompanyId !== DEFAULT_COMPANY_ID) {
+  const apiKey = await getWazzupApiKeyForCompany(effectiveCompanyId);
+  if (!apiKey?.trim()) {
+    log('No Wazzup API key for company:', effectiveCompanyId);
     return withCors({
       statusCode: 403,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'WhatsApp не настроен для этой компании' })
+      body: JSON.stringify({
+        error: 'Подключите каналы WhatsApp в настройках интеграции (Настройки → Интеграции → Wazzup).'
+      })
     });
   }
   const caption = hasText ? formatMessageForWhatsApp((text ?? '').trim()) : '';
@@ -115,26 +111,26 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   let conversationId: string;
   try {
     let client = isInstagram
-      ? await findClientByInstagramChatId(chatId)
-      : await findClientByPhone(normalizedPhone);
+      ? await findClientByInstagramChatId(chatId, effectiveCompanyId)
+      : await findClientByPhone(normalizedPhone, effectiveCompanyId);
     if (!client) {
       if (isInstagram) {
-        await createInstagramClient(chatId, '');
-        client = await findClientByInstagramChatId(chatId);
+        await createInstagramClient(chatId, '', undefined, effectiveCompanyId);
+        client = await findClientByInstagramChatId(chatId, effectiveCompanyId);
       } else {
-        await createClient(normalizedPhone, '');
-        client = await findClientByPhone(normalizedPhone);
+        await createClient(normalizedPhone, '', undefined, effectiveCompanyId);
+        client = await findClientByPhone(normalizedPhone, effectiveCompanyId);
       }
       if (!client) throw new Error('Failed to load created client');
     }
 
-    let conversation = await findConversationByClientId(client.id);
+    let conversation = await findConversationByClientId(client.id, effectiveCompanyId);
     if (!conversation) {
       const newConvId = isInstagram
-        ? await createConversation(client.id, chatId, { channel: 'instagram', displayPhone: '@Instagram' })
-        : await createConversation(client.id, normalizedPhone);
+        ? await createConversation(client.id, chatId, { channel: 'instagram', displayPhone: '@Instagram', companyId: effectiveCompanyId })
+        : await createConversation(client.id, normalizedPhone, { companyId: effectiveCompanyId });
       log('Created conversation (no webhook yet):', newConvId);
-      conversation = await findConversationByClientId(client.id);
+      conversation = await findConversationByClientId(client.id, effectiveCompanyId);
       if (!conversation) throw new Error('Failed to load created conversation');
     }
     conversationId = conversation.id;
@@ -221,7 +217,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       attachments,
       repliedToMessageId: repliedToMessageId ?? undefined,
       forwarded: forwarded === true,
-      channel: chatTypeWazzup === 'instagram' ? 'instagram' : 'whatsapp'
+      channel: chatTypeWazzup === 'instagram' ? 'instagram' : 'whatsapp',
+      companyId: effectiveCompanyId
     });
     log('Message sent', conversationId, providerMessageId ?? '');
 

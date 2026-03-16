@@ -91,15 +91,16 @@ const TransactionEditHistoryPage = lazy(withChunkErrorRecovery(() => import('./p
 const OptimizedTransactionHistoryPage = lazy(withChunkErrorRecovery(() => import('./pages/OptimizedTransactionHistoryPage').then(module => ({ default: module.OptimizedTransactionHistoryPage }))));
 const Profile = lazy(withChunkErrorRecovery(() => import('./pages/Profile').then(module => ({ default: module.Profile }))));
 const WhatsAppChat = lazy(withChunkErrorRecovery(() => import('./pages/WhatsAppChat')));
-const CreateTemplate = lazy(withChunkErrorRecovery(() => import('./pages/CreateTemplate')));
-const EditTemplate = lazy(withChunkErrorRecovery(() => import('./pages/EditTemplate')));
-const CreateContractWithAdditionalWorks = lazy(withChunkErrorRecovery(() => import('./pages/CreateContractWithAdditionalWorks')));
+const CreateTemplate = lazy(withChunkErrorRecovery(() => import('./pages/CreateTemplate').then(m => ({ default: m.CreateTemplate }))));
+const EditTemplate = lazy(withChunkErrorRecovery(() => import('./pages/EditTemplate').then(m => ({ default: m.EditTemplate }))));
+const CreateContractWithAdditionalWorks = lazy(withChunkErrorRecovery(() => import('./pages/CreateContractWithAdditionalWorks').then(m => ({ default: m.CreateContractWithAdditionalWorks }))));
 const FinishingMaterialsManager = lazy(withChunkErrorRecovery(() => import('./components/materials/FinishingMaterialsManager').then(module => ({ default: module.FinishingMaterialsManager }))));
 const DealsPage = lazy(withChunkErrorRecovery(() => import('./pages/DealsPage')));
 const DealsTrashPage = lazy(withChunkErrorRecovery(() => import('./pages/DealsTrashPage')));
 const AnalyticsPage = lazy(withChunkErrorRecovery(() => import('./pages/AnalyticsPage')));
 const KnowledgeBaseSettings = lazy(withChunkErrorRecovery(() => import('./pages/KnowledgeBaseSettings')));
 const QuickRepliesSettings = lazy(withChunkErrorRecovery(() => import('./pages/QuickRepliesSettings')));
+const IntegrationsSettings = lazy(withChunkErrorRecovery(() => import('./pages/IntegrationsSettings').then(m => ({ default: m.IntegrationsSettings }))));
 
 // Fallback компонент для Suspense
 const PageLoader = () => (
@@ -306,6 +307,11 @@ const AppContent: React.FC = () => {
                 <QuickRepliesSettings />
               </ApprovalGuard>
             } />
+            <Route path="/settings/integrations" element={
+              <ApprovalGuard>
+                <IntegrationsSettings />
+              </ApprovalGuard>
+            } />
             <Route path="/finishing-materials" element={
               <ApprovalGuard>
                 <FinishingMaterialsManager />
@@ -327,7 +333,7 @@ const AppContent: React.FC = () => {
 const App = () => {
   return (
     <HelmetProvider>
-      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <Router>
         <CompanyProvider>
         <AuthGuard>
           <ChatProvider>

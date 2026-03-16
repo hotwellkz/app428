@@ -15,6 +15,7 @@ export type MenuSectionId =
   | 'whatsapp'
   | 'knowledgeBase'
   | 'quickReplies'
+  | 'integrations'
   | 'deals'
   | 'analytics';
 
@@ -31,6 +32,7 @@ export interface MenuAccess {
   whatsapp: boolean;
   knowledgeBase: boolean;
   quickReplies: boolean;
+  integrations: boolean;
   deals: boolean;
   /** Доступ к /analytics (аналитический центр) */
   analytics: boolean;
@@ -50,6 +52,7 @@ export const DEFAULT_MENU_ACCESS: MenuAccess = {
   whatsapp: true,
   knowledgeBase: true,
   quickReplies: true,
+  integrations: true,
   deals: true,
   analytics: true
 };
@@ -78,9 +81,10 @@ export const MENU_SECTIONS: { id: MenuSectionId; label: string; path: string }[]
   { id: 'templates', label: 'Шаблоны договоров', path: '/templates' },
   { id: 'products', label: 'Товары и цены', path: '/products' },
   { id: 'employees', label: 'Сотрудники', path: '/employees' },
-  { id: 'whatsapp', label: 'WhatsApp', path: '/whatsapp' },
+  { id: 'whatsapp', label: 'Чаты', path: '/whatsapp' },
   { id: 'knowledgeBase', label: 'AI База знаний', path: '/settings/knowledge' },
   { id: 'quickReplies', label: 'Быстрые ответы', path: '/settings/quick-replies' },
+  { id: 'integrations', label: 'Интеграции', path: '/settings/integrations' },
   { id: 'deals', label: 'Сделки', path: '/deals' },
   { id: 'analytics', label: 'Analytics', path: '/analytics' }
 ];
