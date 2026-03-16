@@ -493,6 +493,17 @@ export async function reorderDealsWithinStage(
 
 // Activity log
 
+function sanitizeForFirestore(obj: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === undefined) continue;
+    out[key] = value != null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)
+      ? sanitizeForFirestore(value as Record<string, unknown>)
+      : value;
+  }
+  return out;
+}
+
 export async function addDealActivity(
   companyId: string,
   dealId: string,
@@ -503,7 +514,7 @@ export async function addDealActivity(
     companyId,
     dealId,
     type,
-    payload,
+    payload: sanitizeForFirestore(payload),
     createdBy: null,
     createdAt: serverTimestamp()
   });
