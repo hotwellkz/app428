@@ -220,11 +220,17 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
     deliveryCity: (parameters.deliveryCity as string) ?? undefined
   };
 
+  // На desktop оверлей не перехватывает события — чат остаётся скроллируемым и кликабельным (side panel UX).
+  // На mobile оверлей закрывает по клику (модальное поведение).
+  const backdropClass = isMobile
+    ? 'fixed inset-0 z-[1100] bg-black/30'
+    : 'fixed inset-0 z-[1100] bg-black/30 pointer-events-none';
+
   return (
     <>
       <div
-        className="fixed inset-0 z-[1100] bg-black/30"
-        onClick={onClose}
+        className={backdropClass}
+        onClick={isMobile ? onClose : undefined}
         aria-hidden
       />
       <div
