@@ -248,6 +248,20 @@ service cloud.firestore {
       allow write: if isAuthenticated(); // Разрешаем запись аутентифицированным пользователям
     }
 
+    // AI-отчёты сравнения сметы и факта по проекту (изоляция по companyId)
+    match /clientEstimateAiReports/{docId} {
+      allow read, write: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || isGlobalAdmin()
+      );
+    }
+
     // WhatsApp CRM: строгая изоляция по companyId пользователя или global_admin
     match /whatsappClients/{clientId} {
       allow read, update, delete: if isAuthenticated() && (

@@ -16,6 +16,7 @@ import { PartitionEstimate } from './PartitionEstimate';
 import { ConsumablesEstimate } from './ConsumablesEstimate';
 import { AdditionalWorksEstimate } from './AdditionalWorksEstimate';
 import { ReceiptCalculation } from './ReceiptCalculation';
+import { AIEstimateAnalysisBlock } from './AIEstimateAnalysisBlock';
 import { FinishingEstimate } from './FinishingEstimate';
 import { MobileHeader } from './MobileHeader';
 
@@ -278,6 +279,11 @@ export const ClientDetails = forwardRef<any, ClientDetailsProps>(({
             <ReceiptCalculation
               isEditing={isEditing}
               clientId={client.id}
+            />
+
+            <AIEstimateAnalysisBlock
+              clientId={client.id}
+              clientName={formData.objectName || `${formData.lastName || ''} ${formData.firstName || ''}`.trim()}
             />
 
             <FinishingEstimate
