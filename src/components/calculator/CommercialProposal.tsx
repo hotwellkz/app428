@@ -65,6 +65,10 @@ export const COMMERCIAL_PROPOSAL_THEMES: { id: ThemeType; name: string; descript
   { id: 'mobile', name: 'Мобильная', description: 'Компактная тема для смартфонов' }
 ];
 
+/** Логотип в КП: локальный файл (положите в public/logo-hotwell.png) или fallback на внешний URL. */
+const LOGO_SRC_PRIMARY = '/logo-hotwell.png';
+const LOGO_SRC_FALLBACK = 'https://hotwell.kz/wp-content/uploads/2021/01/Logotip-hotwell.kz_.png';
+
 export const CommercialProposal: React.FC<CommercialProposalProps> = ({
   area,
   parameters,
@@ -935,31 +939,43 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
           className={getContainerClasses()}
           style={{ backgroundColor: effectiveTheme === 'dark' || effectiveTheme === 'hi-tech' || effectiveTheme === 'tech' || effectiveTheme === 'luxury-black-gold' ? '#ffffff' : undefined }}
         >
+          {captureId && (
+            <style>{`
+              #offer-image .logo { width: 100%; text-align: center; margin-bottom: 20px; }
+              #offer-image .logo img { height: 60px; object-fit: contain; }
+            `}</style>
+          )}
+          {/* Фиксированный блок логотипа в шаблоне — всегда в экспорте/скриншоте */}
+          <div className="logo w-full text-center mb-5">
+            <img
+              src={LOGO_SRC_PRIMARY}
+              alt="HotWell.KZ"
+              className={`h-[60px] object-contain w-auto mx-auto ${captureId ? '' : `${
+                effectiveTheme === 'mobile' ? 'max-h-[60px]' : 'max-h-[120px] md:max-h-[150px]'
+              } ${
+                effectiveTheme === 'dark' ? 'filter invert brightness-0 contrast-100' :
+                effectiveTheme === 'classic' ? 'filter grayscale(0.3) contrast(1.1)' :
+                effectiveTheme === 'red-power' ? 'filter invert brightness-0 contrast-100' :
+                effectiveTheme === 'luxury-black-gold' ? 'filter drop-shadow-[0_0_10px_rgba(255,215,0,0.7)] brightness-1.2 contrast-1.1' :
+                effectiveTheme === 'eco-natural' ? 'filter brightness-1.1 contrast-1.05' :
+                effectiveTheme === 'marine' ? 'filter brightness-1.1 contrast-1.05' :
+                effectiveTheme === 'tech' ? 'filter invert brightness-0 contrast-100 drop-shadow-[0_0_10px_rgba(0,240,255,0.7)]' :
+                effectiveTheme === 'hi-tech' ? 'filter invert brightness-0 contrast-100 drop-shadow-[0_0_15px_rgba(0,255,255,0.9)]' :
+                effectiveTheme === 'construction' ? 'filter contrast-1.2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]' : ''
+              }`}`}
+              crossOrigin={captureId ? 'anonymous' : undefined}
+              onError={(e) => {
+                const el = e.currentTarget;
+                if (el.src !== LOGO_SRC_FALLBACK) {
+                  el.onerror = null;
+                  el.src = LOGO_SRC_FALLBACK;
+                }
+              }}
+            />
+          </div>
           {/* Шапка: одна и та же тема для preview и capture (getHeaderClasses по effectiveTheme) */}
           <div className={getHeaderClasses()}>
             <div className="flex flex-col items-center justify-center">
-              {/* Логотип: один URL для preview и capture — одинаковый вид и гарантированная загрузка в скриншот */}
-              <div className={`${effectiveTheme === 'mobile' ? 'mb-2' : 'mb-4'}`}>
-                <img 
-                  src="https://hotwell.kz/wp-content/uploads/2021/01/Logotip-hotwell.kz_.png" 
-                  alt="HotWell.kz Логотип"
-                  className={`${effectiveTheme === 'mobile' ? 'max-h-[60px]' : 'max-h-[120px] md:max-h-[150px]'} w-auto object-contain ${
-                    effectiveTheme === 'dark' ? 'filter invert brightness-0 contrast-100' :
-                    effectiveTheme === 'classic' ? 'filter grayscale(0.3) contrast(1.1)' :
-                    effectiveTheme === 'red-power' ? 'filter invert brightness-0 contrast-100' :
-                    effectiveTheme === 'luxury-black-gold' ? 'filter drop-shadow-[0_0_10px_rgba(255,215,0,0.7)] brightness-1.2 contrast-1.1' :
-                    effectiveTheme === 'eco-natural' ? 'filter brightness-1.1 contrast-1.05' :
-                    effectiveTheme === 'marine' ? 'filter brightness-1.1 contrast-1.05' :
-                    effectiveTheme === 'tech' ? 'filter invert brightness-0 contrast-100 drop-shadow-[0_0_10px_rgba(0,240,255,0.7)]' :
-                    effectiveTheme === 'hi-tech' ? 'filter invert brightness-0 contrast-100 drop-shadow-[0_0_15px_rgba(0,255,255,0.9)] animate-pulse' :
-                    effectiveTheme === 'construction' ? 'filter contrast-1.2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]' : ''
-                  }`}
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
-                />
-              </div>
-              
               {/* Заголовок и подзаголовок: единые классы по теме (preview и capture совпадают) */}
               {captureId ? (
                 <h1 className={getHeaderTitleDisplayClasses(effectiveTheme)}>

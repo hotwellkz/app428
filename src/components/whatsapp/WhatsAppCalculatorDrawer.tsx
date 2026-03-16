@@ -186,6 +186,20 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
         )
       );
 
+      const logoImg = node.querySelector('.logo img');
+      if (logoImg) {
+        await new Promise<void>((resolve) => {
+          const img = logoImg as HTMLImageElement;
+          if (img.complete) {
+            resolve();
+            return;
+          }
+          img.onload = () => resolve();
+          img.onerror = () => resolve();
+        });
+      }
+      await new Promise<void>((r) => setTimeout(r, 500));
+
       const rect = node.getBoundingClientRect();
       const width = Math.ceil(rect.width);
       const height = Math.ceil(rect.height);
