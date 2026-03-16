@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import EmojiPicker, { type EmojiClickData, Categories } from 'emoji-picker-react';
 import { useSpeechToText } from '../../hooks/useSpeechToText';
+import { processDictationText } from '../../utils/speechPunctuation';
 import { QuickRepliesPopup, type QuickReplyItem } from './QuickRepliesPopup';
 import { MediaQuickRepliesPopup } from './MediaQuickRepliesPopup';
 import type { MediaQuickReply } from '../../types/mediaQuickReplies';
@@ -274,12 +275,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
     audioInputRef.current?.click();
   };
 
-  // Когда появился новый распознанный текст — добавляем его в draft
+  // Когда появился новый распознанный текст — добавляем его в draft (с подстановкой знаков препинания)
   useEffect(() => {
     if (!speechTranscript.trim()) return;
 
     const el = textareaRef.current;
-    const insert = speechTranscript.trim();
+    const insert = processDictationText(speechTranscript.trim());
 
     // Сбросим локальное состояние хука, чтобы не переиспользовать старый текст
     resetDictation();
