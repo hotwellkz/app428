@@ -667,7 +667,7 @@ const WhatsAppChat: React.FC = () => {
       const raw = sessionStorage.getItem(`whatsapp_list_${companyId}`);
       if (raw) {
         const parsed = JSON.parse(raw) as { t?: number; items?: ConversationListItem[] };
-        if (parsed?.items?.length && Date.now() - (parsed.t ?? 0) < 120_000) {
+        if (parsed?.items?.length && Date.now() - (parsed.t ?? 0) < 45_000) {
           setConversations(parsed.items);
         }
       }

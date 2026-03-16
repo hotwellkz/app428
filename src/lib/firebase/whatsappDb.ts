@@ -415,7 +415,10 @@ export async function markConversationAsUnread(conversationId: string): Promise<
 }
 
 /** Размер первой страницы и шаг пагинации (ленивая загрузка). */
-export const CONVERSATIONS_PAGE_SIZE = 30;
+/** Размер первой страницы (realtime). Чем больше — тем больше чатов «поднимаются» при новом сообщении без loadMore. */
+export const CONVERSATIONS_PAGE_SIZE = 50;
+/** При fallback (нет индекса по lastMessageAt) подписываемся на больше диалогов и сортируем по lastMessageAt на клиенте. */
+const CONVERSATIONS_FALLBACK_PAGE_SIZE = 150;
 
 function conversationToListItem(
   c: WhatsAppConversation,
@@ -461,18 +464,24 @@ function conversationToListItem(
   };
 }
 
+function toMillis(v: ConversationListItem['lastMessageAt'] | ConversationListItem['lastIncomingAt']): number {
+  if (!v) return 0;
+  if (typeof (v as { toMillis?: () => number }).toMillis === 'function') {
+    return (v as { toMillis: () => number }).toMillis();
+  }
+  if (typeof v === 'object' && v !== null && 'seconds' in (v as object)) {
+    return ((v as { seconds: number }).seconds ?? 0) * 1000;
+  }
+  return new Date(v as string).getTime();
+}
+
+/** Сортировка по последней активности: непрочитанные выше, затем по lastMessageAt (и lastIncomingAt) по убыванию. */
 function sortConversationItems(items: ConversationListItem[]): void {
   const getItemSortTime = (item: ConversationListItem): number => {
     if (item.lastMessage) return getMessageTime(item.lastMessage);
-    const t = item.lastMessageAt;
-    if (!t) return 0;
-    if (typeof (t as { toMillis?: () => number }).toMillis === 'function') {
-      return (t as { toMillis: () => number }).toMillis();
-    }
-    if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) {
-      return ((t as { seconds: number }).seconds ?? 0) * 1000;
-    }
-    return new Date(t as string).getTime();
+    const lastMsg = toMillis(item.lastMessageAt);
+    const lastIn = toMillis(item.lastIncomingAt);
+    return Math.max(lastMsg, lastIn);
   };
   items.sort((a, b) => {
     const unreadA = (a.unreadCount ?? 0) > 0 ? 1 : 0;
@@ -533,6 +542,7 @@ export function subscribeConversationsList(
     callback(merged);
   }
 
+  /** Требуется индекс Firestore: companyId (==) + lastMessageAt (desc). Без него используется fallback (createdAt), тогда порядок по lastMessageAt — на клиенте. */
   const baseQuery = () =>
     query(
       collection(db, COLLECTIONS.CONVERSATIONS),
@@ -546,7 +556,7 @@ export function subscribeConversationsList(
       collection(db, COLLECTIONS.CONVERSATIONS),
       where('companyId', '==', companyId),
       orderBy('createdAt', 'desc'),
-      limit(CONVERSATIONS_PAGE_SIZE)
+      limit(CONVERSATIONS_FALLBACK_PAGE_SIZE)
     );
 
   let useFallback = false;
