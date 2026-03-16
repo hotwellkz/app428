@@ -26,7 +26,7 @@ const COLLECTIONS: Array<{
       unit: it.unit ?? '',
       quantity: Number(it.quantity) || 0,
       price: Number(it.price) || 0,
-      total: Number(it.total) ?? Number(it.quantity) * Number(it.price) || 0,
+      total: (Number(it.total) ?? Number(it.quantity) * Number(it.price)) || 0,
     })),
     getWorkItem: (d) => {
       const v = Number(d.foundationWorkCost) || 0;
@@ -42,7 +42,7 @@ const COLLECTIONS: Array<{
       unit: it.unit ?? '',
       quantity: Number(it.quantity) || 0,
       price: Number(it.price) || 0,
-      total: Number(it.total) ?? Number(it.quantity) * Number(it.price) || 0,
+      total: (Number(it.total) ?? Number(it.quantity) * Number(it.price)) || 0,
     })),
     getWorkItem: (d) => {
       const v = Number(d.installationCost) || 0;
@@ -58,7 +58,7 @@ const COLLECTIONS: Array<{
       unit: it.unit ?? '',
       quantity: Number(it.quantity) || 0,
       price: Number(it.price) || 0,
-      total: Number(it.total) ?? Number(it.quantity) * Number(it.price) || 0,
+      total: (Number(it.total) ?? Number(it.quantity) * Number(it.price)) || 0,
     })),
     getWorkItem: (d) => {
       const v = Number(d.installationCost) || 0;
@@ -74,7 +74,7 @@ const COLLECTIONS: Array<{
       unit: it.unit ?? '',
       quantity: Number(it.quantity) || 0,
       price: Number(it.price) || 0,
-      total: Number(it.total) ?? Number(it.quantity) * Number(it.price) || 0,
+      total: (Number(it.total) ?? Number(it.quantity) * Number(it.price)) || 0,
     })),
     getWorkItem: (d) => {
       const v = Number(d.roofWorkCost) || 0;
@@ -90,7 +90,7 @@ const COLLECTIONS: Array<{
       unit: it.unit ?? '',
       quantity: Number(it.quantity) || 0,
       price: Number(it.price) || 0,
-      total: Number(it.total) ?? Number(it.quantity) * Number(it.price) || 0,
+      total: (Number(it.total) ?? Number(it.quantity) * Number(it.price)) || 0,
     })),
     getWorkItem: (d) => {
       const v = Number(d.installationCost) || 0;
@@ -106,23 +106,28 @@ const COLLECTIONS: Array<{
       unit: it.unit ?? '',
       quantity: Number(it.quantity) || 0,
       price: Number(it.price) || 0,
-      total: Number(it.total) ?? Number(it.quantity) * Number(it.price) || 0,
+      total: (Number(it.total) ?? Number(it.quantity) * Number(it.price)) || 0,
     })),
   },
   {
     section: 'Доп. работы',
     collection: 'additionalWorksEstimates',
-    getItems: (d) => (d.items as Array<{ name?: string; total?: number }> || []).map((it) => {
-      const total = Number(it.total) || 0;
-      return {
-        section: 'Доп. работы',
-        name: (it.name as string)?.trim() || 'Позиция',
-        unit: '',
-        quantity: total ? 1 : 0,
-        price: total,
-        total,
-      };
-    }).filter((it) => it.name && it.total > 0)),
+    getItems: (d) => {
+      const items = (d.items as Array<{ name?: string; total?: number }> || []);
+      return items
+        .map((it) => {
+          const total = Number(it.total) || 0;
+          return {
+            section: 'Доп. работы',
+            name: (it.name as string)?.trim() || 'Позиция',
+            unit: '',
+            quantity: total ? 1 : 0,
+            price: total,
+            total,
+          };
+        })
+        .filter((it) => it.name && it.total > 0);
+    },
   },
 ];
 
