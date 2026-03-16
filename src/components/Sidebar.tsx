@@ -20,9 +20,12 @@ import {
   Folder,
   ChevronLeft,
   ChevronRight,
-  BarChart3
+  BarChart3,
+  Pin,
+  PinOff
 } from 'lucide-react';
 import { useUnapprovedCount } from '../hooks/useUnapprovedCount';
+import { useWhatsAppFloatingButtonState } from '../hooks/useWhatsAppFloatingButtonState';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useMenuVisibility } from '../contexts/MenuVisibilityContext';
@@ -37,6 +40,8 @@ interface MenuItem {
   path: string;
   sectionId: MenuSectionId;
   isActive?: boolean;
+  /** Бейдж (например непрочитанные WhatsApp) — показывается на иконке в свёрнутом виде */
+  badgeCount?: number;
 }
 
 interface SidebarProps {
@@ -52,6 +57,7 @@ interface MenuItemComponentProps {
 
 const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item, onClick, collapsed }) => {
   const [showTooltip, setShowTooltip] = useState(false);
+  const badge = item.badgeCount != null && item.badgeCount > 0;
 
   return (
     <div className="relative">
@@ -68,17 +74,29 @@ const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item, onClick, co
         {item.isActive && (
           <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-emerald-500 rounded-r-full" />
         )}
-        <span className={`transition-transform duration-200 group-hover:scale-110 ${
+        <span className={`relative transition-transform duration-200 group-hover:scale-110 ${
           item.isActive ? 'text-emerald-600' : 'text-emerald-500'
         } ${collapsed ? 'mx-auto' : ''}`}>
           {item.icon}
+          {collapsed && badge && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-red-500 text-white text-[11px] font-semibold">
+              {item.badgeCount! > 99 ? '99+' : item.badgeCount}
+            </span>
+          )}
         </span>
         {!collapsed && (
-          <span className={`ml-3 text-sm font-medium transition-colors duration-200 ${
-            item.isActive ? 'text-emerald-600' : 'text-gray-700 group-hover:text-emerald-600'
-          }`}>
-            {item.label}
-          </span>
+          <>
+            <span className={`ml-3 text-sm font-medium transition-colors duration-200 ${
+              item.isActive ? 'text-emerald-600' : 'text-gray-700 group-hover:text-emerald-600'
+            }`}>
+              {item.label}
+            </span>
+            {badge && (
+              <span className="ml-auto min-w-[20px] h-5 px-1.5 flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-medium">
+                {item.badgeCount! > 99 ? '99+' : item.badgeCount}
+              </span>
+            )}
+          </>
         )}
       </button>
       
@@ -86,12 +104,16 @@ const MenuItemComponent: React.FC<MenuItemComponentProps> = ({ item, onClick, co
       {collapsed && showTooltip && (
         <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 z-50 px-2 py-1 bg-gray-900 text-white text-sm rounded-md whitespace-nowrap opacity-95 pointer-events-none">
           {item.label}
+          {badge && ` (${item.badgeCount})`}
           <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900"></div>
         </div>
       )}
     </div>
   );
 };
+
+const SIDEBAR_PINNED_KEY = 'sidebar-pinned';
+const HOVER_COLLAPSE_DELAY_MS = 280;
 
 export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) => {
   const { isOpen: isMobileMenuOpen, close: setMobileMenuOpenFalse, toggle: toggleMobileMenu } = useMobileSidebar();
@@ -110,9 +132,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     return localStorage.getItem('sidebar-collapsed') === 'true';
   });
+  const [pinned, setPinned] = useState<boolean>(() => {
+    return localStorage.getItem(SIDEBAR_PINNED_KEY) === 'true';
+  });
+  const [hoverExpanded, setHoverExpanded] = useState(false);
+  const hoverCollapseTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const { canAccess } = useCurrentCompanyUser();
   const unapprovedCount = useUnapprovedCount();
   const { isMenuVisible } = useMenuVisibility();
+  const whatsAppBadge = useWhatsAppFloatingButtonState(true);
+  const whatsAppBadgeCount = whatsAppBadge.unreadChatsCount + whatsAppBadge.awaitingReplyChatsCount;
 
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -144,8 +173,40 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
   const toggleSidebar = () => {
     const newState = !collapsed;
     setCollapsed(newState);
+    if (newState) setPinned(false);
     localStorage.setItem('sidebar-collapsed', newState.toString());
+    if (newState) localStorage.setItem(SIDEBAR_PINNED_KEY, 'false');
   };
+
+  const togglePinned = () => {
+    const newPinned = !pinned;
+    setPinned(newPinned);
+    localStorage.setItem(SIDEBAR_PINNED_KEY, newPinned.toString());
+    if (newPinned) {
+      setCollapsed(false);
+      localStorage.setItem('sidebar-collapsed', 'false');
+    }
+  };
+
+  const handleDesktopSidebarMouseEnter = () => {
+    if (hoverCollapseTimerRef.current) {
+      clearTimeout(hoverCollapseTimerRef.current);
+      hoverCollapseTimerRef.current = null;
+    }
+    setHoverExpanded(true);
+  };
+
+  const handleDesktopSidebarMouseLeave = () => {
+    hoverCollapseTimerRef.current = setTimeout(() => setHoverExpanded(false), HOVER_COLLAPSE_DELAY_MS);
+  };
+
+  React.useEffect(() => {
+    return () => {
+      if (hoverCollapseTimerRef.current) clearTimeout(hoverCollapseTimerRef.current);
+    };
+  }, []);
+
+  const desktopExpanded = pinned || !collapsed || hoverExpanded;
 
   const allMenuItems: MenuItem[] = [
     { icon: <ArrowLeftRight size={20} />, label: 'Транзакции', path: '/transactions', sectionId: 'transactions', isActive: location.pathname === '/transactions' },
@@ -157,7 +218,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
     { icon: <FileText className="w-5 h-5" />, label: 'Шаблоны договоров', path: '/templates', sectionId: 'templates', isActive: location.pathname === '/templates' },
     { icon: <Package className="w-5 h-5" />, label: 'Товары и цены', path: '/products', sectionId: 'products', isActive: location.pathname === '/products' },
     { icon: <Users className="w-5 h-5" />, label: 'Сотрудники', path: '/employees', sectionId: 'employees', isActive: location.pathname === '/employees' },
-    { icon: <MessageSquare className="w-5 h-5" />, label: 'WhatsApp', path: '/whatsapp', sectionId: 'whatsapp', isActive: location.pathname === '/whatsapp' },
+    { icon: <MessageSquare className="w-5 h-5" />, label: 'WhatsApp', path: '/whatsapp', sectionId: 'whatsapp', isActive: location.pathname === '/whatsapp', badgeCount: whatsAppBadgeCount > 0 ? whatsAppBadgeCount : undefined },
     { icon: <Shield className="w-5 h-5" />, label: 'AI База знаний', path: '/settings/knowledge', sectionId: 'knowledgeBase', isActive: location.pathname === '/settings/knowledge' },
     { icon: <MessageSquare className="w-5 h-5" />, label: 'Быстрые ответы', path: '/settings/quick-replies', sectionId: 'quickReplies', isActive: location.pathname === '/settings/quick-replies' },
     { icon: <Building2 className="w-5 h-5" />, label: 'Сделки', path: '/deals', sectionId: 'deals', isActive: location.pathname === '/deals' || location.pathname.startsWith('/deals/') },
@@ -277,20 +338,33 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
         </div>
       )}
 
-      {/* Десктопный Sidebar: только при ширине ≥ 1280px */}
+      {/* Десктопный Sidebar: только при ширине ≥ 1280px; hover раскрывает при свёрнутом */}
       <aside
-        className={`hidden xl:flex flex-col bg-white shadow-xl border-r border-gray-100 transition-all duration-300 ease-in-out ${
-          collapsed ? 'w-16' : 'w-64'
+        onMouseEnter={handleDesktopSidebarMouseEnter}
+        onMouseLeave={handleDesktopSidebarMouseLeave}
+        className={`hidden xl:flex flex-col bg-white shadow-xl border-r border-gray-100 transition-[width] duration-200 ease-out ${
+          desktopExpanded ? 'w-64' : 'w-16'
         }`}
       >
-        {/* Кнопка сворачивания */}
-        <div className={`flex ${collapsed ? 'justify-center' : 'justify-end'} p-2`}>
+        {/* Кнопки: свернуть и закрепить (закрепить видна только когда раскрыто) */}
+        <div className={`flex items-center shrink-0 ${desktopExpanded ? 'justify-between' : 'justify-center'} p-2 gap-0.5`}>
+          {desktopExpanded && (
+            <button
+              onClick={togglePinned}
+              className="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 text-gray-500 hover:text-gray-700"
+              title={pinned ? 'Открепить меню' : 'Закрепить меню открытым'}
+              aria-label={pinned ? 'Открепить' : 'Закрепить'}
+            >
+              {pinned ? <PinOff size={18} /> : <Pin size={18} />}
+            </button>
+          )}
           <button
             onClick={toggleSidebar}
             className="p-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 text-gray-600 hover:text-gray-800"
-            title={collapsed ? 'Развернуть меню' : 'Свернуть меню'}
+            title={desktopExpanded ? 'Свернуть меню' : 'Развернуть меню'}
+            aria-label={desktopExpanded ? 'Свернуть' : 'Развернуть'}
           >
-            {collapsed ? <ChevronRight size={20} /> : <ChevronLeft size={20} />}
+            {desktopExpanded ? <ChevronLeft size={20} /> : <ChevronRight size={20} />}
           </button>
         </div>
         
@@ -299,10 +373,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
           {userEmail && (
             <div
               className={`flex items-center cursor-default transition-colors duration-150 mb-1 ${
-                collapsed ? 'justify-center px-2 py-1' : 'px-3 py-1.5'
+                !desktopExpanded ? 'justify-center px-2 py-1' : 'px-3 py-1.5'
               } hover:bg-gray-100 rounded-md`}
               style={{ minHeight: 32 }}
-              title={collapsed ? userEmail : undefined}
+              title={!desktopExpanded ? userEmail : undefined}
             >
               <div
                 className="flex items-center justify-center rounded-full font-semibold"
@@ -313,11 +387,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
                   color: '#FFFFFF',
                   fontSize: 11
                 }}
-                title={!collapsed ? userEmail : undefined}
+                title={desktopExpanded ? undefined : userEmail}
               >
                 {userEmail.charAt(0).toUpperCase()}
               </div>
-              {!collapsed && (
+              {desktopExpanded && (
                 <div className="flex items-center gap-1 ml-2 min-w-0">
                   <span
                     className="truncate"
@@ -349,7 +423,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
               key={index}
               item={item}
               onClick={() => handleMenuItemClick(item)}
-              collapsed={collapsed}
+              collapsed={!desktopExpanded}
             />
           ))}
         </div>
@@ -368,16 +442,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
                     location.pathname === '/admin'
                       ? 'text-emerald-600 bg-emerald-50 shadow-sm'
                       : 'text-gray-600 hover:text-emerald-600 hover:bg-white'
-                  } ${collapsed ? 'justify-center px-2' : 'px-4'}`}
+                  } ${!desktopExpanded ? 'justify-center px-2' : 'px-4'}`}
                 >
                   <Shield className="w-5 h-5 transition-transform duration-200 group-hover:scale-110" />
-                  {!collapsed && <span className="ml-3">Администратор</span>}
-                  {unapprovedCount > 0 && !collapsed && (
+                  {desktopExpanded && <span className="ml-3">Администратор</span>}
+                  {unapprovedCount > 0 && desktopExpanded && (
                     <span className="absolute right-2 top-1/2 -translate-y-1/2 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full min-w-[20px] text-center animate-pulse">
                       {unapprovedCount}
                     </span>
                   )}
-                  {unapprovedCount > 0 && collapsed && (
+                  {unapprovedCount > 0 && !desktopExpanded && (
                     <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold w-5 h-5 rounded-full flex items-center justify-center animate-pulse">
                       {unapprovedCount}
                     </span>
@@ -399,14 +473,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
                   setMobileMenuOpenFalse();
                 }}
                 className={`flex items-center gap-2 text-sm text-gray-600 hover:text-emerald-600 hover:bg-white rounded-lg transition-all duration-200 group ${
-                  collapsed ? 'justify-center p-2' : 'px-4 py-2'
+                  !desktopExpanded ? 'justify-center p-2' : 'px-4 py-2'
                 }`}
               >
                 <User className="w-4 h-4 transition-transform duration-200 group-hover:scale-110" />
-                {!collapsed && <span>Сменить пароль</span>}
+                {desktopExpanded && <span>Сменить пароль</span>}
                 
                 {/* Tooltip для collapsed режима */}
-                {collapsed && (
+                {!desktopExpanded && (
                   <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 z-50 px-2 py-1 bg-gray-900 text-white text-sm rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-95 transition-opacity duration-200">
                     Сменить пароль
                     <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900"></div>
@@ -419,14 +493,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
               <button
                 onClick={() => auth.signOut()}
                 className={`flex items-center gap-2 text-sm text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all duration-200 group ${
-                  collapsed ? 'justify-center p-2' : 'px-4 py-2'
+                  !desktopExpanded ? 'justify-center p-2' : 'px-4 py-2'
                 }`}
               >
                 <LogOut className="w-4 h-4 transition-transform duration-200 group-hover:scale-110" />
-                {!collapsed && <span>Выйти</span>}
+                {desktopExpanded && <span>Выйти</span>}
                 
                 {/* Tooltip для collapsed режима */}
-                {collapsed && (
+                {!desktopExpanded && (
                   <div className="absolute left-full ml-2 top-1/2 -translate-y-1/2 z-50 px-2 py-1 bg-gray-900 text-white text-sm rounded-md whitespace-nowrap opacity-0 pointer-events-none group-hover:opacity-95 transition-opacity duration-200">
                     Выйти
                     <div className="absolute right-full top-1/2 -translate-y-1/2 border-4 border-transparent border-r-gray-900"></div>

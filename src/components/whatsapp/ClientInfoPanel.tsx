@@ -648,7 +648,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const asideClass = embeddedInSheet
     ? 'w-full max-w-[320px] mx-auto bg-transparent border-0 p-0'
     : fillWidth
-      ? 'w-full min-w-0 flex-shrink-0 bg-white border-l border-[#eee] p-4 overflow-y-auto'
+      ? 'w-full min-w-0 flex-shrink-0 bg-white border-l border-[#eee] p-4 min-h-full'
       : 'w-[320px] flex-shrink-0 bg-white border-l border-[#eee] p-4 overflow-y-auto';
 
   if (!phone) {

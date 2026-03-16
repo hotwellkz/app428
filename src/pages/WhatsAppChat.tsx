@@ -2354,14 +2354,15 @@ const WhatsAppChat: React.FC = () => {
               onResize={handleRightPanelResize}
             />
             <div
-              className="flex flex-col min-h-0 overflow-hidden flex-shrink-0"
+              className="flex flex-col min-h-0 flex-shrink-0"
               style={{
                 width: rightPanelWidth,
                 minWidth: RIGHT_PANEL_MIN,
                 maxWidth: RIGHT_PANEL_MAX,
               }}
             >
-              <ClientInfoPanel
+              <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+                <ClientInfoPanel
                 phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null}
                 conversationId={selectedId}
                 conversationDealId={selectedItem?.dealId ?? null}
@@ -2372,6 +2373,7 @@ const WhatsAppChat: React.FC = () => {
                 managerCounts={managerCounts}
                 fillWidth
               />
+              </div>
             </div>
           </>
         )}
