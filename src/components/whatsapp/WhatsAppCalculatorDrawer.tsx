@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Pencil } from 'lucide-react';
 import { CalculatorForm } from '../calculator/CalculatorForm';
 import { CommercialProposal, COMMERCIAL_PROPOSAL_THEMES, type CommercialProposalThemeId } from '../calculator/CommercialProposal';
 import { CalculationResult } from '../../types/calculator';
@@ -12,8 +12,20 @@ const KP_RENDER_ID = 'commercial-offer-render';
 const KP_OFFER_IMAGE_ID = 'offer-image';
 /** Fallback: блок документа без обёртки offer-image. */
 const KP_DOCUMENT_ID = 'commercial-offer-document';
-const CAPTION =
+const DEFAULT_CAPTION =
   'Ваше коммерческое предложение по дому из SIP-панелей.\nЕсли будут вопросы — напишите 👍';
+
+const KP_MESSAGE_TEMPLATE_KEY = 'crm_kp_message_template';
+const LAST_CALCULATOR_MODE_KEY = 'lastCalculatorMode';
+
+function getStoredCaption(): string {
+  try {
+    const stored = localStorage.getItem(KP_MESSAGE_TEMPLATE_KEY);
+    return (stored && stored.trim()) ? stored : DEFAULT_CAPTION;
+  } catch {
+    return DEFAULT_CAPTION;
+  }
+}
 
 function applyAdditionalCharges(
   base: CalculationResult,
@@ -76,10 +88,29 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
     hideAssemblyCost: false,
     hideDeliveryCost: false
   });
-  const [simpleMode, setSimpleMode] = useState(true);
+  const [simpleMode, setSimpleMode] = useState(() => {
+    try {
+      const saved = localStorage.getItem(LAST_CALCULATOR_MODE_KEY);
+      if (saved === 'simple') return true;
+      if (saved === 'professional') return false;
+    } catch {
+      // ignore
+    }
+    return false; // по умолчанию — профессиональный
+  });
   const [sendingProposal, setSendingProposal] = useState(false);
   const [theme, setTheme] = useState<CommercialProposalThemeId>('light');
+  const [showEditCaptionModal, setShowEditCaptionModal] = useState(false);
+  const [editCaptionDraft, setEditCaptionDraft] = useState('');
   const captureRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAST_CALCULATOR_MODE_KEY, simpleMode ? 'simple' : 'professional');
+    } catch {
+      // ignore
+    }
+  }, [simpleMode]);
 
   // Кэш подставляем при рендере, чтобы форма получила его до первого эффекта и не затирала STANDARD_DEFAULTS
   const initialValues: Record<string, unknown> | undefined = open
@@ -188,7 +219,8 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
           0.95
         );
       });
-      await onSendProposalImage(blob, CAPTION);
+      const caption = getStoredCaption();
+      await onSendProposalImage(blob, caption);
     } catch (e) {
       console.error('KP image generation failed', e);
     } finally {
@@ -312,15 +344,74 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
           <p className="text-xs text-gray-500 mb-1">
             Расчёт обновляется при изменении параметров.
           </p>
-          <button
-            type="button"
-            onClick={handleSendProposal}
-            disabled={finalResult.total <= 0 || sendingProposal}
-            className="w-full py-2.5 rounded-xl bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium text-sm"
-          >
-            {sendingProposal ? 'Отправка…' : 'Отправить коммерческое предложение'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleSendProposal}
+              disabled={finalResult.total <= 0 || sendingProposal}
+              className="flex-1 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-medium text-sm"
+            >
+              {sendingProposal ? 'Отправка…' : 'Отправить коммерческое предложение'}
+            </button>
+            {!simpleMode && (
+              <button
+                type="button"
+                onClick={() => {
+                  setEditCaptionDraft(getStoredCaption());
+                  setShowEditCaptionModal(true);
+                }}
+                className="flex-none p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+                title="Редактировать текст сообщения после отправки КП"
+                aria-label="Редактировать текст сообщения после КП"
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
+
+        {showEditCaptionModal && (
+          <div className="fixed inset-0 z-[1200] flex items-center justify-center p-4 bg-black/40" onClick={() => setShowEditCaptionModal(false)}>
+            <div
+              className="bg-white rounded-xl shadow-lg w-full max-w-[480px] p-4 flex flex-col gap-3"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 className="text-sm font-semibold text-gray-800">
+                Текст сообщения после отправки КП
+              </h3>
+              <textarea
+                value={editCaptionDraft}
+                onChange={(e) => setEditCaptionDraft(e.target.value)}
+                rows={4}
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-800 placeholder-gray-400 resize-y min-h-[80px]"
+                placeholder={DEFAULT_CAPTION}
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowEditCaptionModal(false)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      localStorage.setItem(KP_MESSAGE_TEMPLATE_KEY, editCaptionDraft.trim() || DEFAULT_CAPTION);
+                    } catch {
+                      // ignore
+                    }
+                    setShowEditCaptionModal(false);
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-green-600 hover:bg-green-700"
+                >
+                  Сохранить
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Блок для рендера КП вне экрана (без visibility:hidden — иначе html2canvas даёт белый кадр). Без minHeight — обрезка по контенту. */}
