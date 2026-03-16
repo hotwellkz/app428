@@ -724,7 +724,21 @@ const WhatsAppChat: React.FC = () => {
         setConversationsLoadingMore(false);
       }
     };
+
+    /** Фоновая догрузка всех страниц чатов без ручного скролла: счётчики "Ждут"/"Непр." и фильтры строятся по полному списку. */
+    let cancelled = false;
+    const preloadAll = async () => {
+      while (!cancelled && sub.getHasMore()) {
+        const { appended, hasMore } = await sub.loadMore();
+        setConversationsHasMore(hasMore);
+        if (appended === 0) break;
+        await new Promise((r) => setTimeout(r, 80));
+      }
+    };
+    preloadAll();
+
     return () => {
+      cancelled = true;
       sub.unsubscribe();
       loadMoreConversationsRef.current = null;
     };
