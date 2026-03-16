@@ -29,6 +29,7 @@ import type { MediaQuickReply } from '../types/mediaQuickReplies';
 import ConversationList from '../components/whatsapp/ConversationList';
 import ChatWindow from '../components/whatsapp/ChatWindow';
 import ClientInfoPanel from '../components/whatsapp/ClientInfoPanel';
+import { ResizeHandle } from '../components/whatsapp/ResizeHandle';
 import ForwardDialog from '../components/whatsapp/ForwardDialog';
 import DeleteClientConfirmModal from '../components/whatsapp/DeleteClientConfirmModal';
 import { supabase, CLIENTS_BUCKET } from '../lib/supabase/config';
@@ -135,12 +136,84 @@ function formatMessageForWhatsApp(message: string): string {
 const MOBILE_BREAKPOINT = 768;
 const WIDE_LAYOUT_BREAKPOINT = 1200;
 
+/** Resizable панели (только desktop): min/max в px */
+const LEFT_PANEL_MIN = 260;
+const LEFT_PANEL_MAX = 500;
+const LEFT_PANEL_DEFAULT = 300;
+const RIGHT_PANEL_MIN = 280;
+const RIGHT_PANEL_MAX = 480;
+const RIGHT_PANEL_DEFAULT = 320;
+const CENTER_MIN_WIDTH = 400;
+
+const STORAGE_LEFT = 'whatsapp_chat_left_panel_width';
+const STORAGE_RIGHT = 'whatsapp_chat_right_panel_width';
+
+function readStoredWidth(key: string, defaultVal: number, min: number, max: number): number {
+  try {
+    const v = localStorage.getItem(key);
+    if (v == null) return defaultVal;
+    const n = parseInt(v, 10);
+    if (!Number.isFinite(n)) return defaultVal;
+    return Math.max(min, Math.min(max, n));
+  } catch {
+    return defaultVal;
+  }
+}
+
+function saveWidth(key: string, value: number) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // ignore
+  }
+}
+
 const WhatsAppChat: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const chatIdFromUrl = searchParams.get('chatId');
 
   const isMobile = useIsMobile(MOBILE_BREAKPOINT);
   const isWideLayout = !useIsMobile(WIDE_LAYOUT_BREAKPOINT);
+  const layoutContainerRef = useRef<HTMLDivElement>(null);
+
+  const [leftPanelWidth, setLeftPanelWidth] = useState(() =>
+    readStoredWidth(STORAGE_LEFT, LEFT_PANEL_DEFAULT, LEFT_PANEL_MIN, LEFT_PANEL_MAX)
+  );
+  const [rightPanelWidth, setRightPanelWidth] = useState(() =>
+    readStoredWidth(STORAGE_RIGHT, RIGHT_PANEL_DEFAULT, RIGHT_PANEL_MIN, RIGHT_PANEL_MAX)
+  );
+
+  const leftWidthRef = useRef(leftPanelWidth);
+  const rightWidthRef = useRef(rightPanelWidth);
+  useEffect(() => {
+    leftWidthRef.current = leftPanelWidth;
+  }, [leftPanelWidth]);
+  useEffect(() => {
+    rightWidthRef.current = rightPanelWidth;
+  }, [rightPanelWidth]);
+
+  const handleLeftPanelResize = useCallback((deltaPx: number) => {
+    const container = layoutContainerRef.current?.offsetWidth ?? 1200;
+    const right = isWideLayout ? rightWidthRef.current : 0;
+    const maxLeft = Math.min(LEFT_PANEL_MAX, container - right - CENTER_MIN_WIDTH);
+    setLeftPanelWidth((prev) => {
+      const next = Math.max(LEFT_PANEL_MIN, Math.min(maxLeft, prev + deltaPx));
+      saveWidth(STORAGE_LEFT, next);
+      return next;
+    });
+  }, [isWideLayout]);
+
+  const handleRightPanelResize = useCallback((deltaPx: number) => {
+    const container = layoutContainerRef.current?.offsetWidth ?? 1200;
+    const left = leftWidthRef.current;
+    const maxRight = Math.min(RIGHT_PANEL_MAX, container - left - CENTER_MIN_WIDTH);
+    setRightPanelWidth((prev) => {
+      const next = Math.max(RIGHT_PANEL_MIN, Math.min(maxRight, prev - deltaPx));
+      saveWidth(STORAGE_RIGHT, next);
+      return next;
+    });
+  }, []);
+
   const { isAdmin, user } = useAuth();
   const companyId = useCompanyId();
   const [conversations, setConversations] = useState<ConversationListItem[]>([]);
@@ -2052,15 +2125,22 @@ const WhatsAppChat: React.FC = () => {
       )}
 
       {/* Desktop ≥1200: три колонки. 768–1200: список + чат. <768: список ИЛИ чат */}
-      <div className="flex-1 flex min-h-0 min-w-0 relative overflow-hidden">
-        {/* Левая колонка: список диалогов (desktop 300px) */}
+      <div
+        ref={layoutContainerRef}
+        className="flex-1 flex min-h-0 min-w-0 relative overflow-hidden"
+      >
+        {/* Левая колонка: список диалогов (desktop — resizable) */}
         <aside
           className={`
             flex flex-col overflow-hidden bg-white border-r border-gray-200
-            ${isMobile ? 'w-full h-full absolute inset-0' : 'w-[300px] flex-shrink-0'}
+            ${isMobile ? 'w-full h-full absolute inset-0' : 'flex-shrink-0'}
             ${showChatOnly ? 'hidden' : ''}
           `}
-          style={!isMobile ? { minWidth: 300 } : undefined}
+          style={
+            !isMobile
+              ? { width: leftPanelWidth, minWidth: LEFT_PANEL_MIN, maxWidth: LEFT_PANEL_MAX }
+              : undefined
+          }
         >
           <div className="flex-none border-b border-gray-100 bg-gray-50/80">
             <div className="flex items-center gap-2 px-3 py-2">
@@ -2178,6 +2258,14 @@ const WhatsAppChat: React.FC = () => {
           />
         </aside>
 
+        {/* Разделитель: левая панель ↔ центр (только desktop) */}
+        {!isMobile && (
+          <ResizeHandle
+            direction="left"
+            onResize={handleLeftPanelResize}
+          />
+        )}
+
         {/* Центр: чат. На mobile — высота по visualViewport, overflow hidden, только .chat-messages скроллится */}
         <section
           ref={isMobile ? chatPageRef : undefined}
@@ -2258,18 +2346,34 @@ const WhatsAppChat: React.FC = () => {
           )}
         </section>
 
-        {/* Правая колонка: карточка клиента (только при ширине ≥ 1200px) */}
+        {/* Разделитель и правая колонка: карточка клиента (только при ширине ≥ 1200px, resizable) */}
         {isWideLayout && (
-          <ClientInfoPanel
-            phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null}
-            conversationId={selectedId}
-            conversationDealId={selectedItem?.dealId ?? null}
-            messages={messages}
-            dealStatuses={dealStatuses}
-            managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
-            dealStatusCounts={dealStatusCounts}
-            managerCounts={managerCounts}
-          />
+          <>
+            <ResizeHandle
+              direction="right"
+              onResize={handleRightPanelResize}
+            />
+            <div
+              className="flex flex-col min-h-0 overflow-hidden flex-shrink-0"
+              style={{
+                width: rightPanelWidth,
+                minWidth: RIGHT_PANEL_MIN,
+                maxWidth: RIGHT_PANEL_MAX,
+              }}
+            >
+              <ClientInfoPanel
+                phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null}
+                conversationId={selectedId}
+                conversationDealId={selectedItem?.dealId ?? null}
+                messages={messages}
+                dealStatuses={dealStatuses}
+                managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
+                dealStatusCounts={dealStatusCounts}
+                managerCounts={managerCounts}
+                fillWidth
+              />
+            </div>
+          </>
         )}
       </div>
 

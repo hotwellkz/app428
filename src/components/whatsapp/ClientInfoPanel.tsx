@@ -208,6 +208,8 @@ interface ClientInfoPanelProps {
   managerCounts?: { none: number; byId: Record<string, number> };
   /** Встроен в bottom sheet (мобильный): не создавать свой scroll, чтобы скроллил только контейнер шторки */
   embeddedInSheet?: boolean;
+  /** Ширина на 100% родителя (для resizable правой панели на desktop) */
+  fillWidth?: boolean;
 }
 
 const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 py-0 rounded-[10px] text-[11px] font-medium bg-[#f1f3f5] text-[#555] flex-shrink-0';
@@ -225,7 +227,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   managers = [],
   dealStatusCounts,
   managerCounts,
-  embeddedInSheet = false
+  embeddedInSheet = false,
+  fillWidth = false
 }) => {
   const companyId = useCompanyId();
   const navigate = useNavigate();
@@ -642,7 +645,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
 
   const asideClass = embeddedInSheet
     ? 'w-full max-w-[320px] mx-auto bg-transparent border-0 p-0'
-    : 'w-[320px] flex-shrink-0 bg-white border-l border-[#eee] p-4 overflow-y-auto';
+    : fillWidth
+      ? 'w-full min-w-0 flex-shrink-0 bg-white border-l border-[#eee] p-4 overflow-y-auto'
+      : 'w-[320px] flex-shrink-0 bg-white border-l border-[#eee] p-4 overflow-y-auto';
 
   if (!phone) {
     return (
