@@ -13,15 +13,6 @@ export const ReceiptCalculation: React.FC<ReceiptCalculationProps> = ({
     return Math.round(amount).toLocaleString('ru-RU') + ' ₸';
   };
 
-  // Отладочная информация
-  console.log('💰 Расчёт по чекам - данные:', {
-    clientId,
-    ceilingInsulation: data.ceilingInsulation,
-    sipWalls: data.sipWalls,
-    contractPrice: data.contractPrice,
-    netProfit: data.netProfit
-  });
-
   return (
     <div className="mt-6 bg-white rounded-lg shadow-lg overflow-hidden">
       <button

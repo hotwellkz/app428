@@ -52,11 +52,25 @@ export const AIEstimateAnalysisBlock: React.FC<AIEstimateAnalysisBlockProps> = (
     grandTotal,
   };
 
+  const isPermissionError = (e: unknown): boolean => {
+    const msg = e instanceof Error ? e.message : String(e);
+    return /permission|insufficient|forbidden/i.test(msg) || (e as { code?: string })?.code === 'permission-denied';
+  };
+
   const loadSaved = useCallback(async () => {
     if (!companyId || !clientId) return;
-    const data = await getClientEstimateAiReport(companyId, clientId);
-    setSaved(data);
-    setReport(data?.report ?? null);
+    try {
+      const data = await getClientEstimateAiReport(companyId, clientId);
+      setSaved(data);
+      setReport(data?.report ?? null);
+    } catch (e) {
+      if (isPermissionError(e)) {
+        setSaved(null);
+        setReport(null);
+      } else if (import.meta.env.DEV) {
+        console.error('[AIEstimateAnalysisBlock] loadSaved', e);
+      }
+    }
   }, [companyId, clientId]);
 
   useEffect(() => {
@@ -140,7 +154,12 @@ export const AIEstimateAnalysisBlock: React.FC<AIEstimateAnalysisBlockProps> = (
       });
       setStale(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Ошибка при обращении к AI');
+      if (isPermissionError(e)) {
+        setError('Не удалось сохранить или загрузить отчёт. Проверьте права доступа к проекту.');
+      } else {
+        setError(e instanceof Error ? e.message : 'Ошибка при обращении к AI');
+      }
+      if (import.meta.env.DEV) console.error('[AIEstimateAnalysisBlock] runAnalysis', e);
     } finally {
       setLoading(false);
     }

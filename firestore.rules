@@ -249,8 +249,9 @@ service cloud.firestore {
     }
 
     // AI-отчёты сравнения сметы и факта по проекту (изоляция по companyId)
+    // read/update/delete — проверяем resource.data.companyId; create — request.resource.data (resource при create нет)
     match /clientEstimateAiReports/{docId} {
-      allow read, write: if isAuthenticated() && (
+      allow read, update, delete: if isAuthenticated() && (
         (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
         || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
         || isGlobalAdmin()

@@ -151,15 +151,6 @@ export const useReceiptCalculation = (clientId: string) => {
           });
           
           const polystyreneTotal = polystyreneItem?.total || 0;
-          
-          // Отладочная информация
-          console.log('🔧 Синхронизация пенополистирола:', {
-            clientId,
-            foundItem: polystyreneItem ? polystyreneItem.name : 'НЕ НАЙДЕН',
-            total: polystyreneTotal,
-            availableItems: roofData.items.map((item: any) => item.name)
-          });
-          
           updateTotals({ ceilingInsulation: polystyreneTotal });
         }
       }
