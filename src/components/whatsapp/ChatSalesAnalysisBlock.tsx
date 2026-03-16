@@ -1,0 +1,287 @@
+import React, { useState, useRef, useCallback } from 'react';
+import { Sparkles, Copy, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import type { WhatsAppMessage } from '../../types/whatsappDb';
+
+const SALES_ANALYZE_ENDPOINTS = ['/.netlify/functions/ai-analyze-sales', '/api/ai/analyze-sales'] as const;
+
+function normalizePhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  return digits ? `+${digits}` : phone.trim();
+}
+
+export interface SalesAnalysisResult {
+  overallAssessment: string;
+  strengths: string[];
+  errors: string[];
+  missedOpportunities: string[];
+  clientSignals: string[];
+  recommendations: string[];
+  nextMessage: string;
+  badges?: string[];
+}
+
+const BADGE_LABELS: Record<string, string> = {
+  riskLosingClient: 'Риск потери клиента',
+  clientInterested: 'Клиент заинтересован',
+  noNextStep: 'Нет следующего шага',
+  objectionNotHandled: 'Возражение не отработано',
+  weakNeedDiscovery: 'Слабое выявление потребности',
+};
+
+interface ChatSalesAnalysisBlockProps {
+  messages: WhatsAppMessage[];
+  phone: string | null;
+  conversationId: string | null;
+  /** Результат анализа для текущего чата (из кэша родителя) */
+  cachedResult: SalesAnalysisResult | null;
+  /** Сохранить результат по conversationId */
+  onCacheResult: (conversationId: string, result: SalesAnalysisResult) => void;
+  /** Компактный/мобильный вид: блок можно свернуть */
+  compact?: boolean;
+}
+
+export function ChatSalesAnalysisBlock({
+  messages,
+  phone,
+  conversationId,
+  cachedResult,
+  onCacheResult,
+  compact = false,
+}: ChatSalesAnalysisBlockProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
+  const runGuardRef = useRef(false);
+
+  const recent = messages
+    .map((m) => ({
+      ...m,
+      _content: ((m.transcription ?? m.text) ?? '').trim(),
+    }))
+    .filter((m) => m._content.length > 0 && !m.deleted)
+    .slice(-50);
+
+  const runAnalysis = useCallback(async () => {
+    if (!phone || !conversationId || loading || runGuardRef.current) return;
+    if (recent.length === 0) {
+      setError('Недостаточно сообщений для анализа.');
+      return;
+    }
+
+    runGuardRef.current = true;
+    setError(null);
+    setLoading(true);
+    const payload = {
+      chatId: normalizePhone(phone),
+      messages: recent.map((m) => ({
+        role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
+        text: m._content.replace(/<[^>]*>/g, '').trim(),
+      })),
+    };
+
+    try {
+      let res: Response | null = null;
+      let data: SalesAnalysisResult & { error?: string } = {} as SalesAnalysisResult;
+
+      for (const url of SALES_ANALYZE_ENDPOINTS) {
+        try {
+          const r = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          const raw = await r.text();
+          if (raw.trimStart().startsWith('<') || raw.includes('<!DOCTYPE')) continue;
+          const parsed = raw ? (JSON.parse(raw) as typeof data) : {};
+          if (parsed.error && r.status >= 400) {
+            setError(parsed.error || 'Ошибка анализа.');
+            return;
+          }
+          res = r;
+          data = parsed;
+          if (r.ok && !parsed.error) break;
+        } catch {
+          continue;
+        }
+      }
+
+      if (!res || !res.ok) {
+        setError('Ошибка AI. Попробуйте позже.');
+        return;
+      }
+
+      const result: SalesAnalysisResult = {
+        overallAssessment: data.overallAssessment ?? '—',
+        strengths: Array.isArray(data.strengths) ? data.strengths : [],
+        errors: Array.isArray(data.errors) ? data.errors : [],
+        missedOpportunities: Array.isArray(data.missedOpportunities) ? data.missedOpportunities : [],
+        clientSignals: Array.isArray(data.clientSignals) ? data.clientSignals : [],
+        recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
+        nextMessage: typeof data.nextMessage === 'string' ? data.nextMessage : '',
+        badges: Array.isArray(data.badges) ? data.badges : [],
+      };
+      onCacheResult(conversationId, result);
+    } catch (e) {
+      setError('Не удалось выполнить анализ. Попробуйте позже.');
+      if (import.meta.env.DEV) console.warn('[ChatSalesAnalysis]', e);
+    } finally {
+      setLoading(false);
+      runGuardRef.current = false;
+    }
+  }, [phone, conversationId, loading, recent, onCacheResult]);
+
+  const copyFull = useCallback(() => {
+    if (!cachedResult) return;
+    const parts = [
+      'Общая оценка: ' + cachedResult.overallAssessment,
+      '',
+      'Сильные стороны:\n' + cachedResult.strengths.map((s) => '• ' + s).join('\n'),
+      '',
+      'Ошибки:\n' + cachedResult.errors.map((e) => '• ' + e).join('\n'),
+      '',
+      'Упущенные возможности:\n' + cachedResult.missedOpportunities.map((o) => '• ' + o).join('\n'),
+      '',
+      'Сигналы клиента:\n' + cachedResult.clientSignals.map((s) => '• ' + s).join('\n'),
+      '',
+      'Рекомендации:\n' + cachedResult.recommendations.map((r) => '• ' + r).join('\n'),
+      '',
+      'Готовый ответ клиенту:\n' + (cachedResult.nextMessage || '—'),
+    ];
+    void navigator.clipboard.writeText(parts.join('\n'));
+  }, [cachedResult]);
+
+  const copyNextMessage = useCallback(() => {
+    if (!cachedResult?.nextMessage) return;
+    void navigator.clipboard.writeText(cachedResult.nextMessage);
+  }, [cachedResult]);
+
+  const hasResult = !!cachedResult;
+  const canRun = !!phone && !!conversationId && recent.length > 0 && !loading;
+
+  const section = (title: string, items: string[], emptyText: string) => (
+    <div className="mt-3">
+      <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-1.5">{title}</h4>
+      {items.length > 0 ? (
+        <ul className="space-y-1 text-sm text-gray-800 list-disc list-inside">
+          {items.map((item, i) => (
+            <li key={i}>{item}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-gray-500">{emptyText}</p>
+      )}
+    </div>
+  );
+
+  const content = (
+    <>
+      <p className="text-xs text-gray-500 mt-1">
+        Разбор переписки с точки зрения продаж: оценка, ошибки, упущенные возможности и готовый следующий ответ.
+      </p>
+      <button
+        type="button"
+        onClick={runAnalysis}
+        disabled={!canRun}
+        className="mt-3 w-full inline-flex items-center justify-center gap-2 py-2.5 px-3 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <Sparkles className="w-4 h-4 shrink-0" />
+        {loading ? 'Анализируем…' : 'Проанализировать чат'}
+      </button>
+
+      {recent.length === 0 && phone && (
+        <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-2 py-1.5" role="alert">
+          В чате нет сообщений для анализа.
+        </p>
+      )}
+      {error && (
+        <p className="mt-2 text-xs text-red-700 bg-red-50 rounded-lg px-2 py-1.5" role="alert">
+          {error}
+        </p>
+      )}
+
+      {hasResult && (
+        <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
+          {cachedResult!.badges && cachedResult!.badges.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {cachedResult!.badges!.map((b) => (
+                <span
+                  key={b}
+                  className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 text-gray-700"
+                >
+                  {BADGE_LABELS[b] ?? b}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+            <h4 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Общая оценка</h4>
+            <p className="mt-1 text-sm text-gray-800">{cachedResult!.overallAssessment}</p>
+          </div>
+          {section('Сильные стороны', cachedResult!.strengths, '—')}
+          {section('Ошибки', cachedResult!.errors, '—')}
+          {section('Упущенные возможности', cachedResult!.missedOpportunities, '—')}
+          {section('Сигналы клиента', cachedResult!.clientSignals, '—')}
+          {section('Рекомендации', cachedResult!.recommendations, '—')}
+          {cachedResult!.nextMessage && (
+            <div className="mt-3 p-2.5 rounded-lg bg-green-50 border border-green-100">
+              <h4 className="text-xs font-semibold text-green-800 uppercase tracking-wide mb-1.5">
+                Готовый ответ клиенту
+              </h4>
+              <p className="text-sm text-gray-800 whitespace-pre-wrap">{cachedResult!.nextMessage}</p>
+              <button
+                type="button"
+                onClick={copyNextMessage}
+                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                Скопировать ответ
+              </button>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={runAnalysis}
+              disabled={!canRun}
+              className="inline-flex items-center gap-1 text-xs font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Обновить анализ
+            </button>
+            <button
+              type="button"
+              onClick={copyFull}
+              className="inline-flex items-center gap-1 text-xs font-medium text-gray-600 hover:text-gray-700"
+            >
+              <Copy className="w-3.5 h-3.5" />
+              Скопировать вывод
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+
+  const header = (
+    <div className="flex items-center justify-between gap-2">
+      <h3 className="text-sm font-semibold text-gray-700">AI-разбор переписки</h3>
+      {compact && (
+        <button
+          type="button"
+          onClick={() => setCollapsed((c) => !c)}
+          className="p-1 rounded text-gray-500 hover:bg-gray-100"
+          aria-expanded={!collapsed}
+        >
+          {collapsed ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-200">
+      {header}
+      {(!compact || !collapsed) && <div className="mt-2">{content}</div>}
+    </div>
+  );
+}

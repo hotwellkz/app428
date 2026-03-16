@@ -19,6 +19,7 @@ import { useCompanyId } from '../../contexts/CompanyContext';
 import { createDeal, ensureDefaultPipeline, listStages, moveDealToStage } from '../../lib/firebase/deals';
 import type { Deal } from '../../types/deals';
 import { Sparkles, MoreVertical, X, ExternalLink, GitBranch } from 'lucide-react';
+import { ChatSalesAnalysisBlock, type SalesAnalysisResult } from './ChatSalesAnalysisBlock';
 
 const COLLECTION_WHATSAPP_CONVERSATIONS = 'whatsappConversations';
 
@@ -272,6 +273,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [pipelineDealLoading, setPipelineDealLoading] = useState(false);
   const [creatingPipelineDeal, setCreatingPipelineDeal] = useState(false);
   const [pipelineStageModal, setPipelineStageModal] = useState(false);
+  const [salesAnalysisCache, setSalesAnalysisCache] = useState<Record<string, SalesAnalysisResult>>({});
 
   const loadPipelineDeal = useCallback(async () => {
     if (!conversationDealId || !companyId) {
@@ -1150,6 +1152,15 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                   </>
                 )}
               </div>
+
+              <ChatSalesAnalysisBlock
+                messages={messages}
+                phone={phone}
+                conversationId={conversationId ?? null}
+                cachedResult={conversationId ? salesAnalysisCache[conversationId] ?? null : null}
+                onCacheResult={(id, result) => setSalesAnalysisCache((prev) => ({ ...prev, [id]: result }))}
+                compact={embeddedInSheet}
+              />
             </>
           ) : (
             <div className="mt-4 space-y-3">

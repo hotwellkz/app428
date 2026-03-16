@@ -34,6 +34,12 @@
   status = 200
   force = true
 
+[[redirects]]
+  from = "/api/ai/analyze-sales"
+  to = "/.netlify/functions/ai-analyze-sales"
+  status = 200
+  force = true
+
 # DELETE /api/templates/{id} — может давать 405 за прокси; клиент шлёт POST на /api/templates-delete
 [[redirects]]
   from = "/api/templates/*"

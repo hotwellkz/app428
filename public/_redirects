@@ -4,6 +4,7 @@
 /api/ai/analyze-client /.netlify/functions/ai-analyze-client 200
 /api/ai/generate-reply /.netlify/functions/ai-generate-reply 200
 /api/ai/transcribe-voice /.netlify/functions/ai-transcribe-voice 200
+/api/ai/analyze-sales /.netlify/functions/ai-analyze-sales 200
 /api/templates-delete /.netlify/functions/delete-quick-reply-template 200
 /api/chats/search /.netlify/functions/chats-search 200
 /api/chats-search /.netlify/functions/chats-search 200
