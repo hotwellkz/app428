@@ -275,6 +275,9 @@ export const CommercialProposal: React.FC<CommercialProposalProps> = ({
     return new Intl.NumberFormat('ru-RU').format(price);
   };
 
+  /** В блоке capture (отправка в чат) используем выбранную тему (effectiveTheme), иначе currentTheme — единый вид с калькулятором. */
+  const themeForBlock = captureId ? effectiveTheme : currentTheme;
+
   const { 
     isVatIncluded, 
     isInstallment, 
@@ -459,6 +462,44 @@ export const CommercialProposal: React.FC<CommercialProposalProps> = ({
     }
   };
 
+  /** Классы заголовка "КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ" в шапке — единый источник для preview и capture. */
+  const getHeaderTitleDisplayClasses = (theme: ThemeType) => {
+    const base = theme === 'mobile' ? 'text-sm font-medium mb-1' : 'text-xl md:text-2xl font-semibold mb-2';
+    const byTheme: Record<ThemeType, string> = {
+      dark: 'text-[#00FF8C] tracking-wide text-2xl md:text-3xl',
+      classic: 'text-[#333333] font-serif text-2xl md:text-3xl',
+      'red-power': 'text-white font-bold tracking-wide text-2xl md:text-3xl',
+      'luxury-black-gold': 'text-[#FFD700] font-bold tracking-wide text-2xl md:text-3xl uppercase',
+      'eco-natural': 'text-[#2d572c] font-bold tracking-wide text-2xl md:text-3xl',
+      marine: 'text-white font-bold tracking-wide text-2xl md:text-3xl',
+      tech: 'text-[#00F0FF] font-bold tracking-wider text-2xl md:text-3xl font-mono uppercase',
+      'hi-tech': 'text-[#FFFFFF] font-bold tracking-widest text-3xl md:text-4xl uppercase animate-pulse',
+      construction: 'text-[#000000] font-mono font-bold tracking-widest text-3xl md:text-4xl uppercase',
+      mobile: 'text-white',
+      light: ''
+    };
+    return `${base} ${byTheme[theme] ?? ''}`.trim();
+  };
+
+  /** Классы подзаголовка в шапке — единый источник для preview и capture. */
+  const getHeaderSubtitleDisplayClasses = (theme: ThemeType) => {
+    const base = theme === 'mobile' ? 'text-xs max-w-xs' : 'text-sm md:text-base max-w-md';
+    const byTheme: Record<ThemeType, string> = {
+      dark: 'text-[#CCCCCC] leading-relaxed text-base md:text-lg',
+      classic: 'text-[#666666] leading-relaxed text-base md:text-lg font-serif',
+      'red-power': 'text-[#ffe4e6] leading-relaxed text-base md:text-lg',
+      'luxury-black-gold': 'text-[#d4af37] leading-relaxed text-base md:text-lg',
+      'eco-natural': 'text-[#558b2f] leading-relaxed text-base md:text-lg',
+      marine: 'text-[#004d6b] leading-relaxed text-base md:text-lg',
+      tech: 'text-[#D1D1D1] leading-relaxed text-base md:text-lg font-mono',
+      'hi-tech': 'text-[#00FFFF] leading-relaxed text-base md:text-lg uppercase tracking-wide',
+      construction: 'text-[#333333] leading-relaxed text-base md:text-lg font-mono font-semibold',
+      mobile: 'text-white leading-tight',
+      light: 'text-emerald-100'
+    };
+    return `${base} ${byTheme[theme] ?? ''}`.trim();
+  };
+
   const getButtonClasses = () => {
     switch (currentTheme) {
       case 'dark':
@@ -502,7 +543,7 @@ export const CommercialProposal: React.FC<CommercialProposalProps> = ({
   };
 
   const getFinancialBlockClasses = () => {
-    switch (currentTheme) {
+    switch (captureId ? effectiveTheme : currentTheme) {
       case 'dark':
         return "bg-gradient-to-br from-[#1a1a1a] to-[#2a2a2a] rounded-lg p-4 border border-[#00FF8C] transition-all duration-300 ease-in-out";
       case 'classic':
@@ -886,126 +927,89 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
         </div>
         )}
 
-        {/* PDF Export Block - без селектора тем. При captureId (WhatsApp) — структура #offer-image с логотипом и стилями для скриншота. */}
+        {/* PDF Export Block. При captureId (WhatsApp) — та же тема и шаблон, что и на странице калькулятора (единый источник правды). */}
         <div 
           ref={pdfExportRef}
           id={captureId ? 'offer-image' : undefined}
           {...(captureId ? { 'data-capture-id': captureId } : {})}
           className={getContainerClasses()}
-          style={{ backgroundColor: currentTheme === 'dark' || currentTheme === 'hi-tech' || currentTheme === 'tech' || currentTheme === 'luxury-black-gold' ? '#ffffff' : undefined }}
+          style={{ backgroundColor: effectiveTheme === 'dark' || effectiveTheme === 'hi-tech' || effectiveTheme === 'tech' || effectiveTheme === 'luxury-black-gold' ? '#ffffff' : undefined }}
         >
-          {captureId && (
-            <style>{`
-              .offer-header { background: #1E8E5A; color: white; text-align: center; padding: 30px; }
-              .offer-logo { height: 50px; margin-bottom: 10px; display: block; margin-left: auto; margin-right: auto; object-fit: contain; }
-              .offer-title { font-size: 32px; font-weight: 700; letter-spacing: 1px; white-space: normal; margin: 0 0 8px 0; }
-              .offer-subtitle { margin: 0; font-size: 14px; opacity: 0.95; }
-            `}</style>
-          )}
-          {/* Заголовок: при captureId — фиксированная шапка с локальным логотипом и пробелом в заголовке */}
-          <div className={captureId ? 'offer-header' : getHeaderClasses()}>
+          {/* Шапка: одна и та же тема для preview и capture (getHeaderClasses по effectiveTheme) */}
+          <div className={getHeaderClasses()}>
             <div className="flex flex-col items-center justify-center">
-              {/* Логотип: при captureId — локальный /logo/hotwell-logo.png для гарантированной загрузки в скриншот */}
-              <div className={`${currentTheme === 'mobile' ? 'mb-2' : 'mb-4'}`}>
+              {/* Логотип: один URL для preview и capture — одинаковый вид и гарантированная загрузка в скриншот */}
+              <div className={`${effectiveTheme === 'mobile' ? 'mb-2' : 'mb-4'}`}>
                 <img 
-                  src={captureId ? '/logo/hotwell-logo.png' : 'https://hotwell.kz/wp-content/uploads/2021/01/Logotip-hotwell.kz_.png'} 
+                  src="https://hotwell.kz/wp-content/uploads/2021/01/Logotip-hotwell.kz_.png" 
                   alt="HotWell.kz Логотип"
-                  className={captureId ? 'offer-logo' : `${currentTheme === 'mobile' ? 'max-h-[60px]' : 'max-h-[120px] md:max-h-[150px]'} w-auto object-contain ${
-                    currentTheme === 'dark' ? 'filter invert brightness-0 contrast-100' : 
-                    currentTheme === 'classic' ? 'filter grayscale(0.3) contrast(1.1)' : 
-                    currentTheme === 'red-power' ? 'filter invert brightness-0 contrast-100' :
-                    currentTheme === 'luxury-black-gold' ? 'filter drop-shadow-[0_0_10px_rgba(255,215,0,0.7)] brightness-1.2 contrast-1.1' :
-                    currentTheme === 'eco-natural' ? 'filter brightness-1.1 contrast-1.05' :
-                    currentTheme === 'marine' ? 'filter brightness-1.1 contrast-1.05' :
-                    currentTheme === 'tech' ? 'filter invert brightness-0 contrast-100 drop-shadow-[0_0_10px_rgba(0,240,255,0.7)]' :
-                    currentTheme === 'hi-tech' ? 'filter invert brightness-0 contrast-100 drop-shadow-[0_0_15px_rgba(0,255,255,0.9)] animate-pulse' : 
-                    currentTheme === 'construction' ? 'filter contrast-1.2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]' : ''
+                  className={`${effectiveTheme === 'mobile' ? 'max-h-[60px]' : 'max-h-[120px] md:max-h-[150px]'} w-auto object-contain ${
+                    effectiveTheme === 'dark' ? 'filter invert brightness-0 contrast-100' :
+                    effectiveTheme === 'classic' ? 'filter grayscale(0.3) contrast(1.1)' :
+                    effectiveTheme === 'red-power' ? 'filter invert brightness-0 contrast-100' :
+                    effectiveTheme === 'luxury-black-gold' ? 'filter drop-shadow-[0_0_10px_rgba(255,215,0,0.7)] brightness-1.2 contrast-1.1' :
+                    effectiveTheme === 'eco-natural' ? 'filter brightness-1.1 contrast-1.05' :
+                    effectiveTheme === 'marine' ? 'filter brightness-1.1 contrast-1.05' :
+                    effectiveTheme === 'tech' ? 'filter invert brightness-0 contrast-100 drop-shadow-[0_0_10px_rgba(0,240,255,0.7)]' :
+                    effectiveTheme === 'hi-tech' ? 'filter invert brightness-0 contrast-100 drop-shadow-[0_0_15px_rgba(0,255,255,0.9)] animate-pulse' :
+                    effectiveTheme === 'construction' ? 'filter contrast-1.2 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]' : ''
                   }`}
                   onError={(e) => {
-                    const el = e.currentTarget;
-                    if (captureId && el.src.endsWith('/logo/hotwell-logo.png')) {
-                      el.src = 'https://hotwell.kz/wp-content/uploads/2021/01/Logotip-hotwell.kz_.png';
-                      el.onerror = () => { el.style.display = 'none'; };
-                    } else {
-                      el.style.display = 'none';
-                    }
+                    e.currentTarget.style.display = 'none';
                   }}
                 />
               </div>
               
-              {/* Заголовок предложения: при captureId — h1.offer-title, пробел между словами сохраняется */}
+              {/* Заголовок и подзаголовок: единые классы по теме (preview и capture совпадают) */}
               {captureId ? (
-                <h1 className="offer-title">
+                <h1 className={getHeaderTitleDisplayClasses(effectiveTheme)}>
                   КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ
                 </h1>
               ) : (
-                <h2 className={`${currentTheme === 'mobile' ? 'text-sm font-medium mb-1' : 'text-xl md:text-2xl font-semibold mb-2'} ${
-                  currentTheme === 'dark' ? 'text-[#00FF8C] tracking-wide text-2xl md:text-3xl' : 
-                  currentTheme === 'classic' ? 'text-[#333333] font-serif text-2xl md:text-3xl' : 
-                  currentTheme === 'red-power' ? 'text-white font-bold tracking-wide text-2xl md:text-3xl' :
-                  currentTheme === 'luxury-black-gold' ? 'text-[#FFD700] font-bold tracking-wide text-2xl md:text-3xl uppercase' :
-                  currentTheme === 'eco-natural' ? 'text-[#2d572c] font-bold tracking-wide text-2xl md:text-3xl' :
-                  currentTheme === 'marine' ? 'text-white font-bold tracking-wide text-2xl md:text-3xl' :
-                  currentTheme === 'tech' ? 'text-[#00F0FF] font-bold tracking-wider text-2xl md:text-3xl font-mono uppercase' :
-                  currentTheme === 'hi-tech' ? 'text-[#FFFFFF] font-bold tracking-widest text-3xl md:text-4xl uppercase animate-pulse' : 
-                  currentTheme === 'construction' ? 'text-[#000000] font-mono font-bold tracking-widest text-3xl md:text-4xl uppercase' :
-                  currentTheme === 'mobile' ? 'text-white' : ''
-                }`}>
+                <h2 className={getHeaderTitleDisplayClasses(currentTheme)}>
                   КОММЕРЧЕСКОЕ ПРЕДЛОЖЕНИЕ
                 </h2>
               )}
               
-              {/* Подзаголовок */}
-              <p className={captureId ? 'offer-subtitle' : `${currentTheme === 'mobile' ? 'text-xs max-w-xs' : 'text-sm md:text-base max-w-md'} ${
-                currentTheme === 'dark' ? 'text-[#CCCCCC] leading-relaxed text-base md:text-lg' : 
-                currentTheme === 'classic' ? 'text-[#666666] leading-relaxed text-base md:text-lg font-serif' :
-                currentTheme === 'red-power' ? 'text-[#ffe4e6] leading-relaxed text-base md:text-lg' :
-                currentTheme === 'luxury-black-gold' ? 'text-[#d4af37] leading-relaxed text-base md:text-lg' :
-                currentTheme === 'eco-natural' ? 'text-[#558b2f] leading-relaxed text-base md:text-lg' :
-                currentTheme === 'marine' ? 'text-[#004d6b] leading-relaxed text-base md:text-lg' :
-                currentTheme === 'tech' ? 'text-[#D1D1D1] leading-relaxed text-base md:text-lg font-mono' :
-                currentTheme === 'hi-tech' ? 'text-[#00FFFF] leading-relaxed text-base md:text-lg uppercase tracking-wide' :
-                currentTheme === 'construction' ? 'text-[#333333] leading-relaxed text-base md:text-lg font-mono font-semibold' :
-                currentTheme === 'mobile' ? 'text-white leading-tight' : 'text-emerald-100'
-              }`}>
+              <p className={captureId ? getHeaderSubtitleDisplayClasses(effectiveTheme) : getHeaderSubtitleDisplayClasses(currentTheme)}>
                 По расчёту стоимости СИП дома в черновую отделку
               </p>
             </div>
           </div>
 
-          {/* Контент */}
-          <div className={`offer-content ${currentTheme === 'mobile' ? 'p-2 space-y-3' : 'p-6 space-y-6'} ${
-            currentTheme === 'dark' ? 'bg-[#121212]' : 
-            currentTheme === 'classic' ? 'bg-white' : 
-            currentTheme === 'red-power' ? 'bg-white' :
-            currentTheme === 'luxury-black-gold' ? 'bg-[#0f0f0f]' :
-            currentTheme === 'eco-natural' ? 'bg-[#fdfcf6]' :
-            currentTheme === 'marine' ? 'bg-[#f0f8ff]' :
-            currentTheme === 'tech' ? 'bg-[#1A1A1D]' :
-            currentTheme === 'hi-tech' ? 'bg-[#0F0F0F]' :
-            currentTheme === 'construction' ? 'bg-[#F0F0F0]' :
-            currentTheme === 'mobile' ? 'bg-white' : ''
+          {/* Контент: themeForBlock для совпадения с выбранной темой при отправке в чат */}
+          <div className={`offer-content ${themeForBlock === 'mobile' ? 'p-2 space-y-3' : 'p-6 space-y-6'} ${
+            themeForBlock === 'dark' ? 'bg-[#121212]' :
+            themeForBlock === 'classic' ? 'bg-white' :
+            themeForBlock === 'red-power' ? 'bg-white' :
+            themeForBlock === 'luxury-black-gold' ? 'bg-[#0f0f0f]' :
+            themeForBlock === 'eco-natural' ? 'bg-[#fdfcf6]' :
+            themeForBlock === 'marine' ? 'bg-[#f0f8ff]' :
+            themeForBlock === 'tech' ? 'bg-[#1A1A1D]' :
+            themeForBlock === 'hi-tech' ? 'bg-[#0F0F0F]' :
+            themeForBlock === 'construction' ? 'bg-[#F0F0F0]' :
+            themeForBlock === 'mobile' ? 'bg-white' : ''
           }`}>
             {/* Основные параметры */}
             <div>
-              <div className={`flex items-center ${currentTheme === 'mobile' ? 'mb-2' : 'mb-4'}`}>
-                <Building className={`${currentTheme === 'mobile' ? 'w-3 h-3 mr-1' : 'w-5 h-5 mr-2'} ${
-                  currentTheme === 'dark' ? 'text-[#00FF8C]' : 
-                  currentTheme === 'classic' ? 'text-[#800000]' : 
-                  currentTheme === 'red-power' ? 'text-[#c40021]' :
-                  currentTheme === 'luxury-black-gold' ? 'text-[#FFD700]' :
-                  currentTheme === 'eco-natural' ? 'text-[#33691e]' :
-                  currentTheme === 'marine' ? 'text-[#00aaff]' :
-                  currentTheme === 'tech' ? 'text-[#00F0FF]' :
-                  currentTheme === 'hi-tech' ? 'text-[#00FFFF]' :
-                  currentTheme === 'construction' ? 'text-[#FFCC00]' : 'text-emerald-600'
+              <div className={`flex items-center ${themeForBlock === 'mobile' ? 'mb-2' : 'mb-4'}`}>
+                <Building className={`${themeForBlock === 'mobile' ? 'w-3 h-3 mr-1' : 'w-5 h-5 mr-2'} ${
+                  themeForBlock === 'dark' ? 'text-[#00FF8C]' :
+                  themeForBlock === 'classic' ? 'text-[#800000]' :
+                  themeForBlock === 'red-power' ? 'text-[#c40021]' :
+                  themeForBlock === 'luxury-black-gold' ? 'text-[#FFD700]' :
+                  themeForBlock === 'eco-natural' ? 'text-[#33691e]' :
+                  themeForBlock === 'marine' ? 'text-[#00aaff]' :
+                  themeForBlock === 'tech' ? 'text-[#00F0FF]' :
+                  themeForBlock === 'hi-tech' ? 'text-[#00FFFF]' :
+                  themeForBlock === 'construction' ? 'text-[#FFCC00]' : 'text-emerald-600'
                 }`} />
                 <h3 className={getTextClasses('title')}>
-                  {currentTheme === 'eco-natural' ? '🌿 ' : currentTheme === 'marine' ? '🌊 ' : currentTheme === 'tech' ? '⚡ ' : currentTheme === 'hi-tech' ? '💎 ' : currentTheme === 'construction' ? '🛠 ' : ''}Основные параметры
+                  {themeForBlock === 'eco-natural' ? '🌿 ' : themeForBlock === 'marine' ? '🌊 ' : themeForBlock === 'tech' ? '⚡ ' : themeForBlock === 'hi-tech' ? '💎 ' : themeForBlock === 'construction' ? '🛠 ' : ''}Основные параметры
                 </h3>
               </div>
-              <div className={`${currentTheme === 'mobile' ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'} ${getSectionClasses()}`}>
-                <div className={`${currentTheme === 'mobile' ? 'space-y-1' : 'space-y-2'}`}>
+              <div className={`${themeForBlock === 'mobile' ? 'grid grid-cols-1 gap-2' : 'grid grid-cols-1 md:grid-cols-2 gap-4'} ${getSectionClasses()}`}>
+                <div className={`${themeForBlock === 'mobile' ? 'space-y-1' : 'space-y-2'}`}>
                   <p className={getTextClasses('body')}><span className={getTextClasses('subtitle')}>Площадь застройки:</span> {area} м²</p>
                   <p className={getTextClasses('body')}><span className={getTextClasses('subtitle')}>Фундамент:</span> {parameters.foundation}</p>
                   <p className={getTextClasses('body')}><span className={getTextClasses('subtitle')}>Количество этажей:</span> {parameters.floors}</p>
@@ -1020,7 +1024,7 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
                     <p className={getTextClasses('body')}><span className={getTextClasses('subtitle')}>Высота 3-го этажа:</span> {parameters.thirdFloorHeight}, {parameters.thirdFloorThickness}</p>
                   ) : null}
                 </div>
-                {currentTheme !== 'mobile' && (
+                {themeForBlock !== 'mobile' && (
                   <div className="space-y-2">
                     <p className={getTextClasses('body')}><span className={getTextClasses('subtitle')}>Перегородки:</span> {parameters.partitionType}</p>
                     <p className={getTextClasses('body')}><span className={getTextClasses('subtitle')}>Потолок:</span> {parameters.ceiling}</p>
@@ -1028,7 +1032,7 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
                     <p className={getTextClasses('body')}><span className={getTextClasses('subtitle')}>Форма дома:</span> {parameters.houseShape}</p>
                   </div>
                 )}
-                {currentTheme === 'mobile' && (
+                {themeForBlock === 'mobile' && (
                   <div className="space-y-1">
                     <p className={getTextClasses('body')}><span className={getTextClasses('subtitle')}>Перегородки:</span> {parameters.partitionType}</p>
                     <p className={getTextClasses('body')}><span className={getTextClasses('subtitle')}>Потолок:</span> {parameters.ceiling}</p>
@@ -1043,25 +1047,25 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
             {(parameters.useCustomWorks && parameters.customWorks.some(work => work.name.trim() !== '')) || 
              (!parameters.useCustomWorks && parameters.additionalWorks !== 'Без дополнительных работ') ? (
               <div>
-                <div className={`flex items-center ${currentTheme === 'mobile' ? 'mb-2' : 'mb-4'}`}>
-                  <Wrench className={`${currentTheme === 'mobile' ? 'w-3 h-3 mr-1' : 'w-5 h-5 mr-2'} ${
-                    currentTheme === 'dark' ? 'text-[#00FF8C]' : 
-                    currentTheme === 'classic' ? 'text-[#800000]' : 
-                    currentTheme === 'red-power' ? 'text-[#c40021]' :
-                    currentTheme === 'luxury-black-gold' ? 'text-[#FFD700]' :
-                    currentTheme === 'eco-natural' ? 'text-[#33691e]' :
-                    currentTheme === 'marine' ? 'text-[#00aaff]' :
-                    currentTheme === 'tech' ? 'text-[#00F0FF]' :
-                    currentTheme === 'hi-tech' ? 'text-[#00FFFF]' :
-                    currentTheme === 'construction' ? 'text-[#FFCC00]' : 'text-emerald-600'
+                <div className={`flex items-center ${themeForBlock === 'mobile' ? 'mb-2' : 'mb-4'}`}>
+                  <Wrench className={`${themeForBlock === 'mobile' ? 'w-3 h-3 mr-1' : 'w-5 h-5 mr-2'} ${
+                    themeForBlock === 'dark' ? 'text-[#00FF8C]' :
+                    themeForBlock === 'classic' ? 'text-[#800000]' :
+                    themeForBlock === 'red-power' ? 'text-[#c40021]' :
+                    themeForBlock === 'luxury-black-gold' ? 'text-[#FFD700]' :
+                    themeForBlock === 'eco-natural' ? 'text-[#33691e]' :
+                    themeForBlock === 'marine' ? 'text-[#00aaff]' :
+                    themeForBlock === 'tech' ? 'text-[#00F0FF]' :
+                    themeForBlock === 'hi-tech' ? 'text-[#00FFFF]' :
+                    themeForBlock === 'construction' ? 'text-[#FFCC00]' : 'text-emerald-600'
                   }`} />
                   <h3 className={getTextClasses('title')}>
-                    {currentTheme === 'eco-natural' ? '🌿 ' : currentTheme === 'marine' ? '🌊 ' : currentTheme === 'tech' ? '⚡ ' : currentTheme === 'hi-tech' ? '💎 ' : currentTheme === 'construction' ? '🛠 ' : ''}Дополнительные работы
+                    {themeForBlock === 'eco-natural' ? '🌿 ' : themeForBlock === 'marine' ? '🌊 ' : themeForBlock === 'tech' ? '⚡ ' : themeForBlock === 'hi-tech' ? '💎 ' : themeForBlock === 'construction' ? '🛠 ' : ''}Дополнительные работы
                   </h3>
                 </div>
                 <div className={getSectionClasses()}>
                   {parameters.useCustomWorks && parameters.customWorks.length > 0 ? (
-                    <div className={`${currentTheme === 'mobile' ? 'space-y-1' : 'space-y-2'}`}>
+                    <div className={`${themeForBlock === 'mobile' ? 'space-y-1' : 'space-y-2'}`}>
                       {parameters.customWorks.filter(work => work.name.trim() !== '').map((work, index) => (
                         <div key={index} className="flex justify-between items-center">
                           <span className={getTextClasses('body')}>{work.name}</span>
@@ -1083,43 +1087,43 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
 
             {/* Финансовая часть */}
             <div>
-              <h3 className={`${getTextClasses('title')} ${currentTheme === 'mobile' ? 'mb-1' : 'mb-4'}`}>
-                {currentTheme !== 'mobile' && (
-                  currentTheme === 'eco-natural' ? '🌿 ' : 
-                  currentTheme === 'marine' ? '🌊 ' : 
-                  currentTheme === 'tech' ? '⚡ ' : 
-                  currentTheme === 'hi-tech' ? '💎 ' : 
-                  currentTheme === 'construction' ? '🛠 ' : ''
+              <h3 className={`${getTextClasses('title')} ${themeForBlock === 'mobile' ? 'mb-1' : 'mb-4'}`}>
+                {themeForBlock !== 'mobile' && (
+                  themeForBlock === 'eco-natural' ? '🌿 ' :
+                  themeForBlock === 'marine' ? '🌊 ' :
+                  themeForBlock === 'tech' ? '⚡ ' :
+                  themeForBlock === 'hi-tech' ? '💎 ' :
+                  themeForBlock === 'construction' ? '🛠 ' : ''
                 )}Стоимость
               </h3>
               <div className={getFinancialBlockClasses()}>
-                <div className={`${currentTheme === 'mobile' ? 'space-y-0 mb-1' : 'space-y-2 mb-4'} ${
-                  currentTheme === 'classic' ? 'text-base' : 
-                  currentTheme === 'dark' ? 'text-base' : 
-                  currentTheme === 'red-power' ? 'text-base' : 
-                  currentTheme === 'luxury-black-gold' ? 'text-lg' :
-                  currentTheme === 'eco-natural' ? 'text-base' :
-                  currentTheme === 'marine' ? 'text-base' :
-                  currentTheme === 'tech' ? 'text-base' :
-                  currentTheme === 'hi-tech' ? 'text-base' :
-                  currentTheme === 'construction' ? 'text-base' :
-                  currentTheme === 'mobile' ? 'text-xs' : 'text-sm'
+                <div className={`${themeForBlock === 'mobile' ? 'space-y-0 mb-1' : 'space-y-2 mb-4'} ${
+                  themeForBlock === 'classic' ? 'text-base' :
+                  themeForBlock === 'dark' ? 'text-base' :
+                  themeForBlock === 'red-power' ? 'text-base' :
+                  themeForBlock === 'luxury-black-gold' ? 'text-lg' :
+                  themeForBlock === 'eco-natural' ? 'text-base' :
+                  themeForBlock === 'marine' ? 'text-base' :
+                  themeForBlock === 'tech' ? 'text-base' :
+                  themeForBlock === 'hi-tech' ? 'text-base' :
+                  themeForBlock === 'construction' ? 'text-base' :
+                  themeForBlock === 'mobile' ? 'text-xs' : 'text-sm'
                 }`}>
                   {!hideFundamentCost && (
                     <div className="flex justify-between">
-                      <span className={getTextClasses('body')}>{currentTheme === 'mobile' ? '' : '🏗️ '}Фундамент{currentTheme === 'mobile' ? '' : ' (14%)'}</span>
+                      <span className={getTextClasses('body')}>{themeForBlock === 'mobile' ? '' : '🏗️ '}Фундамент{themeForBlock === 'mobile' ? '' : ' (14%)'}</span>
                       <span className={getTextClasses('subtitle')}>{formatPrice(result.fundamentCost)} ₸</span>
                     </div>
                   )}
                   {!hideKitCost && (
                     <div className="flex justify-between">
-                      <span className={getTextClasses('body')}>{currentTheme === 'mobile' ? '' : '🏠 '}Домокомплект{currentTheme === 'mobile' ? '' : ' (71%)'}</span>
+                      <span className={getTextClasses('body')}>{themeForBlock === 'mobile' ? '' : '🏠 '}Домокомплект{themeForBlock === 'mobile' ? '' : ' (71%)'}</span>
                       <span className={getTextClasses('subtitle')}>{formatPrice(result.kitCost)} ₸</span>
                     </div>
                   )}
                   {!hideAssemblyCost && (
                     <div className="flex justify-between">
-                      <span className={getTextClasses('body')}>{currentTheme === 'mobile' ? '' : '⚒️ '}Сборка{currentTheme === 'mobile' ? '' : ' (15%)'}</span>
+                      <span className={getTextClasses('body')}>{themeForBlock === 'mobile' ? '' : '⚒️ '}Сборка{themeForBlock === 'mobile' ? '' : ' (15%)'}</span>
                       <span className={getTextClasses('subtitle')}>{formatPrice(result.assemblyCost)} ₸</span>
                     </div>
                   )}
@@ -1127,55 +1131,55 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
                   {!hideDeliveryCost && parameters.deliveryCity && parameters.deliveryCity !== 'Выберите город доставки' && result.deliveryCost && result.deliveryCost > 0 && (
                     <div className="flex justify-between">
                       <span className={getTextClasses('body')}>
-                        {currentTheme === 'mobile' ? '' : '🚚 '}
+                        {themeForBlock === 'mobile' ? '' : '🚚 '}
                         Доставка ({parameters.deliveryCity})
-                        {currentTheme !== 'mobile' && ` - ${calculateTrucksNeeded(area)} фур${calculateTrucksNeeded(area) > 1 ? 'ы' : 'а'}`}
+                        {themeForBlock !== 'mobile' && ` - ${calculateTrucksNeeded(area)} фур${calculateTrucksNeeded(area) > 1 ? 'ы' : 'а'}`}
                       </span>
                       <span className={getTextClasses('subtitle')}>{formatPrice(result.deliveryCost)} ₸</span>
                     </div>
                   )}
                   {isVatIncluded && (
-                    <div className={`flex justify-between ${currentTheme === 'mobile' ? 'border-t border-gray-200 pt-0' : 'border-t pt-2'} ${
-                      currentTheme === 'dark' ? 'border-[#2A2A2A]' : 
-                      currentTheme === 'classic' ? 'border-[#DDDDDD]' : 
-                      currentTheme === 'red-power' ? 'border-[#ffccd5]' :
-                      currentTheme === 'luxury-black-gold' ? 'border-[#FFD700]' :
-                      currentTheme === 'eco-natural' ? 'border-[#d4e1d4]' :
-                      currentTheme === 'marine' ? 'border-[#b3e0ff]' :
-                      currentTheme === 'tech' ? 'border-[#00F0FF]' :
-                      currentTheme === 'hi-tech' ? 'border-[#00FFFF]' :
-                      currentTheme === 'construction' ? 'border-[#333333]' : 'border-emerald-300'
+                    <div className={`flex justify-between ${themeForBlock === 'mobile' ? 'border-t border-gray-200 pt-0' : 'border-t pt-2'} ${
+                      themeForBlock === 'dark' ? 'border-[#2A2A2A]' :
+                      themeForBlock === 'classic' ? 'border-[#DDDDDD]' :
+                      themeForBlock === 'red-power' ? 'border-[#ffccd5]' :
+                      themeForBlock === 'luxury-black-gold' ? 'border-[#FFD700]' :
+                      themeForBlock === 'eco-natural' ? 'border-[#d4e1d4]' :
+                      themeForBlock === 'marine' ? 'border-[#b3e0ff]' :
+                      themeForBlock === 'tech' ? 'border-[#00F0FF]' :
+                      themeForBlock === 'hi-tech' ? 'border-[#00FFFF]' :
+                      themeForBlock === 'construction' ? 'border-[#333333]' : 'border-emerald-300'
                     }`}>
                       <span className={getTextClasses('body')}>НДС 16%</span>
                       <span className={getTextClasses('subtitle')}>{formatPrice(Math.round((result.total / 1.16) * 0.16))} ₸</span>
                     </div>
                   )}
                   {isInstallment && (
-                    <div className={`${currentTheme === 'mobile' ? 'border-t border-gray-200 pt-0' : 'border-t pt-2'} ${
-                      currentTheme === 'dark' ? 'border-[#2A2A2A]' : 
-                      currentTheme === 'classic' ? 'border-[#DDDDDD]' : 
-                      currentTheme === 'red-power' ? 'border-[#ffccd5]' :
-                      currentTheme === 'luxury-black-gold' ? 'border-[#FFD700]' :
-                      currentTheme === 'eco-natural' ? 'border-[#d4e1d4]' :
-                      currentTheme === 'marine' ? 'border-[#b3e0ff]' :
-                      currentTheme === 'tech' ? 'border-[#00F0FF]' :
-                      currentTheme === 'hi-tech' ? 'border-[#00FFFF]' :
-                      currentTheme === 'construction' ? 'border-[#333333]' : 'border-emerald-300'
+                    <div className={`${themeForBlock === 'mobile' ? 'border-t border-gray-200 pt-0' : 'border-t pt-2'} ${
+                      themeForBlock === 'dark' ? 'border-[#2A2A2A]' :
+                      themeForBlock === 'classic' ? 'border-[#DDDDDD]' :
+                      themeForBlock === 'red-power' ? 'border-[#ffccd5]' :
+                      themeForBlock === 'luxury-black-gold' ? 'border-[#FFD700]' :
+                      themeForBlock === 'eco-natural' ? 'border-[#d4e1d4]' :
+                      themeForBlock === 'marine' ? 'border-[#b3e0ff]' :
+                      themeForBlock === 'tech' ? 'border-[#00F0FF]' :
+                      themeForBlock === 'hi-tech' ? 'border-[#00FFFF]' :
+                      themeForBlock === 'construction' ? 'border-[#333333]' : 'border-emerald-300'
                     }`}>
                       <div className="flex justify-between">
                         <span className={getTextClasses('body')}>Рассрочка 17% (комиссия Kaspi)</span>
                         <div className="text-right">
                           <span className={getTextClasses('subtitle')}>{formatPrice(Math.round((options.installmentAmount > 0 ? options.installmentAmount : result.total) * 0.17))} ₸</span>
-                          <div className={`${currentTheme === 'mobile' ? 'text-xs' : 'text-sm'} ${
-                            currentTheme === 'dark' ? 'text-[#888888]' : 
-                            currentTheme === 'classic' ? 'text-[#666666]' : 
-                            currentTheme === 'red-power' ? 'text-[#888888]' :
-                            currentTheme === 'luxury-black-gold' ? 'text-[#888888]' :
-                            currentTheme === 'eco-natural' ? 'text-[#666666]' :
-                            currentTheme === 'marine' ? 'text-[#666666]' :
-                            currentTheme === 'tech' ? 'text-[#888888] font-mono' :
-                            currentTheme === 'hi-tech' ? 'text-[#888888]' :
-                            currentTheme === 'construction' ? 'text-[#666666] font-mono' : 'text-gray-500'
+                          <div className={`${themeForBlock === 'mobile' ? 'text-xs' : 'text-sm'} ${
+                            themeForBlock === 'dark' ? 'text-[#888888]' :
+                            themeForBlock === 'classic' ? 'text-[#666666]' :
+                            themeForBlock === 'red-power' ? 'text-[#888888]' :
+                            themeForBlock === 'luxury-black-gold' ? 'text-[#888888]' :
+                            themeForBlock === 'eco-natural' ? 'text-[#666666]' :
+                            themeForBlock === 'marine' ? 'text-[#666666]' :
+                            themeForBlock === 'tech' ? 'text-[#888888] font-mono' :
+                            themeForBlock === 'hi-tech' ? 'text-[#888888]' :
+                            themeForBlock === 'construction' ? 'text-[#666666] font-mono' : 'text-gray-500'
                           } ml-2`}>
                             {options.installmentAmount > 0 
                               ? `от ${formatPrice(options.installmentAmount)} ₸`
@@ -1187,44 +1191,44 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
                     </div>
                   )}
                 </div>
-                <div className={`${currentTheme === 'mobile' ? 'border-t border-emerald-300 pt-1' : 'border-t pt-4'} ${
-                  currentTheme === 'dark' ? 'border-[#00FF8C]' : 
-                  currentTheme === 'classic' ? 'border-[#C2A85D] border-2' : 
-                  currentTheme === 'red-power' ? 'border-[#c40021] border-2' :
-                  currentTheme === 'luxury-black-gold' ? 'border-[#FFD700] border-2' :
-                  currentTheme === 'eco-natural' ? 'border-[#a5d6a7] border-2' :
-                  currentTheme === 'marine' ? 'border-[#00aaff] border-2' :
-                  currentTheme === 'tech' ? 'border-[#00F0FF] border-2' :
-                  currentTheme === 'hi-tech' ? 'border-[#00FFFF] border-2' :
-                  currentTheme === 'construction' ? 'border-[#333333] border-4' :
-                  currentTheme === 'mobile' ? 'border-emerald-300' : 'border-emerald-300'
+                <div className={`${themeForBlock === 'mobile' ? 'border-t border-emerald-300 pt-1' : 'border-t pt-4'} ${
+                  themeForBlock === 'dark' ? 'border-[#00FF8C]' :
+                  themeForBlock === 'classic' ? 'border-[#C2A85D] border-2' :
+                  themeForBlock === 'red-power' ? 'border-[#c40021] border-2' :
+                  themeForBlock === 'luxury-black-gold' ? 'border-[#FFD700] border-2' :
+                  themeForBlock === 'eco-natural' ? 'border-[#a5d6a7] border-2' :
+                  themeForBlock === 'marine' ? 'border-[#00aaff] border-2' :
+                  themeForBlock === 'tech' ? 'border-[#00F0FF] border-2' :
+                  themeForBlock === 'hi-tech' ? 'border-[#00FFFF] border-2' :
+                  themeForBlock === 'construction' ? 'border-[#333333] border-4' :
+                  themeForBlock === 'mobile' ? 'border-emerald-300' : 'border-emerald-300'
                 }`}>
                   <div className="flex justify-between items-center">
-                    <span className={`${currentTheme === 'mobile' ? 'text-xs' : 'text-lg'} font-bold ${
-                      currentTheme === 'dark' ? 'text-white' : 
-                      currentTheme === 'classic' ? 'text-[#333333] font-serif' : 
-                      currentTheme === 'red-power' ? 'text-[#c40021] font-semibold' :
-                      currentTheme === 'luxury-black-gold' ? 'text-[#FFD700] font-semibold' :
-                      currentTheme === 'eco-natural' ? 'text-[#2d572c] font-bold' :
-                      currentTheme === 'marine' ? 'text-white font-bold' :
-                      currentTheme === 'tech' ? 'text-[#00F0FF] font-bold font-mono' :
-                      currentTheme === 'hi-tech' ? 'text-[#FFFFFF] font-bold uppercase tracking-wide' :
-                      currentTheme === 'construction' ? 'text-[#000000] font-mono uppercase tracking-wide' : 'text-gray-900'
+                    <span className={`${themeForBlock === 'mobile' ? 'text-xs' : 'text-lg'} font-bold ${
+                      themeForBlock === 'dark' ? 'text-white' :
+                      themeForBlock === 'classic' ? 'text-[#333333] font-serif' :
+                      themeForBlock === 'red-power' ? 'text-[#c40021] font-semibold' :
+                      themeForBlock === 'luxury-black-gold' ? 'text-[#FFD700] font-semibold' :
+                      themeForBlock === 'eco-natural' ? 'text-[#2d572c] font-bold' :
+                      themeForBlock === 'marine' ? 'text-white font-bold' :
+                      themeForBlock === 'tech' ? 'text-[#00F0FF] font-bold font-mono' :
+                      themeForBlock === 'hi-tech' ? 'text-[#FFFFFF] font-bold uppercase tracking-wide' :
+                      themeForBlock === 'construction' ? 'text-[#000000] font-mono uppercase tracking-wide' : 'text-gray-900'
                     }`}>ИТОГО:</span>
                     <span className={getTotalClasses()}>
                       {formatPrice(result.total)} ₸
                     </span>
                   </div>
-                  <p className={`text-right ${currentTheme === 'mobile' ? 'text-xs' : 'text-sm'} ${
-                    currentTheme === 'dark' ? 'text-[#CCCCCC]' : 
-                    currentTheme === 'classic' ? 'text-[#666666]' : 
-                    currentTheme === 'red-power' ? 'text-[#c40021] font-semibold' :
-                    currentTheme === 'luxury-black-gold' ? 'text-[#FFD700] font-semibold' :
-                    currentTheme === 'eco-natural' ? 'text-[#2d572c] font-semibold' :
-                    currentTheme === 'marine' ? 'text-[#003f5c] font-bold' :
-                    currentTheme === 'tech' ? 'text-[#00F0FF] font-mono' :
-                    currentTheme === 'hi-tech' ? 'text-[#00FFFF] font-bold uppercase tracking-wide' :
-                    currentTheme === 'construction' ? 'text-[#333333] font-mono font-semibold' : 'text-gray-600'
+                  <p className={`text-right ${themeForBlock === 'mobile' ? 'text-xs' : 'text-sm'} ${
+                    themeForBlock === 'dark' ? 'text-[#CCCCCC]' :
+                    themeForBlock === 'classic' ? 'text-[#666666]' :
+                    themeForBlock === 'red-power' ? 'text-[#c40021] font-semibold' :
+                    themeForBlock === 'luxury-black-gold' ? 'text-[#FFD700] font-semibold' :
+                    themeForBlock === 'eco-natural' ? 'text-[#2d572c] font-semibold' :
+                    themeForBlock === 'marine' ? 'text-[#003f5c] font-bold' :
+                    themeForBlock === 'tech' ? 'text-[#00F0FF] font-mono' :
+                    themeForBlock === 'hi-tech' ? 'text-[#00FFFF] font-bold uppercase tracking-wide' :
+                    themeForBlock === 'construction' ? 'text-[#333333] font-mono font-semibold' : 'text-gray-600'
                   }`}>
                     {isVatIncluded ? 'с НДС' : 'без НДС'}
                   </p>
@@ -1234,13 +1238,13 @@ HotWell.kz - Быстровозводимые дома из СИП-панеле�
 
             {/* Условия */}
             <div>
-              <h3 className={`${getTextClasses('title')} ${currentTheme === 'mobile' ? 'mb-1' : 'mb-4'}`}>
-                {currentTheme !== 'mobile' && (
-                  currentTheme === 'eco-natural' ? '🌿 ' : 
-                  currentTheme === 'marine' ? '🌊 ' : 
-                  currentTheme === 'tech' ? '⚡ ' : 
-                  currentTheme === 'hi-tech' ? '💎 ' : 
-                  currentTheme === 'construction' ? '🛠 ' : ''
+              <h3 className={`${getTextClasses('title')} ${themeForBlock === 'mobile' ? 'mb-1' : 'mb-4'}`}>
+                {themeForBlock !== 'mobile' && (
+                  themeForBlock === 'eco-natural' ? '🌿 ' :
+                  themeForBlock === 'marine' ? '🌊 ' :
+                  themeForBlock === 'tech' ? '⚡ ' :
+                  themeForBlock === 'hi-tech' ? '💎 ' :
+                  themeForBlock === 'construction' ? '🛠 ' : ''
                 )}Условия
               </h3>
               <div className={getSectionClasses()}>
