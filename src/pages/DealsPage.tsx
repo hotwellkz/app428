@@ -858,19 +858,19 @@ export const DealsPage: React.FC = () => {
       {deleteTarget && (
         <div className="fixed inset-0 z-[1100] flex items-center justify-center bg-black/45 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-5">
-            <h2 className="text-lg font-semibold">В корзину?</h2>
-            <p className="text-sm text-slate-600 mt-2">Сделка попадёт в корзину; восстановление возможно.</p>
+            <h2 className="text-lg font-semibold text-slate-900">Переместить в корзину?</h2>
+            <p className="text-sm text-slate-600 mt-2">Сделку можно будет восстановить позже в разделе «Корзина».</p>
             <div className="mt-4 flex justify-end gap-2">
-              <button type="button" onClick={() => setDeleteTarget(null)} className="px-4 py-2 border rounded-lg text-sm">
+              <button type="button" onClick={() => setDeleteTarget(null)} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 hover:bg-slate-50">
                 Отмена
               </button>
               <button
                 type="button"
                 disabled={deleting}
                 onClick={confirmSoftDelete}
-                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm disabled:opacity-50"
+                className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium disabled:opacity-50 hover:bg-red-700"
               >
-                В корзину
+                Переместить в корзину
               </button>
             </div>
           </div>
@@ -1247,14 +1247,14 @@ function StageColumn({
                             <div className="border-t border-slate-100 my-0.5" />
                             <button
                               type="button"
-                              className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
+                              className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 font-medium"
                               onClick={() => {
                                 setMenuDealId(null);
                                 onDelete(deal);
                               }}
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
-                              В корзину
+                              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                              Переместить в корзину
                             </button>
                           </div>
                         )}
