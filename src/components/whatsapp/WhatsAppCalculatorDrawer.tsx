@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { X, Pencil } from 'lucide-react';
 import { CalculatorForm } from '../calculator/CalculatorForm';
 import { CommercialProposal, COMMERCIAL_PROPOSAL_THEMES, type CommercialProposalThemeId } from '../calculator/CommercialProposal';
@@ -6,12 +6,8 @@ import { CalculationResult } from '../../types/calculator';
 import html2canvas from 'html2canvas';
 
 const CACHE_KEY = 'whatsapp_calculator_cache';
-const KP_CAPTURE_ID = 'wa-kp-capture';
-const KP_RENDER_ID = 'commercial-offer-render';
-/** Блок документа КП с логотипом и заголовком для скриншота (CommercialProposal рендерит его при captureId). */
+/** Единый блок КП: id для превью в drawer и для захвата при отправке в чат. */
 const KP_OFFER_IMAGE_ID = 'offer-image';
-/** Fallback: блок документа без обёртки offer-image. */
-const KP_DOCUMENT_ID = 'commercial-offer-document';
 const DEFAULT_CAPTION =
   'Ваше коммерческое предложение по дому из SIP-панелей.\nЕсли будут вопросы — напишите 👍';
 
@@ -102,7 +98,6 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
   const [theme, setTheme] = useState<CommercialProposalThemeId>('light');
   const [showEditCaptionModal, setShowEditCaptionModal] = useState(false);
   const [editCaptionDraft, setEditCaptionDraft] = useState('');
-  const captureRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
@@ -154,14 +149,10 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
     if (finalResult.total <= 0) return;
     setSendingProposal(true);
     try {
-      const node =
-        document.getElementById(KP_OFFER_IMAGE_ID) ||
-        document.getElementById(KP_DOCUMENT_ID) ||
-        document.getElementById(KP_RENDER_ID) ||
-        document.getElementById(KP_CAPTURE_ID);
+      const node = document.getElementById(KP_OFFER_IMAGE_ID);
       if (!node) {
-        console.error('KP capture: node not found', { KP_OFFER_IMAGE_ID, KP_DOCUMENT_ID, KP_RENDER_ID, KP_CAPTURE_ID });
-        throw new Error('Capture container not found');
+        console.error('KP capture: node not found (id=', KP_OFFER_IMAGE_ID, ')');
+        throw new Error('Блок КП не найден. Прокрутите до предпросмотра и попробуйте снова.');
       }
 
       await document.fonts.ready;
@@ -198,28 +189,24 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
           img.onerror = () => resolve();
         });
       }
+      node.scrollIntoView({ block: 'start', behavior: 'instant' });
       await new Promise<void>((r) => setTimeout(r, 500));
 
-      const rect = node.getBoundingClientRect();
-      const width = Math.ceil(rect.width);
-      const height = Math.ceil(rect.height);
+      const width = node.offsetWidth || Math.ceil(node.getBoundingClientRect().width);
+      const height = node.offsetHeight || Math.ceil(node.getBoundingClientRect().height);
       if (width <= 0 || height <= 0) {
-        throw new Error('Размер блока КП некорректен');
+        throw new Error('Размер блока КП некорректен. Убедитесь, что предпросмотр КП виден на экране.');
       }
       if (import.meta.env.DEV) {
-        console.log('KP capture node', {
-          id: node.id,
-          width,
-          height,
-          innerHTMLLength: node.innerHTML?.length ?? 0,
-          total: finalResult.total
-        });
+        console.log('KP capture node', { id: node.id, width, height, total: finalResult.total });
       }
 
       const canvas = await html2canvas(node, {
         width,
         height,
         scale: 2,
+        windowWidth: width,
+        windowHeight: height,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
@@ -343,14 +330,29 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
             initialValues={initialValues as any}
           />
           {finalResult.total > 0 && (
-            <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200">
-              <p className="text-sm font-medium text-gray-800">
-                Итого: {new Intl.NumberFormat('ru-RU').format(finalResult.total)} ₸
-              </p>
-              <p className="text-xs text-gray-600 mt-0.5">
-                Площадь: {area} м² · {new Intl.NumberFormat('ru-RU').format(finalResult.pricePerSqm)} ₸/м²
-              </p>
-            </div>
+            <>
+              <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200">
+                <p className="text-sm font-medium text-gray-800">
+                  Итого: {new Intl.NumberFormat('ru-RU').format(finalResult.total)} ₸
+                </p>
+                <p className="text-xs text-gray-600 mt-0.5">
+                  Площадь: {area} м² · {new Intl.NumberFormat('ru-RU').format(finalResult.pricePerSqm)} ₸/м²
+                </p>
+              </div>
+              {/* Единый источник КП: тот же блок для превью и для захвата в изображение при отправке в чат */}
+              <div className="overflow-x-auto -mx-4 px-4" style={{ maxWidth: '100%' }}>
+                <div style={{ width: 1080, minHeight: 1 }}>
+                  <CommercialProposal
+                    area={area}
+                    parameters={paramsForProposal}
+                    result={finalResult}
+                    options={options}
+                    captureId={KP_OFFER_IMAGE_ID}
+                    presetTheme={theme}
+                  />
+                </div>
+              </div>
+            </>
           )}
         </div>
 
@@ -428,40 +430,6 @@ export const WhatsAppCalculatorDrawer: React.FC<WhatsAppCalculatorDrawerProps> =
         )}
       </div>
 
-      {/* Блок для рендера КП вне экрана (без visibility:hidden — иначе html2canvas даёт белый кадр). Без minHeight — обрезка по контенту. */}
-      <div
-        id={KP_CAPTURE_ID}
-        ref={captureRef}
-        className="fixed top-0 z-[-1] overflow-visible bg-white"
-        style={{
-          left: -10000,
-          width: 1080,
-          background: '#ffffff',
-          color: '#111',
-          margin: 0,
-          padding: 0
-        }}
-      >
-        <div
-          id={KP_RENDER_ID}
-          style={{
-            width: 1080,
-            background: '#ffffff',
-            margin: 0,
-            padding: 0,
-            display: 'inline-block'
-          }}
-        >
-          <CommercialProposal
-            area={area}
-            parameters={paramsForProposal}
-            result={finalResult}
-            options={options}
-            captureId={KP_DOCUMENT_ID}
-            presetTheme={theme}
-          />
-        </div>
-      </div>
     </>
   );
 };
