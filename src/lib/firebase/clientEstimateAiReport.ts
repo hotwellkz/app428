@@ -29,11 +29,43 @@ export interface UnclassifiedOrSuspiciousItem {
   reason?: string;
 }
 
+/** Статус позиции при позиционном сравнении сметы и факта */
+export type EstimateLineStatus =
+  | 'ok'       // в норме
+  | 'overrun'  // перерасход
+  | 'savings'  // экономия
+  | 'no_fact'  // нет факта
+  | 'outside'  // расход вне сметы (только для outsideEstimate)
+  | 'ambiguous'; // недостаточно данных / нужна проверка
+
+/** Одна строка позиционного сравнения сметы и факта */
+export interface EstimateLineItemRow {
+  name: string;
+  section?: string;
+  planQty?: number;
+  planPrice?: number;
+  planSum: number;
+  factQty?: number | null;
+  factSum?: number | null;
+  deviation?: number | null;
+  deviationQty?: number | null;
+  deviationPrice?: number | null;
+  status: EstimateLineStatus;
+  comment?: string;
+  confidence: 'high' | 'medium' | 'low';
+  transactionIds?: string[];
+}
+
 export interface EstimateVsActualReport {
   summary: EstimateVsActualSummary;
-  byCategory: EstimateVsActualCategory[];
-  unclassifiedExpenses: UnclassifiedOrSuspiciousItem[];
-  suspicious: UnclassifiedOrSuspiciousItem[];
+  /** Позиционное сравнение (новая схема); при наличии используется в UI */
+  lineItems?: EstimateLineItemRow[];
+  /** Устаревшие поля — для обратной совместимости со старыми сохранёнными отчётами */
+  byCategory?: EstimateVsActualCategory[];
+  unclassifiedExpenses?: UnclassifiedOrSuspiciousItem[];
+  suspicious?: UnclassifiedOrSuspiciousItem[];
+  /** Расходы, не привязанные ни к одной строке сметы (вне сметы) */
+  outsideEstimate?: UnclassifiedOrSuspiciousItem[];
   recommendations: string[];
 }
 
