@@ -108,8 +108,11 @@ export const useClientTransactions = (clientId: string): ClientTransactionsData 
             ...doc.data()
           })) as Transaction[];
 
-          // Вычисляем общую сумму (та же логика, что и в TransactionHistoryPage)
-          const total = transactionsData.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+          // Сумма только по одобренным транзакциям (pending/rejected не влияют на баланс)
+          const approvedOnly = transactionsData.filter(
+            (t) => (t as { status?: string }).status === undefined || (t as { status?: string }).status === 'approved'
+          );
+          const total = approvedOnly.reduce((sum, t) => sum + Math.abs(t.amount), 0);
 
           setTransactions(transactionsData);
           setTotalAmount(total);

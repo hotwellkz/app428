@@ -69,9 +69,12 @@ export const TransactionHistory: React.FC<TransactionHistoryProps> = ({
         ...doc.data()
       })) as Transaction[];
 
-      // Calculate totals
-      const total = transactionsData.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-      const salarySum = transactionsData.reduce((sum, t) => 
+      // Итоги только по одобренным транзакциям (pending/rejected не влияют на сумму счёта)
+      const approvedOnly = transactionsData.filter(
+        (t) => (t as { status?: string }).status === undefined || (t as { status?: string }).status === 'approved'
+      );
+      const total = approvedOnly.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      const salarySum = approvedOnly.reduce((sum, t) => 
         t.isSalary ? sum + Math.abs(t.amount) : sum, 0
       );
 

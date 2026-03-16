@@ -90,7 +90,9 @@ export const useReceiptCalculation = (clientId: string) => {
           unsubscribe = onSnapshot(transactionsQuery, (snapshot) => {
             const totalAmount = snapshot.docs.reduce((sum, doc) => {
               const transaction = doc.data();
-              return sum + Math.abs(transaction.amount);
+              const status = transaction.status as string | undefined;
+              if (status === 'pending' || status === 'rejected') return sum;
+              return sum + Math.abs(transaction.amount ?? 0);
             }, 0);
             
             updateTotals({ generalExpense: totalAmount });

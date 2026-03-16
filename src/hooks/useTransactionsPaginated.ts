@@ -41,13 +41,16 @@ export const useTransactionsPaginated = ({
   const [hasMore, setHasMore] = useState(true);
   const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
 
-  // Мемоизируем вычисления сумм
+  // Мемоизируем вычисления сумм (только одобренные транзакции влияют на баланс/итоги счёта)
   const { totalAmount, salaryTotal, cashlessTotal } = useMemo(() => {
-    const total = transactions.reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    const salarySum = transactions.reduce((sum, t) => 
+    const approved = transactions.filter(
+      (t) => (t as { status?: string }).status === undefined || (t as { status?: string }).status === 'approved'
+    );
+    const total = approved.reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    const salarySum = approved.reduce((sum, t) => 
       t.isSalary ? sum + Math.abs(t.amount) : sum, 0
     );
-    const cashlessSum = transactions.reduce((sum, t) => 
+    const cashlessSum = approved.reduce((sum, t) => 
       t.isCashless ? sum + Math.abs(t.amount) : sum, 0
     );
     

@@ -48,12 +48,18 @@ type Tx = {
   correctedFrom?: string;
 };
 
+/** Транзакция учитывается в балансе/сумме счёта только если одобрена (или без статуса — legacy). */
+function isApprovedForBalance(t: Tx): boolean {
+  return t.status === undefined || t.status === 'approved';
+}
+
 function applyLedgerFilters(raw: Tx[]): Tx[] {
   const correctedFromIds = new Set(
     raw.filter((t) => t.correctedFrom).map((t) => t.correctedFrom as string)
   );
   return raw.filter(
     (t) =>
+      isApprovedForBalance(t) &&
       t.status !== 'cancelled' &&
       t.editType !== 'reversal' &&
       !correctedFromIds.has(t.id)
