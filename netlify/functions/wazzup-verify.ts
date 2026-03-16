@@ -80,21 +80,26 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     }
 
     if (res.status >= 200 && res.status < 300) {
-      let channelId: string | null = null;
+      let whatsappChannelId: string | null = null;
+      let instagramChannelId: string | null = null;
       try {
         const data = await res.json();
         const channels = Array.isArray(data?.channels) ? data.channels : [];
-        const wa = channels.find((c: { type?: string }) => (c?.type ?? '').toLowerCase() === 'whatsapp');
-        const ig = channels.find((c: { type?: string }) => (c?.type ?? '').toLowerCase() === 'instagram');
-        channelId = (wa?.id ?? ig?.id ?? channels[0]?.id) ?? null;
-        if (channelId && typeof channelId !== 'string') channelId = null;
+        for (const c of channels) {
+          const type = String(c?.type ?? c?.transport ?? '').toLowerCase().trim();
+          const id = (c?.channelId ?? c?.id ?? '').trim();
+          if (!id || typeof id !== 'string') continue;
+          if (type === 'whatsapp') whatsappChannelId = id;
+          else if (type === 'instagram' || type === 'instagram_direct' || type === 'ig') instagramChannelId = id;
+        }
       } catch {
         /* ignore */
       }
       return json(200, {
         ok: true,
-        message: 'Подключение успешно. Канал доступен.',
-        ...(channelId ? { channelId } : {})
+        message: 'Подключение успешно. Каналы доступны.',
+        ...(whatsappChannelId ? { whatsappChannelId } : {}),
+        ...(instagramChannelId ? { instagramChannelId } : {})
       });
     }
 

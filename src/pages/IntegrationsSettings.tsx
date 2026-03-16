@@ -113,9 +113,15 @@ export const IntegrationsSettings: React.FC = () => {
       const data = await res.json();
       if (data.ok) {
         setSuccess('Подключение успешно. Ключ действителен.');
-        if (data.channelId && typeof data.channelId === 'string' && !looksLikeEmail(data.channelId)) {
-          setForm((f) => ({ ...f, whatsappChannelId: data.channelId }));
-        }
+        setForm((f) => ({
+          ...f,
+          ...(data.whatsappChannelId && typeof data.whatsappChannelId === 'string' && !looksLikeEmail(data.whatsappChannelId)
+            ? { whatsappChannelId: data.whatsappChannelId }
+            : {}),
+          ...(data.instagramChannelId && typeof data.instagramChannelId === 'string' && !looksLikeEmail(data.instagramChannelId)
+            ? { instagramChannelId: data.instagramChannelId }
+            : {})
+        }));
       } else {
         setError(data.error || 'Проверка не пройдена');
       }
@@ -201,12 +207,22 @@ export const IntegrationsSettings: React.FC = () => {
           ) : (
             <>
               {state.configured && (
-                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm text-emerald-800">
-                  <CheckCircle className="w-4 h-4 shrink-0" />
-                  <span>Интеграция настроена</span>
-                  {state.apiKeyMasked && (
-                    <span className="text-emerald-600">(ключ …{state.apiKeyMasked})</span>
-                  )}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm text-emerald-800">
+                    <CheckCircle className="w-4 h-4 shrink-0" />
+                    <span>Ключ сохранён</span>
+                    {state.apiKeyMasked && (
+                      <span className="text-emerald-600">(…{state.apiKeyMasked})</span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                    <span className={state.whatsappChannelId ? 'text-emerald-700' : 'text-amber-700'}>
+                      WhatsApp: {state.whatsappChannelId ? 'подключён' : 'канал не найден — укажите ID вручную или дождитесь первого входящего'}
+                    </span>
+                    <span className={state.instagramChannelId ? 'text-emerald-700' : 'text-amber-700'}>
+                      Instagram: {state.instagramChannelId ? 'подключён' : 'канал не найден — укажите ID вручную или дождитесь первого входящего'}
+                    </span>
+                  </div>
                 </div>
               )}
               {(looksLikeEmail(form.whatsappChannelId) || looksLikeEmail(form.instagramChannelId)) && (
