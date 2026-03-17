@@ -266,6 +266,10 @@ interface ClientInfoPanelProps {
 
 const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 py-0 rounded-[10px] text-[11px] font-medium bg-[#f1f3f5] text-[#555] flex-shrink-0';
 
+/** Обёртки для dl-терминов, чтобы избежать конфликта имён при JSX-трансформации (dt/dd). */
+const DefTerm = (props: React.HTMLAttributes<HTMLElement>) => React.createElement('dt', props);
+const DefDesc = (props: React.HTMLAttributes<HTMLElement>) => React.createElement('dd', props);
+
 const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   phone,
   conversationId = null,
@@ -1133,24 +1137,24 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
             <>
               <dl className="mt-4 space-y-2 text-sm">
                 <div>
-                  <dt className="text-gray-500">Имя</dt>
-                  <dd className="text-gray-900">{client?.name || '—'}</dd>
+                  <DefTerm className="text-gray-500">Имя</DefTerm>
+                  <DefDesc className="text-gray-900">{client?.name || '—'}</DefDesc>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Телефон</dt>
-                  <dd className="text-gray-900">{client?.phone ?? phone}</dd>
+                  <DefTerm className="text-gray-500">Телефон</DefTerm>
+                  <DefDesc className="text-gray-900">{client?.phone ?? phone}</DefDesc>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Источник</dt>
-                  <dd className="text-gray-900">{client?.source || '—'}</dd>
+                  <DefTerm className="text-gray-500">Источник</DefTerm>
+                  <DefDesc className="text-gray-900">{client?.source || '—'}</DefDesc>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Комментарий</dt>
-                  <dd className="text-gray-900 whitespace-pre-wrap">{client?.comment || '—'}</dd>
+                  <DefTerm className="text-gray-500">Комментарий</DefTerm>
+                  <DefDesc className="text-gray-900 whitespace-pre-wrap">{client?.comment || '—'}</DefDesc>
                 </div>
                 <div>
-                  <dt className="text-gray-500">Дата первого обращения</dt>
-                  <dd className="text-gray-900">{client?.createdAt ? formatDate(client.createdAt) : '—'}</dd>
+                  <DefTerm className="text-gray-500">Дата первого обращения</DefTerm>
+                  <DefDesc className="text-gray-900">{client?.createdAt ? formatDate(client.createdAt) : '—'}</DefDesc>
                 </div>
               </dl>
               <button
@@ -1661,12 +1665,12 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                       ) : (
                         <>
                           <dl className="space-y-1 text-xs">
-                            {extractedClientData.city && <><dt className="text-gray-500">Город</dt><dd className="text-gray-800">{extractedClientData.city}</dd></>}
-                            {extractedClientData.areaSqm && <><dt className="text-gray-500">Площадь</dt><dd className="text-gray-800">{extractedClientData.areaSqm} м²</dd></>}
-                            {extractedClientData.houseType && <><dt className="text-gray-500">Тип дома</dt><dd className="text-gray-800">{extractedClientData.houseType}</dd></>}
-                            {extractedClientData.floors && <><dt className="text-gray-500">Этажность</dt><dd className="text-gray-800">{extractedClientData.floors}</dd></>}
-                            {extractedClientData.clientIntent && <><dt className="text-gray-500">Интерес</dt><dd className="text-gray-800">{extractedClientData.clientIntent}</dd></>}
-                            {extractedClientData.aiSummary && <><dt className="text-gray-500">Комментарий</dt><dd className="text-gray-800 whitespace-pre-wrap">{extractedClientData.aiSummary}</dd></>}
+                            {extractedClientData.city && <><DefTerm className="text-gray-500">Город</DefTerm><DefDesc className="text-gray-800">{extractedClientData.city}</DefDesc></>}
+                            {extractedClientData.areaSqm && <><DefTerm className="text-gray-500">Площадь</DefTerm><DefDesc className="text-gray-800">{extractedClientData.areaSqm} м²</DefDesc></>}
+                            {extractedClientData.houseType && <><DefTerm className="text-gray-500">Тип дома</DefTerm><DefDesc className="text-gray-800">{extractedClientData.houseType}</DefDesc></>}
+                            {extractedClientData.floors && <><DefTerm className="text-gray-500">Этажность</DefTerm><DefDesc className="text-gray-800">{extractedClientData.floors}</DefDesc></>}
+                            {extractedClientData.clientIntent && <><DefTerm className="text-gray-500">Интерес</DefTerm><DefDesc className="text-gray-800">{extractedClientData.clientIntent}</DefDesc></>}
+                            {extractedClientData.aiSummary && <><DefTerm className="text-gray-500">Комментарий</DefTerm><DefDesc className="text-gray-800 whitespace-pre-wrap">{extractedClientData.aiSummary}</DefDesc></>}
                           </dl>
                           {!extractedClientData.city && !extractedClientData.areaSqm && !extractedClientData.houseType && !extractedClientData.floors && !extractedClientData.clientIntent && !extractedClientData.aiSummary && (
                             <p className="text-xs text-gray-400 italic">Ничего не извлечено</p>
@@ -1740,9 +1744,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                       Классификация лида
                     </h4>
                     <dl className="space-y-1 text-xs mb-2">
-                      {cached.leadTemperature && <><dt className="text-gray-500">Температура</dt><dd className="text-gray-800">{leadTempLabels[cached.leadTemperature] ?? cached.leadTemperature}</dd></>}
-                      {cached.leadStage && <><dt className="text-gray-500">Этап</dt><dd className="text-gray-800">{leadStageLabels[cached.leadStage] ?? cached.leadStage}</dd></>}
-                      {cached.leadIntent && <><dt className="text-gray-500">Намерение</dt><dd className="text-gray-800">{leadIntentLabels[cached.leadIntent] ?? cached.leadIntent}</dd></>}
+                      {cached.leadTemperature && <><DefTerm className="text-gray-500">Температура</DefTerm><DefDesc className="text-gray-800">{leadTempLabels[cached.leadTemperature] ?? cached.leadTemperature}</DefDesc></>}
+                      {cached.leadStage && <><DefTerm className="text-gray-500">Этап</DefTerm><DefDesc className="text-gray-800">{leadStageLabels[cached.leadStage] ?? cached.leadStage}</DefDesc></>}
+                      {cached.leadIntent && <><DefTerm className="text-gray-500">Намерение</DefTerm><DefDesc className="text-gray-800">{leadIntentLabels[cached.leadIntent] ?? cached.leadIntent}</DefDesc></>}
                     </dl>
                     <div className="flex flex-wrap gap-1.5">
                       <button
