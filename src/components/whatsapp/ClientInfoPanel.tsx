@@ -23,6 +23,7 @@ import { createDeal, ensureDefaultPipeline, listStages, moveDealToStage } from '
 import { removeCompanyCity, renameCompanyCity } from '../../lib/firebase/companyCities';
 import { useClampedMenuPosition } from '../../hooks/useClampedMenuPosition';
 import type { Deal } from '../../types/deals';
+import toast from 'react-hot-toast';
 import { Sparkles, MoreVertical, X, ExternalLink, GitBranch } from 'lucide-react';
 import { ChatSalesAnalysisBlock, type SalesAnalysisResult } from './ChatSalesAnalysisBlock';
 import {
@@ -268,6 +269,8 @@ interface ClientInfoPanelProps {
   aiBotAutoProposalEnabled?: boolean;
   /** Обновить флаги AI-бота (тест) */
   onAiBotFlagsChange?: (flags: { aiBotEnabled?: boolean; aiBotAutoProposalEnabled?: boolean }) => void;
+  /** Идёт сохранение флагов AI-бота — дизейблить переключатель */
+  aiBotFlagsSaving?: boolean;
 }
 
 const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 py-0 rounded-[10px] text-[11px] font-medium bg-[#f1f3f5] text-[#555] flex-shrink-0';
@@ -304,6 +307,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   aiBotEnabled = false,
   aiBotAutoProposalEnabled = false,
   onAiBotFlagsChange,
+  aiBotFlagsSaving = false,
 }) => {
   const companyId = useCompanyId();
   const navigate = useNavigate();
@@ -1109,15 +1113,29 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
           {/* AI-бот (тест): переключатель и опция авто-КП */}
           {conversationId && onAiBotFlagsChange != null && (
             <div className="mt-4 p-3 rounded-xl border border-gray-200 bg-gray-50/80">
+              {!aiConfigured && !aiLoadingConfigured && (
+                <p className="mb-2 text-xs text-amber-700">
+                  Чтобы AI-бот отвечал, настройте API ключ в разделе Интеграции.
+                </p>
+              )}
               <div className="flex items-center gap-2 flex-wrap">
                 <label className="inline-flex items-center gap-2 cursor-pointer" title="AI может отвечать в этом чате, собирать данные и отправлять КП через калькулятор">
                   <input
                     type="checkbox"
                     checked={aiBotEnabled}
-                    onChange={(e) => onAiBotFlagsChange({ aiBotEnabled: e.target.checked, aiBotAutoProposalEnabled: e.target.checked ? aiBotAutoProposalEnabled : false })}
-                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    disabled={aiBotFlagsSaving}
+                    onChange={(e) => {
+                      const nextEnabled = e.target.checked;
+                      if (nextEnabled && !aiLoadingConfigured && !aiConfigured) {
+                        toast.error('Нельзя включить AI-бот: у компании не сохранён AI API ключ в разделе Интеграции');
+                        return;
+                      }
+                      onAiBotFlagsChange({ aiBotEnabled: nextEnabled, aiBotAutoProposalEnabled: nextEnabled ? aiBotAutoProposalEnabled : false });
+                    }}
+                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 disabled:opacity-50"
                   />
                   <span className="text-sm font-medium text-gray-800">AI-бот</span>
+                  {aiBotFlagsSaving && <span className="text-xs text-gray-500">сохранение…</span>}
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">тест</span>
                 </label>
               </div>

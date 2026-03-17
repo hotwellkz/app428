@@ -665,6 +665,48 @@ const WhatsAppChat: React.FC = () => {
     }
   }, [companyId]);
 
+  const [aiBotFlagsSaving, setAiBotFlagsSaving] = useState(false);
+
+  /** Смена флагов AI-бота: оптимистичное обновление UI, запись в Firestore, откат при ошибке. */
+  const handleAiBotFlagsChange = useCallback(
+    (flags: { aiBotEnabled?: boolean; aiBotAutoProposalEnabled?: boolean }) => {
+      if (!selectedId) return;
+      const prevEnabled = selectedItem?.aiBotEnabled ?? false;
+      const prevAutoProposal = selectedItem?.aiBotAutoProposalEnabled ?? false;
+      const mergeFlags = (c: ConversationListItem) =>
+        c.id !== selectedId
+          ? c
+          : {
+              ...c,
+              aiBotEnabled: flags.aiBotEnabled !== undefined ? flags.aiBotEnabled : c.aiBotEnabled,
+              aiBotAutoProposalEnabled:
+                flags.aiBotAutoProposalEnabled !== undefined ? flags.aiBotAutoProposalEnabled : c.aiBotAutoProposalEnabled
+            };
+      setConversations((prev) => prev.map(mergeFlags));
+      setSearchChats((prev) => prev.map(mergeFlags));
+      if (stickySelectedChat?.id === selectedId)
+        setStickySelectedChat((prev) =>
+          prev ? mergeFlags(prev) : null
+        );
+      setAiBotFlagsSaving(true);
+      updateConversationAiBotFlags(selectedId, flags)
+        .then(() => {
+          toast.success(flags.aiBotEnabled ? 'AI-бот включён' : 'AI-бот выключен');
+        })
+        .catch((err) => {
+          const revert = (c: ConversationListItem) =>
+            c.id !== selectedId ? c : { ...c, aiBotEnabled: prevEnabled, aiBotAutoProposalEnabled: prevAutoProposal };
+          setConversations((prev) => prev.map(revert));
+          setSearchChats((prev) => prev.map(revert));
+          if (stickySelectedChat?.id === selectedId)
+            setStickySelectedChat((prev) => (prev ? revert(prev) : null));
+          toast.error(err instanceof Error ? err.message : 'Не удалось изменить состояние AI-бота');
+        })
+        .finally(() => setAiBotFlagsSaving(false));
+    },
+    [selectedId, selectedItem?.aiBotEnabled, selectedItem?.aiBotAutoProposalEnabled, stickySelectedChat?.id]
+  );
+
   /** Оптимистичное обновление: после отправки сообщения сразу поднимаем чат в списке по lastMessageAt. */
   const moveConversationToTopByActivity = useCallback((conversationId: string) => {
     setConversations((prev) => {
@@ -2638,7 +2680,8 @@ const WhatsAppChat: React.FC = () => {
                 onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}
                 aiBotEnabled={selectedItem?.aiBotEnabled ?? false}
                 aiBotAutoProposalEnabled={selectedItem?.aiBotAutoProposalEnabled ?? false}
-                onAiBotFlagsChange={selectedId ? (flags) => updateConversationAiBotFlags(selectedId, flags) : undefined}
+                onAiBotFlagsChange={selectedId ? handleAiBotFlagsChange : undefined}
+                aiBotFlagsSaving={aiBotFlagsSaving}
               />
               </div>
             </div>
@@ -2734,7 +2777,8 @@ const WhatsAppChat: React.FC = () => {
                 }}
                 aiBotEnabled={selectedItem?.aiBotEnabled ?? false}
                 aiBotAutoProposalEnabled={selectedItem?.aiBotAutoProposalEnabled ?? false}
-                onAiBotFlagsChange={selectedId ? (flags) => updateConversationAiBotFlags(selectedId, flags) : undefined}
+                onAiBotFlagsChange={selectedId ? handleAiBotFlagsChange : undefined}
+                aiBotFlagsSaving={aiBotFlagsSaving}
                 isTranscribeBatchRunning={batchTranscribeRunning}
                 onPrepareForAnalysisStart={() => setPrepareForAnalysisRunning(true)}
                 onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}
