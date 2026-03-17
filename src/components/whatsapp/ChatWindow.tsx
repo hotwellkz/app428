@@ -14,7 +14,7 @@ import type { WhatsAppMessage, MessageAttachment } from '../../types/whatsappDb'
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
 import { getAuthToken } from '../../lib/firebase/auth';
 import { useAIConfigured } from '../../hooks/useAIConfigured';
-import { transcribeVoiceBatch, getVoiceMessagesToTranscribe } from '../../utils/transcribeVoiceBatch';
+import { transcribeVoiceBatch, getVoiceMessagesToTranscribe, type TranscribeVoiceBatchResult } from '../../utils/transcribeVoiceBatch';
 import { detectRuKzLang, getTargetLangForTranslate, translateRuKz } from '../../utils/translateRuKz';
 import toast from 'react-hot-toast';
 
@@ -1039,6 +1039,9 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     : null;
 
   const [aiMode, setAiMode] = useState<'normal' | 'short' | 'close' | null>(null);
+  /** Фаза при нажатии AI-кнопки: сначала расшифровка, потом генерация */
+  const [aiPhase, setAiPhase] = useState<'transcribing' | 'generating' | null>(null);
+  const [aiTranscribeProgress, setAiTranscribeProgress] = useState<{ current: number; total: number } | null>(null);
   const [transcribingId, setTranscribingId] = useState<string | null>(null);
   const [calculatorDrawerOpen, setCalculatorDrawerOpen] = useState(false);
   const [transcribeErrorId, setTranscribeErrorId] = useState<string | null>(null);
@@ -1079,23 +1082,55 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
   );
 
   const handleAiReply = async (mode: 'normal' | 'short' | 'close') => {
-    // Шаг 6: базовый debug-лог на клик
-    // eslint-disable-next-line no-console
-    console.log('[WhatsApp] AI reply requested:', mode);
-
     if (!onInputChange || !messages || messages.length === 0) return;
     if (aiMode) return;
-    const recent = messages
-      .map((m) => ({
-        ...m,
-        _content: (m.transcription ?? m.text ?? '').trim()
-      }))
-      .filter((m) => m._content.length > 0 && !m.deleted)
-      .slice(-15);
-    if (recent.length === 0) return;
 
     setAiMode(mode);
+    let transcribeResult: TranscribeVoiceBatchResult | null = null;
+
     try {
+      const itemsToTranscribe = voiceToTranscribe.map(({ message: m, att }) => ({ messageId: m.id, audioUrl: att.url }));
+
+      if (itemsToTranscribe.length > 0) {
+        setAiPhase('transcribing');
+        setAiTranscribeProgress({ current: 0, total: itemsToTranscribe.length });
+        const result = await transcribeVoiceBatch(
+          itemsToTranscribe,
+          getAuthToken,
+          (current, total) => setAiTranscribeProgress({ current, total })
+        );
+        transcribeResult = result;
+        if (result.updates && Object.keys(result.updates).length > 0) {
+          result.updates &&
+            Object.entries(result.updates).forEach(([id, txt]) => {
+              const m = messages.find((msg) => msg.id === id);
+              if (m) messagesById.current.set(id, { ...m, transcription: txt });
+            });
+          setTranscriptionUpdates((prev) => ({ ...prev, ...result.updates }));
+        }
+        if (result.errors > 0) {
+          toast('Часть голосовых не удалось расшифровать. Ответ по остальным сообщениям.', { duration: 4000, icon: '⚠️' });
+        }
+        setAiTranscribeProgress(null);
+        setAiPhase('generating');
+      } else {
+        setAiPhase('generating');
+      }
+
+      const mergedUpdates = { ...transcriptionUpdates, ...(transcribeResult?.updates ?? {}) };
+      const recent = messages
+        .map((m) => ({
+          ...m,
+          _content: (mergedUpdates[m.id] ?? m.transcription ?? m.text ?? '').trim()
+        }))
+        .filter((m) => m._content.length > 0 && !m.deleted)
+        .slice(-15);
+
+      if (recent.length === 0) {
+        toast('Нет текста для генерации ответа. Расшифруйте голосовые или дождитесь сообщений.', { duration: 3500 });
+        return;
+      }
+
       const payload: {
         mode: 'normal' | 'short' | 'close';
         messages: { role: 'client' | 'manager'; text: string }[];
@@ -1126,7 +1161,6 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
       }
       const token = await getAuthToken();
       if (!token) {
-        setAiMode(null);
         return;
       }
       const res = await fetch('/.netlify/functions/ai-generate-reply', {
@@ -1144,14 +1178,11 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
         };
       };
       if (!res.ok || data.error) {
-        // eslint-disable-next-line no-console
-        console.error('[WhatsApp] AI generate reply failed', { mode, status: res.status, data });
+        toast.error(data.error ?? 'Ошибка генерации ответа');
         return;
       }
       if (data.debug) {
         setLastAiDebug(data.debug);
-        // eslint-disable-next-line no-console
-        console.log('[WhatsApp] AI reply debug', data.debug);
       } else {
         setLastAiDebug(null);
       }
@@ -1160,10 +1191,11 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
         onInputChange(reply);
       }
     } catch (e) {
-      // eslint-disable-next-line no-console
-      console.error('[WhatsApp] AI generate reply error', { mode, error: e });
+      toast.error(e instanceof Error ? e.message : 'Ошибка при подготовке ответа');
     } finally {
       setAiMode(null);
+      setAiPhase(null);
+      setAiTranscribeProgress(null);
     }
   };
 
@@ -1329,7 +1361,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
             <button
               type="button"
               onClick={onBatchTranscribeClick}
-              disabled={voiceToTranscribeFiltered.length === 0 || batchTranscribeProgress !== null || disableTranscribeAllButton}
+              disabled={voiceToTranscribeFiltered.length === 0 || batchTranscribeProgress !== null || !!aiMode || disableTranscribeAllButton}
               title={
                 voiceToTranscribeFiltered.length === 0
                   ? 'Все голосовые уже расшифрованы'
@@ -1414,15 +1446,22 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
         )}
       </div>
 
-      {(batchTranscribeProgress || batchTranscribeResult) && (
+      {(aiPhase || batchTranscribeProgress || batchTranscribeResult) && (
         <div className="flex-none border-b border-gray-200 bg-gray-50 px-3 py-1.5 text-xs text-gray-700">
-          {batchTranscribeProgress && (
+          {aiPhase === 'transcribing' && (
+            <span>
+              Сначала расшифровываем голосовые…
+              {aiTranscribeProgress && ` (${aiTranscribeProgress.current} из ${aiTranscribeProgress.total})`}
+            </span>
+          )}
+          {aiPhase === 'generating' && <span>Готовим ответ…</span>}
+          {!aiPhase && batchTranscribeProgress && (
             <span className="inline-flex items-center gap-1.5">
               <span className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-gray-400 border-t-transparent animate-spin" aria-hidden />
               Расшифровка голосовых: {batchTranscribeProgress.current} из {batchTranscribeProgress.total}
             </span>
           )}
-          {batchTranscribeResult && !batchTranscribeProgress && (
+          {batchTranscribeResult && !batchTranscribeProgress && !aiPhase && (
             <span className="inline-flex items-center gap-2 flex-wrap">
               <span>Расшифровано: {batchTranscribeResult.done}</span>
               {batchTranscribeResult.skipped > 0 && (
