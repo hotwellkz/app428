@@ -12,6 +12,7 @@ import MessageActionsSheet from './MessageActionsSheet';
 import ReplyComposerPreview from './ReplyComposerPreview';
 import type { WhatsAppMessage, MessageAttachment } from '../../types/whatsappDb';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
+import { getAuthToken } from '../../lib/firebase/auth';
 
 interface PendingAttachment {
   file: File;
@@ -1069,9 +1070,14 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
           category: q.category
         }));
       }
+      const token = await getAuthToken();
+      if (!token) {
+        setAiMode(null);
+        return;
+      }
       const res = await fetch('/.netlify/functions/ai-generate-reply', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(payload)
       });
       const data = (await res.json().catch(() => ({}))) as {
@@ -1255,9 +1261,15 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
                     setTranscribingId(m.id);
                     setTranscribeErrorId(null);
                     try {
+                      const token = await getAuthToken();
+                      if (!token) {
+                        setTranscribingId(null);
+                        setTranscribeErrorId(m.id);
+                        return;
+                      }
                       const res = await fetch('/.netlify/functions/ai-transcribe-voice', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
                         body: JSON.stringify({ audioUrl: att.url, messageId: m.id })
                       });
                       const data = (await res.json().catch(() => ({}))) as {
