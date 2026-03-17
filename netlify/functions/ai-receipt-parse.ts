@@ -197,7 +197,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
     const items = rawItems.map((it: Record<string, unknown>) => {
       const q = Number(it.quantity) || 0;
-      const up = Number(it.unitPrice) ?? Number(it.price) || 0;
+      const up = (Number(it.unitPrice) ?? Number(it.price)) || 0;
       let lineTotal = typeof it.lineTotal === 'number' ? it.lineTotal : Number(it.lineTotal);
       if (!Number.isFinite(lineTotal) && q && up) lineTotal = q * up;
       return {
