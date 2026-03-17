@@ -14,6 +14,9 @@ export interface ChatAiAnalysisResult {
   recommendations: string[];
   nextMessage: string;
   badges?: string[];
+  leadTemperature?: string;
+  leadStage?: string;
+  leadIntent?: string;
 }
 
 /** Документ в Firestore: результат + метаданные */

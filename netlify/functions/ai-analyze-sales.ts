@@ -28,6 +28,25 @@ interface AnalyzeSalesBody {
   messages?: AiMessage[];
 }
 
+const LEAD_TEMPERATURE_VALUES = ['hot', 'warm', 'cold'] as const;
+const LEAD_STAGE_VALUES = [
+  'primary_interest',
+  'need_quote',
+  'send_proposal',
+  'thinking',
+  'meeting',
+  'in_progress',
+  'lost',
+] as const;
+const LEAD_INTENT_VALUES = [
+  'build_house',
+  'get_price',
+  'compare_tech',
+  'need_project',
+  'mortgage_installment',
+  'consultation',
+] as const;
+
 const SYSTEM_PROMPT = `Ты — сильный руководитель отдела продаж и эксперт по продажам в переписке.
 Твоя задача: проанализировать диалог менеджера с клиентом и дать конкретный продажный разбор.
 Оцени: качество ведения клиента, выявление потребности, работу с возражениями, структуру диалога, фиксацию следующего шага и вероятность продвижения сделки.
@@ -41,6 +60,11 @@ const SYSTEM_PROMPT = `Ты — сильный руководитель отде
 - recommendations: массив — что делать дальше (конкретные шаги).
 - nextMessage: одна строка — готовый текст следующего сообщения клиенту, которое можно отправить от имени менеджера (практичный, продажный, ведущий к следующему шагу).
 - badges: массив строк — необязательно, только если уместно: "riskLosingClient", "clientInterested", "noNextStep", "objectionNotHandled", "weakNeedDiscovery" (на английском, как в списке).
+
+Классификация лида (по переписке, одно значение на поле; если неясно — выбери наиболее вероятное):
+- leadTemperature: "hot" | "warm" | "cold" — температура лида (горячий / тёплый / холодный).
+- leadStage: один из — "primary_interest" (первичный интерес), "need_quote" (нужен расчёт), "send_proposal" (отправить КП), "thinking" (думает), "meeting" (встреча), "in_progress" (в работе), "lost" (потерян).
+- leadIntent: один из — "build_house" (строить дом), "get_price" (узнать цену), "compare_tech" (сравнить технологии), "need_project" (нужен проект), "mortgage_installment" (ипотека/рассрочка), "consultation" (консультация).
 
 Стиль: уверенно и чётко, как сильный РОП. Без абстракций и "возможно стоит". Только конкретика для обучения и контроля продаж.`;
 
@@ -108,6 +132,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         recommendations: [],
         nextMessage: '',
         badges: [],
+        leadTemperature: '',
+        leadStage: '',
+        leadIntent: '',
       }),
     });
   }
@@ -119,7 +146,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       null,
       2
     ) +
-    '\n\nВерни один JSON-объект с полями: overallAssessment, strengths, errors, missedOpportunities, clientSignals, recommendations, nextMessage, badges.';
+    '\n\nВерни один JSON-объект с полями: overallAssessment, strengths, errors, missedOpportunities, clientSignals, recommendations, nextMessage, badges, leadTemperature, leadStage, leadIntent.';
 
   try {
     log('Calling OpenAI for chatId', chatId, 'messages=', messages.length);
@@ -177,6 +204,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       recommendations?: string[];
       nextMessage?: string;
       badges?: string[];
+      leadTemperature?: string;
+      leadStage?: string;
+      leadIntent?: string;
     } = {};
 
     try {
@@ -195,6 +225,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const arr = (v: unknown): string[] =>
       Array.isArray(v) ? v.filter((x) => typeof x === 'string').map((x) => String(x).trim()).filter(Boolean) : [];
     const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+    const oneOf = (v: unknown, allowed: readonly string[]) =>
+      typeof v === 'string' && allowed.includes(v) ? v : '';
 
     const result = {
       error: null as string | null,
@@ -206,6 +238,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       recommendations: arr(parsed.recommendations),
       nextMessage: str(parsed.nextMessage),
       badges: arr(parsed.badges),
+      leadTemperature: oneOf(parsed.leadTemperature, LEAD_TEMPERATURE_VALUES),
+      leadStage: oneOf(parsed.leadStage, LEAD_STAGE_VALUES),
+      leadIntent: oneOf(parsed.leadIntent, LEAD_INTENT_VALUES),
     };
 
     log('Success, sections:', {

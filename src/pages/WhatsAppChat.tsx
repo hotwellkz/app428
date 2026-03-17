@@ -2426,6 +2426,11 @@ const WhatsAppChat: React.FC = () => {
                 dealStatusCounts={dealStatusCounts}
                 managerCounts={managerCounts}
                 fillWidth
+                getCurrentInputValue={() => inputText}
+                onInsertNextMessage={(text, mode) => {
+                  if (mode === 'replace') setInputText(text);
+                  else setInputText((prev) => (prev ? prev + '\n' + text : text));
+                }}
               />
               </div>
             </div>
@@ -2511,6 +2516,11 @@ const WhatsAppChat: React.FC = () => {
                 dealStatusCounts={dealStatusCounts}
                 managerCounts={managerCounts}
                 embeddedInSheet
+                getCurrentInputValue={() => inputText}
+                onInsertNextMessage={(text, mode) => {
+                  if (mode === 'replace') setInputText(text);
+                  else setInputText((prev) => (prev ? prev + '\n' + text : text));
+                }}
               />
             </div>
           </div>

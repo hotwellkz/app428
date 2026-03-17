@@ -1,5 +1,5 @@
-import React, { useState, useRef, useCallback } from 'react';
-import { Sparkles, Copy, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import React, { useState, useRef, useCallback, useId, useEffect } from 'react';
+import { Sparkles, Copy, RefreshCw, ChevronDown, ChevronUp, Type } from 'lucide-react';
 import { getAuthToken } from '../../lib/firebase/auth';
 import { useAIConfigured } from '../../hooks/useAIConfigured';
 import type { WhatsAppMessage } from '../../types/whatsappDb';
@@ -20,6 +20,12 @@ export interface SalesAnalysisResult {
   recommendations: string[];
   nextMessage: string;
   badges?: string[];
+  /** Классификация лида: hot | warm | cold */
+  leadTemperature?: string;
+  /** Этап интереса: primary_interest | need_quote | send_proposal | thinking | meeting | in_progress | lost */
+  leadStage?: string;
+  /** Намерение: build_house | get_price | compare_tech | need_project | mortgage_installment | consultation */
+  leadIntent?: string;
 }
 
 const BADGE_LABELS: Record<string, string> = {
@@ -53,6 +59,10 @@ interface ChatSalesAnalysisBlockProps {
   onCacheResult: (conversationId: string, result: SalesAnalysisResult) => void;
   /** Компактный/мобильный вид: блок можно свернуть */
   compact?: boolean;
+  /** Вставить готовый ответ в поле ввода (replace или append). Не отправляет сообщение. */
+  onInsertNextMessage?: (text: string, mode: 'replace' | 'append') => void;
+  /** Текущий текст поля ввода: если не пустой, при «Вставить в поле» показывается выбор замены/добавления */
+  getCurrentInputValue?: () => string;
 }
 
 export function ChatSalesAnalysisBlock({
@@ -63,10 +73,15 @@ export function ChatSalesAnalysisBlock({
   analyzedAt = null,
   onCacheResult,
   compact = false,
+  onInsertNextMessage,
+  getCurrentInputValue,
 }: ChatSalesAnalysisBlockProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [insertChoiceOpen, setInsertChoiceOpen] = useState(false);
+  const insertAnchorRef = useRef<HTMLButtonElement>(null);
+  const insertChoiceId = useId();
   const runGuardRef = useRef(false);
   const { configured: aiConfigured, loading: aiLoadingConfigured } = useAIConfigured();
 
@@ -140,6 +155,9 @@ export function ChatSalesAnalysisBlock({
         recommendations: Array.isArray(data.recommendations) ? data.recommendations : [],
         nextMessage: typeof data.nextMessage === 'string' ? data.nextMessage : '',
         badges: Array.isArray(data.badges) ? data.badges : [],
+        leadTemperature: typeof data.leadTemperature === 'string' ? data.leadTemperature : undefined,
+        leadStage: typeof data.leadStage === 'string' ? data.leadStage : undefined,
+        leadIntent: typeof data.leadIntent === 'string' ? data.leadIntent : undefined,
       };
       onCacheResult(conversationId, result);
     } catch (e) {
@@ -176,8 +194,49 @@ export function ChatSalesAnalysisBlock({
     void navigator.clipboard.writeText(cachedResult.nextMessage);
   }, [cachedResult]);
 
+  const handleInsertClick = useCallback(() => {
+    const text = cachedResult?.nextMessage?.trim();
+    if (!text || !onInsertNextMessage) return;
+    const current = getCurrentInputValue?.()?.trim() ?? '';
+    if (!current) {
+      onInsertNextMessage(text, 'replace');
+      return;
+    }
+    setInsertChoiceOpen(true);
+  }, [cachedResult?.nextMessage, onInsertNextMessage, getCurrentInputValue]);
+
+  const handleInsertChoice = useCallback(
+    (mode: 'replace' | 'append') => {
+      const text = cachedResult?.nextMessage?.trim();
+      if (text && onInsertNextMessage) {
+        onInsertNextMessage(text, mode);
+      }
+      setInsertChoiceOpen(false);
+    },
+    [cachedResult?.nextMessage, onInsertNextMessage]
+  );
+
   const hasResult = !!cachedResult;
   const canRun = !!phone && !!conversationId && recent.length > 0 && !loading && (aiLoadingConfigured || aiConfigured !== false);
+
+  useEffect(() => {
+    if (!insertChoiceOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setInsertChoiceOpen(false);
+    };
+    const onDocClick = (e: MouseEvent) => {
+      if (insertAnchorRef.current && !insertAnchorRef.current.contains(e.target as Node)) {
+        const menu = document.getElementById(insertChoiceId);
+        if (menu && !menu.contains(e.target as Node)) setInsertChoiceOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    document.addEventListener('click', onDocClick, true);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.removeEventListener('click', onDocClick, true);
+    };
+  }, [insertChoiceOpen, insertChoiceId]);
 
   const section = (title: string, items: string[], emptyText: string) => (
     <div className="mt-3">
@@ -254,19 +313,78 @@ export function ChatSalesAnalysisBlock({
           {section('Сигналы клиента', cachedResult!.clientSignals, '—')}
           {section('Рекомендации', cachedResult!.recommendations, '—')}
           {cachedResult!.nextMessage && (
-            <div className="mt-3 p-2.5 rounded-lg bg-green-50 border border-green-100">
+            <div className="mt-3 p-2.5 rounded-lg bg-green-50 border border-green-100 relative">
               <h4 className="text-xs font-semibold text-green-800 uppercase tracking-wide mb-1.5">
                 Готовый ответ клиенту
               </h4>
               <p className="text-sm text-gray-800 whitespace-pre-wrap">{cachedResult!.nextMessage}</p>
-              <button
-                type="button"
-                onClick={copyNextMessage}
-                className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800"
-              >
-                <Copy className="w-3.5 h-3.5" />
-                Скопировать ответ
-              </button>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {onInsertNextMessage && (
+                  <>
+                    <button
+                      ref={insertAnchorRef}
+                      type="button"
+                      onClick={handleInsertClick}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800"
+                      aria-expanded={insertChoiceOpen}
+                      aria-haspopup="true"
+                      aria-controls={insertChoiceId}
+                    >
+                      <Type className="w-3.5 h-3.5" />
+                      Вставить в поле
+                    </button>
+                    {insertChoiceOpen && (
+                      <div
+                        id={insertChoiceId}
+                        role="menu"
+                        className="absolute left-2.5 right-2.5 top-full mt-1 z-10 rounded-lg border border-green-200 bg-white py-1 shadow-lg"
+                      >
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => handleInsertChoice('replace')}
+                          className="w-full text-left px-3 py-2 text-xs font-medium text-gray-800 hover:bg-green-50"
+                        >
+                          Заменить текст
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => handleInsertChoice('append')}
+                          className="w-full text-left px-3 py-2 text-xs font-medium text-gray-800 hover:bg-green-50"
+                        >
+                          Добавить в конец
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={() => setInsertChoiceOpen(false)}
+                          className="w-full text-left px-3 py-2 text-xs text-gray-500 hover:bg-gray-50"
+                        >
+                          Отмена
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={copyNextMessage}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  Копировать
+                </button>
+                <button
+                  type="button"
+                  onClick={runAnalysis}
+                  disabled={!canRun}
+                  className="inline-flex items-center gap-1 text-xs font-medium text-green-700 hover:text-green-800 disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                  Обновить ответ
+                </button>
+              </div>
             </div>
           )}
           <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-200">

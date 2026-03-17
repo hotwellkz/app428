@@ -84,6 +84,17 @@ export interface WhatsAppClientCard {
   source: string;
   comment: string;
   createdAt: unknown;
+  /** Извлечённые / сохранённые поля карточки */
+  city?: string | null;
+  areaSqm?: number | null;
+  houseType?: string | null;
+  floors?: string | null;
+  clientIntent?: string | null;
+  aiSummary?: string | null;
+  leadTemperature?: string | null;
+  leadStage?: string | null;
+  leadIntent?: string | null;
+  aiClassifiedAt?: unknown;
 }
 
 async function getClientByPhone(phone: string, companyId: string): Promise<WhatsAppClientCard | null> {
@@ -97,6 +108,9 @@ async function getClientByPhone(phone: string, companyId: string): Promise<Whats
   if (snapshot.empty) return null;
   const d = snapshot.docs[0];
   const data = d.data();
+  const num = (v: unknown) =>
+    typeof v === 'number' && Number.isFinite(v) ? v : null;
+  const ts = (v: unknown) => (v != null ? v : undefined);
   return {
     id: d.id,
     phone: (data.phone as string) ?? normalized,
@@ -104,6 +118,16 @@ async function getClientByPhone(phone: string, companyId: string): Promise<Whats
     source: (data.source as string) ?? '',
     comment: (data.comment as string) ?? '',
     createdAt: data.createdAt,
+    city: (data.city as string) ?? undefined,
+    areaSqm: num(data.areaSqm),
+    houseType: (data.houseType as string) ?? undefined,
+    floors: (data.floors as string) ?? undefined,
+    clientIntent: (data.clientIntent as string) ?? undefined,
+    aiSummary: (data.aiSummary as string) ?? undefined,
+    leadTemperature: (data.leadTemperature as string) ?? undefined,
+    leadStage: (data.leadStage as string) ?? undefined,
+    leadIntent: (data.leadIntent as string) ?? undefined,
+    aiClassifiedAt: ts(data.aiClassifiedAt),
   };
 }
 
@@ -214,6 +238,10 @@ interface ClientInfoPanelProps {
   embeddedInSheet?: boolean;
   /** Ширина на 100% родителя (для resizable правой панели на desktop) */
   fillWidth?: boolean;
+  /** Вставить текст готового AI-ответа в поле ввода чата (режим: заменить или добавить в конец). Не отправляет сообщение. */
+  onInsertNextMessage?: (text: string, mode: 'replace' | 'append') => void;
+  /** Текущее значение поля ввода чата (для выбора «заменить» / «добавить в конец» при непустом поле). */
+  getCurrentInputValue?: () => string;
 }
 
 const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 py-0 rounded-[10px] text-[11px] font-medium bg-[#f1f3f5] text-[#555] flex-shrink-0';
@@ -232,7 +260,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   dealStatusCounts,
   managerCounts,
   embeddedInSheet = false,
-  fillWidth = false
+  fillWidth = false,
+  onInsertNextMessage,
+  getCurrentInputValue,
 }) => {
   const companyId = useCompanyId();
   const navigate = useNavigate();
@@ -279,6 +309,32 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [pipelineStageModal, setPipelineStageModal] = useState(false);
   const [salesAnalysisCache, setSalesAnalysisCache] = useState<Record<string, SalesAnalysisResult>>({});
   const [analyzedAtByConversation, setAnalyzedAtByConversation] = useState<Record<string, Date | null>>({});
+
+  /** Извлечённые из переписки данные (AI client) — не сохраняются без подтверждения */
+  type ExtractedClientData = {
+    city: string;
+    areaSqm: string;
+    houseType: string;
+    floors: string;
+    clientIntent: string;
+    aiSummary: string;
+  };
+  const emptyExtracted = (): ExtractedClientData => ({
+    city: '',
+    areaSqm: '',
+    houseType: '',
+    floors: '',
+    clientIntent: '',
+    aiSummary: '',
+  });
+  const [extractedClientData, setExtractedClientData] = useState<ExtractedClientData | null>(null);
+  const [extractedClientVisible, setExtractedClientVisible] = useState(true);
+  const [extractedClientEditMode, setExtractedClientEditMode] = useState(false);
+  const [extractedClientDraft, setExtractedClientDraft] = useState<ExtractedClientData>(emptyExtracted);
+  const [extractedSaveLoading, setExtractedSaveLoading] = useState(false);
+  const [leadClassApplyLoading, setLeadClassApplyLoading] = useState(false);
+  /** Скрытие блока «Классификация лида» по выбору «Не сохранять» (по conversationId) */
+  const [leadClassDismissed, setLeadClassDismissed] = useState<Record<string, boolean>>({});
 
   const loadPipelineDeal = useCallback(async () => {
     if (!conversationDealId || !companyId) {
@@ -418,8 +474,12 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       setClient(null);
       setDeal(null);
       setEditing(false);
+      setExtractedClientData(null);
+      setExtractedClientVisible(true);
       return;
     }
+    setExtractedClientData(null);
+    setExtractedClientVisible(true);
     loadClientAndDeal();
   }, [phone, loadClientAndDeal]);
 
@@ -438,6 +498,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const handleSalesAnalysisCacheResult = useCallback((convId: string, result: SalesAnalysisResult) => {
     setSalesAnalysisCache((prev) => ({ ...prev, [convId]: result }));
     setAnalyzedAtByConversation((prev) => ({ ...prev, [convId]: new Date() }));
+    setLeadClassDismissed((prev) => ({ ...prev, [convId]: false }));
     if (companyId) {
       setChatAiAnalysis(companyId, convId, result).catch((err) => {
         if (import.meta.env.DEV) console.warn('[ClientInfoPanel] save chat AI analysis', err);
@@ -500,9 +561,13 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       let data: {
         name?: string | null;
         city?: string | null;
+        areaSqm?: number | null;
+        houseType?: string | null;
+        floors?: string | null;
         houseSummary?: string | null;
         leadTitle?: string | null;
         lead_title?: string | null;
+        clientIntent?: string | null;
         comment?: string | null;
         summary?: string | null;
         error?: string;
@@ -614,6 +679,20 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       if (nextComment != null && nextComment.length > 0) {
         setEditComment(nextComment);
       }
+      const areaSqmVal = typeof data.areaSqm === 'number' && Number.isFinite(data.areaSqm) ? data.areaSqm : null;
+      const houseTypeStr = typeof data.houseType === 'string' && data.houseType.trim() ? data.houseType.trim() : '';
+      const floorsStr = typeof data.floors === 'string' && data.floors.trim() ? data.floors.trim() : '';
+      const intentStr = typeof data.clientIntent === 'string' && data.clientIntent.trim() ? data.clientIntent.trim() : '';
+      setExtractedClientData({
+        city: city ?? '',
+        areaSqm: areaSqmVal != null ? String(areaSqmVal) : '',
+        houseType: houseTypeStr,
+        floors: floorsStr,
+        clientIntent: intentStr,
+        aiSummary: nextComment ?? '',
+      });
+      setExtractedClientVisible(true);
+      setExtractedClientEditMode(false);
     } catch (e) {
       setAiError('Ошибка AI анализа. Попробуйте позже.');
       console.error('AI error', e);
@@ -677,6 +756,110 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     setEditComment(client?.comment ?? '');
     setEditing(false);
   };
+
+  /** Заполнить карточку клиента из блока «Извлечено из переписки» (только непустые поля) */
+  const handleFillCardFromExtracted = useCallback(async () => {
+    if (!phone || !companyId) return;
+    const source = extractedClientEditMode ? extractedClientDraft : extractedClientData;
+    if (!source) return;
+    setExtractedSaveLoading(true);
+    try {
+      const normalized = normalizePhone(phone);
+      const payload: Record<string, unknown> = {};
+      if (source.city.trim()) payload.city = source.city.trim();
+      if (source.areaSqm.trim()) {
+        const n = parseFloat(source.areaSqm.replace(',', '.'));
+        if (Number.isFinite(n) && n > 0) payload.areaSqm = n;
+      }
+      if (source.houseType.trim()) payload.houseType = source.houseType.trim();
+      if (source.floors.trim()) payload.floors = source.floors.trim();
+      if (source.clientIntent.trim()) payload.clientIntent = source.clientIntent.trim();
+      if (source.aiSummary.trim()) payload.aiSummary = source.aiSummary.trim();
+      if (Object.keys(payload).length === 0) {
+        setExtractedSaveLoading(false);
+        return;
+      }
+      if (client) {
+        await updateDoc(doc(db, COLLECTION_CLIENTS, client.id), payload);
+        setClient({ ...client, ...payload } as WhatsAppClientCard);
+      } else {
+        const ref = await addDoc(collection(db, COLLECTION_CLIENTS), {
+          phone: normalized,
+          name: editName.trim() || 'Клиент',
+          source: editSource.trim() || 'whatsapp',
+          comment: editComment.trim() || (source.aiSummary.trim() || ''),
+          companyId,
+          createdAt: serverTimestamp(),
+          ...payload,
+        });
+        setClient({
+          id: ref.id,
+          phone: normalized,
+          name: editName.trim() || 'Клиент',
+          source: editSource.trim() || 'whatsapp',
+          comment: editComment.trim() || (source.aiSummary.trim() || ''),
+          createdAt: null,
+          ...payload,
+        } as WhatsAppClientCard);
+      }
+      setExtractedClientEditMode(false);
+    } finally {
+      setExtractedSaveLoading(false);
+    }
+  }, [
+    phone,
+    companyId,
+    client,
+    editName,
+    editSource,
+    editComment,
+    extractedClientData,
+    extractedClientDraft,
+    extractedClientEditMode,
+  ]);
+
+  /** Применить классификацию лида из AI в карточку клиента */
+  const handleApplyLeadClassification = useCallback(async () => {
+    if (!phone || !companyId || !conversationId) return;
+    const cached = salesAnalysisCache[conversationId];
+    if (!cached?.leadTemperature && !cached?.leadStage && !cached?.leadIntent) return;
+    setLeadClassApplyLoading(true);
+    try {
+      const normalized = normalizePhone(phone);
+      const existing = client ?? (await getClientByPhone(normalized, companyId));
+      const payload: Record<string, unknown> = {
+        leadTemperature: cached.leadTemperature || null,
+        leadStage: cached.leadStage || null,
+        leadIntent: cached.leadIntent || null,
+        aiClassifiedAt: serverTimestamp(),
+      };
+      if (existing) {
+        await updateDoc(doc(db, COLLECTION_CLIENTS, existing.id), payload);
+        setClient((prev) => (prev ? { ...prev, ...payload } as WhatsAppClientCard : prev));
+      } else {
+        const ref = await addDoc(collection(db, COLLECTION_CLIENTS), {
+          phone: normalized,
+          name: 'Клиент',
+          source: 'whatsapp',
+          comment: '',
+          companyId,
+          createdAt: serverTimestamp(),
+          ...payload,
+        });
+        setClient({
+          id: ref.id,
+          phone: normalized,
+          name: 'Клиент',
+          source: 'whatsapp',
+          comment: '',
+          createdAt: null,
+          ...payload,
+        } as WhatsAppClientCard);
+      }
+    } finally {
+      setLeadClassApplyLoading(false);
+    }
+  }, [phone, companyId, conversationId, salesAnalysisCache, client]);
 
   const asideClass = embeddedInSheet
     ? 'w-full max-w-[320px] mx-auto bg-transparent border-0 p-0'
@@ -1194,7 +1377,189 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                 analyzedAt={conversationId ? analyzedAtByConversation[conversationId] ?? null : null}
                 onCacheResult={handleSalesAnalysisCacheResult}
                 compact={embeddedInSheet}
+                onInsertNextMessage={onInsertNextMessage}
+                getCurrentInputValue={getCurrentInputValue}
               />
+
+              {/* Извлечено из переписки */}
+              {extractedClientVisible && (
+                <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50/80 p-2.5">
+                  <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
+                    Извлечено из переписки
+                  </h4>
+                  {!extractedClientData ? (
+                    <p className="text-xs text-gray-500 mb-2">Данные по переписке появятся после анализа.</p>
+                    <button
+                      type="button"
+                      onClick={handleAIAnalyze}
+                      disabled={aiLoading || !messages?.length}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 hover:text-amber-800 disabled:opacity-50"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      {aiLoading ? 'Загрузка…' : 'Извлечь из переписки'}
+                    </button>
+                  ) : (
+                    <>
+                      {extractedClientEditMode ? (
+                        <div className="space-y-1.5">
+                          {['city', 'areaSqm', 'houseType', 'floors', 'clientIntent', 'aiSummary'].map((key) => (
+                            <div key={key}>
+                              <label className="block text-[10px] text-gray-500 mb-0.5">
+                                {key === 'city' && 'Город'}
+                                {key === 'areaSqm' && 'Площадь (м²)'}
+                                {key === 'houseType' && 'Тип дома'}
+                                {key === 'floors' && 'Этажность'}
+                                {key === 'clientIntent' && 'Интерес / запрос'}
+                                {key === 'aiSummary' && 'Краткий комментарий'}
+                              </label>
+                              {key === 'aiSummary' ? (
+                                <textarea
+                                  value={extractedClientDraft[key as keyof ExtractedClientData]}
+                                  onChange={(e) => setExtractedClientDraft((p) => ({ ...p, [key]: e.target.value }))}
+                                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs min-h-[60px]"
+                                  rows={2}
+                                />
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={extractedClientDraft[key as keyof ExtractedClientData]}
+                                  onChange={(e) => setExtractedClientDraft((p) => ({ ...p, [key]: e.target.value }))}
+                                  className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
+                                />
+                              )}
+                            </div>
+                          ))}
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            <button
+                              type="button"
+                              onClick={handleFillCardFromExtracted}
+                              disabled={extractedSaveLoading}
+                              className="px-2.5 py-1.5 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:opacity-50"
+                            >
+                              {extractedSaveLoading ? '…' : 'Сохранить в карточку'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setExtractedClientEditMode(false); setExtractedClientDraft(extractedClientData ? { ...extractedClientData } : emptyExtracted()); }}
+                              className="px-2.5 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+                            >
+                              Отмена
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <dl className="space-y-1 text-xs">
+                            {extractedClientData.city && <><dt className="text-gray-500">Город</dt><dd className="text-gray-800">{extractedClientData.city}</dd></>}
+                            {extractedClientData.areaSqm && <><dt className="text-gray-500">Площадь</dt><dd className="text-gray-800">{extractedClientData.areaSqm} м²</dd></>}
+                            {extractedClientData.houseType && <><dt className="text-gray-500">Тип дома</dt><dd className="text-gray-800">{extractedClientData.houseType}</dd></>}
+                            {extractedClientData.floors && <><dt className="text-gray-500">Этажность</dt><dd className="text-gray-800">{extractedClientData.floors}</dd></>}
+                            {extractedClientData.clientIntent && <><dt className="text-gray-500">Интерес</dt><dd className="text-gray-800">{extractedClientData.clientIntent}</dd></>}
+                            {extractedClientData.aiSummary && <><dt className="text-gray-500">Комментарий</dt><dd className="text-gray-800 whitespace-pre-wrap">{extractedClientData.aiSummary}</dd></>}
+                          </dl>
+                          {!extractedClientData.city && !extractedClientData.areaSqm && !extractedClientData.houseType && !extractedClientData.floors && !extractedClientData.clientIntent && !extractedClientData.aiSummary && (
+                            <p className="text-xs text-gray-400 italic">Ничего не извлечено</p>
+                          )}
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            <button
+                              type="button"
+                              onClick={handleFillCardFromExtracted}
+                              disabled={extractedSaveLoading}
+                              className="px-2.5 py-1.5 text-xs font-medium text-white bg-green-600 rounded hover:bg-green-700 disabled:opacity-50"
+                            >
+                              {extractedSaveLoading ? '…' : 'Заполнить карточку'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => { setExtractedClientEditMode(true); setExtractedClientDraft(extractedClientData ? { ...extractedClientData } : emptyExtracted()); }}
+                              className="px-2.5 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+                            >
+                              Редактировать
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setExtractedClientVisible(false)}
+                              className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+                            >
+                              Скрыть
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+              {!extractedClientVisible && (
+                <button
+                  type="button"
+                  onClick={() => setExtractedClientVisible(true)}
+                  className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Показать «Извлечено из переписки»
+                </button>
+              )}
+
+              {/* Классификация лида */}
+              {conversationId && !leadClassDismissed[conversationId] && (() => {
+                const cached = salesAnalysisCache[conversationId];
+                const hasLead = cached && (cached.leadTemperature || cached.leadStage || cached.leadIntent);
+                const leadTempLabels: Record<string, string> = { hot: 'Горячий', warm: 'Тёплый', cold: 'Холодный' };
+                const leadStageLabels: Record<string, string> = {
+                  primary_interest: 'Первичный интерес',
+                  need_quote: 'Нужен расчёт',
+                  send_proposal: 'Отправить КП',
+                  thinking: 'Думает',
+                  meeting: 'Встреча',
+                  in_progress: 'В работе',
+                  lost: 'Потерян',
+                };
+                const leadIntentLabels: Record<string, string> = {
+                  build_house: 'Строить дом',
+                  get_price: 'Узнать цену',
+                  compare_tech: 'Сравнить технологии',
+                  need_project: 'Нужен проект',
+                  mortgage_installment: 'Ипотека / рассрочка',
+                  consultation: 'Консультация',
+                };
+                if (!hasLead) return null;
+                return (
+                  <div className="mt-3 rounded-lg border border-gray-200 bg-blue-50/60 p-2.5">
+                    <h4 className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
+                      Классификация лида
+                    </h4>
+                    <dl className="space-y-1 text-xs mb-2">
+                      {cached.leadTemperature && <><dt className="text-gray-500">Температура</dt><dd className="text-gray-800">{leadTempLabels[cached.leadTemperature] ?? cached.leadTemperature}</dd></>}
+                      {cached.leadStage && <><dt className="text-gray-500">Этап</dt><dd className="text-gray-800">{leadStageLabels[cached.leadStage] ?? cached.leadStage}</dd></>}
+                      {cached.leadIntent && <><dt className="text-gray-500">Намерение</dt><dd className="text-gray-800">{leadIntentLabels[cached.leadIntent] ?? cached.leadIntent}</dd></>}
+                    </dl>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={handleApplyLeadClassification}
+                        disabled={leadClassApplyLoading}
+                        className="px-2.5 py-1.5 text-xs font-medium text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
+                      >
+                        {leadClassApplyLoading ? '…' : 'Применить'}
+                      </button>
+                      <button
+                        type="button"
+                        className="px-2.5 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50"
+                        title="Изменить вручную в карточке клиента"
+                      >
+                        Изменить вручную
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => conversationId && setLeadClassDismissed((p) => ({ ...p, [conversationId]: true }))}
+                        className="px-2.5 py-1.5 text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Не сохранять
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
             </>
           ) : (
             <div className="mt-4 space-y-3">
