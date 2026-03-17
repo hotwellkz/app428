@@ -7,6 +7,7 @@ import {
   limit, 
   startAfter, 
   onSnapshot,
+  getDocs,
   QueryDocumentSnapshot,
   DocumentData
 } from 'firebase/firestore';
@@ -116,9 +117,9 @@ export const useTransactionsPaginated = ({
     return unsubscribe;
   }, [categoryId, pageSize, enabled, companyId]);
 
-  // Функция загрузки следующей страницы
+  // Загрузка следующей страницы — один раз через getDocs (не onSnapshot), чтобы не дублировать записи и не оставлять лишние подписки
   const loadMore = useCallback(async () => {
-    if (!companyId || !hasMore || loading || !lastDoc) return;
+    if (!companyId || !categoryId || !hasMore || loading || !lastDoc) return;
 
     setLoading(true);
 
@@ -131,37 +132,38 @@ export const useTransactionsPaginated = ({
       limit(pageSize)
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const raw = snapshot.docs.map(doc => ({
+    try {
+      const snapshot = await getDocs(q);
+      const raw = snapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data()
       })) as (Transaction & { status?: string; editType?: string; correctedFrom?: string })[];
       if (process.env.NODE_ENV === 'development' && raw.length > 0) {
-        console.log('TRANSACTIONS PAGE RAW RESULT (loadMore)', { routeId: categoryId, totalFetched: raw.length, docIds: raw.map(t => t.id) });
+        console.log('TRANSACTIONS PAGE RAW RESULT (loadMore)', { routeId: categoryId, totalFetched: raw.length, docIds: raw.map((t) => t.id) });
       }
       const correctedFromIds = new Set(
-        raw.filter(t => t.correctedFrom).map(t => t.correctedFrom as string)
+        raw.filter((t) => t.correctedFrom).map((t) => t.correctedFrom as string)
       );
       const newTransactions = raw.filter(
-        t =>
+        (t) =>
           t.status !== 'cancelled' &&
           t.editType !== 'reversal' &&
           !correctedFromIds.has(t.id)
       ) as Transaction[];
 
-      if (newTransactions.length > 0) {
-        setTransactions(prev => [...prev, ...newTransactions]);
-        setLastDoc(snapshot.docs[snapshot.docs.length - 1]);
-        setHasMore(newTransactions.length === pageSize);
-      } else {
-        setHasMore(false);
-      }
+      const receivedFullPage = snapshot.docs.length === pageSize;
+      const newLastDoc = snapshot.docs.length > 0 ? snapshot.docs[snapshot.docs.length - 1] : null;
 
+      setTransactions((prev) => (newTransactions.length > 0 ? [...prev, ...newTransactions] : prev));
+      if (newLastDoc) setLastDoc(newLastDoc);
+      setHasMore(receivedFullPage);
+    } catch (err) {
+      console.error('useTransactionsPaginated loadMore:', err);
+      setHasMore(false);
+    } finally {
       setLoading(false);
-    });
-
-    return unsubscribe;
-  }, [categoryId, pageSize, lastDoc, hasMore, loading]);
+    }
+  }, [categoryId, pageSize, companyId, lastDoc, hasMore, loading]);
 
   // Загружаем данные при изменении categoryId
   useEffect(() => {
