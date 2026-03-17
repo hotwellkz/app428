@@ -976,6 +976,11 @@ export const deleteTransaction = async (transactionId: string, userId: string): 
     const categoryId = transactionData.categoryId;
     const amount = Number(transactionData.amount);
 
+    // Откат балансов/агрегатов только если транзакция была реально проведена (одобрена).
+    // Pending-транзакции при создании не меняют балансы — при удалении ничего не откатываем.
+    const status = (transactionData.status as TransactionStatus | undefined) ?? 'approved';
+    const wasApplied = status === 'approved';
+
     // Удаляем прикрепленные файлы из Supabase
     if (transactionData.attachments && transactionData.attachments.length > 0) {
       for (const attachment of transactionData.attachments) {
@@ -992,29 +997,27 @@ export const deleteTransaction = async (transactionId: string, userId: string): 
 
     const companyId = transactionData.companyId;
 
-    // Обновляем агрегаты для клиента перед удалением транзакции
-    try {
-      await updateClientAggregatesOnDelete(categoryId, amount, companyId);
-    } catch (error) {
-      console.error('Error updating client aggregates on delete:', error);
-      // Не прерываем выполнение, если обновление агрегатов не удалось
-    }
+    if (wasApplied) {
+      // Обновляем агрегаты для клиента перед удалением транзакции (только если транзакция была проведена)
+      try {
+        await updateClientAggregatesOnDelete(categoryId, amount, companyId);
+      } catch (error) {
+        console.error('Error updating client aggregates on delete:', error);
+      }
 
-    // Получаем текущий баланс категории
-    const categoryRef = doc(db, 'categories', categoryId);
-    const categorySnap = await getDoc(categoryRef);
+      // Откат баланса категории (источник/получатель) — только для проведённых транзакций
+      const categoryRef = doc(db, 'categories', categoryId);
+      const categorySnap = await getDoc(categoryRef);
 
-    if (categorySnap.exists()) {
-      const currentAmount = parseAmount(categorySnap.data().amount);
-      // При удалении:
-      // Для расхода (amount отрицательный) - прибавляем модуль суммы
-      // Для дохода (amount положительный) - вычитаем сумму
-      const newAmount = currentAmount + (amount * -1);
+      if (categorySnap.exists()) {
+        const currentAmount = parseAmount(categorySnap.data().amount);
+        const newAmount = currentAmount + (amount * -1);
 
-      batch.update(categoryRef, {
-        amount: formatAmount(newAmount),
-        updatedAt: serverTimestamp()
-      });
+        batch.update(categoryRef, {
+          amount: formatAmount(newAmount),
+          updatedAt: serverTimestamp()
+        });
+      }
     }
 
     // Ищем связанные транзакции двумя способами:
@@ -1045,46 +1048,46 @@ export const deleteTransaction = async (transactionId: string, userId: string): 
       }
     }
 
-    // Если нашли связанную транзакцию, удаляем её и обновляем баланс её категории
+    // Если нашли связанную транзакцию, удаляем её из БД; откат баланса/агрегатов — только если пара была проведена
     if (relatedTransaction) {
       const relatedRef = doc(db, 'transactions', relatedTransaction.id);
 
-      // Удаляем прикрепленные файлы связанной транзакции
       if (relatedTransaction.attachments && relatedTransaction.attachments.length > 0) {
         for (const attachment of relatedTransaction.attachments) {
           try {
             await deleteFileFromSupabase(attachment.path);
           } catch (error) {
             console.error('Error deleting related transaction file from Supabase:', error);
-            // Продолжаем удаление других файлов даже если один не удалился
           }
         }
       }
 
       batch.delete(relatedRef);
 
-      try {
-        await updateClientAggregatesOnDelete(
-          relatedTransaction.categoryId,
-          relatedTransaction.amount,
-          (relatedTransaction as any).companyId
-        );
-      } catch (error) {
-        console.error('Error updating client aggregates for related transaction:', error);
-      }
+      if (wasApplied) {
+        try {
+          await updateClientAggregatesOnDelete(
+            relatedTransaction.categoryId,
+            relatedTransaction.amount,
+            (relatedTransaction as any).companyId
+          );
+        } catch (error) {
+          console.error('Error updating client aggregates for related transaction:', error);
+        }
 
-      const relatedCategoryRef = doc(db, 'categories', relatedTransaction.categoryId);
-      const relatedCategorySnap = await getDoc(relatedCategoryRef);
+        const relatedCategoryRef = doc(db, 'categories', relatedTransaction.categoryId);
+        const relatedCategorySnap = await getDoc(relatedCategoryRef);
 
-      if (relatedCategorySnap.exists()) {
-        const currentAmount = parseAmount(relatedCategorySnap.data().amount);
-        const relatedAmount = Number(relatedTransaction.amount);
-        const newAmount = currentAmount + (relatedAmount * -1);
+        if (relatedCategorySnap.exists()) {
+          const currentAmount = parseAmount(relatedCategorySnap.data().amount);
+          const relatedAmount = Number(relatedTransaction.amount);
+          const newAmount = currentAmount + (relatedAmount * -1);
 
-        batch.update(relatedCategoryRef, {
-          amount: formatAmount(newAmount),
-          updatedAt: serverTimestamp()
-        });
+          batch.update(relatedCategoryRef, {
+            amount: formatAmount(newAmount),
+            updatedAt: serverTimestamp()
+          });
+        }
       }
     }
 
@@ -1099,15 +1102,12 @@ export const deleteTransaction = async (transactionId: string, userId: string): 
 
     await batch.commit();
 
-    // Если это складская операция, откатываем количество товаров на складе.
-    // Источник истины — категория "Склад" (row === 4). Откатываем ТОЛЬКО ту
-    // транзакцию из пары, которая относится к этой категории, чтобы избежать
-    // двойного rollback при isWarehouseOperation=true на обеих сторонах.
+    // Складской откат — только если транзакция была проведена (одобрена); pending не менял остатки.
     const isPotentialWarehouseOp =
       (transactionData && transactionData.isWarehouseOperation) ||
       (relatedTransaction && relatedTransaction.isWarehouseOperation);
 
-    if (isPotentialWarehouseOp && companyId) {
+    if (wasApplied && isPotentialWarehouseOp && companyId) {
       // Находим категории склада только текущей компании (изоляция по companyId)
       const warehouseCategoriesSnap = await getDocs(
         query(
