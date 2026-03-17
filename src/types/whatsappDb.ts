@@ -58,6 +58,14 @@ export interface WhatsAppConversation {
   lastMessagePreview?: string | null;
   lastMessageMedia?: boolean;
   awaitingReplyDismissedAt?: Date | Timestamp | null;
+  /** Тест: AI-бот отвечает в этом чате (per-conversation) */
+  aiBotEnabled?: boolean;
+  /** Тест: разрешить боту автоматически отправлять КП через калькулятор */
+  aiBotAutoProposalEnabled?: boolean;
+  /** ID последнего обработанного ботом входящего сообщения (защита от повтора) */
+  aiBotLastMessageIdProcessed?: string | null;
+  /** Время последней автоотправки КП ботом (защита от дублей) */
+  aiBotLastProposalAt?: Date | Timestamp | null;
 }
 
 /** Направление сообщения */

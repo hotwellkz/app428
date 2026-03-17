@@ -62,6 +62,10 @@ export interface ConversationListItem {
   /** Город клиента из CRM (для фильтра и отображения). */
   city?: string | null;
   channel?: 'whatsapp' | 'instagram';
+  /** Тест: AI-бот включён для этого чата */
+  aiBotEnabled?: boolean;
+  /** Тест: разрешить боту отправлять КП */
+  aiBotAutoProposalEnabled?: boolean;
 }
 
 export type ConversationAttentionState = 'unread' | 'need_reply' | 'normal';
@@ -140,7 +144,13 @@ function docToConversation(docId: string, data: Record<string, unknown>): WhatsA
     lastMessagePreview: (data.lastMessagePreview as string) ?? undefined,
     lastMessageMedia: data.lastMessageMedia === true,
     awaitingReplyDismissedAt:
-      (data.awaitingReplyDismissedAt as WhatsAppConversation['awaitingReplyDismissedAt']) ?? null
+      (data.awaitingReplyDismissedAt as WhatsAppConversation['awaitingReplyDismissedAt']) ?? null,
+    aiBotEnabled: data.aiBotEnabled === true,
+    aiBotAutoProposalEnabled: data.aiBotAutoProposalEnabled === true,
+    aiBotLastMessageIdProcessed:
+      (data.aiBotLastMessageIdProcessed as string | null | undefined) ?? null,
+    aiBotLastProposalAt:
+      (data.aiBotLastProposalAt as WhatsAppConversation['aiBotLastProposalAt']) ?? null
   };
 }
 
@@ -398,6 +408,38 @@ export async function dismissAwaitingReply(conversationId: string): Promise<void
   });
 }
 
+export interface AiBotFlagsUpdate {
+  aiBotEnabled?: boolean;
+  aiBotAutoProposalEnabled?: boolean;
+}
+
+/**
+ * Обновить флаги AI-бота для диалога (тестовый режим).
+ */
+export async function updateConversationAiBotFlags(
+  conversationId: string,
+  flags: AiBotFlagsUpdate
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
+  const payload: Record<string, boolean> = {};
+  if (typeof flags.aiBotEnabled === 'boolean') payload.aiBotEnabled = flags.aiBotEnabled;
+  if (typeof flags.aiBotAutoProposalEnabled === 'boolean')
+    payload.aiBotAutoProposalEnabled = flags.aiBotAutoProposalEnabled;
+  if (Object.keys(payload).length === 0) return;
+  await updateDoc(ref, payload);
+}
+
+/**
+ * Записать ID последнего обработанного ботом сообщения (после успешной отправки ответа).
+ */
+export async function setConversationAiBotLastProcessedMessageId(
+  conversationId: string,
+  messageId: string
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
+  await updateDoc(ref, { aiBotLastMessageIdProcessed: messageId });
+}
+
 /**
  * Ручной перевод диалога в состояние «есть непрочитанные».
  * Минимально: unreadCount >= 1, опционально сброс lastReadAt.
@@ -462,7 +504,9 @@ function conversationToListItem(
     dealStageName: c.dealStageName ?? null,
     dealStageColor: c.dealStageColor ?? null,
     dealTitle: c.dealTitle ?? null,
-    dealResponsibleName: c.dealResponsibleName ?? null
+    dealResponsibleName: c.dealResponsibleName ?? null,
+    aiBotEnabled: c.aiBotEnabled === true,
+    aiBotAutoProposalEnabled: c.aiBotAutoProposalEnabled === true
   };
 }
 

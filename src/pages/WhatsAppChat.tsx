@@ -19,11 +19,15 @@ import {
   addReactionToMessage,
   getConversationAttentionState,
   deleteClientWithConversation,
+  updateConversationAiBotFlags,
+  setConversationAiBotLastProcessedMessageId,
+  COLLECTIONS,
   type ConversationListItem
 } from '../lib/firebase/whatsappDb';
 import { showErrorNotification } from '../utils/notifications';
 import toast from 'react-hot-toast';
 import { collection, query, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
+import { transcribeVoiceBatch, getVoiceMessagesToTranscribe } from '../utils/transcribeVoiceBatch';
 import { db, auth } from '../lib/firebase/config';
 import { getAuthToken } from '../lib/firebase/auth';
 import type { WhatsAppMessage } from '../types/whatsappDb';
@@ -248,6 +252,9 @@ const WhatsAppChat: React.FC = () => {
   const prevConversationsRef = useRef<ConversationListItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
+  /** AI-бот: ID последнего обработанного входящего (чтобы не отвечать дважды). */
+  const aiBotLastProcessedMessageIdRef = useRef<string | null>(null);
+  const aiBotProcessingRef = useRef(false);
 
   /** Чаты, открытые в этой сессии: в списке для них всегда показываем unreadCount=0 (защита от stale snapshot). */
   const [locallyReadChatIds, setLocallyReadChatIds] = useState<Set<string>>(() => new Set());
@@ -1076,6 +1083,113 @@ const WhatsAppChat: React.FC = () => {
       if (markReadDebounceRef.current) clearTimeout(markReadDebounceRef.current);
     };
   }, [selectedId, messages, companyId, incognitoMode]);
+
+  /** AI-бот: при открытии чата с включённым AI загружаем lastProcessed из Firestore. */
+  useEffect(() => {
+    if (!selectedId || !selectedItem?.aiBotEnabled) {
+      aiBotLastProcessedMessageIdRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    getDoc(doc(db, COLLECTIONS.CONVERSATIONS, selectedId)).then((snap) => {
+      if (cancelled || !snap.exists()) return;
+      const data = snap.data() as { aiBotLastMessageIdProcessed?: string | null };
+      aiBotLastProcessedMessageIdRef.current = data.aiBotLastMessageIdProcessed ?? null;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, selectedItem?.aiBotEnabled]);
+
+  /** AI-бот: при новом входящем сообщении — расшифровка (если голос), генерация ответа, отправка. */
+  useEffect(() => {
+    if (
+      !selectedId ||
+      !selectedItem?.aiBotEnabled ||
+      !selectedItem?.phone ||
+      selectedItem.phone === '…' ||
+      !companyId ||
+      incognitoMode ||
+      messages.length === 0 ||
+      aiBotProcessingRef.current
+    ) {
+      return;
+    }
+    const getMessageTime = (m: WhatsAppMessage): number => {
+      const t = m.createdAt;
+      if (!t) return 0;
+      if (typeof (t as { toMillis?: () => number }).toMillis === 'function') return (t as { toMillis: () => number }).toMillis();
+      if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) return ((t as { seconds: number }).seconds ?? 0) * 1000;
+      return new Date(t as string).getTime();
+    };
+    const sorted = [...messages].filter((m) => !m.deleted).sort((a, b) => getMessageTime(b) - getMessageTime(a));
+    const latest = sorted[0];
+    if (!latest || latest.direction !== 'incoming') return;
+    if (latest.id === aiBotLastProcessedMessageIdRef.current) return;
+
+    aiBotProcessingRef.current = true;
+    const messageIdToProcess = latest.id;
+    (async () => {
+      try {
+        const phone = selectedItem!.phone!;
+        const voiceItems = getVoiceMessagesToTranscribe(messages);
+        let mergedUpdates: Record<string, string> = {};
+        if (voiceItems.length > 0) {
+          const result = await transcribeVoiceBatch(voiceItems, getAuthToken);
+          mergedUpdates = result.updates ?? {};
+        }
+        const recent = messages
+          .map((m) => ({
+            ...m,
+            _content: (mergedUpdates[m.id] ?? m.transcription ?? m.text ?? '').trim()
+          }))
+          .filter((m) => m._content.length > 0 && !m.deleted)
+          .slice(-20)
+          .sort((a, b) => getMessageTime(a) - getMessageTime(b));
+        const payloadMessages = recent.map((m) => ({
+          role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
+          text: m._content.replace(/<[^>]*>/g, '').trim()
+        }));
+        if (payloadMessages.length === 0) return;
+
+        const token = await getAuthToken();
+        if (!token) return;
+
+        const res = await fetch('/.netlify/functions/ai-chat-bot-reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            messages: payloadMessages,
+            knowledgeBase: knowledgeBase.length > 0 ? knowledgeBase.map((k) => ({ title: k.title, content: k.content, category: k.category ?? null })) : undefined,
+            quickReplies: quickReplies.length > 0 ? quickReplies.map((q) => ({ title: q.title, text: q.text, keywords: q.keywords, category: q.category })) : undefined
+          })
+        });
+        const data = (await res.json().catch(() => ({}))) as { reply?: string; error?: string };
+        if (!res.ok || data.error) {
+          if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot reply failed', res.status, data);
+          return;
+        }
+        const reply = typeof data.reply === 'string' ? data.reply.trim() : '';
+        if (!reply) return;
+
+        const sendRes = await fetch(SEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(wazzupSendBody(phone, { text: formatMessageForWhatsApp(reply), companyId }))
+        });
+        if (!sendRes.ok) {
+          if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot send failed', sendRes.status);
+          return;
+        }
+        aiBotLastProcessedMessageIdRef.current = messageIdToProcess;
+        await setConversationAiBotLastProcessedMessageId(selectedId, messageIdToProcess);
+      } catch (e) {
+        if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot pipeline error', e);
+      } finally {
+        aiBotProcessingRef.current = false;
+      }
+    })();
+  }, [messages, selectedId, selectedItem?.aiBotEnabled, selectedItem?.phone, companyId, incognitoMode, knowledgeBase, quickReplies]);
 
   /** Краткое описание пересылаемого: "1 изображение, 2 сообщения" и т.п. */
   const forwardPreviewSummary = useMemo(() => {
@@ -2522,6 +2636,9 @@ const WhatsAppChat: React.FC = () => {
                 isTranscribeBatchRunning={batchTranscribeRunning}
                 onPrepareForAnalysisStart={() => setPrepareForAnalysisRunning(true)}
                 onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}
+                aiBotEnabled={selectedItem?.aiBotEnabled ?? false}
+                aiBotAutoProposalEnabled={selectedItem?.aiBotAutoProposalEnabled ?? false}
+                onAiBotFlagsChange={selectedId ? (flags) => updateConversationAiBotFlags(selectedId, flags) : undefined}
               />
               </div>
             </div>
@@ -2615,6 +2732,9 @@ const WhatsAppChat: React.FC = () => {
                   if (mode === 'replace') setInputText(text);
                   else setInputText((prev) => (prev ? prev + '\n' + text : text));
                 }}
+                aiBotEnabled={selectedItem?.aiBotEnabled ?? false}
+                aiBotAutoProposalEnabled={selectedItem?.aiBotAutoProposalEnabled ?? false}
+                onAiBotFlagsChange={selectedId ? (flags) => updateConversationAiBotFlags(selectedId, flags) : undefined}
                 isTranscribeBatchRunning={batchTranscribeRunning}
                 onPrepareForAnalysisStart={() => setPrepareForAnalysisRunning(true)}
                 onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}

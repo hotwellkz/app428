@@ -262,6 +262,12 @@ interface ClientInfoPanelProps {
   onPrepareForAnalysisStart?: () => void;
   /** Вызвать по завершении подготовки к анализу. */
   onPrepareForAnalysisEnd?: () => void;
+  /** Тест: AI-бот включён для этого чата */
+  aiBotEnabled?: boolean;
+  /** Тест: разрешить боту отправлять КП */
+  aiBotAutoProposalEnabled?: boolean;
+  /** Обновить флаги AI-бота (тест) */
+  onAiBotFlagsChange?: (flags: { aiBotEnabled?: boolean; aiBotAutoProposalEnabled?: boolean }) => void;
 }
 
 const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 py-0 rounded-[10px] text-[11px] font-medium bg-[#f1f3f5] text-[#555] flex-shrink-0';
@@ -295,6 +301,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   isTranscribeBatchRunning = false,
   onPrepareForAnalysisStart,
   onPrepareForAnalysisEnd,
+  aiBotEnabled = false,
+  aiBotAutoProposalEnabled = false,
+  onAiBotFlagsChange,
 }) => {
   const companyId = useCompanyId();
   const navigate = useNavigate();
@@ -1092,6 +1101,38 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                   >
                     {creatingPipelineDeal ? 'Создание…' : 'Создать сделку'}
                   </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* AI-бот (тест): переключатель и опция авто-КП */}
+          {conversationId && onAiBotFlagsChange != null && (
+            <div className="mt-4 p-3 rounded-xl border border-gray-200 bg-gray-50/80">
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="inline-flex items-center gap-2 cursor-pointer" title="AI может отвечать в этом чате, собирать данные и отправлять КП через калькулятор">
+                  <input
+                    type="checkbox"
+                    checked={aiBotEnabled}
+                    onChange={(e) => onAiBotFlagsChange({ aiBotEnabled: e.target.checked, aiBotAutoProposalEnabled: e.target.checked ? aiBotAutoProposalEnabled : false })}
+                    className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="text-sm font-medium text-gray-800">AI-бот</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 font-medium">тест</span>
+                </label>
+              </div>
+              {aiBotEnabled && (
+                <>
+                  <p className="mt-1.5 text-xs text-emerald-700 font-medium">AI-режим активен</p>
+                  <label className="mt-2 flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={aiBotAutoProposalEnabled}
+                      onChange={(e) => onAiBotFlagsChange({ aiBotAutoProposalEnabled: e.target.checked })}
+                      className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <span className="text-xs text-gray-700">Разрешить AI отправлять КП</span>
+                  </label>
                 </>
               )}
             </div>
