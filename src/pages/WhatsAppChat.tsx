@@ -2511,6 +2511,7 @@ const WhatsAppChat: React.FC = () => {
                 dealStatusCounts={dealStatusCounts}
                 managerCounts={managerCounts}
                 cities={citiesForFilter}
+                cityCounts={cityCounts}
                 onAddCity={handleAddCity}
                 fillWidth
                 getCurrentInputValue={() => inputText}
@@ -2606,6 +2607,7 @@ const WhatsAppChat: React.FC = () => {
                 dealStatusCounts={dealStatusCounts}
                 managerCounts={managerCounts}
                 cities={citiesForFilter}
+                cityCounts={cityCounts}
                 onAddCity={handleAddCity}
                 embeddedInSheet
                 getCurrentInputValue={() => inputText}

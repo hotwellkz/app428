@@ -5,11 +5,16 @@ import {
   setDoc,
   onSnapshot,
   serverTimestamp,
+  query,
+  where,
+  getDocs,
+  writeBatch,
   type Unsubscribe
 } from 'firebase/firestore';
 import { db } from './config';
 
 const COLLECTION_COMPANY_CITIES = 'companyCities';
+const COLLECTION_CLIENTS = 'clients';
 
 /** Нормализация для отображения: trim + первый символ в верхний регистр, остальные в нижний (по словам). */
 export function normalizeCityDisplay(name: string): string {
@@ -75,4 +80,67 @@ export async function addCompanyCity(companyId: string, cityName: string): Promi
   cities.sort((a, b) => a.localeCompare(b, 'ru'));
   await setDoc(ref, { cities, updatedAt: serverTimestamp() }, { merge: true });
   return normalized;
+}
+
+/** Переименовать город в справочнике и у всех клиентов компании. */
+export async function renameCompanyCity(
+  companyId: string,
+  oldName: string,
+  newName: string
+): Promise<string> {
+  const oldNorm = (oldName ?? '').trim();
+  const newNorm = normalizeCityDisplay(newName);
+  if (!oldNorm || !newNorm) throw new Error('Укажите название');
+  if (sameCity(oldNorm, newNorm)) return newNorm;
+  const ref = doc(db, COLLECTION_COMPANY_CITIES, companyId);
+  const snap = await getDoc(ref);
+  const data = (snap.data() as CompanyCitiesDoc | undefined) ?? { cities: [] };
+  let cities: string[] = Array.isArray(data.cities) ? [...data.cities] : [];
+  const idx = cities.findIndex((c) => sameCity(c, oldNorm));
+  if (idx === -1) throw new Error('Город не найден');
+  if (cities.some((c) => sameCity(c, newNorm))) throw new Error('Такой город уже есть');
+  cities[idx] = newNorm;
+  cities.sort((a, b) => a.localeCompare(b, 'ru'));
+  const clientsRef = collection(db, COLLECTION_CLIENTS);
+  const clientsSnap = await getDocs(
+    query(
+      clientsRef,
+      where('companyId', '==', companyId),
+      where('city', '==', oldNorm)
+    )
+  );
+  const batch = writeBatch(db);
+  clientsSnap.docs.forEach((d) => {
+    batch.update(d.ref, { city: newNorm });
+  });
+  await batch.commit();
+  await setDoc(ref, { cities, updatedAt: serverTimestamp() }, { merge: true });
+  return newNorm;
+}
+
+/** Удалить город из справочника и сбросить city у клиентов компании. */
+export async function removeCompanyCity(companyId: string, cityName: string): Promise<void> {
+  const normalized = (cityName ?? '').trim();
+  if (!normalized) return;
+  const ref = doc(db, COLLECTION_COMPANY_CITIES, companyId);
+  const snap = await getDoc(ref);
+  const data = (snap.data() as CompanyCitiesDoc | undefined) ?? { cities: [] };
+  let cities: string[] = Array.isArray(data.cities) ? [...data.cities] : [];
+  const idx = cities.findIndex((c) => sameCity(c, normalized));
+  if (idx === -1) return;
+  cities.splice(idx, 1);
+  const clientsRef = collection(db, COLLECTION_CLIENTS);
+  const clientsSnap = await getDocs(
+    query(
+      clientsRef,
+      where('companyId', '==', companyId),
+      where('city', '==', normalized)
+    )
+  );
+  const batch = writeBatch(db);
+  clientsSnap.docs.forEach((d) => {
+    batch.update(d.ref, { city: null });
+  });
+  await batch.commit();
+  await setDoc(ref, { cities, updatedAt: serverTimestamp() }, { merge: true });
 }

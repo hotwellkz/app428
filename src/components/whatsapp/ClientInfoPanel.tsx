@@ -20,6 +20,8 @@ import { getChatAiAnalysis, setChatAiAnalysis } from '../../lib/firebase/chatAiA
 import { useCompanyId } from '../../contexts/CompanyContext';
 import { useAIConfigured } from '../../hooks/useAIConfigured';
 import { createDeal, ensureDefaultPipeline, listStages, moveDealToStage } from '../../lib/firebase/deals';
+import { removeCompanyCity, renameCompanyCity } from '../../lib/firebase/companyCities';
+import { useClampedMenuPosition } from '../../hooks/useClampedMenuPosition';
 import type { Deal } from '../../types/deals';
 import { Sparkles, MoreVertical, X, ExternalLink, GitBranch } from 'lucide-react';
 import { ChatSalesAnalysisBlock, type SalesAnalysisResult } from './ChatSalesAnalysisBlock';
@@ -242,6 +244,8 @@ interface ClientInfoPanelProps {
   managerCounts?: { none: number; byId: Record<string, number> };
   /** Список городов для выбора (справочник + из чатов) */
   cities?: string[];
+  /** Количество контактов по городам (для бейджей в блоке «Город») */
+  cityCounts?: { none: number; byCity: Record<string, number> };
   /** Добавить новый город в справочник компании; возвращает нормализованное название. */
   onAddCity?: (name: string) => Promise<string>;
   /** Встроен в bottom sheet (мобильный): не создавать свой scroll, чтобы скроллил только контейнер шторки */
@@ -276,6 +280,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   dealStatusCounts,
   managerCounts,
   cities = [],
+  cityCounts,
   onAddCity,
   embeddedInSheet = false,
   fillWidth = false,
@@ -312,7 +317,11 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [editStatusColor, setEditStatusColor] = useState('#6B7280');
   const [deletingStatus, setDeletingStatus] = useState<{ status: DealStatusRecord; dealCount: number } | null>(null);
   const [deleteStatusLoading, setDeleteStatusLoading] = useState(false);
-  const statusMenuRef = useRef<HTMLDivElement>(null);
+  const statusMenuPosition = useClampedMenuPosition(
+    !!statusContextMenu,
+    statusContextMenu?.x ?? 0,
+    statusContextMenu?.y ?? 0
+  );
   const [managerContextMenu, setManagerContextMenu] = useState<{ x: number; y: number; manager: ChatManagerRecord } | null>(null);
   const [mobileStatusPickerOpen, setMobileStatusPickerOpen] = useState(false);
   const [mobileManagerPickerOpen, setMobileManagerPickerOpen] = useState(false);
@@ -321,11 +330,25 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [editManagerColor, setEditManagerColor] = useState('#3B82F6');
   const [deletingManager, setDeletingManager] = useState<{ manager: ChatManagerRecord; dealCount: number } | null>(null);
   const [deleteManagerLoading, setDeleteManagerLoading] = useState(false);
-  const managerMenuRef = useRef<HTMLDivElement>(null);
+  const managerMenuPosition = useClampedMenuPosition(
+    !!managerContextMenu,
+    managerContextMenu?.x ?? 0,
+    managerContextMenu?.y ?? 0
+  );
+  const cityMenuPosition = useClampedMenuPosition(
+    !!cityContextMenu,
+    cityContextMenu?.x ?? 0,
+    cityContextMenu?.y ?? 0
+  );
   const [citySaving, setCitySaving] = useState(false);
   const [citySaveFeedback, setCitySaveFeedback] = useState<'idle' | 'success' | 'error'>('idle');
   const [showAddCityModal, setShowAddCityModal] = useState(false);
   const [newCityName, setNewCityName] = useState('');
+  const [cityContextMenu, setCityContextMenu] = useState<{ x: number; y: number; cityName: string } | null>(null);
+  const [deletingCity, setDeletingCity] = useState<string | null>(null);
+  const [deleteCityLoading, setDeleteCityLoading] = useState(false);
+  const [renamingCity, setRenamingCity] = useState<string | null>(null);
+  const [renameCityValue, setRenameCityValue] = useState('');
 
   const [pipelineDeal, setPipelineDeal] = useState<Deal | null>(null);
   const [pipelineStages, setPipelineStages] = useState<Array<{ id: string; name: string; color?: string | null }>>([]);
@@ -564,7 +587,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     if (!statusContextMenu) return;
     const close = () => setStatusContextMenu(null);
     const onDocClick = (e: MouseEvent) => {
-      if (statusMenuRef.current && !statusMenuRef.current.contains(e.target as Node)) close();
+      if (statusMenuPosition.ref.current && !statusMenuPosition.ref.current.contains(e.target as Node)) close();
     };
     document.addEventListener('click', onDocClick, true);
     return () => document.removeEventListener('click', onDocClick, true);
@@ -574,11 +597,21 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     if (!managerContextMenu) return;
     const close = () => setManagerContextMenu(null);
     const onDocClick = (e: MouseEvent) => {
-      if (managerMenuRef.current && !managerMenuRef.current.contains(e.target as Node)) close();
+      if (managerMenuPosition.ref.current && !managerMenuPosition.ref.current.contains(e.target as Node)) close();
     };
     document.addEventListener('click', onDocClick, true);
     return () => document.removeEventListener('click', onDocClick, true);
   }, [managerContextMenu]);
+
+  useEffect(() => {
+    if (!cityContextMenu) return;
+    const close = () => setCityContextMenu(null);
+    const onDocClick = (e: MouseEvent) => {
+      if (cityMenuPosition.ref.current && !cityMenuPosition.ref.current.contains(e.target as Node)) close();
+    };
+    document.addEventListener('click', onDocClick, true);
+    return () => document.removeEventListener('click', onDocClick, true);
+  }, [cityContextMenu]);
 
   /** Сначала прямой вызов функции Netlify (на хостинге без редиректа /api даёт 404 HTML) */
   const AI_ANALYZE_ENDPOINTS = ['/.netlify/functions/ai-analyze-client', '/api/ai/analyze-client'] as const;
@@ -1482,19 +1515,45 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                       className="text-green-600"
                     />
                     <span className="text-sm text-gray-600">Без города</span>
+                    {cityCounts != null && (
+                      <span className={COUNT_BADGE_CLASS + ' ml-auto'}>{cityCounts.none}</span>
+                    )}
                   </label>
                   {cities.map((cityName) => (
-                    <label key={cityName} className="flex items-center gap-2 cursor-pointer w-full min-w-0">
-                      <input
-                        type="radio"
-                        name="city"
-                        checked={(client?.city ?? '').trim() === cityName}
-                        onChange={() => saveCity(cityName)}
-                        disabled={citySaving}
-                        className="text-green-600"
-                      />
-                      <span className="text-sm text-gray-800 truncate">{cityName}</span>
-                    </label>
+                    <div
+                      key={cityName}
+                      className="group flex items-center gap-1 w-full"
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        setCityContextMenu({ x: e.clientX, y: e.clientY, cityName });
+                      }}
+                    >
+                      <label className="flex-1 flex items-center gap-2 cursor-pointer min-w-0">
+                        <input
+                          type="radio"
+                          name="city"
+                          checked={(client?.city ?? '').trim() === cityName}
+                          onChange={() => saveCity(cityName)}
+                          disabled={citySaving}
+                          className="text-green-600"
+                        />
+                        <span className="text-sm text-gray-800 truncate">{cityName}</span>
+                      </label>
+                      {cityCounts != null && (
+                        <span className={COUNT_BADGE_CLASS}>{cityCounts.byCity[cityName] ?? 0}</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCityContextMenu({ x: e.clientX, y: e.clientY, cityName });
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-gray-200 text-gray-500 flex-shrink-0"
+                        aria-label="Меню города"
+                      >
+                        <MoreVertical className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   ))}
                   {onAddCity && (
                     <button
@@ -2007,9 +2066,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
 
       {statusContextMenu && (
         <div
-          ref={statusMenuRef}
+          ref={statusMenuPosition.ref}
           className="fixed z-[1300] min-w-[140px] py-1 bg-white rounded-lg shadow-lg border border-gray-200"
-          style={{ left: statusContextMenu.x, top: statusContextMenu.y }}
+          style={{ left: statusMenuPosition.style.left, top: statusMenuPosition.style.top }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -2160,9 +2219,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
 
       {managerContextMenu && (
         <div
-          ref={managerMenuRef}
+          ref={managerMenuPosition.ref}
           className="fixed z-[1300] min-w-[140px] py-1 bg-white rounded-lg shadow-lg border border-gray-200"
-          style={{ left: managerContextMenu.x, top: managerContextMenu.y }}
+          style={{ left: managerMenuPosition.style.left, top: managerMenuPosition.style.top }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -2365,6 +2424,124 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
           </div>
         </div>
       )}
+
+      {cityContextMenu && (
+        <div
+          ref={cityMenuPosition.ref}
+          className="fixed z-[1300] min-w-[140px] py-1 bg-white rounded-lg shadow-lg border border-gray-200"
+          style={{ left: cityMenuPosition.style.left, top: cityMenuPosition.style.top }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="w-full text-left px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100"
+            onClick={() => {
+              setRenameCityValue(cityContextMenu.cityName);
+              setRenamingCity(cityContextMenu.cityName);
+              setCityContextMenu(null);
+            }}
+          >
+            Переименовать
+          </button>
+          <button
+            type="button"
+            className="w-full text-left px-3 py-1.5 text-sm text-red-600 hover:bg-red-50"
+            onClick={async () => {
+              setDeletingCity(cityContextMenu.cityName);
+              setCityContextMenu(null);
+            }}
+          >
+            Удалить
+          </button>
+        </div>
+      )}
+
+      {deletingCity && companyId && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-sm">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">
+              Удалить город «{deletingCity}»?
+            </h3>
+            <p className="text-xs text-gray-600 mb-3">
+              Город будет удалён из справочника. У контактов с этим городом поле «Город» будет сброшено.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeletingCity(null)}
+                disabled={deleteCityLoading}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={deleteCityLoading}
+                onClick={async () => {
+                  setDeleteCityLoading(true);
+                  try {
+                    await removeCompanyCity(companyId, deletingCity);
+                    if (client?.city?.trim() === deletingCity) {
+                      setClient({ ...client, city: undefined } as WhatsAppClientCard);
+                    }
+                    setDeletingCity(null);
+                  } finally {
+                    setDeleteCityLoading(false);
+                  }
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50"
+              >
+                {deleteCityLoading ? 'Удаление…' : 'Удалить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {renamingCity && companyId && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-xs">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">Переименовать город</h3>
+            <input
+              type="text"
+              value={renameCityValue}
+              onChange={(e) => setRenameCityValue(e.target.value)}
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm mb-3"
+              placeholder="Новое название"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setRenamingCity(null); setRenameCityValue(''); }}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={!renameCityValue.trim()}
+                onClick={async () => {
+                  if (!renameCityValue.trim()) return;
+                  try {
+                    const newName = await renameCompanyCity(companyId, renamingCity, renameCityValue.trim());
+                    if (client?.city?.trim() === renamingCity) {
+                      setClient({ ...client, city: newName } as WhatsAppClientCard);
+                    }
+                    setRenamingCity(null);
+                    setRenameCityValue('');
+                  } catch (e) {
+                    if (import.meta.env.DEV) console.warn('Rename city error', e);
+                  }
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                Сохранить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAddCityModal && onAddCity && (
         <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40">
           <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-xs">
