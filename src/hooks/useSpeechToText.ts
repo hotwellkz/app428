@@ -108,7 +108,9 @@ export const useSpeechToText = (options?: UseSpeechToTextOptions): UseSpeechToTe
     try {
       const recognition = new Ctor();
       recognition.lang = options?.lang ?? 'ru-RU';
-      recognition.continuous = false;
+      // Включаем непрерывный режим, чтобы движок дольше ждал продолжения речи
+      // и не обрывал диктовку при коротких паузах
+      recognition.continuous = true;
       recognition.interimResults = false;
 
       recognition.onstart = () => {
