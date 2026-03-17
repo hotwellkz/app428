@@ -1084,113 +1084,6 @@ const WhatsAppChat: React.FC = () => {
     };
   }, [selectedId, messages, companyId, incognitoMode]);
 
-  /** AI-бот: при открытии чата с включённым AI загружаем lastProcessed из Firestore. */
-  useEffect(() => {
-    if (!selectedId || !selectedItem?.aiBotEnabled) {
-      aiBotLastProcessedMessageIdRef.current = null;
-      return;
-    }
-    let cancelled = false;
-    getDoc(doc(db, COLLECTIONS.CONVERSATIONS, selectedId)).then((snap) => {
-      if (cancelled || !snap.exists()) return;
-      const data = snap.data() as { aiBotLastMessageIdProcessed?: string | null };
-      aiBotLastProcessedMessageIdRef.current = data.aiBotLastMessageIdProcessed ?? null;
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedId, selectedItem?.aiBotEnabled]);
-
-  /** AI-бот: при новом входящем сообщении — расшифровка (если голос), генерация ответа, отправка. */
-  useEffect(() => {
-    if (
-      !selectedId ||
-      !selectedItem?.aiBotEnabled ||
-      !selectedItem?.phone ||
-      selectedItem.phone === '…' ||
-      !companyId ||
-      incognitoMode ||
-      messages.length === 0 ||
-      aiBotProcessingRef.current
-    ) {
-      return;
-    }
-    const getMessageTime = (m: WhatsAppMessage): number => {
-      const t = m.createdAt;
-      if (!t) return 0;
-      if (typeof (t as { toMillis?: () => number }).toMillis === 'function') return (t as { toMillis: () => number }).toMillis();
-      if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) return ((t as { seconds: number }).seconds ?? 0) * 1000;
-      return new Date(t as string).getTime();
-    };
-    const sorted = [...messages].filter((m) => !m.deleted).sort((a, b) => getMessageTime(b) - getMessageTime(a));
-    const latest = sorted[0];
-    if (!latest || latest.direction !== 'incoming') return;
-    if (latest.id === aiBotLastProcessedMessageIdRef.current) return;
-
-    aiBotProcessingRef.current = true;
-    const messageIdToProcess = latest.id;
-    (async () => {
-      try {
-        const phone = selectedItem!.phone!;
-        const voiceItems = getVoiceMessagesToTranscribe(messages);
-        let mergedUpdates: Record<string, string> = {};
-        if (voiceItems.length > 0) {
-          const result = await transcribeVoiceBatch(voiceItems, getAuthToken);
-          mergedUpdates = result.updates ?? {};
-        }
-        const recent = messages
-          .map((m) => ({
-            ...m,
-            _content: (mergedUpdates[m.id] ?? m.transcription ?? m.text ?? '').trim()
-          }))
-          .filter((m) => m._content.length > 0 && !m.deleted)
-          .slice(-20)
-          .sort((a, b) => getMessageTime(a) - getMessageTime(b));
-        const payloadMessages = recent.map((m) => ({
-          role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
-          text: m._content.replace(/<[^>]*>/g, '').trim()
-        }));
-        if (payloadMessages.length === 0) return;
-
-        const token = await getAuthToken();
-        if (!token) return;
-
-        const res = await fetch('/.netlify/functions/ai-chat-bot-reply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            messages: payloadMessages,
-            knowledgeBase: knowledgeBase.length > 0 ? knowledgeBase.map((k) => ({ title: k.title, content: k.content, category: k.category ?? null })) : undefined,
-            quickReplies: quickReplies.length > 0 ? quickReplies.map((q) => ({ title: q.title, text: q.text, keywords: q.keywords, category: q.category })) : undefined
-          })
-        });
-        const data = (await res.json().catch(() => ({}))) as { reply?: string; error?: string };
-        if (!res.ok || data.error) {
-          if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot reply failed', res.status, data);
-          return;
-        }
-        const reply = typeof data.reply === 'string' ? data.reply.trim() : '';
-        if (!reply) return;
-
-        const sendRes = await fetch(SEND_API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(wazzupSendBody(phone, { text: formatMessageForWhatsApp(reply), companyId }))
-        });
-        if (!sendRes.ok) {
-          if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot send failed', sendRes.status);
-          return;
-        }
-        aiBotLastProcessedMessageIdRef.current = messageIdToProcess;
-        await setConversationAiBotLastProcessedMessageId(selectedId, messageIdToProcess);
-      } catch (e) {
-        if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot pipeline error', e);
-      } finally {
-        aiBotProcessingRef.current = false;
-      }
-    })();
-  }, [messages, selectedId, selectedItem?.aiBotEnabled, selectedItem?.phone, companyId, incognitoMode, knowledgeBase, quickReplies]);
-
   /** Краткое описание пересылаемого: "1 изображение, 2 сообщения" и т.п. */
   const forwardPreviewSummary = useMemo(() => {
     const toSend = messages.filter((m) => selectedMessageIds.includes(m.id) && !m.deleted);
@@ -1320,6 +1213,113 @@ const WhatsAppChat: React.FC = () => {
     conversations.find((c) => c.id === selectedId) ||
     searchChats.find((c) => c.id === selectedId) ||
     (stickySelectedChat?.id === selectedId ? stickySelectedChat : undefined);
+
+  /** AI-бот: при открытии чата с включённым AI загружаем lastProcessed из Firestore. */
+  useEffect(() => {
+    if (!selectedId || !selectedItem?.aiBotEnabled) {
+      aiBotLastProcessedMessageIdRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    getDoc(doc(db, COLLECTIONS.CONVERSATIONS, selectedId)).then((snap) => {
+      if (cancelled || !snap.exists()) return;
+      const data = snap.data() as { aiBotLastMessageIdProcessed?: string | null };
+      aiBotLastProcessedMessageIdRef.current = data.aiBotLastMessageIdProcessed ?? null;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, selectedItem?.aiBotEnabled]);
+
+  /** AI-бот: при новом входящем сообщении — расшифровка (если голос), генерация ответа, отправка. */
+  useEffect(() => {
+    if (
+      !selectedId ||
+      !selectedItem?.aiBotEnabled ||
+      !selectedItem?.phone ||
+      selectedItem.phone === '…' ||
+      !companyId ||
+      incognitoMode ||
+      messages.length === 0 ||
+      aiBotProcessingRef.current
+    ) {
+      return;
+    }
+    const getMessageTime = (m: WhatsAppMessage): number => {
+      const t = m.createdAt;
+      if (!t) return 0;
+      if (typeof (t as { toMillis?: () => number }).toMillis === 'function') return (t as { toMillis: () => number }).toMillis();
+      if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) return ((t as { seconds: number }).seconds ?? 0) * 1000;
+      return new Date(t as string).getTime();
+    };
+    const sorted = [...messages].filter((m) => !m.deleted).sort((a, b) => getMessageTime(b) - getMessageTime(a));
+    const latest = sorted[0];
+    if (!latest || latest.direction !== 'incoming') return;
+    if (latest.id === aiBotLastProcessedMessageIdRef.current) return;
+
+    aiBotProcessingRef.current = true;
+    const messageIdToProcess = latest.id;
+    (async () => {
+      try {
+        const phone = selectedItem!.phone!;
+        const voiceItems = getVoiceMessagesToTranscribe(messages);
+        let mergedUpdates: Record<string, string> = {};
+        if (voiceItems.length > 0) {
+          const result = await transcribeVoiceBatch(voiceItems, getAuthToken);
+          mergedUpdates = result.updates ?? {};
+        }
+        const recent = messages
+          .map((m) => ({
+            ...m,
+            _content: (mergedUpdates[m.id] ?? m.transcription ?? m.text ?? '').trim()
+          }))
+          .filter((m) => m._content.length > 0 && !m.deleted)
+          .slice(-20)
+          .sort((a, b) => getMessageTime(a) - getMessageTime(b));
+        const payloadMessages = recent.map((m) => ({
+          role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
+          text: m._content.replace(/<[^>]*>/g, '').trim()
+        }));
+        if (payloadMessages.length === 0) return;
+
+        const token = await getAuthToken();
+        if (!token) return;
+
+        const res = await fetch('/.netlify/functions/ai-chat-bot-reply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({
+            messages: payloadMessages,
+            knowledgeBase: knowledgeBase.length > 0 ? knowledgeBase.map((k) => ({ title: k.title, content: k.content, category: k.category ?? null })) : undefined,
+            quickReplies: quickReplies.length > 0 ? quickReplies.map((q) => ({ title: q.title, text: q.text, keywords: q.keywords, category: q.category })) : undefined
+          })
+        });
+        const data = (await res.json().catch(() => ({}))) as { reply?: string; error?: string };
+        if (!res.ok || data.error) {
+          if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot reply failed', res.status, data);
+          return;
+        }
+        const reply = typeof data.reply === 'string' ? data.reply.trim() : '';
+        if (!reply) return;
+
+        const sendRes = await fetch(SEND_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(wazzupSendBody(phone, { text: formatMessageForWhatsApp(reply), companyId }))
+        });
+        if (!sendRes.ok) {
+          if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot send failed', sendRes.status);
+          return;
+        }
+        aiBotLastProcessedMessageIdRef.current = messageIdToProcess;
+        await setConversationAiBotLastProcessedMessageId(selectedId, messageIdToProcess);
+      } catch (e) {
+        if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot pipeline error', e);
+      } finally {
+        aiBotProcessingRef.current = false;
+      }
+    })();
+  }, [messages, selectedId, selectedItem?.aiBotEnabled, selectedItem?.phone, companyId, incognitoMode, knowledgeBase, quickReplies]);
 
   const handleFileSelect = useCallback(async (file: File) => {
     setSendError(null);
