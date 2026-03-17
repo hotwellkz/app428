@@ -34,5 +34,8 @@ serviceAccountKey.json
 # Local Netlify folder
 .netlify
 
+# Firebase CLI cache
+.firebase
+
 # Firestore backups (local)
 backups/
