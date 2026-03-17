@@ -133,13 +133,13 @@ self.addEventListener('fetch', (event) => {
 
   // Полностью отключаем кэширование для маршрута /calculator
   if (url.pathname === '/calculator' || url.pathname.startsWith('/calculator/')) {
-    event.respondWith(fetch(event.request));
+    event.respondWith(fetch(event.request).catch(() => createErrorResponse(503)));
     return;
   }
 
   // API через Netlify Functions — не кэшировать, всегда сеть
   if (url.pathname.startsWith('/.netlify/functions')) {
-    event.respondWith(fetch(event.request));
+    event.respondWith(fetch(event.request).catch(() => createErrorResponse(503)));
     return;
   }
 
@@ -255,7 +255,7 @@ self.addEventListener('fetch', (event) => {
     url.searchParams.has('t') ||
     url.searchParams.has('v')
   ) {
-    event.respondWith(fetch(event.request));
+    event.respondWith(fetch(event.request).catch(() => createErrorResponse(503)));
     return;
   }
 

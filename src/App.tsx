@@ -333,7 +333,7 @@ const AppContent: React.FC = () => {
 const App = () => {
   return (
     <HelmetProvider>
-      <Router>
+      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <CompanyProvider>
         <AuthGuard>
           <ChatProvider>
