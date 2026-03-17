@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { X, Receipt, Loader } from 'lucide-react';
+import { X, Receipt, Loader, Eye } from 'lucide-react';
 import { updateTransactionDescription } from '../../lib/firebase/transactions';
+import { AttachmentViewerModal } from '../AttachmentViewerModal';
 import { getAuthToken } from '../../lib/firebase/auth';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
 
@@ -36,12 +37,16 @@ export const UpdateCommentByReceiptModal: React.FC<UpdateCommentByReceiptModalPr
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newComment, setNewComment] = useState<string>('');
+  const [showReceiptPreview, setShowReceiptPreview] = useState(false);
+  const [receiptPreviewError, setReceiptPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
     setStep('fetch');
     setError(null);
     setNewComment('');
+    setShowReceiptPreview(false);
+    setReceiptPreviewError(null);
     setLoading(true);
 
     if (!canUseForReceipt(attachment.type)) {
@@ -190,6 +195,26 @@ export const UpdateCommentByReceiptModal: React.FC<UpdateCommentByReceiptModalPr
                   className="w-full p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-gray-800 placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-400 resize-y min-h-[100px]"
                 />
               </div>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReceiptPreviewError(null);
+                    if (attachment?.url) {
+                      setShowReceiptPreview(true);
+                    } else {
+                      setReceiptPreviewError('Файл чека недоступен');
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 hover:text-emerald-800 hover:underline focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 rounded"
+                >
+                  <Eye className="w-4 h-4 flex-shrink-0" />
+                  Посмотреть чек
+                </button>
+                {receiptPreviewError && (
+                  <p className="mt-1 text-xs text-red-600">{receiptPreviewError}</p>
+                )}
+              </div>
               <p className="text-xs text-gray-500">
                 Сумма и остальные данные транзакции не изменятся.
               </p>
@@ -241,6 +266,16 @@ export const UpdateCommentByReceiptModal: React.FC<UpdateCommentByReceiptModalPr
           )}
         </div>
       </div>
+
+      {showReceiptPreview && attachment?.url && (
+        <AttachmentViewerModal
+          isOpen={showReceiptPreview}
+          onClose={() => setShowReceiptPreview(false)}
+          url={attachment.url}
+          type={attachment.type}
+          name={attachment.name}
+        />
+      )}
     </div>
   );
 };
