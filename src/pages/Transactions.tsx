@@ -34,10 +34,9 @@ import { RayBackground } from '../components/RayBackground';
 import { PageMetadata } from '../components/PageMetadata';
 import './Transactions.css';
 import { PendingTransactionsProvider } from '../contexts/PendingTransactionsContext';
-import {
-  isProjectCategory,
-  sumAbsAmountByCategory,
-} from '../lib/firebase/categoryIconAmount';
+// Баланс для всех категорий (включая проекты) берём из Firestore (categories.amount).
+// Раньше для проектов подставляли sumAbsAmountByCategory, из-за чего при переводе
+// объект→сотрудник у объекта отображался рост суммы вместо списания.
 
 export const Transactions: React.FC = () => {
   const companyId = useCompanyId();
@@ -68,7 +67,8 @@ export const Transactions: React.FC = () => {
     setLocalLoading(false);
   }, [companyId]);
 
-  // Когда пришли данные с сервера (useCategories с where companyId) — мержим суммы по проектам
+  // Когда пришли данные с сервера — используем баланс из Firestore (categories.amount) для всех категорий.
+  // Для проектов тоже показываем categories.amount, чтобы при переводе объект→сотрудник сумма у объекта уменьшалась.
   useEffect(() => {
     if (!companyId) {
       setCategories([]);
@@ -80,67 +80,33 @@ export const Transactions: React.FC = () => {
       setLocalLoading(false);
       return;
     }
-    let cancelled = false;
-    // Строгая изоляция: только категории текущей компании (companyId обязателен)
-    const visible = loadedCategories.filter(
-      (c) => c.isVisible !== false && c.companyId === companyId
-    );
-    const projects = visible.filter((c) => isProjectCategory(c));
-
-    (async () => {
-      const absById: Record<string, number> = {};
-      await Promise.all(
-        projects.map(async (c) => {
-          try {
-            absById[c.id] = await sumAbsAmountByCategory(companyId, c.id);
-          } catch (e) {
-            console.error('sumAbsAmountByCategory', c.id, e);
-          }
-        })
+    const merged = loadedCategories
+      .filter((c) => c.isVisible !== false && c.companyId === companyId)
+      .map((c) => ({ ...c }));
+    const bad = merged.filter((c) => c.companyId !== companyId);
+    if (bad.length > 0) {
+      console.error('[transactions] merged contained wrong companyId', { companyId, bad });
+      setCategories([]);
+    } else {
+      setCategories(merged);
+    }
+    setFromCache(false);
+    const cacheKey = getTransactionsCacheKey(companyId);
+    if (cacheKey) {
+      saveSettingsToCache(
+        cacheKey,
+        merged.map(({ id, title, amount, color, row, isVisible, type, companyId: catCompanyId }) => ({
+          id,
+          title,
+          amount,
+          color,
+          row,
+          isVisible,
+          type,
+          companyId: catCompanyId ?? companyId,
+        }))
       );
-      if (cancelled) return;
-
-      const merged = loadedCategories
-        .filter((c) => c.companyId === companyId)
-        .map((c) => ({
-          ...c,
-          amount: isProjectCategory(c)
-            ? String(
-                Math.round(
-                  absById[c.id] ??
-                    (parseFloat(String(c.amount).replace(/[^\d.-]/g, '')) || 0)
-                )
-              )
-            : c.amount,
-        }));
-      const bad = merged.filter((c) => c.companyId !== companyId);
-      if (bad.length > 0) {
-        console.error('[transactions] merged contained wrong companyId', { companyId, bad });
-        setCategories([]);
-      } else {
-        setCategories(merged);
-      }
-      setFromCache(false);
-      const cacheKey = getTransactionsCacheKey(companyId);
-      if (cacheKey) {
-        saveSettingsToCache(
-          cacheKey,
-          merged.map(({ id, title, amount, color, row, isVisible, type, companyId: catCompanyId }) => ({
-            id,
-            title,
-            amount,
-            color,
-            row,
-            isVisible,
-            type,
-            companyId: catCompanyId ?? companyId,
-          }))
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    }
   }, [companyId, loadedCategories]);
 
   // Экспортируем функцию обновления глобально для StickyNavigation (очищаем кэш текущей компании)
