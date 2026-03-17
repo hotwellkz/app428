@@ -266,9 +266,11 @@ interface ClientInfoPanelProps {
 
 const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 py-0 rounded-[10px] text-[11px] font-medium bg-[#f1f3f5] text-[#555] flex-shrink-0';
 
-/** Обёртки для dl-терминов, чтобы избежать конфликта имён при JSX-трансформации (dt/dd). */
-const DefTerm = (props: React.HTMLAttributes<HTMLElement>) => React.createElement('dt', props);
-const DefDesc = (props: React.HTMLAttributes<HTMLElement>) => React.createElement('dd', props);
+/** Обёртки для dl-терминов (теги не задаём литералами 'dt'/'dd', чтобы минификатор не создавал переменную dt). */
+const TAG_DEF_TERM = 'd' + 't';
+const TAG_DEF_DESC = 'd' + 'd';
+const DefTerm = (props: React.HTMLAttributes<HTMLElement>) => React.createElement(TAG_DEF_TERM, props);
+const DefDesc = (props: React.HTMLAttributes<HTMLElement>) => React.createElement(TAG_DEF_DESC, props);
 
 const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   phone,
