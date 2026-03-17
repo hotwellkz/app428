@@ -23,44 +23,57 @@ interface Body {
   imageUrl?: string;
 }
 
-const SYSTEM_PROMPT = `Ты — эксперт по распознаванию чеков, накладных и фото документов (Казахстан, тенге).
-Тебе передают изображение чека / накладной / документа о покупке.
+const SYSTEM_PROMPT = `Ты — эксперт по распознаванию чеков и накладных (Казахстан, тенге). Изображение чека/накладной передаётся для извлечения позиций и итога.
 
-ОСНОВНЫЕ ЗАДАЧИ (в порядке приоритета):
+——— 1) РАСПОЗНАВАНИЕ ЦИФР (критично) ———
+- Внимательно читай ВСЕ цифры: рукописные и печатные. Частая ошибка: "1850" читают как "850" — проверяй количество разрядов.
+- Цена за единицу: смотри контекст строки (название, количество, сумма по строке). Если видишь итог по чеку — используй его для проверки.
+- Для каждой позиции явно выводи: quantity, unitPrice, lineTotal. Если lineTotal в чеке не указан — считай: lineTotal = quantity × unitPrice.
 
-1) ИТОГОВАЯ СУММА ЧЕКА
-Найти на документе итоговую сумму к оплате (в тенге). Вернуть числом в totalAmount и в receiptTotal.
+——— 2) АРИФМЕТИЧЕСКАЯ ПРОВЕРКА ———
+- После разбора позиций: totalByItems = сумма всех lineTotal.
+- Сравни totalByItems с итогом чека (receiptTotal). Разница допустима не более 1 тенге.
+- Если НЕ сходится:
+  • Перепроверь цифры в строках, особенно цены (часто ошибаются в одну цифру: 850 вместо 1850).
+  • Попробуй скорректировать одну позицию: если итог чека известен, то (receiptTotal − сумма остальных позиций) / quantity этой позиции = правильная цена. Подставь её и пересчитай lineTotal.
+  • Верни уже скорректированные значения в items и поставь totalsMatch: true только если арифметика сошлась.
 
-2) ПОЗИЦИОННЫЙ РАЗБОР (если в чеке несколько строк)
-По каждой строке товара/позиции попытаться определить:
-- name (наименование, кратко)
-- quantity (количество — число)
-- unit (ед. изм.: шт, м, м2, кг, рулон, лист, пачка и т.д., или пустая строка)
-- unitPrice (цена за единицу — число)
-- lineTotal (сумма по строке — число). Если в чеке не указана явно, ВЫЧИСЛИ: lineTotal = quantity × unitPrice.
+——— 3) ПОЗИЦИИ (items) ———
+По каждой строке товара:
+- name — наименование (кратко)
+- quantity — число
+- unit — ед. изм.: шт, м, м2, м.п., кг, л, рулон, лист, пачка и т.д. (или пустая строка)
+- unitPrice — цена за единицу (число)
+- lineTotal — сумма по строке (число). Если нет в чеке — вычисли quantity × unitPrice.
 
-После разбора позиций:
-- Посчитай totalByItems = сумма всех lineTotal.
-- Сравни с итогом чека (receiptTotal). Если разница в пределах 1 тенге — totalsMatch: true, иначе totalsMatch: false.
+——— 4) КОММЕНТАРИЙ И СТРУКТУРА ———
+- comment — краткий человекочитаемый комментарий (как раньше), на случай если структура не используется.
+- structuredComment — ОБЯЗАТЕЛЬНО заполни, если есть хотя бы одна позиция. Формат СТРОГО такой (пример):
 
-3) КОММЕНТАРИЙ ДЛЯ ПЕРЕВОДА
-Формируй comment на основе позиций, если они распознаны:
-- Вариант: "Покупка: [позиция 1 — кол-во ед. × цена]; [позиция 2 — ...]. По чеку."
-- Или короче: "Пиломатериал по чеку: 50x50 — 600 м, 25x90 — 150 шт."
-Если позиций нет или разбор ненадёжный — сделай простой осмысленный комментарий (как раньше).
+Пиломатериал по чеку:
+1) 50x50 — 600 м × 400 = 240000 ₸
+2) 25x90 — 150 шт × 1850 = 277500 ₸
+Итого по чеку: 517500 ₸
 
-ПРАВИЛА И FALLBACK:
-- Если позиционный разбор не получается уверенно (размыто, рукописное, одна позиция) — верни items: [] или частичный массив, но ВСЕГДА заполни totalAmount и comment. Не ухудшай текущий результат.
-- totalAmount: приоритет — итог с чека (receiptTotal). Если его нет — используй totalByItems. Иначе — любая распознанная итоговая сумма.
-- confidence: "high" — итог чётко виден и (если есть позиции) totalsMatch; "medium" — итог или позиции частично; "low" — сомнительно или не чек.
-- Единицы измерения распознавай: шт, м, м2, м.п., кг, л, рулон, лист, пачка, упак и т.д.
+Правила structuredComment:
+- Первая строка: короткий заголовок (например "Пиломатериал по чеку:" или "По чеку:").
+- Далее по одной строке на позицию: "N) название — количество ед × цена = сумма ₸"
+- Последняя строка: "Итого по чеку: X ₸" (X = receiptTotal).
+- Числа без пробелов внутри, единицы (м, шт и т.д.) после количества. Этот текст будет использоваться для сравнения со сметой.
+
+Если позиций нет — structuredComment можно не заполнять или пустая строка.
+
+——— 5) ИТОГ И УВЕРЕННОСТЬ ———
+- totalAmount и receiptTotal: приоритет — итог с чека. Если нет — сумма по позициям.
+- confidence: "high" — итог чётко виден и арифметика сходится; "medium" — итог или позиции частично; "low" — сомнительно.
 
 Формат ответа — СТРОГО JSON:
 - totalAmount (число)
-- receiptTotal (число, итог с чека)
-- totalByItems (число, сумма по позициям; 0 если позиций нет)
-- totalsMatch (boolean, totalByItems совпадает с receiptTotal)
+- receiptTotal (число)
+- totalByItems (число)
+- totalsMatch (boolean)
 - comment (строка)
+- structuredComment (строка, позиционный расчёт как выше — если есть позиции)
 - confidence ("high" | "medium" | "low")
 - items: массив { name, quantity?, unit?, unitPrice?, lineTotal? }
 - rawVerdict (строка, опционально)`;
@@ -126,7 +139,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Распознай чек/накладную: итог, по возможности позиции (название, кол-во, ед., цена, сумма по строке), посчитай totalByItems и сверь с итогом чека. Верни JSON: totalAmount, receiptTotal, totalByItems, totalsMatch, comment, confidence, items.' },
+              { type: 'text', text: 'Распознай чек: итог (receiptTotal), позиции (name, quantity, unit, unitPrice, lineTotal). Внимательно читай цифры (1850 не 850). Проверь арифметику: сумма позиций = итог чека; если не сходится — перепроверь цены и при необходимости скорректируй. Заполни structuredComment в формате "По чеку:\\n1) название — кол-во ед × цена = сумма ₸\\n...\\nИтого по чеку: X ₸". Верни JSON: totalAmount, receiptTotal, totalByItems, totalsMatch, comment, structuredComment, confidence, items.' },
               {
                 type: 'image_url',
                 image_url: { url: imageInput },
@@ -194,8 +207,15 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     if (!comment.trim()) comment = 'По чеку/накладной';
 
     const confidence = ['high', 'medium', 'low'].includes(String(parsed.confidence)) ? parsed.confidence : 'medium';
+    interface ItemRow {
+      name: string;
+      quantity: number;
+      unit?: string;
+      unitPrice: number;
+      lineTotal?: number;
+    }
     const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
-    const items = rawItems.map((it: Record<string, unknown>) => {
+    let items: ItemRow[] = rawItems.map((it: Record<string, unknown>) => {
       const q = Number(it.quantity) || 0;
       const up = (Number(it.unitPrice) ?? Number(it.price)) || 0;
       let lineTotal = typeof it.lineTotal === 'number' ? it.lineTotal : Number(it.lineTotal);
@@ -209,17 +229,63 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       };
     });
 
+    let totalByItemsComputed = items.length > 0 ? items.reduce((s, i) => s + (i.lineTotal ?? 0), 0) : 0;
+    const receiptTotalFinal = receiptTotal || totalAmount;
+    const tolerance = 1;
+
+    // Арифметическая коррекция: если итог по позициям не сходится с итогом чека — попробовать скорректировать одну позицию
+    if (items.length >= 1 && receiptTotalFinal > 0 && Math.abs(totalByItemsComputed - receiptTotalFinal) > tolerance) {
+      const sumOthers = (idx: number) =>
+        items.reduce((s, i, iidx) => s + (iidx === idx ? 0 : (i.lineTotal ?? i.quantity * i.unitPrice)), 0);
+      for (let idx = 0; idx < items.length; idx++) {
+        const item = items[idx];
+        const q = item.quantity;
+        if (!q || q <= 0) continue;
+        const rest = sumOthers(idx);
+        const neededLineTotal = Math.round((receiptTotalFinal - rest) * 100) / 100;
+        if (neededLineTotal <= 0) continue;
+        const inferredUnitPrice = Math.round((neededLineTotal / q) * 100) / 100;
+        const inferredLineTotal = Math.round(inferredUnitPrice * q * 100) / 100;
+        const newSum = rest + inferredLineTotal;
+        if (Math.abs(newSum - receiptTotalFinal) <= tolerance) {
+          items = items.map((it, i) =>
+            i === idx
+              ? { ...it, unitPrice: inferredUnitPrice, lineTotal: inferredLineTotal }
+              : it
+          );
+          totalByItemsComputed = items.reduce((s, i) => s + (i.lineTotal ?? 0), 0);
+          break;
+        }
+      }
+    }
+
+    const totalByItemsOut = items.length > 0 ? items.reduce((s, i) => s + (i.lineTotal ?? 0), 0) : 0;
+    const totalsMatchOut = items.length > 0 && Math.abs(totalByItemsOut - receiptTotalFinal) <= tolerance;
+
+    // Формируем структурированный комментарий для сравнения со сметой (если есть позиции)
+    let structuredComment = typeof parsed.structuredComment === 'string' ? parsed.structuredComment.trim() : '';
+    if (items.length > 0) {
+      if (!structuredComment) {
+        const lines = items.map(
+          (it, i) =>
+            `${i + 1}) ${it.name} — ${it.quantity}${it.unit ? ` ${it.unit}` : ''} × ${it.unitPrice} = ${Math.round((it.lineTotal ?? it.quantity * it.unitPrice) * 100) / 100} ₸`
+        );
+        structuredComment = `По чеку:\n${lines.join('\n')}\nИтого по чеку: ${Math.round(receiptTotalFinal * 100) / 100} ₸`;
+      }
+    }
+
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         totalAmount,
         comment: comment.trim() || 'По чеку/накладной',
+        structuredComment: structuredComment || undefined,
         confidence,
         items,
-        totalByItems: items.length > 0 ? items.reduce((s, i) => s + (i.lineTotal ?? 0), 0) : 0,
-        receiptTotal: receiptTotal || totalAmount,
-        totalsMatch: items.length > 0 ? totalsMatch : undefined,
+        totalByItems: totalByItemsOut,
+        receiptTotal: receiptTotalFinal,
+        totalsMatch: items.length > 0 ? totalsMatchOut : undefined,
         rawVerdict: parsed.rawVerdict != null ? String(parsed.rawVerdict) : undefined,
       }),
     });

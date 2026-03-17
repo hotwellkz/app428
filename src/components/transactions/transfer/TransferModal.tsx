@@ -12,7 +12,7 @@ import { formatMoney } from '../../../utils/formatMoney';
 import { XMarkIcon, PencilIcon } from '@heroicons/react/24/outline';
 import { useDropzone } from 'react-dropzone';
 import { supabase } from '../../../lib/supabase/config';
-import { PaperclipIcon, SendHorizontal, Camera, ScanLine, X, Maximize2 } from 'lucide-react';
+import { PaperclipIcon, SendHorizontal, Camera, ScanLine } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { useAuth } from '../../../hooks/useAuth';
 import { getAuthToken } from '../../../lib/firebase/auth';
@@ -52,6 +52,26 @@ const CREATE_NEW_ID = '__create_new_expense_category__';
 /** Название категории «наша компания» — при переводе ИЗ неё автоматически включаем «Безнал». */
 const HOTWELL_SOURCE_TITLE = 'HotWell';
 
+type ReceiptItem = { name: string; quantity?: number; unit?: string; unitPrice?: number; lineTotal?: number };
+
+function buildStructuredComment(
+  items: ReceiptItem[],
+  totalAmount: number
+): string {
+  if (!items.length) return '';
+  const lines = items.map(
+    (it, i) => {
+      const q = it.quantity ?? 0;
+      const up = it.unitPrice ?? 0;
+      const lineTotal = it.lineTotal ?? (q && up ? q * up : 0);
+      const sum = Math.round(lineTotal * 100) / 100;
+      return `${i + 1}) ${it.name} — ${q}${it.unit ? ` ${it.unit}` : ''} × ${up} = ${sum} ₸`;
+    }
+  );
+  const total = Math.round(totalAmount * 100) / 100;
+  return `По чеку:\n${lines.join('\n')}\nИтого по чеку: ${total} ₸`;
+}
+
 export const TransferModal: React.FC<TransferModalProps> = ({
   sourceCategory,
   targetCategory,
@@ -87,11 +107,10 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [receiptParseLoading, setReceiptParseLoading] = useState(false);
-  const [filePreview, setFilePreview] = useState<{ url: string; name: string } | null>(null);
-
   const [receiptParseResult, setReceiptParseResult] = useState<{
     totalAmount: number;
     comment: string;
+    structuredComment?: string;
     confidence: 'high' | 'medium' | 'low';
     items?: Array<{ name: string; quantity?: number; unit?: string; unitPrice?: number; lineTotal?: number }>;
     totalByItems?: number;
@@ -378,6 +397,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       setReceiptParseResult({
         totalAmount: Number(data.totalAmount) || 0,
         comment: typeof data.comment === 'string' ? data.comment : 'По чеку/накладной',
+        structuredComment: typeof data.structuredComment === 'string' && data.structuredComment.trim() ? data.structuredComment.trim() : undefined,
         confidence: ['high', 'medium', 'low'].includes(data.confidence) ? data.confidence : 'medium',
         items: Array.isArray(data.items) ? data.items : undefined,
         totalByItems: typeof data.totalByItems === 'number' ? data.totalByItems : undefined,
@@ -394,7 +414,18 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const applyReceiptResult = useCallback(() => {
     if (!receiptParseResult) return;
     setAmount(formatNumber(String(Math.round(receiptParseResult.totalAmount))));
-    setDescription(receiptParseResult.comment);
+    let commentToApply =
+      receiptParseResult.structuredComment && receiptParseResult.structuredComment.trim()
+        ? receiptParseResult.structuredComment.trim()
+        : '';
+    if (!commentToApply && receiptParseResult.items && receiptParseResult.items.length > 0) {
+      commentToApply = buildStructuredComment(
+        receiptParseResult.items,
+        receiptParseResult.receiptTotal ?? receiptParseResult.totalAmount
+      );
+    }
+    if (!commentToApply) commentToApply = receiptParseResult.comment;
+    setDescription(commentToApply);
     setReceiptParseResult(null);
     showSuccessNotification('Заполнено по чеку');
   }, [receiptParseResult]);
@@ -406,7 +437,6 @@ export const TransferModal: React.FC<TransferModalProps> = ({
 
   useEffect(() => {
     if (isOpen) return;
-    setFilePreview(null);
     setReceiptParseResult(null);
     const toDelete = files.filter(f => f.status === 'uploaded' && f.path);
     if (!submittedSuccessRef.current && toDelete.length > 0) {
@@ -419,15 +449,6 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     });
     setFiles([]);
   }, [isOpen, files]);
-
-  useEffect(() => {
-    if (!filePreview) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setFilePreview(null);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [filePreview]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -930,9 +951,28 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                         )}
                       </div>
                     )}
-                    <p className="text-xs text-emerald-700 line-clamp-2" title={receiptParseResult.comment}>
-                      Комментарий: {receiptParseResult.comment}
-                    </p>
+                    {(() => {
+                      const structured =
+                        receiptParseResult.structuredComment?.trim() ||
+                        (receiptParseResult.items?.length
+                          ? buildStructuredComment(
+                              receiptParseResult.items,
+                              receiptParseResult.receiptTotal ?? receiptParseResult.totalAmount
+                            )
+                          : '');
+                      return structured ? (
+                        <div className="text-xs text-emerald-800">
+                          <p className="font-medium text-emerald-900">В комментарий будет записано:</p>
+                          <pre className="mt-1 p-2 bg-white/70 rounded border border-emerald-200 whitespace-pre-wrap break-words font-sans text-emerald-800 max-h-32 overflow-y-auto">
+                            {structured}
+                          </pre>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-emerald-700 line-clamp-2" title={receiptParseResult.comment}>
+                          Комментарий: {receiptParseResult.comment}
+                        </p>
+                      );
+                    })()}
                     <p className="text-xs text-emerald-600">
                       Уверенность: {receiptParseResult.confidence === 'high' ? 'высокая' : receiptParseResult.confidence === 'medium' ? 'средняя' : 'низкая'}
                     </p>
@@ -957,83 +997,42 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     </div>
                   </div>
                 )}
-                {files.map((file, index) => {
-                  const imageUrl = file.file.type.startsWith('image/') && (file.previewUrl || file.url) ? (file.previewUrl || file.url) : null;
-                  const isPdf = file.file.type === 'application/pdf';
-                  return (
+                {files.map((file, index) => (
                   <div
                     key={file.id}
                     className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
                   >
                     <div className="flex-shrink-0 relative w-14 h-14 rounded-lg bg-gray-200 overflow-hidden flex items-center justify-center">
-                      {imageUrl ? (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (file.status === 'uploading') return;
-                            setFilePreview({ url: imageUrl, name: file.file.name });
-                          }}
-                          disabled={file.status === 'uploading'}
-                          className="w-full h-full block cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-inset disabled:cursor-not-allowed"
-                          title="Открыть в полном размере"
-                        >
-                          <img
-                            src={imageUrl}
-                            alt=""
-                            className="w-full h-full object-cover pointer-events-none"
-                          />
-                        </button>
+                      {file.file.type.startsWith('image/') && (file.previewUrl || file.url) ? (
+                        <img
+                          src={file.previewUrl || file.url}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
                       ) : (
-                        isPdf && file.url ? (
-                          <a
-                            href={file.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="w-full h-full flex items-center justify-center text-gray-500 hover:bg-gray-300 rounded-lg"
-                            title="Открыть PDF"
-                          >
-                            <PaperclipIcon className="h-6 w-6" />
-                          </a>
-                        ) : (
-                          <PaperclipIcon className="h-6 w-6 text-gray-500" />
-                        )
+                        <PaperclipIcon className="h-6 w-6 text-gray-500" />
                       )}
                       {file.status === 'uploading' && (
-                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg pointer-events-none">
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center rounded-lg">
                           <div className="animate-spin rounded-full h-6 w-6 border-2 border-white border-t-transparent" />
                         </div>
                       )}
-                      {file.status === 'uploaded' && imageUrl && (
+                      {file.status === 'uploaded' && (
                         <span className="absolute bottom-1 right-1 text-green-600 text-xs font-medium bg-white/90 px-1 rounded">✓</span>
                       )}
                     </div>
                     <div className="flex-1 min-w-0 relative">
-                      <div className="flex justify-between items-center gap-2">
+                      <div className="flex justify-between items-center">
                         <p className="text-sm font-medium text-gray-900 truncate">
                           {file.file.name}
                         </p>
-                        <div className="flex items-center gap-1 flex-shrink-0">
-                          {imageUrl && file.status !== 'uploading' && (
-                            <button
-                              type="button"
-                              onClick={() => setFilePreview({ url: imageUrl, name: file.file.name })}
-                              className="p-1 text-gray-400 hover:text-blue-600 rounded"
-                              title="Просмотр"
-                              aria-label="Просмотр"
-                            >
-                              <Maximize2 className="h-4 w-4" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => removeFile(index)}
-                            className="text-gray-400 hover:text-gray-500"
-                          >
-                            <XMarkIcon className="h-5 w-5" />
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removeFile(index)}
+                          className="text-gray-400 hover:text-gray-500 flex-shrink-0"
+                        >
+                          <XMarkIcon className="h-5 w-5" />
+                        </button>
                       </div>
                       <p className="text-xs text-gray-500">
                         {(file.file.size / 1024).toFixed(1)} KB
@@ -1053,8 +1052,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                       )}
                     </div>
                   </div>
-                  );
-                })}
+                ))}
               </div>
             )}
 
@@ -1098,48 +1096,6 @@ export const TransferModal: React.FC<TransferModalProps> = ({
           </div>
         </form>
       </div>
-
-      {/* Просмотр чека / изображения в полном размере */}
-      {filePreview && (
-        <div
-          className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/90 p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Просмотр изображения"
-        >
-          <button
-            type="button"
-            onClick={() => setFilePreview(null)}
-            className="absolute top-3 right-3 z-10 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors"
-            aria-label="Закрыть"
-          >
-            <X className="h-6 w-6" />
-          </button>
-          <div
-            className="flex-1 w-full flex items-center justify-center min-h-0 overflow-auto touch-pan-y"
-            onClick={() => setFilePreview(null)}
-          >
-            <img
-              src={filePreview.url}
-              alt={filePreview.name}
-              className="max-w-full max-h-[85vh] md:max-h-[90vh] w-auto h-auto object-contain select-none"
-              style={{ touchAction: 'pan-x pan-y pinch-zoom' }}
-              onClick={(e) => e.stopPropagation()}
-              draggable={false}
-            />
-          </div>
-          <div className="flex-shrink-0 pt-3 flex items-center justify-center gap-3">
-            <a
-              href={filePreview.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-white/80 hover:text-white underline"
-            >
-              Открыть в новой вкладке
-            </a>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
