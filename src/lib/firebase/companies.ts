@@ -213,6 +213,33 @@ export async function getCompanyUser(userId: string): Promise<CompanyUserRow | n
   };
 }
 
+/**
+ * Обновить роль пользователя в компании.
+ * Вызывать только при проверке прав (owner или global_admin на клиенте).
+ * Firestore rules: update разрешён для owner/admin компании.
+ */
+export async function updateCompanyUserRole(
+  userId: string,
+  newRole: CompanyUserRole,
+  companyId: string
+): Promise<void> {
+  const ref = doc(db, COMPANY_USERS, userId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) {
+    throw new Error('Пользователь не найден в компании');
+  }
+  const data = snap.data();
+  if ((data.companyId as string) !== companyId) {
+    throw new Error('Пользователь принадлежит другой компании');
+  }
+  const menuAccess = defaultMenuAccessForRole(newRole);
+  await updateDoc(ref, {
+    role: newRole,
+    menuAccess,
+    updatedAt: serverTimestamp()
+  });
+}
+
 /** Удалить привязку пользователя к компании (company_users/{userId}). Доступно owner/admin компании или global_admin. */
 export async function deleteCompanyUser(userId: string): Promise<void> {
   const ref = doc(db, COMPANY_USERS, userId);

@@ -54,5 +54,8 @@ export const useIsAdmin = () => {
   /** Может управлять пользователями и их правами доступа к разделам */
   const canManageUsers = canAccessEmployees;
 
-  return { isAdmin, role, companyRole, canAccessEmployees, canManageUsers, loading };
+  /** Может менять роли пользователей: только владелец компании или global_admin (не обычный админ) */
+  const canChangeUserRoles = companyRole === 'owner' || role === 'global_admin';
+
+  return { isAdmin, role, companyRole, canAccessEmployees, canManageUsers, canChangeUserRoles, loading };
 };

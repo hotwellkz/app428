@@ -27,8 +27,9 @@ import { useCompanyUsers } from '../hooks/useCompanyUsers';
 import { Navigate } from 'react-router-dom';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { MenuAccessModal } from '../components/employees/MenuAccessModal';
-import { deleteCompanyUser } from '../lib/firebase/companies';
+import { deleteCompanyUser, updateCompanyUserRole } from '../lib/firebase/companies';
 import { showSuccessNotification } from '../utils/notifications';
+import type { CompanyUserRole } from '../types/company';
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Владелец',
@@ -37,12 +38,14 @@ const ROLE_LABELS: Record<string, string> = {
   member: 'Сотрудник'
 };
 
+const ALL_ROLES: CompanyUserRole[] = ['owner', 'admin', 'manager', 'member'];
+
 export const Employees: React.FC = () => {
   const companyId = useCompanyId();
   const { user } = useAuth();
-  const { canAccessEmployees, canManageUsers, loading: adminCheckLoading } = useIsAdmin();
+  const { canAccessEmployees, canManageUsers, canChangeUserRoles, loading: adminCheckLoading } = useIsAdmin();
   const { employees, loading } = useEmployees();
-  const { users: companyUsers, orphans: companyUserOrphans, loading: companyUsersLoading } = useCompanyUsers();
+  const { users: companyUsers, orphans: companyUserOrphans, loading: companyUsersLoading, refetch: refetchCompanyUsers } = useCompanyUsers();
   const { 
     searchQuery, 
     setSearchQuery, 
@@ -70,12 +73,43 @@ export const Employees: React.FC = () => {
   const [menuAccessUser, setMenuAccessUser] = useState<{ userId: string; userName: string } | null>(null);
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const [clearingOrphanId, setClearingOrphanId] = useState<string | null>(null);
+  const [roleChangeUserId, setRoleChangeUserId] = useState<string | null>(null);
+
+  const handleRoleChange = async (
+    cu: { userId: string; role: CompanyUserRole; displayName?: string | null },
+    newRole: CompanyUserRole
+  ) => {
+    if (!companyId || newRole === cu.role) return;
+    const ownersCount = companyUsers.filter((c) => c.role === 'owner').length;
+    if (cu.role === 'owner' && ownersCount <= 1 && newRole !== 'owner') {
+      showErrorNotification('Нельзя понизить последнего владельца компании');
+      return;
+    }
+    const sensitive =
+      newRole === 'owner' || newRole === 'admin' || cu.role === 'owner';
+    if (sensitive && !window.confirm(
+      `Назначить роль «${ROLE_LABELS[newRole]}» пользователю ${cu.displayName ?? cu.userId}?`
+    )) {
+      return;
+    }
+    setRoleChangeUserId(cu.userId);
+    try {
+      await updateCompanyUserRole(cu.userId, newRole, companyId);
+      await refetchCompanyUsers();
+      showSuccessNotification('Роль пользователя изменена');
+    } catch (e) {
+      showErrorNotification(e instanceof Error ? e.message : 'Не удалось изменить роль');
+    } finally {
+      setRoleChangeUserId(null);
+    }
+  };
 
   const handleRemoveFromCompany = async (targetUserId: string, displayName: string) => {
     if (!window.confirm(`Удалить пользователя «${displayName}» из компании? Он потеряет доступ к системе.`)) return;
     setRemovingUserId(targetUserId);
     try {
       await deleteCompanyUser(targetUserId);
+      await refetchCompanyUsers();
       showSuccessNotification('Пользователь удалён из компании');
     } catch (e) {
       showErrorNotification(e instanceof Error ? e.message : 'Не удалось удалить');
@@ -285,10 +319,35 @@ export const Employees: React.FC = () => {
                             {companyUsers.map((cu) => {
                               const isSelf = cu.userId === user?.uid;
                               const display = cu.displayName || cu.email || cu.userId;
+                              const ownersCount = companyUsers.filter((c) => c.role === 'owner').length;
+                              const isLastOwner = cu.role === 'owner' && ownersCount <= 1;
+                              const canEditRole = canChangeUserRoles && !isSelf && companyId;
                               return (
                                 <tr key={cu.userId} className="hover:bg-gray-50">
                                   <td className="px-4 py-3 text-sm text-gray-900">{display}</td>
-                                  <td className="px-4 py-3 text-sm text-gray-600">{ROLE_LABELS[cu.role] ?? cu.role}</td>
+                                  <td className="px-4 py-3 text-sm text-gray-600">
+                                    {canEditRole ? (
+                                      <select
+                                        value={cu.role}
+                                        onChange={(e) => handleRoleChange(cu, e.target.value as CompanyUserRole)}
+                                        disabled={roleChangeUserId === cu.userId}
+                                        className="text-sm border border-gray-300 rounded-lg px-2 py-1.5 bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 disabled:opacity-50"
+                                        title="Изменить роль"
+                                      >
+                                        {ALL_ROLES.map((r) => (
+                                          <option
+                                            key={r}
+                                            value={r}
+                                            disabled={isLastOwner && r !== 'owner'}
+                                          >
+                                            {ROLE_LABELS[r] ?? r}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      <span>{ROLE_LABELS[cu.role] ?? cu.role}</span>
+                                    )}
+                                  </td>
                                   <td className="px-4 py-3 text-right">
                                   <div className="flex justify-end gap-1">
                                     <button
