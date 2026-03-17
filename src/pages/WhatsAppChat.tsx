@@ -252,6 +252,7 @@ const WhatsAppChat: React.FC = () => {
   const prevConversationsRef = useRef<ConversationListItem[]>([]);
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
+  const selectedItemRef = useRef<ConversationListItem | undefined>(undefined);
   /** AI-бот: ID последнего обработанного входящего (чтобы не отвечать дважды). */
   const aiBotLastProcessedMessageIdRef = useRef<string | null>(null);
   const aiBotProcessingRef = useRef(false);
@@ -671,8 +672,9 @@ const WhatsAppChat: React.FC = () => {
   const handleAiBotFlagsChange = useCallback(
     (flags: { aiBotEnabled?: boolean; aiBotAutoProposalEnabled?: boolean }) => {
       if (!selectedId) return;
-      const prevEnabled = selectedItem?.aiBotEnabled ?? false;
-      const prevAutoProposal = selectedItem?.aiBotAutoProposalEnabled ?? false;
+      const item = selectedItemRef.current;
+      const prevEnabled = item?.aiBotEnabled ?? false;
+      const prevAutoProposal = item?.aiBotAutoProposalEnabled ?? false;
       const mergeFlags = (c: ConversationListItem) =>
         c.id !== selectedId
           ? c
@@ -704,7 +706,7 @@ const WhatsAppChat: React.FC = () => {
         })
         .finally(() => setAiBotFlagsSaving(false));
     },
-    [selectedId, selectedItem?.aiBotEnabled, selectedItem?.aiBotAutoProposalEnabled, stickySelectedChat?.id]
+    [selectedId, stickySelectedChat?.id]
   );
 
   /** Оптимистичное обновление: после отправки сообщения сразу поднимаем чат в списке по lastMessageAt. */
@@ -1255,6 +1257,7 @@ const WhatsAppChat: React.FC = () => {
     conversations.find((c) => c.id === selectedId) ||
     searchChats.find((c) => c.id === selectedId) ||
     (stickySelectedChat?.id === selectedId ? stickySelectedChat : undefined);
+  selectedItemRef.current = selectedItem;
 
   /** AI-бот: при открытии чата с включённым AI загружаем lastProcessed из Firestore. */
   useEffect(() => {
