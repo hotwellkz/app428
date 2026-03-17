@@ -428,6 +428,15 @@ export const createReversalTransaction = async (transactionId: string): Promise<
   await updateDoc(relatedRef, { reversedAt: serverTimestamp() });
 };
 
+/** Обновить только описание (комментарий) транзакции. Сумма, дата, статус и прочее не меняются. */
+export const updateTransactionDescription = async (
+  transactionId: string,
+  description: string
+): Promise<void> => {
+  const ref = doc(db, 'transactions', transactionId);
+  await updateDoc(ref, { description: description.trim() });
+};
+
 export const createCorrectionTransaction = async (
   sourceCategory: CategoryCardType,
   targetCategory: CategoryCardType,

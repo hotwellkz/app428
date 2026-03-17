@@ -29,6 +29,8 @@ import {
   type VirtualizedRow
 } from '../components/transactions/VirtualizedTransactionsList';
 import { AttachmentViewerModal } from '../components/AttachmentViewerModal';
+import { UpdateCommentByReceiptModal } from '../components/transactions/UpdateCommentByReceiptModal';
+import type { TransactionCardTransaction } from '../components/transactions/TransactionCard';
 import { exportTransactionsReport } from '../utils/exportTransactionsReport';
 import { TransactionExportModal, TransactionExportFilters } from '../components/transactions/TransactionExportModal';
 
@@ -180,7 +182,8 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
   const [showWaybill, setShowWaybill] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [receiptView, setReceiptView] = useState<{ url: string; type: string; name?: string } | null>(null);
-  
+  const [updateCommentTransaction, setUpdateCommentTransaction] = useState<TransactionCardTransaction | null>(null);
+
   // Состояния фильтров
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -752,6 +755,7 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
                 onReceiptClick={(a) => setReceiptView(a)}
                 onWaybillClick={handleWaybillClick}
                 onDeleteRequest={handleDeleteClick}
+                onUpdateCommentByReceipt={setUpdateCommentTransaction}
                 hasMore={hasMore}
                 loading={loading}
                 onLoadMore={loadMore}
@@ -772,6 +776,16 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
       </div>
 
       {/* Модальные окна */}
+      {updateCommentTransaction && updateCommentTransaction.attachments?.[0] && (
+        <UpdateCommentByReceiptModal
+          isOpen
+          onClose={() => setUpdateCommentTransaction(null)}
+          transactionId={updateCommentTransaction.id}
+          currentDescription={updateCommentTransaction.description ?? ''}
+          attachment={updateCommentTransaction.attachments[0]}
+          onSuccess={() => setUpdateCommentTransaction(null)}
+        />
+      )}
       {showPasswordPrompt && selectedTransaction && (
         <PasswordPrompt
           isOpen={showPasswordPrompt}

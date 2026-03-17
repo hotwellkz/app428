@@ -33,6 +33,8 @@ import {
   buildFlattenedRowsFromGrouped,
   type VirtualizedRow
 } from '../components/transactions/VirtualizedTransactionsList';
+import { UpdateCommentByReceiptModal } from '../components/transactions/UpdateCommentByReceiptModal';
+import type { TransactionCardTransaction } from '../components/transactions/TransactionCard';
 import { FeedFiltersPanel } from '../components/feed/FeedFiltersPanel';
 import { FeedFilterChips } from '../components/feed/FeedFilterChips';
 
@@ -607,6 +609,7 @@ export const Feed: React.FC = () => {
   };
 
   const [transactionToDelete, setTransactionToDelete] = useState<Transaction | null>(null);
+  const [updateCommentTransaction, setUpdateCommentTransaction] = useState<TransactionCardTransaction | null>(null);
   const [deletePermission, setDeletePermission] = useState<{
     allowed: boolean;
     requiresPassword: boolean;
@@ -1193,6 +1196,7 @@ export const Feed: React.FC = () => {
                 onApprove={handleApprove}
                 onEdit={setEditingTransaction}
                 onDeleteRequest={setTransactionToDelete}
+                onUpdateCommentByReceipt={setUpdateCommentTransaction}
                 canDeleteTransaction={canShowDeleteForTransaction}
                 approvingTransactionId={approvingId}
                 rejectingTransactionId={rejectingId}
@@ -1368,6 +1372,17 @@ export const Feed: React.FC = () => {
           type={receiptView?.type}
           name={receiptView?.name}
         />
+
+        {updateCommentTransaction && updateCommentTransaction.attachments?.[0] && (
+          <UpdateCommentByReceiptModal
+            isOpen
+            onClose={() => setUpdateCommentTransaction(null)}
+            transactionId={updateCommentTransaction.id}
+            currentDescription={updateCommentTransaction.description ?? ''}
+            attachment={updateCommentTransaction.attachments[0]}
+            onSuccess={() => setUpdateCommentTransaction(null)}
+          />
+        )}
 
         {showEditPasswordModal && createPortal(
           <div

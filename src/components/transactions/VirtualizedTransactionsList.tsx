@@ -104,6 +104,7 @@ const TransactionRowContent = memo(function TransactionRowContent({
   onApprove,
   onEdit,
   onDeleteRequest,
+  onUpdateCommentByReceipt,
   canDeleteTransaction,
   approvingTransactionId,
   rejectingTransactionId
@@ -117,6 +118,7 @@ const TransactionRowContent = memo(function TransactionRowContent({
   onApprove?: (t: TransactionCardTransaction) => void;
   onEdit?: (t: TransactionCardTransaction) => void;
   onDeleteRequest?: (t: TransactionCardTransaction) => void;
+  onUpdateCommentByReceipt?: (t: TransactionCardTransaction) => void;
   canDeleteTransaction?: (t: TransactionCardTransaction) => boolean;
   approvingTransactionId?: string | null;
   rejectingTransactionId?: string | null;
@@ -144,6 +146,7 @@ const TransactionRowContent = memo(function TransactionRowContent({
         onApprove={onApprove}
         onEdit={onEdit}
         onDeleteRequest={showDelete ? onDeleteRequest : undefined}
+        onUpdateCommentByReceipt={onUpdateCommentByReceipt}
         approvingTransactionId={approvingTransactionId}
         rejectingTransactionId={rejectingTransactionId}
       />
@@ -164,6 +167,7 @@ export interface VirtualizedTransactionsListProps {
   onApprove?: (t: TransactionCardTransaction) => void;
   onEdit?: (t: TransactionCardTransaction) => void;
   onDeleteRequest?: (t: TransactionCardTransaction) => void;
+  onUpdateCommentByReceipt?: (t: TransactionCardTransaction) => void;
   canDeleteTransaction?: (t: TransactionCardTransaction) => boolean;
   approvingTransactionId?: string | null;
   rejectingTransactionId?: string | null;
@@ -188,6 +192,7 @@ function VirtualizedTransactionsListInner({
   onApprove,
   onEdit,
   onDeleteRequest,
+  onUpdateCommentByReceipt,
   canDeleteTransaction,
   approvingTransactionId,
   rejectingTransactionId,
@@ -300,6 +305,7 @@ function VirtualizedTransactionsListInner({
               onApprove={onApprove}
               onEdit={onEdit}
               onDeleteRequest={onDeleteRequest}
+              onUpdateCommentByReceipt={onUpdateCommentByReceipt}
               canDeleteTransaction={canDeleteTransaction}
               approvingTransactionId={approvingTransactionId}
               rejectingTransactionId={rejectingTransactionId}

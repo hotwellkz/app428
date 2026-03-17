@@ -45,6 +45,8 @@ export interface TransactionCardProps {
   onEdit?: (transaction: TransactionCardTransaction) => void;
   /** Запрос на удаление (показать модалку с паролем и т.д.) */
   onDeleteRequest?: (transaction: TransactionCardTransaction) => void;
+  /** Обновить комментарий по прикреплённому чеку (AI) */
+  onUpdateCommentByReceipt?: (transaction: TransactionCardTransaction) => void;
 }
 
 /**
@@ -67,7 +69,8 @@ export const TransactionCard = React.memo<TransactionCardProps>(function Transac
   approvingTransactionId,
   rejectingTransactionId,
   onEdit,
-  onDeleteRequest
+  onDeleteRequest,
+  onUpdateCommentByReceipt
 }) {
   const [isSwiped, setIsSwiped] = useState(false);
   const [categoryTooltipOpen, setCategoryTooltipOpen] = useState(false);
@@ -297,26 +300,42 @@ export const TransactionCard = React.memo<TransactionCardProps>(function Transac
                   </span>
                 )}
                 {hasReceipt && (
-                  onReceiptClick ? (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onReceiptClick(firstAttachment!);
-                      }}
-                      className="flex items-center justify-center min-w-[32px] min-h-[32px] p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded"
-                      style={{ opacity: 0.85 }}
-                      title="Просмотр чека"
-                      aria-label="Просмотр чека"
-                    >
-                      <Receipt className="w-[18px] h-[18px]" strokeWidth={2} />
-                    </button>
-                  ) : (
-                    <span className="flex items-center justify-center min-w-[32px] min-h-[32px] p-1.5 text-gray-400" title="Есть чек" aria-label="Есть чек">
-                      <Receipt className="w-[18px] h-[18px]" strokeWidth={2} />
-                    </span>
-                  )
+                  <>
+                    {onReceiptClick ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onReceiptClick(firstAttachment!);
+                        }}
+                        className="flex items-center justify-center min-w-[32px] min-h-[32px] p-1.5 text-gray-400 hover:text-gray-600 transition-colors rounded"
+                        style={{ opacity: 0.85 }}
+                        title="Просмотр чека"
+                        aria-label="Просмотр чека"
+                      >
+                        <Receipt className="w-[18px] h-[18px]" strokeWidth={2} />
+                      </button>
+                    ) : (
+                      <span className="flex items-center justify-center min-w-[32px] min-h-[32px] p-1.5 text-gray-400" title="Есть чек" aria-label="Есть чек">
+                        <Receipt className="w-[18px] h-[18px]" strokeWidth={2} />
+                      </span>
+                    )}
+                    {onUpdateCommentByReceipt && (firstAttachment!.type.startsWith('image/') || firstAttachment!.type === 'application/pdf') && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onUpdateCommentByReceipt(transaction);
+                        }}
+                        className="text-[12px] text-emerald-600 hover:text-emerald-700 font-medium"
+                        title="Обновить комментарий по чеку (AI)"
+                      >
+                        По чеку
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
               {transaction.waybillNumber && onWaybillClick && (
