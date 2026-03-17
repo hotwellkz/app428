@@ -26,12 +26,19 @@ export async function getAIApiKeyFromRequest(event: HandlerEvent): Promise<AIAut
     return { ok: false, statusCode: 401, error: 'Неверный токен' };
   }
 
-  const companyId = await getCompanyIdForUser(uid);
-  if (!companyId) {
-    return { ok: false, statusCode: 403, error: 'Доступ запрещён' };
+  let companyId: string | null = null;
+  let apiKey: string | null = null;
+  try {
+    companyId = await getCompanyIdForUser(uid);
+    if (!companyId) {
+      return { ok: false, statusCode: 403, error: 'Доступ запрещён' };
+    }
+    apiKey = await getOpenAIApiKeyForCompany(companyId);
+  } catch (e) {
+    console.error('[aiAuth] getCompanyIdForUser/getOpenAIApiKeyForCompany failed:', e);
+    return { ok: false, statusCode: 503, error: 'Сервис временно недоступен. Проверьте настройки деплоя (Firebase).' };
   }
 
-  const apiKey = await getOpenAIApiKeyForCompany(companyId);
   if (!apiKey) {
     return { ok: false, statusCode: 403, error: AI_NOT_CONFIGURED_MESSAGE };
   }

@@ -40,18 +40,29 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     return json(401, { error: 'Неверный токен' });
   }
 
-  const companyId = await getCompanyIdForUser(uid);
+  let companyId: string | null = null;
+  try {
+    companyId = await getCompanyIdForUser(uid);
+  } catch (e) {
+    console.error('[openai-integration] getCompanyIdForUser failed:', e);
+    return json(503, { error: 'Сервис временно недоступен. Проверьте настройки деплоя (Firebase).' });
+  }
   if (!companyId) return json(403, { error: 'Доступ запрещён' });
 
   if (event.httpMethod === 'GET') {
-    const integration = await getOpenAIIntegration(companyId);
-    if (!integration) {
-      return json(200, { configured: false, apiKeyMasked: null });
+    try {
+      const integration = await getOpenAIIntegration(companyId);
+      if (!integration) {
+        return json(200, { configured: false, apiKeyMasked: null });
+      }
+      return json(200, {
+        configured: true,
+        apiKeyMasked: integration.apiKeyMasked ?? (integration.apiKey ? '****' + integration.apiKey.slice(-4) : null)
+      });
+    } catch (e) {
+      console.error('[openai-integration] getOpenAIIntegration failed:', e);
+      return json(503, { error: 'Сервис временно недоступен. Проверьте настройки деплоя (Firebase).' });
     }
-    return json(200, {
-      configured: true,
-      apiKeyMasked: integration.apiKeyMasked ?? (integration.apiKey ? '****' + integration.apiKey.slice(-4) : null)
-    });
   }
 
   // POST — сохранить API ключ
