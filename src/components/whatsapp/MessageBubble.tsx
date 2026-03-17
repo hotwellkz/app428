@@ -1,4 +1,5 @@
 import React, { useRef, useCallback } from 'react';
+import { Languages } from 'lucide-react';
 import { formatMessageTime } from './whatsappUtils';
 import MessageStatusIcon from './MessageStatusIcon';
 import type { WhatsAppMessage, MessageAttachment } from '../../types/whatsappDb';
@@ -18,6 +19,14 @@ export interface MessageBubbleProps {
   onTap?: (messageId: string) => void;
   /** Рендер вложений (AttachmentBlock и т.д.) — передаётся из ChatWindow */
   renderAttachments: (msg: WhatsAppMessage) => React.ReactNode;
+  /** Текст перевода RU↔KZ (показывается под сообщением) */
+  translationText?: string | null;
+  /** Показать блок перевода (toggle) */
+  translationVisible?: boolean;
+  /** Запрос перевода или переключение видимости */
+  onTranslateClick?: () => void;
+  /** Идёт загрузка перевода */
+  isTranslating?: boolean;
 }
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
@@ -105,6 +114,10 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
   onContextMenu,
   onTap,
   renderAttachments,
+  translationText,
+  translationVisible = false,
+  onTranslateClick,
+  isTranslating = false,
 }) => {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const touchStartXRef = useRef<number | null>(null);
@@ -202,8 +215,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
           {isSelected && <span className="text-emerald-600 text-xs font-bold">✓</span>}
         </span>
       )}
+      <div className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'} max-w-[80%] md:max-w-[60%]`}>
       <div
-        className={`rounded-lg px-3 py-2 shadow-sm max-w-[80%] md:max-w-[60%] cursor-pointer select-text ${
+        className={`message-bubble group rounded-lg px-3 py-2 shadow-sm w-full cursor-pointer select-text ${
           isOutgoing ? 'bg-[#dcf8c6] text-gray-900' : 'bg-white text-gray-900'
         } ${isSelected ? 'ring-2 ring-green-500 ring-offset-1' : ''}`}
         onClick={onTap ? handleClick : undefined}
@@ -227,12 +241,41 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({
         )}
         <ReactionsStrip message={message} />
         <p className="message-status text-xs text-gray-500 mt-1 flex items-center justify-end gap-0.5 select-none">
+          {!isDeleted && message.text?.trim() && onTranslateClick && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onTranslateClick(); }}
+              className="opacity-0 group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 p-0.5 rounded hover:bg-black/10 text-gray-500 hover:text-gray-700 flex-shrink-0 transition-opacity"
+              aria-label="Перевести"
+              title="Перевести"
+            >
+              {isTranslating ? (
+                <span className="inline-block w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Languages className="w-3.5 h-3.5" />
+              )}
+            </button>
+          )}
           {formatMessageTime(message.createdAt)}
           <MessageStatusIcon msg={message} />
         </p>
         {isOutgoing && message.status === 'failed' && message.errorMessage && (
           <p className="text-xs text-red-600 mt-0.5">{message.errorMessage}</p>
         )}
+      </div>
+      {translationVisible && translationText && (
+        <div className="mt-1 w-full pl-2 pr-2 py-1.5 rounded-md bg-black/[0.06] border border-black/[0.08]">
+          <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">Перевод</p>
+          <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">{translationText}</p>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onTranslateClick?.(); }}
+            className="mt-1 text-[11px] text-gray-500 hover:text-gray-700"
+          >
+            Скрыть
+          </button>
+        </div>
+      )}
       </div>
     </div>
   );

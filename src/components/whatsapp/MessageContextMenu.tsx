@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Reply, Forward, Copy, Star, Trash2, Info } from 'lucide-react';
+import { Reply, Forward, Copy, Star, Trash2, Info, Languages } from 'lucide-react';
 
 export interface MessageContextMenuProps {
   x: number;
@@ -11,6 +11,8 @@ export interface MessageContextMenuProps {
   onStar: () => void;
   onDelete: () => void;
   onInfo?: () => void;
+  /** Перевести сообщение RU↔KZ */
+  onTranslate?: () => void;
   /** Какие действия показывать */
   hasText: boolean;
   isStarred?: boolean;
@@ -26,6 +28,7 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
   onStar,
   onDelete,
   onInfo,
+  onTranslate,
   hasText,
   isStarred = false,
 }) => {
@@ -93,6 +96,16 @@ const MessageContextMenu: React.FC<MessageContextMenuProps> = ({
           role="menuitem"
         >
           <Copy className="w-4 h-4" /> Копировать
+        </button>
+      )}
+      {hasText && onTranslate && (
+        <button
+          type="button"
+          onClick={() => { onTranslate(); onClose(); }}
+          className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-100"
+          role="menuitem"
+        >
+          <Languages className="w-4 h-4" /> Перевести
         </button>
       )}
       <button

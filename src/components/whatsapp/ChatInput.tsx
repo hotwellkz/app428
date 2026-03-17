@@ -15,7 +15,8 @@ import {
   Sparkles,
   Zap,
   Target,
-  Calculator
+  Calculator,
+  Languages
 } from 'lucide-react';
 import EmojiPicker, { type EmojiClickData, Categories } from 'emoji-picker-react';
 import { useSpeechToText } from '../../hooks/useSpeechToText';
@@ -90,6 +91,10 @@ interface ChatInputProps {
   mediaQuickReplies?: MediaQuickReply[];
   /** При выборе медиа-шаблона — отправить все изображения подряд */
   onMediaQuickReplySelect?: (reply: MediaQuickReply) => void;
+  /** Перевести текст в поле ввода RU↔KZ (заменить текст переводом) */
+  onTranslateInput?: () => void;
+  /** Идёт перевод текста в поле */
+  translateInputLoading?: boolean;
 }
 
 const QUICK_REPLIES_MAX = 5;
@@ -118,7 +123,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
   quickReplies = [],
   onQuickReplySelect,
   mediaQuickReplies = [],
-  onMediaQuickReplySelect
+  onMediaQuickReplySelect,
+  onTranslateInput,
+  translateInputLoading = false,
 }) => {
   /** Android/iOS: только фото + capture → камера, не галерея */
   const cameraPhotoRef = useRef<HTMLInputElement>(null);
@@ -706,6 +713,22 @@ const ChatInput: React.FC<ChatInputProps> = ({
                       aria-label="Камера"
                     >
                       <Camera className="w-5 h-5 md:w-6 md:h-6" />
+                    </button>
+                  )}
+                  {hasText && onTranslateInput && (
+                    <button
+                      type="button"
+                      onClick={() => onTranslateInput()}
+                      disabled={disabled || translateInputLoading}
+                      title="Перевести RU↔KZ"
+                      className="flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-xl text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 md:h-auto md:w-auto md:p-2"
+                      aria-label="Перевести"
+                    >
+                      {translateInputLoading ? (
+                        <Loader2 className="w-4 h-4 md:w-5 md:h-5 animate-spin" />
+                      ) : (
+                        <Languages className="w-4 h-4 md:w-5 md:h-5" />
+                      )}
                     </button>
                   )}
                   <button

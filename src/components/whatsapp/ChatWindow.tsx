@@ -13,7 +13,10 @@ import ReplyComposerPreview from './ReplyComposerPreview';
 import type { WhatsAppMessage, MessageAttachment } from '../../types/whatsappDb';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
 import { getAuthToken } from '../../lib/firebase/auth';
+import { useAIConfigured } from '../../hooks/useAIConfigured';
 import { transcribeVoiceBatch, getVoiceMessagesToTranscribe } from '../../utils/transcribeVoiceBatch';
+import { detectRuKzLang, getTargetLangForTranslate, translateRuKz } from '../../utils/translateRuKz';
+import toast from 'react-hot-toast';
 
 interface PendingAttachment {
   file: File;
@@ -1006,6 +1009,15 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     }
   }, [messages]);
 
+  const { configured: aiConfigured } = useAIConfigured();
+
+  /** Кэш переводов сообщений RU↔KZ (messageId → текст перевода) */
+  const [translationByMessageId, setTranslationByMessageId] = useState<Record<string, string>>({});
+  /** Видимость блока перевода по messageId */
+  const [translationVisibleByMessageId, setTranslationVisibleByMessageId] = useState<Record<string, boolean>>({});
+  const [translatingMessageId, setTranslatingMessageId] = useState<string | null>(null);
+  const [translateInputLoading, setTranslateInputLoading] = useState(false);
+
   /** При открытии чата (смена выбранного) — прокрутить вниз и сбросить локальные расшифровки */
   const chatKey = selectedItem?.id ?? selectedItem?.clientId ?? '';
   useEffect(() => {
@@ -1154,6 +1166,84 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
       setAiMode(null);
     }
   };
+
+  /** Перевод сообщения RU↔KZ: переключить видимость или запросить перевод */
+  const handleTranslateMessage = useCallback(
+    async (messageId: string) => {
+      if (!aiConfigured) {
+        toast.error('Для перевода подключите AI API key в разделе Интеграции');
+        return;
+      }
+      const msg = messages.find((m) => m.id === messageId);
+      const text = (msg?.text ?? '').trim();
+      if (!text) return;
+
+      const cached = translationByMessageId[messageId];
+      const visible = translationVisibleByMessageId[messageId];
+
+      if (cached !== undefined) {
+        setTranslationVisibleByMessageId((prev) => ({ ...prev, [messageId]: !visible }));
+        return;
+      }
+
+      const detected = detectRuKzLang(text);
+      const targetLang = getTargetLangForTranslate(detected);
+      if (!targetLang) {
+        toast.error('Перевод доступен только для русского и казахского');
+        return;
+      }
+
+      setTranslatingMessageId(messageId);
+      try {
+        const token = await getAuthToken();
+        if (!token) {
+          toast.error('Требуется авторизация');
+          return;
+        }
+        const { translated } = await translateRuKz(text, targetLang, token);
+        setTranslationByMessageId((prev) => ({ ...prev, [messageId]: translated }));
+        setTranslationVisibleByMessageId((prev) => ({ ...prev, [messageId]: true }));
+      } catch (e) {
+        const msgErr = e instanceof Error ? e.message : 'Ошибка перевода';
+        toast.error(msgErr);
+      } finally {
+        setTranslatingMessageId(null);
+      }
+    },
+    [aiConfigured, messages, translationByMessageId, translationVisibleByMessageId]
+  );
+
+  /** Перевести текст в поле ввода RU↔KZ (заменить текст переводом) */
+  const handleTranslateInput = useCallback(async () => {
+    const text = (inputText ?? '').trim();
+    if (!text) return;
+    if (!aiConfigured) {
+      toast.error('Для перевода подключите AI API key в разделе Интеграции');
+      return;
+    }
+    const detected = detectRuKzLang(text);
+    const targetLang = getTargetLangForTranslate(detected);
+    if (!targetLang) {
+      toast.error('Перевод доступен только для русского и казахского');
+      return;
+    }
+    setTranslateInputLoading(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        toast.error('Требуется авторизация');
+        return;
+      }
+      const { translated } = await translateRuKz(text, targetLang, token);
+      onInputChange(translated);
+      toast.success('Текст заменён переводом');
+    } catch (e) {
+      const msgErr = e instanceof Error ? e.message : 'Ошибка перевода';
+      toast.error(msgErr);
+    } finally {
+      setTranslateInputLoading(false);
+    }
+  }, [aiConfigured, inputText, onInputChange]);
 
   /** Массовая расшифровка всех голосовых без расшифровки в чате */
   const handleBatchTranscribe = useCallback(async () => {
@@ -1391,6 +1481,10 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
               onLongPress={onLongPressMessage}
               onContextMenu={onContextMenuMessage}
               onTap={selectionMode ? onToggleSelectMessage : undefined}
+              translationText={translationByMessageId[msg.id] ?? null}
+              translationVisible={!!translationVisibleByMessageId[msg.id]}
+              onTranslateClick={msg.text?.trim() ? () => handleTranslateMessage(msg.id) : undefined}
+              isTranslating={translatingMessageId === msg.id}
               renderAttachments={(m) =>
                 m.attachments?.map((att, i) => {
                   const isAudio = att.type === 'audio';
@@ -1524,6 +1618,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
           onReply={() => { onReplyToMessage?.(contextMenu.messageId); onCloseContextMenu?.(); }}
           onForward={() => { onForwardMessages?.([contextMenu.messageId]); onCloseContextMenu?.(); }}
           onCopy={() => { onCopyMessage?.(contextMenu.messageId); onCloseContextMenu?.(); }}
+          onTranslate={() => { handleTranslateMessage(contextMenu.messageId); onCloseContextMenu?.(); }}
           onStar={() => { onStarMessages?.([contextMenu.messageId]); onCloseContextMenu?.(); }}
           onDelete={() => { onDeleteMessages?.([contextMenu.messageId]); onCloseContextMenu?.(); }}
           hasText={!!messages.find((m) => m.id === contextMenu.messageId)?.text?.trim()}
@@ -1538,6 +1633,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
           onReply={() => { onReplyToMessage?.(actionsSheetMessageId); onCloseSelection?.(); }}
           onForward={() => { onForwardMessages?.(selectedMessageIds); onCloseSelection?.(); }}
           onCopy={() => { onCopyMessage?.(actionsSheetMessageId); onCloseSelection?.(); }}
+          onTranslate={() => { handleTranslateMessage(actionsSheetMessageId); onCloseSelection?.(); }}
           onStar={() => { onStarMessages?.(selectedMessageIds); onCloseSelection?.(); }}
           onDelete={() => { onDeleteMessages?.(selectedMessageIds); onCloseSelection?.(); }}
           hasText={!!actionsSheetMessage.text?.trim()}
@@ -1675,6 +1771,8 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
           onQuickReplySelect={incognitoMode ? undefined : onQuickReplySelect}
           mediaQuickReplies={mediaQuickReplies}
           onMediaQuickReplySelect={incognitoMode ? undefined : onMediaQuickReplySelect}
+          onTranslateInput={!incognitoMode && aiConfigured ? handleTranslateInput : undefined}
+          translateInputLoading={translateInputLoading}
         />
         {onSendProposalImage && (
           <WhatsAppCalculatorDrawer

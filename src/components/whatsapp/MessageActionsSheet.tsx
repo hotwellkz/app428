@@ -1,5 +1,5 @@
 import React from 'react';
-import { Reply, Forward, Copy, Star, Trash2, X } from 'lucide-react';
+import { Reply, Forward, Copy, Star, Trash2, X, Languages } from 'lucide-react';
 
 export interface MessageActionsSheetProps {
   open: boolean;
@@ -9,6 +9,7 @@ export interface MessageActionsSheetProps {
   onCopy: () => void;
   onStar: () => void;
   onDelete: () => void;
+  onTranslate?: () => void;
   hasText: boolean;
   isStarred?: boolean;
 }
@@ -21,6 +22,7 @@ const MessageActionsSheet: React.FC<MessageActionsSheetProps> = ({
   onCopy,
   onStar,
   onDelete,
+  onTranslate,
   hasText,
   isStarred = false,
 }) => {
@@ -62,6 +64,11 @@ const MessageActionsSheet: React.FC<MessageActionsSheetProps> = ({
           {hasText && (
             <button type="button" onClick={() => { onCopy(); onClose(); }} className={itemClass}>
               <Copy className="w-5 h-5 text-gray-500" /> Копировать
+            </button>
+          )}
+          {hasText && onTranslate && (
+            <button type="button" onClick={() => { onTranslate(); onClose(); }} className={itemClass}>
+              <Languages className="w-5 h-5 text-gray-500" /> Перевести
             </button>
           )}
           <button type="button" onClick={() => { onStar(); onClose(); }} className={itemClass}>
