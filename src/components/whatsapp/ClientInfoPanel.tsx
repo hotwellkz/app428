@@ -15,8 +15,10 @@ import {
   deleteField
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase/config';
+import { getAuthToken } from '../../lib/firebase/auth';
 import { getChatAiAnalysis, setChatAiAnalysis } from '../../lib/firebase/chatAiAnalysis';
 import { useCompanyId } from '../../contexts/CompanyContext';
+import { useAIConfigured } from '../../hooks/useAIConfigured';
 import { createDeal, ensureDefaultPipeline, listStages, moveDealToStage } from '../../lib/firebase/deals';
 import type { Deal } from '../../types/deals';
 import { Sparkles, MoreVertical, X, ExternalLink, GitBranch } from 'lucide-react';
@@ -234,6 +236,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
 }) => {
   const companyId = useCompanyId();
   const navigate = useNavigate();
+  const { configured: aiConfigured, loading: aiLoadingConfigured } = useAIConfigured();
   const [client, setClient] = useState<WhatsAppClientCard | null>(null);
   const [deal, setDeal] = useState<DealCard | null>(null);
   const [loading, setLoading] = useState(false);
@@ -505,11 +508,15 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
         error?: string;
       } = {};
 
+      const token = await getAuthToken();
       for (const url of AI_ANALYZE_ENDPOINTS) {
         try {
           const currentRes = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify(payload),
           });
           const currentRawBody = await currentRes.text();
@@ -540,12 +547,14 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       }
 
       if (!res || !res.ok) {
-        setAiError('Ошибка AI анализа. Попробуйте позже.');
+        const msg = (data?.error && typeof data.error === 'string') ? data.error : 'Ошибка AI анализа. Попробуйте позже.';
+        setAiError(msg);
+        if (res?.status === 403 && msg.includes('AI не подключен')) return;
         console.error('AI error', { status: res?.status, body: data, raw: rawBody?.slice(0, 300) });
         return;
       }
       if (data.error) {
-        setAiError('Ошибка AI анализа. Попробуйте позже.');
+        setAiError(typeof data.error === 'string' ? data.error : 'Ошибка AI анализа. Попробуйте позже.');
         console.error('AI error', data.error, data);
         return;
       }
@@ -1199,10 +1208,10 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                       e.preventDefault();
                       if (!aiLoading && messages.length > 0) handleAIAnalyze();
                     }}
-                    disabled={aiLoading || messages.length === 0}
+                    disabled={aiLoading || messages.length === 0 || (aiLoadingConfigured === false && aiConfigured === false)}
                     className="inline-flex min-h-[44px] min-w-[44px] touch-manipulation cursor-pointer items-center justify-center gap-1 rounded-full border border-dashed border-amber-300 px-3 py-2 text-[11px] font-medium text-amber-700 hover:bg-amber-50 active:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed disabled:active:bg-transparent"
                     style={{ touchAction: 'manipulation' }}
-                    title="AI анализ переписки: определить имя и комментарий"
+                    title={aiConfigured === false && !aiLoadingConfigured ? 'Подключите AI API key в разделе Интеграции' : 'AI анализ переписки: определить имя и комментарий'}
                     aria-label="AI анализ переписки"
                   >
                     <Sparkles

@@ -21,6 +21,7 @@ import { useTransactionsPaginated } from '../hooks/useTransactionsPaginated';
 import { useAuth } from '../hooks/useAuth';
 import { useExpenseCategories } from '../hooks/useExpenseCategories';
 import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
+import { useAIConfigured } from '../hooks/useAIConfigured';
 import {
   VirtualizedTransactionsList,
   buildFlattenedRowsFromGrouped,
@@ -168,7 +169,8 @@ TransactionFilters.displayName = 'TransactionFilters';
 export const OptimizedTransactionHistoryPage: React.FC = () => {
   const navigate = useNavigate();
   const { id: categoryId } = useParams();
-  
+  const { configured: aiConfigured } = useAIConfigured();
+
   // Состояния UI
   const [categoryTitle, setCategoryTitle] = useState('');
   const [showPasswordPrompt, setShowPasswordPrompt] = useState(false);
@@ -756,6 +758,7 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
                 onWaybillClick={handleWaybillClick}
                 onDeleteRequest={handleDeleteClick}
                 onUpdateCommentByReceipt={setUpdateCommentTransaction}
+                aiConfigured={aiConfigured === true}
                 hasMore={hasMore}
                 loading={loading}
                 onLoadMore={loadMore}

@@ -1,4 +1,5 @@
 import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
+import { getAIApiKeyFromRequest } from './lib/aiAuth';
 
 const LOG_PREFIX = '[ai-extract-client-name]';
 
@@ -40,15 +41,16 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY || process.env.NEXT_PUBLIC_OPENAI_API_KEY;
-  if (!apiKey) {
-    log('Missing OPENAI_API_KEY / NEXT_PUBLIC_OPENAI_API_KEY');
+  const auth = await getAIApiKeyFromRequest(event);
+  if (!auth.ok) {
+    log('AI key not available:', auth.error);
     return withCors({
-      statusCode: 500,
+      statusCode: auth.statusCode,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'OpenAI API key is not configured' }),
+      body: JSON.stringify({ error: auth.error }),
     });
   }
+  const apiKey = auth.apiKey;
 
   let body: ExtractNameBody;
   try {

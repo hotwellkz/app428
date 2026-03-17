@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
+import { useAIConfigured } from '../hooks/useAIConfigured';
 import { exportFeedToExcel } from '../utils/exportFeedToExcel';
 import { showErrorNotification, showSuccessNotification } from '../utils/notifications';
 import { useFeedPaginated } from '../hooks/useFeedPaginated';
@@ -174,6 +175,7 @@ export const Feed: React.FC = () => {
   );
 
   const { companyUser } = useCurrentCompanyUser();
+  const { configured: aiConfigured } = useAIConfigured();
   const isTrustedForApproval = useMemo(() => {
     const email = user?.email || '';
     const byEmail = !!email && approvedEmails.includes(email.toLowerCase());
@@ -1197,6 +1199,7 @@ export const Feed: React.FC = () => {
                 onEdit={setEditingTransaction}
                 onDeleteRequest={setTransactionToDelete}
                 onUpdateCommentByReceipt={setUpdateCommentTransaction}
+                aiConfigured={aiConfigured === true}
                 canDeleteTransaction={canShowDeleteForTransaction}
                 approvingTransactionId={approvingId}
                 rejectingTransactionId={rejectingId}

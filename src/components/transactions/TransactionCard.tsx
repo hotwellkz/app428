@@ -45,8 +45,10 @@ export interface TransactionCardProps {
   onEdit?: (transaction: TransactionCardTransaction) => void;
   /** Запрос на удаление (показать модалку с паролем и т.д.) */
   onDeleteRequest?: (transaction: TransactionCardTransaction) => void;
-  /** Обновить комментарий по прикреплённому чеку (AI) */
+  /** Обновить комментарий по прикреплённому чеку (AI). Кнопка скрыта, если aiConfigured === false. */
   onUpdateCommentByReceipt?: (transaction: TransactionCardTransaction) => void;
+  /** AI ключ компании подключён (иначе кнопка «По чеку» не показывается) */
+  aiConfigured?: boolean;
 }
 
 /**
@@ -70,7 +72,8 @@ export const TransactionCard = React.memo<TransactionCardProps>(function Transac
   rejectingTransactionId,
   onEdit,
   onDeleteRequest,
-  onUpdateCommentByReceipt
+  onUpdateCommentByReceipt,
+  aiConfigured = true
 }) {
   const [isSwiped, setIsSwiped] = useState(false);
   const [categoryTooltipOpen, setCategoryTooltipOpen] = useState(false);
@@ -321,7 +324,7 @@ export const TransactionCard = React.memo<TransactionCardProps>(function Transac
                         <Receipt className="w-[18px] h-[18px]" strokeWidth={2} />
                       </span>
                     )}
-                    {onUpdateCommentByReceipt && (firstAttachment!.type.startsWith('image/') || firstAttachment!.type === 'application/pdf') && (
+                    {aiConfigured !== false && onUpdateCommentByReceipt && (firstAttachment!.type.startsWith('image/') || firstAttachment!.type === 'application/pdf') && (
                       <button
                         type="button"
                         onClick={(e) => {

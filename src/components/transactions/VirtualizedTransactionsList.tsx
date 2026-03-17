@@ -107,7 +107,8 @@ const TransactionRowContent = memo(function TransactionRowContent({
   onUpdateCommentByReceipt,
   canDeleteTransaction,
   approvingTransactionId,
-  rejectingTransactionId
+  rejectingTransactionId,
+  aiConfigured
 }: {
   row: VirtualizedRow;
   context: TransactionCardContext;
@@ -122,6 +123,7 @@ const TransactionRowContent = memo(function TransactionRowContent({
   canDeleteTransaction?: (t: TransactionCardTransaction) => boolean;
   approvingTransactionId?: string | null;
   rejectingTransactionId?: string | null;
+  aiConfigured?: boolean;
 }) {
   if (isDateRow(row)) {
     return <DateRow dateLabel={row.dateLabel} total={row.total} />;
@@ -147,6 +149,7 @@ const TransactionRowContent = memo(function TransactionRowContent({
         onEdit={onEdit}
         onDeleteRequest={showDelete ? onDeleteRequest : undefined}
         onUpdateCommentByReceipt={onUpdateCommentByReceipt}
+        aiConfigured={aiConfigured}
         approvingTransactionId={approvingTransactionId}
         rejectingTransactionId={rejectingTransactionId}
       />
@@ -171,6 +174,8 @@ export interface VirtualizedTransactionsListProps {
   canDeleteTransaction?: (t: TransactionCardTransaction) => boolean;
   approvingTransactionId?: string | null;
   rejectingTransactionId?: string | null;
+  /** AI ключ компании подключён (кнопка «По чеку» скрыта при false) */
+  aiConfigured?: boolean;
   hasMore: boolean;
   loading: boolean;
   onLoadMore: () => void;
@@ -196,6 +201,7 @@ function VirtualizedTransactionsListInner({
   canDeleteTransaction,
   approvingTransactionId,
   rejectingTransactionId,
+  aiConfigured,
   hasMore,
   loading,
   onLoadMore,
@@ -307,6 +313,7 @@ function VirtualizedTransactionsListInner({
               onDeleteRequest={onDeleteRequest}
               onUpdateCommentByReceipt={onUpdateCommentByReceipt}
               canDeleteTransaction={canDeleteTransaction}
+              aiConfigured={aiConfigured}
               approvingTransactionId={approvingTransactionId}
               rejectingTransactionId={rejectingTransactionId}
             />

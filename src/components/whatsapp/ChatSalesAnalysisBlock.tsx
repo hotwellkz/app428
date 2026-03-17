@@ -1,5 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { Sparkles, Copy, RefreshCw, ChevronDown, ChevronUp } from 'lucide-react';
+import { getAuthToken } from '../../lib/firebase/auth';
+import { useAIConfigured } from '../../hooks/useAIConfigured';
 import type { WhatsAppMessage } from '../../types/whatsappDb';
 
 const SALES_ANALYZE_ENDPOINTS = ['/.netlify/functions/ai-analyze-sales', '/api/ai/analyze-sales'] as const;
@@ -66,6 +68,7 @@ export function ChatSalesAnalysisBlock({
   const [error, setError] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState(false);
   const runGuardRef = useRef(false);
+  const { configured: aiConfigured, loading: aiLoadingConfigured } = useAIConfigured();
 
   const recent = messages
     .map((m) => ({
@@ -94,6 +97,7 @@ export function ChatSalesAnalysisBlock({
     };
 
     try {
+      const token = await getAuthToken();
       let res: Response | null = null;
       let data: SalesAnalysisResult & { error?: string } = {} as SalesAnalysisResult;
 
@@ -101,7 +105,10 @@ export function ChatSalesAnalysisBlock({
         try {
           const r = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify(payload),
           });
           const raw = await r.text();
@@ -170,7 +177,7 @@ export function ChatSalesAnalysisBlock({
   }, [cachedResult]);
 
   const hasResult = !!cachedResult;
-  const canRun = !!phone && !!conversationId && recent.length > 0 && !loading;
+  const canRun = !!phone && !!conversationId && recent.length > 0 && !loading && (aiLoadingConfigured || aiConfigured !== false);
 
   const section = (title: string, items: string[], emptyText: string) => (
     <div className="mt-3">
@@ -196,12 +203,17 @@ export function ChatSalesAnalysisBlock({
         type="button"
         onClick={runAnalysis}
         disabled={!canRun}
+        title={aiConfigured === false && !aiLoadingConfigured ? 'Подключите AI API key в разделе Интеграции' : undefined}
         className="mt-3 w-full inline-flex items-center justify-center gap-2 py-2.5 px-3 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <Sparkles className="w-4 h-4 shrink-0" />
         {loading ? 'Анализируем…' : 'Проанализировать чат'}
       </button>
-
+      {!aiLoadingConfigured && aiConfigured === false && (
+        <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-2 py-1.5" role="alert">
+          Подключите AI API key в разделе Интеграции
+        </p>
+      )}
       {recent.length === 0 && phone && (
         <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-2 py-1.5" role="alert">
           В чате нет сообщений для анализа.

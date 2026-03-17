@@ -1,4 +1,5 @@
 import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
+import { getAIApiKeyFromRequest } from './lib/aiAuth';
 
 const LOG_PREFIX = '[ai-estimate-vs-actual]';
 
@@ -114,7 +115,16 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
 
-  const apiKey = process.env.OPENAI_API_KEY;
+  const auth = await getAIApiKeyFromRequest(event);
+  if (!auth.ok) {
+    log('AI key not available:', auth.error);
+    return withCors({
+      statusCode: auth.statusCode,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: auth.error }),
+    });
+  }
+  const apiKey = auth.apiKey;
 
   let body: Body;
   try {
@@ -138,15 +148,6 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       statusCode: 400,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: 'clientId is required' }),
-    });
-  }
-
-  if (!apiKey) {
-    log('Missing OPENAI_API_KEY');
-    return withCors({
-      statusCode: 503,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'AI не настроен (нет API ключа)' }),
     });
   }
 

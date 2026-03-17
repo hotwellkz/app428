@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sparkles, RefreshCw, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react';
 import { useCompanyId } from '../../contexts/CompanyContext';
+import { useAIConfigured } from '../../hooks/useAIConfigured';
 import { useEstimateTotals } from '../../hooks/useEstimateTotals';
 import { useEstimateLineItems } from '../../hooks/useEstimateLineItems';
 import { useClientTransactions } from '../../hooks/useClientTransactions';
@@ -65,6 +66,7 @@ export const AIEstimateAnalysisBlock: React.FC<AIEstimateAnalysisBlockProps> = (
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(true);
   const [stale, setStale] = useState(false);
+  const { configured: aiConfigured, loading: aiLoadingConfigured } = useAIConfigured();
 
   const estimateSnapshot: EstimateSnapshot = {
     foundation: totals.foundation,
@@ -238,7 +240,8 @@ export const AIEstimateAnalysisBlock: React.FC<AIEstimateAnalysisBlockProps> = (
               <button
                 type="button"
                 onClick={runAnalysis}
-                disabled={loading || transactionsLoading || lineItemsLoading}
+                disabled={loading || transactionsLoading || lineItemsLoading || (aiLoadingConfigured === false && aiConfigured === false)}
+                title={aiConfigured === false && !aiLoadingConfigured ? 'Подключите AI API key в разделе Интеграции' : undefined}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 text-white text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
@@ -253,6 +256,11 @@ export const AIEstimateAnalysisBlock: React.FC<AIEstimateAnalysisBlockProps> = (
                   </>
                 )}
               </button>
+              {!aiLoadingConfigured && aiConfigured === false && (
+                <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-2 py-1.5 inline-block">
+                  Подключите AI API key в разделе Интеграции
+                </p>
+              )}
             </div>
           )}
 
@@ -273,7 +281,7 @@ export const AIEstimateAnalysisBlock: React.FC<AIEstimateAnalysisBlockProps> = (
                 <button
                   type="button"
                   onClick={runAnalysis}
-                  disabled={loading}
+                  disabled={loading || (aiLoadingConfigured === false && aiConfigured === false)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-50 disabled:opacity-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />

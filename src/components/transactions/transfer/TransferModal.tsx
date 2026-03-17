@@ -17,6 +17,7 @@ import imageCompression from 'browser-image-compression';
 import { useAuth } from '../../../hooks/useAuth';
 import { getAuthToken } from '../../../lib/firebase/auth';
 import { useCompanyId } from '../../../contexts/CompanyContext';
+import { useAIConfigured } from '../../../hooks/useAIConfigured';
 import { useExpenseCategories } from '../../../hooks/useExpenseCategories';
 import { useIsMobile } from '../../../hooks/useIsMobile';
 import { ExpenseCategoryMobilePicker } from '../../ExpenseCategoryMobilePicker';
@@ -80,6 +81,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
 }) => {
   const { user } = useAuth();
   const companyId = useCompanyId();
+  const { configured: aiConfigured, loading: aiLoading } = useAIConfigured();
   const { categories: expenseCategories } = useExpenseCategories(user?.uid);
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -893,7 +895,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     <button
                       type="button"
                       onClick={fillFromReceipt}
-                      disabled={receiptParseLoading}
+                      disabled={receiptParseLoading || (aiLoading === false && aiConfigured === false)}
+                      title={aiConfigured === false && !aiLoading ? 'Подключите AI API key в разделе Интеграции' : undefined}
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-200 bg-violet-50 text-violet-800 text-sm font-medium hover:bg-violet-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                     >
                       {receiptParseLoading ? (
@@ -908,6 +911,11 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                         </>
                       )}
                     </button>
+                    {!aiLoading && aiConfigured === false && (
+                      <p className="text-xs text-amber-700 mt-1">
+                        Подключите AI API key в разделе Интеграции
+                      </p>
+                    )}
                   </div>
                 )}
                 {receiptParseResult && (

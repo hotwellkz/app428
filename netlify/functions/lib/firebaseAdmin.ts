@@ -12,7 +12,8 @@ const COLLECTIONS = {
   COMPANIES: 'companies',
   COMPANY_USERS: 'company_users',
   USERS: 'users',
-  WAZZUP_INTEGRATIONS: 'wazzupIntegrations'
+  WAZZUP_INTEGRATIONS: 'wazzupIntegrations',
+  OPENAI_INTEGRATIONS: 'openaiIntegrations'
 } as const;
 
 function normalizePhone(phone: string): string {
@@ -254,6 +255,69 @@ export async function getWazzupApiKeyForCompany(companyId: string): Promise<stri
     return process.env.WAZZUP_API_KEY.trim();
   }
   return null;
+}
+
+/** Получить companyId пользователя по uid (из company_users). */
+export async function getCompanyIdForUser(uid: string): Promise<string | null> {
+  const db = getDb();
+  const snap = await db.collection(COLLECTIONS.COMPANY_USERS).doc(uid).get();
+  if (!snap.exists) return null;
+  return (snap.data()?.companyId as string) ?? null;
+}
+
+/** OpenAI-интеграция компании: только ключ из БД, без fallback на env. */
+export interface OpenAIIntegrationRow {
+  companyId: string;
+  apiKey: string;
+  apiKeyMasked: string | null;
+  updatedAt: Timestamp;
+}
+
+export async function getOpenAIIntegration(companyId: string): Promise<OpenAIIntegrationRow | null> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.OPENAI_INTEGRATIONS).doc(companyId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const d = snap.data()!;
+  const apiKey = (d.apiKey as string) ?? '';
+  return {
+    companyId,
+    apiKey,
+    apiKeyMasked: (d.apiKeyMasked as string) ?? (apiKey ? '****' + apiKey.slice(-4) : null),
+    updatedAt: (d.updatedAt as Timestamp) ?? Timestamp.now()
+  };
+}
+
+/** Получить OpenAI API key компании. Только из БД, без fallback на env. */
+export async function getOpenAIApiKeyForCompany(companyId: string): Promise<string | null> {
+  const row = await getOpenAIIntegration(companyId);
+  if (row?.apiKey?.trim()) return row.apiKey.trim();
+  return null;
+}
+
+function maskApiKeyForDisplay(key: string): string {
+  if (!key || key.length <= 4) return '****';
+  return '****' + key.slice(-4);
+}
+
+export async function setOpenAIIntegration(companyId: string, apiKey: string): Promise<void> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.OPENAI_INTEGRATIONS).doc(companyId);
+  const trimmed = apiKey.trim();
+  const now = Timestamp.now();
+  const payload: Record<string, unknown> = {
+    companyId,
+    apiKey: trimmed,
+    apiKeyMasked: maskApiKeyForDisplay(trimmed),
+    updatedAt: now
+  };
+  const snap = await ref.get();
+  if (!snap.exists) {
+    payload.createdAt = now;
+    await ref.set(payload);
+  } else {
+    await ref.update(payload);
+  }
 }
 
 /** Стабильный ключ контакта Instagram (Wazzup chatId потока). */
