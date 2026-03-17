@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Search, Barcode, Plus, Trash2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { collection, addDoc, doc, getDoc, updateDoc, serverTimestamp, writeBatch, getDocs, query, where } from 'firebase/firestore';
+import { collection, doc, getDoc, serverTimestamp, writeBatch, getDocs, query, where } from 'firebase/firestore';
 import { getTransactionStatusForCompany } from '../../lib/firebase/transactions';
+import { incrementExpenseCategoryUsage } from '../../lib/firebase/expenseCategories';
 import { getNextDocumentNumber } from '../../utils/documentUtils';
 import { db } from '../../lib/firebase';
 import { useCompanyId } from '../../contexts/CompanyContext';
-import { sendTelegramNotification, formatTransactionMessage } from '../../services/telegramService';
+import { useAuth } from '../../hooks/useAuth';
+import { useExpenseCategories } from '../../hooks/useExpenseCategories';
 import { Product as WarehouseProduct } from '../../types/warehouse';
 import { ProjectSelector } from '../../components/warehouse/ProjectSelector';
 import { showErrorNotification, showSuccessNotification } from '../../utils/notifications';
@@ -15,6 +17,7 @@ import { Scrollbars } from 'react-custom-scrollbars-2';
 import { FileUpload } from '../../components/FileUpload';
 import { calculateExpenseTotals, getProductEffectivePrice, resolveExpenseItemPrice } from '../../utils/warehousePricing';
 
+const GENERAL_EXPENSE_TITLE = 'Общ Расх';
 const EXPENSE_PROJECT_KEY = 'expense_selected_project';
 const EXPENSE_ITEMS_KEY = 'expense_items';
 const EXPENSE_NOTE_KEY = 'expense_note';
@@ -36,13 +39,15 @@ export const NewExpense: React.FC = () => {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [documentNumber, setDocumentNumber] = useState('');
   const [selectedProject, setSelectedProject] = useState(() => {
-    // Проверяем state на наличие projectTitle
     const state = location.state as { selectedProject?: string; projectTitle?: string };
-    if (state?.selectedProject && state?.projectTitle === 'Общ Расх') {
+    if (state?.selectedProject && state?.projectTitle === GENERAL_EXPENSE_TITLE) {
       return state.selectedProject;
     }
     return localStorage.getItem(EXPENSE_PROJECT_KEY) || '';
   });
+  const { user } = useAuth();
+  const { categories: expenseCategories } = useExpenseCategories(user?.uid);
+  const [expenseCategoryId, setExpenseCategoryId] = useState('');
 
   // Состояния для отладки и обработки ошибок
   const [componentError, setComponentError] = useState<string | null>(null);
@@ -104,7 +109,6 @@ export const NewExpense: React.FC = () => {
   }, [files]);
 
   useEffect(() => {
-    // Проверяем наличие предварительно выбранного проекта
     const state = location.state as { selectedProject?: string };
     const projectState = location.state as { selectedProject?: string; projectTitle?: string };
     if (projectState?.selectedProject && projectState?.projectTitle) {
@@ -116,6 +120,20 @@ export const NewExpense: React.FC = () => {
       localStorage.setItem(EXPENSE_PROJECT_KEY, state.selectedProject);
     }
   }, [location.state]);
+
+  // Загружаем название проекта при смене выбора (для показа блока «Категория расхода» при «Общ Расх»)
+  useEffect(() => {
+    if (!selectedProject) {
+      setProjectTitle('');
+      return;
+    }
+    getDoc(doc(db, 'categories', selectedProject))
+      .then((snap) => {
+        if (snap.exists()) setProjectTitle((snap.data()?.title as string) ?? '');
+        else setProjectTitle('');
+      })
+      .catch(() => setProjectTitle(''));
+  }, [selectedProject]);
 
   // Сохраняем примечание в localStorage при изменении
   useEffect(() => {
@@ -182,7 +200,10 @@ export const NewExpense: React.FC = () => {
       showErrorNotification('Выберите проект');
       return;
     }
-
+    if (projectTitle === GENERAL_EXPENSE_TITLE && !expenseCategoryId) {
+      showErrorNotification('Выберите категорию расхода');
+      return;
+    }
     if (items.length === 0) {
       showErrorNotification('Добавьте товары');
       return;
@@ -265,6 +286,9 @@ export const NewExpense: React.FC = () => {
         createdAt: timestamp
       });
 
+      const isGeneralExpense = currentProjectTitle === GENERAL_EXPENSE_TITLE;
+      const savedExpenseCategoryId = isGeneralExpense && expenseCategoryId ? expenseCategoryId : undefined;
+
       batch.set(warehouseTransactionRef, {
         categoryId: warehouseCategory.id,
         fromUser: 'Склад',
@@ -285,17 +309,18 @@ export const NewExpense: React.FC = () => {
             quantity: item.quantity,
             price: resolveExpenseItemPrice(item)
           })),
-          files // Добавляем информацию о прикрепленных файлах
+          files
         },
         type: 'expense',
         date: timestamp,
         isWarehouseOperation: true,
         relatedTransactionId: projectTransactionRef.id,
         companyId,
-        status: txStatus
+        status: txStatus,
+        ...(savedExpenseCategoryId ? { expenseCategoryId: savedExpenseCategoryId } : {})
       });
 
-      batch.set(projectTransactionRef, { 
+      batch.set(projectTransactionRef, {
         categoryId: selectedProject,
         fromUser: 'Склад',
         toUser: currentProjectTitle,
@@ -315,14 +340,15 @@ export const NewExpense: React.FC = () => {
             quantity: item.quantity,
             price: resolveExpenseItemPrice(item)
           })),
-          files // Добавляем информацию о прикрепленных файлах
+          files
         },
         type: 'income',
         date: timestamp,
         isWarehouseOperation: true,
         relatedTransactionId: warehouseTransactionRef.id,
         companyId,
-        status: txStatus
+        status: txStatus,
+        ...(savedExpenseCategoryId ? { expenseCategoryId: savedExpenseCategoryId } : {})
       });
 
       // Обновляем количество товаров на складе
@@ -406,7 +432,15 @@ export const NewExpense: React.FC = () => {
       }
       
       await batch.commit();
-      
+
+      if (savedExpenseCategoryId) {
+        try {
+          await incrementExpenseCategoryUsage(savedExpenseCategoryId);
+        } catch (err) {
+          console.warn('incrementExpenseCategoryUsage failed:', err);
+        }
+      }
+
       // Очищаем localStorage перед показом накладной
       const clearLocalStorage = () => {
         localStorage.removeItem(EXPENSE_ITEMS_KEY);
@@ -549,7 +583,7 @@ export const NewExpense: React.FC = () => {
                 </div>
               </div>
 
-              {/* Покупатель */}
+              {/* Проект */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Проект
@@ -559,6 +593,28 @@ export const NewExpense: React.FC = () => {
                   onChange={handleProjectChange}
                 />
               </div>
+
+              {/* Категория расхода — только для «Общ Расх» */}
+              {projectTitle === GENERAL_EXPENSE_TITLE && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Категория расхода <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={expenseCategoryId}
+                    onChange={(e) => setExpenseCategoryId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 bg-white text-sm"
+                    required={projectTitle === GENERAL_EXPENSE_TITLE}
+                  >
+                    <option value="">Выберите категорию</option>
+                    {expenseCategories.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Примечание и файлы */}
               <div className="space-y-1">
@@ -660,7 +716,12 @@ export const NewExpense: React.FC = () => {
                     <div className="flex gap-2 w-full sm:w-auto">
                       <button
                         onClick={handleSubmit}
-                        disabled={loading || !selectedProject || items.length === 0}
+                        disabled={
+                          loading ||
+                          !selectedProject ||
+                          items.length === 0 ||
+                          (projectTitle === GENERAL_EXPENSE_TITLE && !expenseCategoryId)
+                        }
                         className="flex-1 sm:flex-none px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors disabled:bg-gray-300 text-sm sm:text-base"
                       >
                         {loading ? 'Отправка...' : 'Отправить на проект'}
