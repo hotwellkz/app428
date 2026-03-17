@@ -88,14 +88,39 @@ export const UpdateCommentByReceiptModal: React.FC<UpdateCommentByReceiptModalPr
     return () => { cancelled = true; };
   }, [isOpen, attachment.url, attachment.type]);
 
-  const handleConfirm = async () => {
-    if (!newComment.trim()) return;
+  const textToSave = newComment.trim();
+
+  const handleReplace = async () => {
+    if (!textToSave) return;
     setLoading(true);
     setStep('saving');
     setError(null);
     try {
-      await updateTransactionDescription(transactionId, newComment.trim());
-      showSuccessNotification('Комментарий обновлён по чеку');
+      await updateTransactionDescription(transactionId, textToSave);
+      showSuccessNotification('Комментарий заменён по чеку');
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      showErrorNotification(err instanceof Error ? err.message : 'Не удалось обновить комментарий');
+      setError(err instanceof Error ? err.message : 'Ошибка сохранения');
+    } finally {
+      setLoading(false);
+      setStep('preview');
+    }
+  };
+
+  const handleAppend = async () => {
+    if (!textToSave) return;
+    setLoading(true);
+    setStep('saving');
+    setError(null);
+    try {
+      const oldTrimmed = (currentDescription ?? '').trim();
+      const finalDescription = oldTrimmed
+        ? `${oldTrimmed}\n\n---\n\n${textToSave}`
+        : textToSave;
+      await updateTransactionDescription(transactionId, finalDescription);
+      showSuccessNotification('Комментарий дополнен по чеку');
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -143,7 +168,7 @@ export const UpdateCommentByReceiptModal: React.FC<UpdateCommentByReceiptModalPr
             </div>
           )}
 
-          {step === 'preview' && newComment && (
+          {step === 'preview' && (
             <>
               <div>
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
@@ -157,9 +182,13 @@ export const UpdateCommentByReceiptModal: React.FC<UpdateCommentByReceiptModalPr
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
                   Новый комментарий по чеку
                 </p>
-                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-gray-800 whitespace-pre-wrap min-h-[60px]">
-                  {newComment}
-                </div>
+                <textarea
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  placeholder="Текст распознанного чека (можно редактировать)"
+                  rows={6}
+                  className="w-full p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-gray-800 placeholder-gray-500 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-400 resize-y min-h-[100px]"
+                />
               </div>
               <p className="text-xs text-gray-500">
                 Сумма и остальные данные транзакции не изменятся.
@@ -168,7 +197,7 @@ export const UpdateCommentByReceiptModal: React.FC<UpdateCommentByReceiptModalPr
           )}
         </div>
 
-        <div className="flex gap-3 justify-end p-4 border-t border-gray-200">
+        <div className="flex flex-wrap gap-3 justify-end p-4 border-t border-gray-200">
           <button
             type="button"
             onClick={onClose}
@@ -176,22 +205,39 @@ export const UpdateCommentByReceiptModal: React.FC<UpdateCommentByReceiptModalPr
           >
             Отмена
           </button>
-          {step === 'preview' && newComment && (
-            <button
-              type="button"
-              onClick={handleConfirm}
-              disabled={loading}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium disabled:opacity-50 flex items-center gap-2"
-            >
-              {loading && step === 'saving' ? (
-                <>
-                  <Loader className="w-4 h-4 animate-spin" />
-                  Сохранение...
-                </>
-              ) : (
-                'Заменить комментарий'
-              )}
-            </button>
+          {step === 'preview' && (
+            <>
+              <button
+                type="button"
+                onClick={handleAppend}
+                disabled={loading || !textToSave}
+                className="px-4 py-2 border border-emerald-600 text-emerald-700 rounded-lg hover:bg-emerald-50 font-medium disabled:opacity-50 flex items-center gap-2"
+              >
+                {loading && step === 'saving' ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Сохранение...
+                  </>
+                ) : (
+                  'Добавить к комментарию'
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleReplace}
+                disabled={loading || !textToSave}
+                className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-medium disabled:opacity-50 flex items-center gap-2"
+              >
+                {loading && step === 'saving' ? (
+                  <>
+                    <Loader className="w-4 h-4 animate-spin" />
+                    Сохранение...
+                  </>
+                ) : (
+                  'Заменить комментарий'
+                )}
+              </button>
+            </>
           )}
         </div>
       </div>
