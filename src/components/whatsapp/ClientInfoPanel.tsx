@@ -353,6 +353,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [citySaveFeedback, setCitySaveFeedback] = useState<'idle' | 'success' | 'error'>('idle');
   const [showAddCityModal, setShowAddCityModal] = useState(false);
   const [newCityName, setNewCityName] = useState('');
+  const [addCityLoading, setAddCityLoading] = useState(false);
   const [cityContextMenu, setCityContextMenu] = useState<{ x: number; y: number; cityName: string } | null>(null);
   const [deletingCity, setDeletingCity] = useState<string | null>(null);
   const [deleteCityLoading, setDeleteCityLoading] = useState(false);
@@ -2623,6 +2624,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                   }}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
                   placeholder="Например: Алматы"
+                  disabled={addCityLoading}
                 />
               </div>
             </div>
@@ -2630,30 +2632,42 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
               <button
                 type="button"
                 onClick={() => {
+                  if (addCityLoading) return;
                   setShowAddCityModal(false);
                   setNewCityName('');
                 }}
-                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                disabled={addCityLoading}
               >
                 Отмена
               </button>
               <button
                 type="button"
-                disabled={!newCityName.trim()}
+                disabled={!newCityName.trim() || addCityLoading}
                 onClick={async () => {
-                  if (!newCityName.trim()) return;
+                  const trimmed = newCityName.trim();
+                  if (!trimmed || addCityLoading) return;
+                  setAddCityLoading(true);
                   try {
-                    const normalized = await onAddCity(newCityName.trim());
+                    const normalized = await onAddCity(trimmed);
+                    if (!normalized) {
+                      toast.error('Не удалось добавить город');
+                      return;
+                    }
                     setShowAddCityModal(false);
                     setNewCityName('');
-                    if (normalized) await saveCity(normalized);
+                    toast.success('Город добавлен');
+                    await saveCity(normalized);
                   } catch (err) {
-                    if (import.meta.env.DEV) console.warn('Add city error', err);
+                    const message = err instanceof Error ? err.message : 'Не удалось добавить город';
+                    toast.error(message);
+                  } finally {
+                    setAddCityLoading(false);
                   }
                 }}
                 className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
               >
-                Добавить
+                {addCityLoading ? 'Сохранение…' : 'Добавить'}
               </button>
             </div>
           </div>

@@ -75,7 +75,7 @@ export async function addCompanyCity(companyId: string, cityName: string): Promi
   const snap = await getDoc(ref);
   const data = (snap.data() as CompanyCitiesDoc | undefined) ?? { cities: [] };
   const cities: string[] = Array.isArray(data.cities) ? [...data.cities] : [];
-  if (cities.some((c) => sameCity(c, normalized))) return normalized;
+  if (cities.some((c) => sameCity(c, normalized))) throw new Error('Такой город уже существует');
   cities.push(normalized);
   cities.sort((a, b) => a.localeCompare(b, 'ru'));
   await setDoc(ref, { cities, updatedAt: serverTimestamp() }, { merge: true });
