@@ -92,6 +92,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
 
+  try {
   const auth = await getAIApiKeyFromRequest(event);
   if (!auth.ok) {
     log('AI key not available:', auth.error);
@@ -297,6 +298,14 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ error: 'Ошибка при распознавании чека. Попробуйте позже.' }),
+    });
+  }
+  } catch (outer) {
+    log('Handler error:', outer);
+    return withCors({
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Сервис временно недоступен. Попробуйте позже.' }),
     });
   }
 };
