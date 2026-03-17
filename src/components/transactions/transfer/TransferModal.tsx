@@ -12,9 +12,10 @@ import { formatMoney } from '../../../utils/formatMoney';
 import { XMarkIcon, PencilIcon } from '@heroicons/react/24/outline';
 import { useDropzone } from 'react-dropzone';
 import { supabase } from '../../../lib/supabase/config';
-import { PaperclipIcon, SendHorizontal, Camera } from 'lucide-react';
+import { PaperclipIcon, SendHorizontal, Camera, ScanLine } from 'lucide-react';
 import imageCompression from 'browser-image-compression';
 import { useAuth } from '../../../hooks/useAuth';
+import { getAuthToken } from '../../../lib/firebase/auth';
 import { useCompanyId } from '../../../contexts/CompanyContext';
 import { useExpenseCategories } from '../../../hooks/useExpenseCategories';
 import { useIsMobile } from '../../../hooks/useIsMobile';
@@ -84,6 +85,13 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const isMobile = useIsMobile(768);
   const submittedSuccessRef = useRef(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const [receiptParseLoading, setReceiptParseLoading] = useState(false);
+  const [receiptParseResult, setReceiptParseResult] = useState<{
+    totalAmount: number;
+    comment: string;
+    confidence: 'high' | 'medium' | 'low';
+  } | null>(null);
 
   const isFromTopRow =
     sourceCategory.type === 'employee' || sourceCategory.type === 'company' ||
@@ -327,6 +335,60 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     [files.length, startPreupload]
   );
 
+  const firstUploadedImage = files.find(
+    (f) => f.status === 'uploaded' && f.file.type.startsWith('image/')
+  );
+
+  const fillFromReceipt = useCallback(async () => {
+    if (!firstUploadedImage?.file) return;
+    setReceiptParseLoading(true);
+    setReceiptParseResult(null);
+    setError(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+        reader.readAsDataURL(firstUploadedImage.file);
+      });
+      const token = await getAuthToken();
+      const res = await fetch('/.netlify/functions/ai-receipt-parse', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ imageDataUrl: dataUrl }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setError(data?.error ?? 'Ошибка распознавания чека');
+        return;
+      }
+      if (data.totalAmount == null && !data.comment) {
+        setError('Не удалось уверенно распознать чек. Проверьте сумму и комментарий вручную.');
+        return;
+      }
+      setReceiptParseResult({
+        totalAmount: Number(data.totalAmount) || 0,
+        comment: typeof data.comment === 'string' ? data.comment : 'По чеку/накладной',
+        confidence: ['high', 'medium', 'low'].includes(data.confidence) ? data.confidence : 'medium',
+      });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Ошибка при распознавании чека');
+    } finally {
+      setReceiptParseLoading(false);
+    }
+  }, [firstUploadedImage]);
+
+  const applyReceiptResult = useCallback(() => {
+    if (!receiptParseResult) return;
+    setAmount(formatNumber(String(Math.round(receiptParseResult.totalAmount))));
+    setDescription(receiptParseResult.comment);
+    setReceiptParseResult(null);
+    showSuccessNotification('Заполнено по чеку');
+  }, [receiptParseResult]);
+
   useEffect(() => {
     if (!isOpen) return;
     submittedSuccessRef.current = false;
@@ -334,6 +396,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
 
   useEffect(() => {
     if (isOpen) return;
+    setReceiptParseResult(null);
     const toDelete = files.filter(f => f.status === 'uploaded' && f.path);
     if (!submittedSuccessRef.current && toDelete.length > 0) {
       toDelete.forEach(({ path }) => {
@@ -783,6 +846,62 @@ export const TransferModal: React.FC<TransferModalProps> = ({
 
             {files.length > 0 && (
               <div className="space-y-2">
+                {firstUploadedImage && (
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="text-xs text-slate-500">Можно распознать чек по первому изображению</span>
+                    <button
+                      type="button"
+                      onClick={fillFromReceipt}
+                      disabled={receiptParseLoading}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-200 bg-violet-50 text-violet-800 text-sm font-medium hover:bg-violet-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                      {receiptParseLoading ? (
+                        <>
+                          <span className="animate-spin inline-block w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full" />
+                          Распознаём чек…
+                        </>
+                      ) : (
+                        <>
+                          <ScanLine className="w-4 h-4" />
+                          Заполнить по чеку
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+                {receiptParseResult && (
+                  <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 space-y-2">
+                    <p className="text-sm font-medium text-emerald-900">Распознано по чеку</p>
+                    <p className="text-sm text-emerald-800">
+                      Сумма: <strong>{formatMoney(receiptParseResult.totalAmount)}</strong>
+                    </p>
+                    <p className="text-xs text-emerald-700 line-clamp-2" title={receiptParseResult.comment}>
+                      Комментарий: {receiptParseResult.comment}
+                    </p>
+                    <p className="text-xs text-emerald-600">
+                      Уверенность: {receiptParseResult.confidence === 'high' ? 'высокая' : receiptParseResult.confidence === 'medium' ? 'средняя' : 'низкая'}
+                    </p>
+                    {receiptParseResult.confidence === 'low' && (
+                      <p className="text-xs text-amber-700">Проверьте сумму и комментарий вручную.</p>
+                    )}
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={applyReceiptResult}
+                        className="px-3 py-1.5 text-sm font-medium rounded-lg bg-emerald-600 text-white hover:bg-emerald-700"
+                      >
+                        Применить
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setReceiptParseResult(null)}
+                        className="px-3 py-1.5 text-sm rounded-lg border border-emerald-300 text-emerald-800 hover:bg-emerald-100"
+                      >
+                        Отмена
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {files.map((file, index) => (
                   <div
                     key={file.id}
