@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause, User, Shield, Send, Trash2 } from 'lucide-react';
+import { ArrowLeft, Image, Video, Music, FileText, X, Play, Pause, User, Shield, Send, Trash2, Mic } from 'lucide-react';
 import ChatInput from './ChatInput';
 import { WhatsAppCalculatorDrawer } from './WhatsAppCalculatorDrawer';
 import MessageBubble from './MessageBubble';
@@ -999,10 +999,12 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     }
   }, [messages]);
 
-  /** При открытии чата (смена выбранного) — прокрутить вниз после отрисовки (важно для мобильной версии) */
+  /** При открытии чата (смена выбранного) — прокрутить вниз и сбросить локальные расшифровки */
   const chatKey = selectedItem?.id ?? selectedItem?.clientId ?? '';
   useEffect(() => {
     if (!chatKey) return;
+    setTranscriptionUpdates({});
+    setBatchTranscribeResult(null);
     const t = setTimeout(() => {
       const container = messagesContainerRef.current;
       if (container) container.scrollTop = container.scrollHeight;
@@ -1023,6 +1025,39 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
   const [transcribeErrorId, setTranscribeErrorId] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const dropZoneRef = useRef<HTMLDivElement>(null);
+
+  /** Массовая расшифровка: защита от повторного запуска и прогресс */
+  const batchTranscribeRunningRef = useRef(false);
+  const [batchTranscribeProgress, setBatchTranscribeProgress] = useState<{ current: number; total: number } | null>(null);
+  const [batchTranscribeResult, setBatchTranscribeResult] = useState<{ done: number; skipped: number; errors: number } | null>(null);
+  /** Оптимистичные расшифровки (пока Firestore не обновился) */
+  const [transcriptionUpdates, setTranscriptionUpdates] = useState<Record<string, string>>({});
+
+  /** Голосовые (аудио) без расшифровки для текущего чата. Во время batch не исключаем по transcribingId. */
+  const voiceToTranscribe = React.useMemo(() => {
+    const list: { message: WhatsAppMessage; att: MessageAttachment }[] = [];
+    for (const m of messages) {
+      if (m.deleted) continue;
+      const audioAtt = m.attachments?.find((a) => a.type === 'audio');
+      if (!audioAtt?.url) continue;
+      const hasText = (transcriptionUpdates[m.id] ?? m.transcription ?? '').trim().length > 0;
+      if (hasText) continue;
+      list.push({ message: m, att: audioAtt });
+    }
+    return list;
+  }, [messages, transcriptionUpdates]);
+
+  /** Исключить из списка «к расшифровке» сообщение, которое уже расшифровывается по одной кнопке (чтобы не дублировать запрос) */
+  const voiceToTranscribeFiltered = React.useMemo(() => {
+    if (batchTranscribeProgress !== null) return voiceToTranscribe;
+    if (!transcribingId) return voiceToTranscribe;
+    return voiceToTranscribe.filter((x) => x.message.id !== transcribingId);
+  }, [voiceToTranscribe, transcribingId, batchTranscribeProgress]);
+
+  const hasAnyVoiceInChat = React.useMemo(
+    () => messages.some((m) => !m.deleted && m.attachments?.some((a) => a.type === 'audio')),
+    [messages]
+  );
 
   const handleAiReply = async (mode: 'normal' | 'short' | 'close') => {
     // Шаг 6: базовый debug-лог на клик
@@ -1113,6 +1148,74 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     }
   };
 
+  /** Массовая расшифровка всех голосовых без расшифровки в чате */
+  const handleBatchTranscribe = useCallback(async () => {
+    const toProcess = transcribingId
+      ? voiceToTranscribe.filter((x) => x.message.id !== transcribingId)
+      : voiceToTranscribe;
+    if (batchTranscribeRunningRef.current || toProcess.length === 0) return;
+    const totalVoiceInChat = messages.filter(
+      (m) => !m.deleted && m.attachments?.some((a) => a.type === 'audio')
+    ).length;
+    const alreadyHadTranscription = totalVoiceInChat - toProcess.length;
+    batchTranscribeRunningRef.current = true;
+    setBatchTranscribeResult(null);
+    setTranscribeErrorId(null);
+    const total = toProcess.length;
+    setBatchTranscribeProgress({ current: 0, total });
+    let done = 0;
+    let errors = 0;
+    const token = await getAuthToken();
+    if (!token) {
+      batchTranscribeRunningRef.current = false;
+      setBatchTranscribeProgress(null);
+      return;
+    }
+    for (let i = 0; i < toProcess.length; i++) {
+      const { message: m, att } = toProcess[i];
+      setTranscribingId(m.id);
+      try {
+        const res = await fetch('/.netlify/functions/ai-transcribe-voice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ audioUrl: att.url, messageId: m.id })
+        });
+        const data = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
+        if (!res.ok || data.error) {
+          if (import.meta.env.DEV) console.warn('[ChatWindow] batch transcribe failed', { messageId: m.id, status: res.status, data });
+          errors += 1;
+        } else {
+          const txt = (data.text ?? '').trim();
+          if (txt) {
+            done += 1;
+            messagesById.current.set(m.id, { ...m, transcription: txt });
+            setTranscriptionUpdates((prev) => ({ ...prev, [m.id]: txt }));
+          }
+        }
+      } catch (e) {
+        if (import.meta.env.DEV) console.warn('[ChatWindow] batch transcribe error', m.id, e);
+        errors += 1;
+      } finally {
+        setTranscribingId(null);
+        setBatchTranscribeProgress({ current: i + 1, total });
+      }
+    }
+    batchTranscribeRunningRef.current = false;
+    setBatchTranscribeProgress(null);
+    setBatchTranscribeResult({
+      done,
+      skipped: alreadyHadTranscription,
+      errors
+    });
+  }, [voiceToTranscribe, transcribingId, messages]);
+
+  /** Клик по кнопке «Расшифровать всё»: проверить наличие и запустить или показать сообщение */
+  const onBatchTranscribeClick = useCallback(() => {
+    if (voiceToTranscribeFiltered.length === 0) return;
+    if (batchTranscribeRunningRef.current) return;
+    void handleBatchTranscribe();
+  }, [voiceToTranscribeFiltered, handleBatchTranscribe]);
+
   const content = (
     <>
       {/* Шапка чата: липкая на мобильном, не прокручивается с сообщениями */}
@@ -1139,6 +1242,35 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
             <span className="chat-phone truncate text-xs text-gray-500">{phone}</span>
           )}
         </div>
+        {hasAnyVoiceInChat && (
+          <div className="flex flex-shrink-0 items-center gap-1">
+            <button
+              type="button"
+              onClick={onBatchTranscribeClick}
+              disabled={voiceToTranscribeFiltered.length === 0 || batchTranscribeProgress !== null}
+              title={
+                voiceToTranscribeFiltered.length === 0
+                  ? 'Все голосовые уже расшифрованы'
+                  : 'Расшифровать все голосовые в этом чате'
+              }
+              aria-label={
+                voiceToTranscribeFiltered.length === 0
+                  ? 'Все голосовые уже расшифрованы'
+                  : 'Расшифровать все голосовые в этом чате'
+              }
+              className="flex items-center gap-1 rounded-lg p-2 text-gray-600 hover:bg-gray-100 disabled:opacity-50 disabled:cursor-default disabled:hover:bg-transparent"
+            >
+              <Mic className="w-4 h-4 shrink-0" aria-hidden />
+              {batchTranscribeProgress ? (
+                <span className="hidden text-xs text-gray-500 sm:inline">
+                  {batchTranscribeProgress.current} из {batchTranscribeProgress.total}
+                </span>
+              ) : (
+                <span className="hidden text-xs font-medium text-gray-700 sm:inline">Расшифровать всё</span>
+              )}
+            </button>
+          </div>
+        )}
         {isMobile && (
           <div className="header-actions flex flex-shrink-0 items-center gap-2.5">
             {onToggleIncognito && (
@@ -1199,6 +1331,36 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
           </button>
         )}
       </div>
+
+      {(batchTranscribeProgress || batchTranscribeResult) && (
+        <div className="flex-none border-b border-gray-200 bg-gray-50 px-3 py-1.5 text-xs text-gray-700">
+          {batchTranscribeProgress && (
+            <span className="inline-flex items-center gap-1.5">
+              <span className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-gray-400 border-t-transparent animate-spin" aria-hidden />
+              Расшифровка голосовых: {batchTranscribeProgress.current} из {batchTranscribeProgress.total}
+            </span>
+          )}
+          {batchTranscribeResult && !batchTranscribeProgress && (
+            <span className="inline-flex items-center gap-2 flex-wrap">
+              <span>Расшифровано: {batchTranscribeResult.done}</span>
+              {batchTranscribeResult.skipped > 0 && (
+                <span className="text-gray-500">Пропущено (уже были): {batchTranscribeResult.skipped}</span>
+              )}
+              {batchTranscribeResult.errors > 0 && (
+                <span className="text-red-600">Ошибки: {batchTranscribeResult.errors}</span>
+              )}
+              <button
+                type="button"
+                onClick={() => setBatchTranscribeResult(null)}
+                className="text-gray-500 hover:text-gray-700 ml-1"
+                aria-label="Закрыть"
+              >
+                ×
+              </button>
+            </span>
+          )}
+        </div>
+      )}
 
       {selectionMode && onCloseSelection && (
         <MessageActionBar
@@ -1289,11 +1451,8 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
                       }
                       const txt = (data.text ?? '').trim();
                       if (txt) {
-                        // локально патчим сообщение, чтобы сразу показать текст
-                        messagesById.current.set(m.id, {
-                          ...m,
-                          transcription: txt
-                        });
+                        messagesById.current.set(m.id, { ...m, transcription: txt });
+                        setTranscriptionUpdates((prev) => ({ ...prev, [m.id]: txt }));
                       }
                     } catch (e) {
                       if (import.meta.env.DEV) {
@@ -1306,7 +1465,8 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
                     }
                   };
 
-                  const showTranscription = m.transcription && m.transcription.trim().length > 0;
+                  const effectiveTranscription = (transcriptionUpdates[m.id] ?? m.transcription ?? '').trim();
+                  const showTranscription = effectiveTranscription.length > 0;
                   const isLoading = transcribingId === m.id;
 
                   return (
@@ -1338,7 +1498,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
                             <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-0.5">
                               Текст
                             </div>
-                            <span className="whitespace-pre-wrap break-words">{m.transcription}</span>
+                            <span className="whitespace-pre-wrap break-words">{effectiveTranscription}</span>
                           </div>
                         )}
                       </div>

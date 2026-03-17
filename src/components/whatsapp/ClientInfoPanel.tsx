@@ -1388,42 +1388,44 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                     Извлечено из переписки
                   </h4>
                   {!extractedClientData ? (
-                    <p className="text-xs text-gray-500 mb-2">Данные по переписке появятся после анализа.</p>
-                    <button
-                      type="button"
-                      onClick={handleAIAnalyze}
-                      disabled={aiLoading || !messages?.length}
-                      className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 hover:text-amber-800 disabled:opacity-50"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" />
-                      {aiLoading ? 'Загрузка…' : 'Извлечь из переписки'}
-                    </button>
+                    <>
+                      <p className="text-xs text-gray-500 mb-2">Данные по переписке появятся после анализа.</p>
+                      <button
+                        type="button"
+                        onClick={handleAIAnalyze}
+                        disabled={aiLoading || !messages?.length}
+                        className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 hover:text-amber-800 disabled:opacity-50"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        {aiLoading ? 'Загрузка…' : 'Извлечь из переписки'}
+                      </button>
+                    </>
                   ) : (
                     <>
                       {extractedClientEditMode ? (
                         <div className="space-y-1.5">
-                          {['city', 'areaSqm', 'houseType', 'floors', 'clientIntent', 'aiSummary'].map((key) => (
-                            <div key={key}>
+                          {(['city', 'areaSqm', 'houseType', 'floors', 'clientIntent', 'aiSummary'] as const).map((fieldKey) => (
+                            <div key={fieldKey}>
                               <label className="block text-[10px] text-gray-500 mb-0.5">
-                                {key === 'city' && 'Город'}
-                                {key === 'areaSqm' && 'Площадь (м²)'}
-                                {key === 'houseType' && 'Тип дома'}
-                                {key === 'floors' && 'Этажность'}
-                                {key === 'clientIntent' && 'Интерес / запрос'}
-                                {key === 'aiSummary' && 'Краткий комментарий'}
+                                {fieldKey === 'city' && 'Город'}
+                                {fieldKey === 'areaSqm' && 'Площадь (м²)'}
+                                {fieldKey === 'houseType' && 'Тип дома'}
+                                {fieldKey === 'floors' && 'Этажность'}
+                                {fieldKey === 'clientIntent' && 'Интерес / запрос'}
+                                {fieldKey === 'aiSummary' && 'Краткий комментарий'}
                               </label>
-                              {key === 'aiSummary' ? (
+                              {fieldKey === 'aiSummary' ? (
                                 <textarea
-                                  value={extractedClientDraft[key as keyof ExtractedClientData]}
-                                  onChange={(e) => setExtractedClientDraft((p) => ({ ...p, [key]: e.target.value }))}
+                                  value={extractedClientDraft[fieldKey]}
+                                  onChange={(e) => setExtractedClientDraft((p) => ({ ...p, [fieldKey]: e.target.value }))}
                                   className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs min-h-[60px]"
                                   rows={2}
                                 />
                               ) : (
                                 <input
                                   type="text"
-                                  value={extractedClientDraft[key as keyof ExtractedClientData]}
-                                  onChange={(e) => setExtractedClientDraft((p) => ({ ...p, [key]: e.target.value }))}
+                                  value={extractedClientDraft[fieldKey]}
+                                  onChange={(e) => setExtractedClientDraft((p) => ({ ...p, [fieldKey]: e.target.value }))}
                                   className="w-full rounded border border-gray-300 px-2 py-1.5 text-xs"
                                 />
                               )}
