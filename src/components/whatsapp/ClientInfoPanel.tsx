@@ -240,6 +240,10 @@ interface ClientInfoPanelProps {
   dealStatusCounts?: { none: number; byId: Record<string, number> };
   /** Количество клиентов по менеджерам (для бейджей в карточке) */
   managerCounts?: { none: number; byId: Record<string, number> };
+  /** Список городов для выбора (справочник + из чатов) */
+  cities?: string[];
+  /** Добавить новый город в справочник компании; возвращает нормализованное название. */
+  onAddCity?: (name: string) => Promise<string>;
   /** Встроен в bottom sheet (мобильный): не создавать свой scroll, чтобы скроллил только контейнер шторки */
   embeddedInSheet?: boolean;
   /** Ширина на 100% родителя (для resizable правой панели на desktop) */
@@ -271,6 +275,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   managers = [],
   dealStatusCounts,
   managerCounts,
+  cities = [],
+  onAddCity,
   embeddedInSheet = false,
   fillWidth = false,
   onInsertNextMessage,
@@ -316,6 +322,10 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [deletingManager, setDeletingManager] = useState<{ manager: ChatManagerRecord; dealCount: number } | null>(null);
   const [deleteManagerLoading, setDeleteManagerLoading] = useState(false);
   const managerMenuRef = useRef<HTMLDivElement>(null);
+  const [citySaving, setCitySaving] = useState(false);
+  const [citySaveFeedback, setCitySaveFeedback] = useState<'idle' | 'success' | 'error'>('idle');
+  const [showAddCityModal, setShowAddCityModal] = useState(false);
+  const [newCityName, setNewCityName] = useState('');
 
   const [pipelineDeal, setPipelineDeal] = useState<Deal | null>(null);
   const [pipelineStages, setPipelineStages] = useState<Array<{ id: string; name: string; color?: string | null }>>([]);
@@ -800,6 +810,52 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     setEditComment(client?.comment ?? '');
     setEditing(false);
   };
+
+  const saveCity = useCallback(
+    async (value: string | null) => {
+      if (!phone || !companyId) return;
+      setCitySaving(true);
+      setCitySaveFeedback('idle');
+      try {
+        const normalized = normalizePhone(phone);
+        if (client) {
+          await updateDoc(doc(db, COLLECTION_CLIENTS, client.id), {
+            city: value ?? null,
+          });
+          setClient({ ...client, city: value ?? undefined } as WhatsAppClientCard);
+        } else {
+          const ref = await addDoc(collection(db, COLLECTION_CLIENTS), {
+            phone: normalized,
+            name: 'Клиент',
+            source: 'whatsapp',
+            comment: '',
+            companyId,
+            createdAt: serverTimestamp(),
+            city: value ?? null,
+          });
+          setClient({
+            id: ref.id,
+            phone: normalized,
+            name: 'Клиент',
+            source: 'whatsapp',
+            comment: '',
+            createdAt: null,
+            city: value ?? undefined,
+          } as WhatsAppClientCard);
+        }
+        setCitySaveFeedback('success');
+        const t = window.setTimeout(() => setCitySaveFeedback('idle'), 2000);
+        return () => window.clearTimeout(t);
+      } catch {
+        setCitySaveFeedback('error');
+        const t = window.setTimeout(() => setCitySaveFeedback('idle'), 3000);
+        return () => window.clearTimeout(t);
+      } finally {
+        setCitySaving(false);
+      }
+    },
+    [phone, companyId, client]
+  );
 
   /** Заполнить карточку клиента из блока «Извлечено из переписки» (только непустые поля) */
   const handleFillCardFromExtracted = useCallback(async () => {
@@ -1410,6 +1466,54 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                       + Добавить первого менеджера
                     </button>
                   </>
+                )}
+              </div>
+
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">Город</h3>
+                <div className="space-y-1">
+                  <label className="flex items-center gap-2 cursor-pointer w-full min-w-0">
+                    <input
+                      type="radio"
+                      name="city"
+                      checked={!(client?.city ?? '').trim()}
+                      onChange={() => saveCity(null)}
+                      disabled={citySaving}
+                      className="text-green-600"
+                    />
+                    <span className="text-sm text-gray-600">Без города</span>
+                  </label>
+                  {cities.map((cityName) => (
+                    <label key={cityName} className="flex items-center gap-2 cursor-pointer w-full min-w-0">
+                      <input
+                        type="radio"
+                        name="city"
+                        checked={(client?.city ?? '').trim() === cityName}
+                        onChange={() => saveCity(cityName)}
+                        disabled={citySaving}
+                        className="text-green-600"
+                      />
+                      <span className="text-sm text-gray-800 truncate">{cityName}</span>
+                    </label>
+                  ))}
+                  {onAddCity && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAddCityModal(true)}
+                      className="mt-1 text-[11px] text-green-600 hover:text-green-700"
+                    >
+                      + Добавить город
+                    </button>
+                  )}
+                </div>
+                {citySaving && (
+                  <p className="mt-1 text-[11px] text-gray-500">Сохранение…</p>
+                )}
+                {citySaveFeedback === 'success' && !citySaving && (
+                  <p className="mt-1 text-[11px] text-green-600">Сохранено</p>
+                )}
+                {citySaveFeedback === 'error' && !citySaving && (
+                  <p className="mt-1 text-[11px] text-red-600">Ошибка сохранения</p>
                 )}
               </div>
 
@@ -2256,6 +2360,58 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                 className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
               >
                 Создать
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showAddCityModal && onAddCity && (
+        <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl p-4 w-full max-w-xs">
+            <h3 className="text-sm font-semibold text-gray-800 mb-2">Добавить город</h3>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Название города</label>
+                <input
+                  type="text"
+                  value={newCityName}
+                  onChange={(e) => setNewCityName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.preventDefault();
+                  }}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  placeholder="Например: Алматы"
+                />
+              </div>
+            </div>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAddCityModal(false);
+                  setNewCityName('');
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                disabled={!newCityName.trim()}
+                onClick={async () => {
+                  if (!newCityName.trim()) return;
+                  try {
+                    const normalized = await onAddCity(newCityName.trim());
+                    setShowAddCityModal(false);
+                    setNewCityName('');
+                    if (normalized) await saveCity(normalized);
+                  } catch (err) {
+                    if (import.meta.env.DEV) console.warn('Add city error', err);
+                  }
+                }}
+                className="px-3 py-1.5 text-xs font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 disabled:opacity-50"
+              >
+                Добавить
               </button>
             </div>
           </div>

@@ -34,6 +34,7 @@ import ClientInfoPanel from '../components/whatsapp/ClientInfoPanel';
 import { ResizeHandle } from '../components/whatsapp/ResizeHandle';
 import ForwardDialog from '../components/whatsapp/ForwardDialog';
 import DeleteClientConfirmModal from '../components/whatsapp/DeleteClientConfirmModal';
+import { subscribeCompanyCities, addCompanyCity } from '../lib/firebase/companyCities';
 import { supabase, CLIENTS_BUCKET } from '../lib/supabase/config';
 import { MAX_ATTACHMENT_MB } from '../components/whatsapp/ChatInput';
 import { compressImage, validateVideoForChat, isLargeVideo } from '../utils/mediaUtils';
@@ -252,6 +253,10 @@ const WhatsAppChat: React.FC = () => {
   const [locallyReadChatIds, setLocallyReadChatIds] = useState<Set<string>>(() => new Set());
   /** Имена CRM-клиентов по нормализованному телефону (для отображения в списке и в шапке чата). */
   const [crmNamesByPhone, setCrmNamesByPhone] = useState<Map<string, string>>(() => new Map());
+  /** Города клиентов по нормализованному телефону (для фильтра и отображения). */
+  const [cityByPhone, setCityByPhone] = useState<Map<string, string>>(() => new Map());
+  /** Справочник городов компании (для блока «Город» и фильтра). */
+  const [companyCitiesList, setCompanyCitiesList] = useState<string[]>([]);
   /** Поиск по имени клиента, номеру и превью сообщения */
   const [searchQuery, setSearchQuery] = useState('');
   const [searchQueryDebounced, setSearchQueryDebounced] = useState('');
@@ -482,6 +487,7 @@ const WhatsAppChat: React.FC = () => {
   const [managers, setManagers] = useState<SimpleManager[]>([]);
   const [managerByPhone, setManagerByPhone] = useState<Map<string, string>>(() => new Map());
   const [managerFilter, setManagerFilter] = useState<'all' | 'none' | string>('all');
+  const [cityFilter, setCityFilter] = useState<'all' | 'none' | string>('all');
   const overlayRef = useRef(false);
 
   const selectionMode = selectedMessageIds.length > 0;
@@ -760,6 +766,7 @@ const WhatsAppChat: React.FC = () => {
   useEffect(() => {
     if (!companyId) {
       setCrmNamesByPhone(new Map());
+      setCityByPhone(new Map());
       return;
     }
     const q = query(
@@ -769,25 +776,40 @@ const WhatsAppChat: React.FC = () => {
     const unsub = onSnapshot(
       q,
       (snapshot) => {
-        const map = new Map<string, string>();
+        const nameMap = new Map<string, string>();
+        const cityMap = new Map<string, string>();
         snapshot.docs.forEach((d) => {
           const data = d.data();
           const phone = data.phone as string | undefined;
           const name = ((data.name as string) ?? '').trim();
+          const city = (data.city as string) ?? '';
           if (!phone) return;
           const norm = normalizePhone(phone);
           if (name) {
-            if (import.meta.env.DEV && map.has(norm) && map.get(norm) !== name) {
+            if (import.meta.env.DEV && nameMap.has(norm) && nameMap.get(norm) !== name) {
               console.warn('[WhatsApp] Два клиента CRM с одним номером:', norm);
             }
-            map.set(norm, name);
+            nameMap.set(norm, name);
           }
+          if (city.trim()) cityMap.set(norm, city.trim());
         });
-        setCrmNamesByPhone(map);
+        setCrmNamesByPhone(nameMap);
+        setCityByPhone(cityMap);
       },
-      () => setCrmNamesByPhone(new Map())
+      () => {
+        setCrmNamesByPhone(new Map());
+        setCityByPhone(new Map());
+      }
     );
     return () => unsub();
+  }, [companyId]);
+
+  useEffect(() => {
+    if (!companyId) {
+      setCompanyCitiesList([]);
+      return;
+    }
+    return subscribeCompanyCities(companyId, setCompanyCitiesList);
   }, [companyId]);
 
   // Подписка на статусы сделок компании
@@ -1131,6 +1153,7 @@ const WhatsAppChat: React.FC = () => {
       const normPhone = normalizePhone(c.phone ?? c.client?.phone ?? '');
       const statusId = normPhone ? dealStatusByPhone.get(normPhone) ?? null : null;
       const managerId = normPhone ? managerByPhone.get(normPhone) ?? null : null;
+      const city = normPhone ? (cityByPhone.get(normPhone) ?? null) : null;
       const displayTitle =
         crmNamesByPhone.get(normalizePhone(c.phone))?.trim() || c.phone || '—';
       const status = statusId ? (dealStatuses.find((s) => s.id === statusId) ?? null) : null;
@@ -1151,13 +1174,15 @@ const WhatsAppChat: React.FC = () => {
         dealStatusName: dealStatusName || undefined,
         managerId: managerId ?? undefined,
         managerColor: managerColor || undefined,
-        managerName: managerName || undefined
+        managerName: managerName || undefined,
+        city: city ?? undefined
       };
     });
   }, [
     chatsListForSidebar,
     locallyReadChatIds,
     crmNamesByPhone,
+    cityByPhone,
     dealStatusByPhone,
     dealStatuses,
     managerByPhone,
@@ -2036,6 +2061,13 @@ const WhatsAppChat: React.FC = () => {
         return mid === managerFilter;
       });
     }
+    if (cityFilter !== 'all') {
+      base = base.filter((item) => {
+        const c = (item as { city?: string | null }).city;
+        if (cityFilter === 'none') return c == null || c === '';
+        return (c ?? '').trim() === cityFilter;
+      });
+    }
 
     const withState = base.map((item) => ({
       item,
@@ -2072,7 +2104,7 @@ const WhatsAppChat: React.FC = () => {
     }
 
     return result;
-  }, [listWithDisplayTitle, activeFilter, dealStatusFilter, managerFilter]);
+  }, [listWithDisplayTitle, activeFilter, dealStatusFilter, managerFilter, cityFilter]);
 
   const dealStatusCounts = useMemo(() => {
     const list = listWithDisplayTitle;
@@ -2105,6 +2137,35 @@ const WhatsAppChat: React.FC = () => {
     }
     return { all: total, none, byId };
   }, [listWithDisplayTitle]);
+
+  const cityCounts = useMemo(() => {
+    const list = listWithDisplayTitle;
+    let none = 0;
+    const byCity: Record<string, number> = {};
+    for (const item of list) {
+      const c = ((item as { city?: string | null }).city ?? '').trim();
+      if (!c) none += 1;
+      else byCity[c] = (byCity[c] ?? 0) + 1;
+    }
+    return { none, byCity };
+  }, [listWithDisplayTitle]);
+
+  const citiesForFilter = useMemo(() => {
+    const set = new Set<string>(companyCitiesList);
+    listWithDisplayTitle.forEach((item) => {
+      const c = ((item as { city?: string | null }).city ?? '').trim();
+      if (c) set.add(c);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'ru'));
+  }, [companyCitiesList, listWithDisplayTitle]);
+
+  const handleAddCity = useCallback(
+    async (name: string): Promise<string> => {
+      if (!companyId) return '';
+      return addCompanyCity(companyId, name);
+    },
+    [companyId]
+  );
 
   return (
     <div
@@ -2299,6 +2360,24 @@ const WhatsAppChat: React.FC = () => {
                 ))}
               </select>
             </div>
+            <div className="px-3 pb-2">
+              <select
+                value={cityFilter}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setCityFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
+                }}
+                className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
+              >
+                <option value="all">Все города</option>
+                <option value="none">Без города ({cityCounts.none})</option>
+                {citiesForFilter.map((city) => (
+                  <option key={city} value={city}>
+                    {city} ({cityCounts.byCity[city] ?? 0})
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <ConversationList
             items={filteredList}
@@ -2431,6 +2510,8 @@ const WhatsAppChat: React.FC = () => {
                 managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
                 dealStatusCounts={dealStatusCounts}
                 managerCounts={managerCounts}
+                cities={citiesForFilter}
+                onAddCity={handleAddCity}
                 fillWidth
                 getCurrentInputValue={() => inputText}
                 onInsertNextMessage={(text, mode) => {
@@ -2524,6 +2605,8 @@ const WhatsAppChat: React.FC = () => {
                 managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
                 dealStatusCounts={dealStatusCounts}
                 managerCounts={managerCounts}
+                cities={citiesForFilter}
+                onAddCity={handleAddCity}
                 embeddedInSheet
                 getCurrentInputValue={() => inputText}
                 onInsertNextMessage={(text, mode) => {

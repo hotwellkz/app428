@@ -59,6 +59,8 @@ export interface ConversationListItem {
   dealResponsibleName?: string | null;
   /** Имя клиента из CRM, если контакт связан; иначе показывать phone */
   displayTitle?: string;
+  /** Город клиента из CRM (для фильтра и отображения). */
+  city?: string | null;
   channel?: 'whatsapp' | 'instagram';
 }
 
