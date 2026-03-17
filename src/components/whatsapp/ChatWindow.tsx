@@ -13,6 +13,7 @@ import ReplyComposerPreview from './ReplyComposerPreview';
 import type { WhatsAppMessage, MessageAttachment } from '../../types/whatsappDb';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
 import { getAuthToken } from '../../lib/firebase/auth';
+import { transcribeVoiceBatch, getVoiceMessagesToTranscribe } from '../../utils/transcribeVoiceBatch';
 
 interface PendingAttachment {
   file: File;
@@ -115,6 +116,10 @@ interface ChatWindowProps {
   showAiDebug?: boolean;
   /** При перетаскивании файлов в чат (только desktop) — отправить файлы */
   onFilesDrop?: (files: File[]) => void;
+  /** Дизейблить кнопку «Расшифровать всё», когда идёт подготовка к анализу (prepare for analysis) */
+  disableTranscribeAllButton?: boolean;
+  /** Сообщить родителю, что массовая расшифровка запущена/завершена (чтобы дизейблить «Проанализировать чат») */
+  onBatchTranscribeRunningChange?: (running: boolean) => void;
 }
 
 const CHAT_HEADER_HEIGHT = 56;
@@ -966,7 +971,9 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     quickReplies = [],
     onSendProposalImage,
     showAiDebug = false,
-    onFilesDrop
+    onFilesDrop,
+    disableTranscribeAllButton = false,
+    onBatchTranscribeRunningChange,
   } = props;
   const onQuickReplySelect = props.onQuickReplySelect;
   const mediaQuickReplies = props.mediaQuickReplies ?? [];
@@ -1161,53 +1168,38 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     batchTranscribeRunningRef.current = true;
     setBatchTranscribeResult(null);
     setTranscribeErrorId(null);
+    onBatchTranscribeRunningChange?.(true);
     const total = toProcess.length;
     setBatchTranscribeProgress({ current: 0, total });
-    let done = 0;
-    let errors = 0;
-    const token = await getAuthToken();
-    if (!token) {
+    const items = toProcess.map(({ message: m, att }) => ({ messageId: m.id, audioUrl: att.url }));
+    try {
+      const result = await transcribeVoiceBatch(
+        items,
+        getAuthToken,
+        (current, tot) => {
+          setTranscribingId(items[current - 1]?.messageId ?? null);
+          setBatchTranscribeProgress({ current, total: tot });
+        }
+      );
+      result.updates && Object.entries(result.updates).forEach(([id, txt]) => {
+        const m = messages.find((msg) => msg.id === id);
+        if (m) {
+          messagesById.current.set(id, { ...m, transcription: txt });
+        }
+      });
+      setTranscriptionUpdates((prev) => ({ ...prev, ...result.updates }));
+      setBatchTranscribeResult({
+        done: result.done,
+        skipped: alreadyHadTranscription,
+        errors: result.errors
+      });
+    } finally {
+      setTranscribingId(null);
       batchTranscribeRunningRef.current = false;
       setBatchTranscribeProgress(null);
-      return;
+      onBatchTranscribeRunningChange?.(false);
     }
-    for (let i = 0; i < toProcess.length; i++) {
-      const { message: m, att } = toProcess[i];
-      setTranscribingId(m.id);
-      try {
-        const res = await fetch('/.netlify/functions/ai-transcribe-voice', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ audioUrl: att.url, messageId: m.id })
-        });
-        const data = (await res.json().catch(() => ({}))) as { text?: string; error?: string };
-        if (!res.ok || data.error) {
-          if (import.meta.env.DEV) console.warn('[ChatWindow] batch transcribe failed', { messageId: m.id, status: res.status, data });
-          errors += 1;
-        } else {
-          const txt = (data.text ?? '').trim();
-          if (txt) {
-            done += 1;
-            messagesById.current.set(m.id, { ...m, transcription: txt });
-            setTranscriptionUpdates((prev) => ({ ...prev, [m.id]: txt }));
-          }
-        }
-      } catch (e) {
-        if (import.meta.env.DEV) console.warn('[ChatWindow] batch transcribe error', m.id, e);
-        errors += 1;
-      } finally {
-        setTranscribingId(null);
-        setBatchTranscribeProgress({ current: i + 1, total });
-      }
-    }
-    batchTranscribeRunningRef.current = false;
-    setBatchTranscribeProgress(null);
-    setBatchTranscribeResult({
-      done,
-      skipped: alreadyHadTranscription,
-      errors
-    });
-  }, [voiceToTranscribe, transcribingId, messages]);
+  }, [voiceToTranscribe, transcribingId, messages, onBatchTranscribeRunningChange]);
 
   /** Клик по кнопке «Расшифровать всё»: проверить наличие и запустить или показать сообщение */
   const onBatchTranscribeClick = useCallback(() => {
@@ -1247,7 +1239,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
             <button
               type="button"
               onClick={onBatchTranscribeClick}
-              disabled={voiceToTranscribeFiltered.length === 0 || batchTranscribeProgress !== null}
+              disabled={voiceToTranscribeFiltered.length === 0 || batchTranscribeProgress !== null || disableTranscribeAllButton}
               title={
                 voiceToTranscribeFiltered.length === 0
                   ? 'Все голосовые уже расшифрованы'

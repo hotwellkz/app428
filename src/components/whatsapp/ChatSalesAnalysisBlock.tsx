@@ -63,6 +63,12 @@ interface ChatSalesAnalysisBlockProps {
   onInsertNextMessage?: (text: string, mode: 'replace' | 'append') => void;
   /** Текущий текст поля ввода: если не пустой, при «Вставить в поле» показывается выбор замены/добавления */
   getCurrentInputValue?: () => string;
+  /** Подготовка к анализу: расшифровать голосовые, вернуть результат и updates для подстановки в анализ */
+  onPrepareForAnalysis?: (
+    onProgress?: (current: number, total: number) => void
+  ) => Promise<{ status: 'none' | 'done' | 'partial' | 'failed'; updates: Record<string, string>; done: number; errors: number; total: number }>;
+  /** Идёт ли массовая расшифровка из кнопки «Расшифровать всё» — дизейблить «Проанализировать чат» */
+  isTranscribeBatchRunning?: boolean;
 }
 
 export function ChatSalesAnalysisBlock({
@@ -75,6 +81,8 @@ export function ChatSalesAnalysisBlock({
   compact = false,
   onInsertNextMessage,
   getCurrentInputValue,
+  onPrepareForAnalysis,
+  isTranscribeBatchRunning = false,
 }: ChatSalesAnalysisBlockProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +93,11 @@ export function ChatSalesAnalysisBlock({
   const runGuardRef = useRef(false);
   const { configured: aiConfigured, loading: aiLoadingConfigured } = useAIConfigured();
 
+  /** Фаза цепочки: подготовка (расшифровка) → анализ */
+  const [analysisPhase, setAnalysisPhase] = useState<'idle' | 'preparing' | 'transcribing' | 'analyzing'>('idle');
+  const [transcribeProgress, setTranscribeProgress] = useState<{ current: number; total: number } | null>(null);
+  const [prepareWarning, setPrepareWarning] = useState<string | null>(null);
+
   const recent = messages
     .map((m) => ({
       ...m,
@@ -93,23 +106,39 @@ export function ChatSalesAnalysisBlock({
     .filter((m) => m._content.length > 0 && !m.deleted)
     .slice(-50);
 
-  const runAnalysis = useCallback(async () => {
-    if (!phone || !conversationId || loading || runGuardRef.current) return;
-    if (recent.length === 0) {
-      setError('Недостаточно сообщений для анализа.');
-      return;
-    }
+  /** Построить recent с подстановкой переданных расшифровок (после prepare) */
+  const getRecentWithOverrides = useCallback(
+    (overrides?: Record<string, string>) => {
+      return messages
+        .map((m) => ({
+          ...m,
+          _content: ((overrides?.[m.id] ?? m.transcription ?? m.text) ?? '').trim(),
+        }))
+        .filter((m) => m._content.length > 0 && !m.deleted)
+        .slice(-50);
+    },
+    [messages]
+  );
 
-    runGuardRef.current = true;
-    setError(null);
-    setLoading(true);
-    const payload = {
-      chatId: normalizePhone(phone),
-      messages: recent.map((m) => ({
-        role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
-        text: m._content.replace(/<[^>]*>/g, '').trim(),
-      })),
-    };
+  const runAnalysis = useCallback(
+    async (transcriptionOverrides?: Record<string, string>) => {
+      if (!phone || !conversationId || runGuardRef.current) return;
+      const recentForPayload = getRecentWithOverrides(transcriptionOverrides);
+      if (recentForPayload.length === 0) {
+        setError('Недостаточно сообщений для анализа.');
+        return;
+      }
+
+      runGuardRef.current = true;
+      setError(null);
+      setLoading(true);
+      const payload = {
+        chatId: normalizePhone(phone),
+        messages: recentForPayload.map((m) => ({
+          role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
+          text: m._content.replace(/<[^>]*>/g, '').trim(),
+        })),
+      };
 
     try {
       const token = await getAuthToken();
@@ -167,7 +196,7 @@ export function ChatSalesAnalysisBlock({
       setLoading(false);
       runGuardRef.current = false;
     }
-  }, [phone, conversationId, loading, recent, onCacheResult]);
+  }, [phone, conversationId, getRecentWithOverrides, onCacheResult]);
 
   const copyFull = useCallback(() => {
     if (!cachedResult) return;
@@ -217,7 +246,51 @@ export function ChatSalesAnalysisBlock({
   );
 
   const hasResult = !!cachedResult;
-  const canRun = !!phone && !!conversationId && recent.length > 0 && !loading && (aiLoadingConfigured || aiConfigured !== false);
+  const canRun =
+    !!phone &&
+    !!conversationId &&
+    recent.length > 0 &&
+    !loading &&
+    analysisPhase === 'idle' &&
+    !isTranscribeBatchRunning &&
+    (aiLoadingConfigured || aiConfigured !== false);
+
+  /** Цепочка: подготовка (расшифровка при необходимости) → анализ */
+  const runAnalysisWithPrepare = useCallback(async () => {
+    if (!phone || !conversationId || runGuardRef.current || analysisPhase !== 'idle') return;
+    if (recent.length === 0) {
+      setError('Недостаточно сообщений для анализа.');
+      return;
+    }
+    setPrepareWarning(null);
+    if (onPrepareForAnalysis) {
+      setAnalysisPhase('preparing');
+      try {
+        const result = await onPrepareForAnalysis((current, total) => {
+          setAnalysisPhase('transcribing');
+          setTranscribeProgress({ current, total });
+        });
+        setTranscribeProgress(null);
+        if (result.status === 'failed' && result.total > 0 && result.done === 0) {
+          setError('Не удалось расшифровать голосовые. Проверьте подключение AI и попробуйте снова.');
+          return;
+        }
+        if (result.status === 'partial' && result.errors > 0) {
+          setPrepareWarning('Часть голосовых не удалось расшифровать, анализ выполнен по доступным сообщениям.');
+        }
+        setAnalysisPhase('analyzing');
+        await runAnalysis(result.updates);
+      } catch (e) {
+        if (import.meta.env.DEV) console.warn('[ChatSalesAnalysis] prepare failed', e);
+        setError('Ошибка подготовки чата к анализу.');
+      } finally {
+        setAnalysisPhase('idle');
+        setTranscribeProgress(null);
+      }
+    } else {
+      await runAnalysis();
+    }
+  }, [phone, conversationId, recent.length, onPrepareForAnalysis, runAnalysis]);
 
   useEffect(() => {
     if (!insertChoiceOpen) return;
@@ -260,14 +333,29 @@ export function ChatSalesAnalysisBlock({
       </p>
       <button
         type="button"
-        onClick={runAnalysis}
+        onClick={runAnalysisWithPrepare}
         disabled={!canRun}
         title={aiConfigured === false && !aiLoadingConfigured ? 'Подключите AI API key в разделе Интеграции' : undefined}
         className="mt-3 w-full inline-flex items-center justify-center gap-2 py-2.5 px-3 text-sm font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         <Sparkles className="w-4 h-4 shrink-0" />
-        {loading ? 'Анализируем…' : 'Проанализировать чат'}
+        {analysisPhase === 'preparing' && 'Подготовка чата…'}
+        {analysisPhase === 'transcribing' &&
+          transcribeProgress &&
+          `Расшифровка: ${transcribeProgress.current} из ${transcribeProgress.total}`}
+        {analysisPhase === 'analyzing' && (loading ? 'Анализируем чат…' : 'Анализируем чат…')}
+        {analysisPhase === 'idle' && (loading ? 'Анализируем чат…' : 'Проанализировать чат')}
       </button>
+      {(analysisPhase === 'transcribing' && transcribeProgress) && (
+        <p className="mt-1.5 text-xs text-gray-500">
+          Расшифровка голосовых перед анализом…
+        </p>
+      )}
+      {prepareWarning && (
+        <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-2 py-1.5" role="alert">
+          {prepareWarning}
+        </p>
+      )}
       {!aiLoadingConfigured && aiConfigured === false && (
         <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-2 py-1.5" role="alert">
           Подключите AI API key в разделе Интеграции

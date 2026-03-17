@@ -23,6 +23,12 @@ import { createDeal, ensureDefaultPipeline, listStages, moveDealToStage } from '
 import type { Deal } from '../../types/deals';
 import { Sparkles, MoreVertical, X, ExternalLink, GitBranch } from 'lucide-react';
 import { ChatSalesAnalysisBlock, type SalesAnalysisResult } from './ChatSalesAnalysisBlock';
+import {
+  transcribeVoiceBatch,
+  getVoiceMessagesToTranscribe,
+  type PrepareForAnalysisResult,
+  type PrepareForAnalysisStatus,
+} from '../../utils/transcribeVoiceBatch';
 
 const COLLECTION_WHATSAPP_CONVERSATIONS = 'whatsappConversations';
 
@@ -242,6 +248,12 @@ interface ClientInfoPanelProps {
   onInsertNextMessage?: (text: string, mode: 'replace' | 'append') => void;
   /** Текущее значение поля ввода чата (для выбора «заменить» / «добавить в конец» при непустом поле). */
   getCurrentInputValue?: () => string;
+  /** Идёт ли массовая расшифровка из ChatWindow (кнопка «Расшифровать всё») — дизейблить «Проанализировать чат». */
+  isTranscribeBatchRunning?: boolean;
+  /** Вызвать перед началом подготовки к анализу (расшифровка) — родитель может дизейблить «Расшифровать всё». */
+  onPrepareForAnalysisStart?: () => void;
+  /** Вызвать по завершении подготовки к анализу. */
+  onPrepareForAnalysisEnd?: () => void;
 }
 
 const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 py-0 rounded-[10px] text-[11px] font-medium bg-[#f1f3f5] text-[#555] flex-shrink-0';
@@ -263,6 +275,9 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   fillWidth = false,
   onInsertNextMessage,
   getCurrentInputValue,
+  isTranscribeBatchRunning = false,
+  onPrepareForAnalysisStart,
+  onPrepareForAnalysisEnd,
 }) => {
   const companyId = useCompanyId();
   const navigate = useNavigate();
@@ -505,6 +520,35 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       });
     }
   }, [companyId]);
+
+  /** Подготовка чата к анализу: расшифровать голосовые без текста, вернуть результат и обновления для подстановки в анализ */
+  const prepareForAnalysis = useCallback(
+    async (
+      onProgress?: (current: number, total: number) => void
+    ): Promise<PrepareForAnalysisResult> => {
+      const list = getVoiceMessagesToTranscribe(messages ?? []);
+      if (list.length === 0) {
+        return { status: 'none', updates: {}, done: 0, errors: 0, total: 0 };
+      }
+      onPrepareForAnalysisStart?.();
+      try {
+        const result = await transcribeVoiceBatch(list, getAuthToken, onProgress);
+        const total = list.length;
+        let status: PrepareForAnalysisStatus =
+          result.errors === total ? 'failed' : result.errors > 0 ? 'partial' : 'done';
+        return {
+          status,
+          updates: result.updates,
+          done: result.done,
+          errors: result.errors,
+          total,
+        };
+      } finally {
+        onPrepareForAnalysisEnd?.();
+      }
+    },
+    [messages, onPrepareForAnalysisStart, onPrepareForAnalysisEnd]
+  );
 
   useEffect(() => {
     if (!statusContextMenu) return;
@@ -1379,6 +1423,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                 compact={embeddedInSheet}
                 onInsertNextMessage={onInsertNextMessage}
                 getCurrentInputValue={getCurrentInputValue}
+                onPrepareForAnalysis={prepareForAnalysis}
+                isTranscribeBatchRunning={isTranscribeBatchRunning}
               />
 
               {/* Извлечено из переписки */}

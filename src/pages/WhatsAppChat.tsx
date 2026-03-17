@@ -444,6 +444,10 @@ const WhatsAppChat: React.FC = () => {
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [forwardLoading, setForwardLoading] = useState(false);
   const [mobileClientSheetOpen, setMobileClientSheetOpen] = useState(false);
+  /** Идёт массовая расшифровка из кнопки «Расшифровать всё» — дизейблить «Проанализировать чат» */
+  const [batchTranscribeRunning, setBatchTranscribeRunning] = useState(false);
+  /** Идёт подготовка к анализу (расшифровка перед «Проанализировать чат») — дизейблить «Расшифровать всё» */
+  const [prepareForAnalysisRunning, setPrepareForAnalysisRunning] = useState(false);
   /** Позиция bottom sheet карточки клиента: peek = 60% экрана, open = полностью */
   const [clientSheetPosition, setClientSheetPosition] = useState<'peek' | 'open'>('peek');
   const clientSheetTouchStartY = useRef<number>(0);
@@ -2395,6 +2399,8 @@ const WhatsAppChat: React.FC = () => {
               onSendProposalImage={incognitoMode ? undefined : handleSendProposalImage}
               showAiDebug={isAdmin}
               onFilesDrop={incognitoMode ? undefined : handleFilesDrop}
+              disableTranscribeAllButton={prepareForAnalysisRunning}
+              onBatchTranscribeRunningChange={setBatchTranscribeRunning}
             />
             </div>
           )}
@@ -2431,6 +2437,9 @@ const WhatsAppChat: React.FC = () => {
                   if (mode === 'replace') setInputText(text);
                   else setInputText((prev) => (prev ? prev + '\n' + text : text));
                 }}
+                isTranscribeBatchRunning={batchTranscribeRunning}
+                onPrepareForAnalysisStart={() => setPrepareForAnalysisRunning(true)}
+                onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}
               />
               </div>
             </div>
@@ -2521,6 +2530,9 @@ const WhatsAppChat: React.FC = () => {
                   if (mode === 'replace') setInputText(text);
                   else setInputText((prev) => (prev ? prev + '\n' + text : text));
                 }}
+                isTranscribeBatchRunning={batchTranscribeRunning}
+                onPrepareForAnalysisStart={() => setPrepareForAnalysisRunning(true)}
+                onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}
               />
             </div>
           </div>
