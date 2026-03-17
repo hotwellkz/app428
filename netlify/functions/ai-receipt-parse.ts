@@ -26,22 +26,44 @@ interface Body {
 const SYSTEM_PROMPT = `Ты — эксперт по распознаванию чеков, накладных и фото документов (Казахстан, тенге).
 Тебе передают изображение чека / накладной / документа о покупке.
 
-Задача:
-1. Найти ИТОГОВУЮ СУММУ к оплате (в тенге или без валюты — считаем тенге).
-2. Сформировать КРАТКИЙ СМЫСЛОВОЙ КОММЕНТАРИЙ для перевода/транзакции: не сырой OCR, а понятное описание (например: "Пиломатериал по чеку: 50x50 — 600 м, 25x90 — 150 шт" или "Покупка стройматериалов по накладной №X").
+ОСНОВНЫЕ ЗАДАЧИ (в порядке приоритета):
 
-Правила:
-- Сумму верни одним числом (без пробелов, только цифры и при необходимости точка для копеек). Если копеек нет — целое число.
-- Комментарий: 1–2 предложения, без мусора, пригоден для истории операций.
-- Если не удаётся уверенно определить сумму — укажи confidence "low" и по возможности предполагаемую сумму.
-- Если изображение не чек и не накладная — верни confidence "low" и пустую сумму 0.
+1) ИТОГОВАЯ СУММА ЧЕКА
+Найти на документе итоговую сумму к оплате (в тенге). Вернуть числом в totalAmount и в receiptTotal.
 
-Отвечай СТРОГО в формате JSON с полями:
-- totalAmount (число) — итоговая сумма
-- comment (строка) — комментарий для перевода
+2) ПОЗИЦИОННЫЙ РАЗБОР (если в чеке несколько строк)
+По каждой строке товара/позиции попытаться определить:
+- name (наименование, кратко)
+- quantity (количество — число)
+- unit (ед. изм.: шт, м, м2, кг, рулон, лист, пачка и т.д., или пустая строка)
+- unitPrice (цена за единицу — число)
+- lineTotal (сумма по строке — число). Если в чеке не указана явно, ВЫЧИСЛИ: lineTotal = quantity × unitPrice.
+
+После разбора позиций:
+- Посчитай totalByItems = сумма всех lineTotal.
+- Сравни с итогом чека (receiptTotal). Если разница в пределах 1 тенге — totalsMatch: true, иначе totalsMatch: false.
+
+3) КОММЕНТАРИЙ ДЛЯ ПЕРЕВОДА
+Формируй comment на основе позиций, если они распознаны:
+- Вариант: "Покупка: [позиция 1 — кол-во ед. × цена]; [позиция 2 — ...]. По чеку."
+- Или короче: "Пиломатериал по чеку: 50x50 — 600 м, 25x90 — 150 шт."
+Если позиций нет или разбор ненадёжный — сделай простой осмысленный комментарий (как раньше).
+
+ПРАВИЛА И FALLBACK:
+- Если позиционный разбор не получается уверенно (размыто, рукописное, одна позиция) — верни items: [] или частичный массив, но ВСЕГДА заполни totalAmount и comment. Не ухудшай текущий результат.
+- totalAmount: приоритет — итог с чека (receiptTotal). Если его нет — используй totalByItems. Иначе — любая распознанная итоговая сумма.
+- confidence: "high" — итог чётко виден и (если есть позиции) totalsMatch; "medium" — итог или позиции частично; "low" — сомнительно или не чек.
+- Единицы измерения распознавай: шт, м, м2, м.п., кг, л, рулон, лист, пачка, упак и т.д.
+
+Формат ответа — СТРОГО JSON:
+- totalAmount (число)
+- receiptTotal (число, итог с чека)
+- totalByItems (число, сумма по позициям; 0 если позиций нет)
+- totalsMatch (boolean, totalByItems совпадает с receiptTotal)
+- comment (строка)
 - confidence ("high" | "medium" | "low")
-- items (массив объектов { name: string, quantity?: number, price?: number, total?: number } или пустой массив) — если удалось выделить позиции
-- rawVerdict (строка, опционально) — кратко: что за документ и насколько уверен`;
+- items: массив { name, quantity?, unit?, unitPrice?, lineTotal? }
+- rawVerdict (строка, опционально)`;
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   if (event.httpMethod === 'OPTIONS') {
@@ -104,7 +126,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Распознай чек/накладную на изображении и верни JSON с totalAmount, comment, confidence, items.' },
+              { type: 'text', text: 'Распознай чек/накладную: итог, по возможности позиции (название, кол-во, ед., цена, сумма по строке), посчитай totalByItems и сверь с итогом чека. Верни JSON: totalAmount, receiptTotal, totalByItems, totalsMatch, comment, confidence, items.' },
               {
                 type: 'image_url',
                 image_url: { url: imageInput },
@@ -160,19 +182,44 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       });
     }
 
-    const totalAmount = typeof parsed.totalAmount === 'number' ? parsed.totalAmount : Number(parsed.totalAmount) || 0;
-    const comment = typeof parsed.comment === 'string' ? parsed.comment : '';
+    const receiptTotal = typeof parsed.receiptTotal === 'number' ? parsed.receiptTotal : Number(parsed.receiptTotal) || 0;
+    const totalByItems = typeof parsed.totalByItems === 'number' ? parsed.totalByItems : Number(parsed.totalByItems) || 0;
+    const totalsMatch = Boolean(parsed.totalsMatch);
+    let totalAmount = typeof parsed.totalAmount === 'number' ? parsed.totalAmount : Number(parsed.totalAmount) || 0;
+    if (receiptTotal > 0) totalAmount = receiptTotal;
+    else if (totalByItems > 0) totalAmount = totalByItems;
+    totalAmount = Math.round(totalAmount * 100) / 100;
+
+    let comment = typeof parsed.comment === 'string' ? parsed.comment : '';
+    if (!comment.trim()) comment = 'По чеку/накладной';
+
     const confidence = ['high', 'medium', 'low'].includes(String(parsed.confidence)) ? parsed.confidence : 'medium';
-    const items = Array.isArray(parsed.items) ? parsed.items : [];
+    const rawItems = Array.isArray(parsed.items) ? parsed.items : [];
+    const items = rawItems.map((it: Record<string, unknown>) => {
+      const q = Number(it.quantity) || 0;
+      const up = Number(it.unitPrice) ?? Number(it.price) || 0;
+      let lineTotal = typeof it.lineTotal === 'number' ? it.lineTotal : Number(it.lineTotal);
+      if (!Number.isFinite(lineTotal) && q && up) lineTotal = q * up;
+      return {
+        name: String(it.name ?? ''),
+        quantity: q,
+        unit: it.unit != null ? String(it.unit) : undefined,
+        unitPrice: up,
+        lineTotal: Number.isFinite(lineTotal) ? Math.round(lineTotal * 100) / 100 : undefined,
+      };
+    });
 
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        totalAmount: Math.round(totalAmount * 100) / 100,
-        comment: comment || 'По чеку/накладной',
+        totalAmount,
+        comment: comment.trim() || 'По чеку/накладной',
         confidence,
         items,
+        totalByItems: items.length > 0 ? items.reduce((s, i) => s + (i.lineTotal ?? 0), 0) : 0,
+        receiptTotal: receiptTotal || totalAmount,
+        totalsMatch: items.length > 0 ? totalsMatch : undefined,
         rawVerdict: parsed.rawVerdict != null ? String(parsed.rawVerdict) : undefined,
       }),
     });

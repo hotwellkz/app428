@@ -91,6 +91,10 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     totalAmount: number;
     comment: string;
     confidence: 'high' | 'medium' | 'low';
+    items?: Array<{ name: string; quantity?: number; unit?: string; unitPrice?: number; lineTotal?: number }>;
+    totalByItems?: number;
+    receiptTotal?: number;
+    totalsMatch?: boolean;
   } | null>(null);
 
   const isFromTopRow =
@@ -373,6 +377,10 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         totalAmount: Number(data.totalAmount) || 0,
         comment: typeof data.comment === 'string' ? data.comment : 'По чеку/накладной',
         confidence: ['high', 'medium', 'low'].includes(data.confidence) ? data.confidence : 'medium',
+        items: Array.isArray(data.items) ? data.items : undefined,
+        totalByItems: typeof data.totalByItems === 'number' ? data.totalByItems : undefined,
+        receiptTotal: typeof data.receiptTotal === 'number' ? data.receiptTotal : undefined,
+        totalsMatch: data.totalsMatch === true || data.totalsMatch === false ? data.totalsMatch : undefined,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка при распознавании чека');
@@ -875,6 +883,41 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     <p className="text-sm text-emerald-800">
                       Сумма: <strong>{formatMoney(receiptParseResult.totalAmount)}</strong>
                     </p>
+                    {receiptParseResult.items && receiptParseResult.items.length > 0 && (
+                      <div className="text-xs text-emerald-800 bg-emerald-100/60 rounded p-2 space-y-1">
+                        <p className="font-medium">По позициям:</p>
+                        <ul className="space-y-0.5">
+                          {receiptParseResult.items.map((row, i) => (
+                            <li key={i}>
+                              {row.name}
+                              {row.quantity != null && row.quantity > 0 && (
+                                <> — {row.quantity}{row.unit ? ` ${row.unit}` : ''}</>
+                              )}
+                              {row.unitPrice != null && row.unitPrice > 0 && (
+                                <> × {formatMoney(row.unitPrice)}</>
+                              )}
+                              {row.lineTotal != null && row.lineTotal > 0 && (
+                                <> = {formatMoney(row.lineTotal)}</>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                        {receiptParseResult.totalByItems != null && receiptParseResult.totalByItems > 0 && (
+                          <p className="pt-1 border-t border-emerald-200 mt-1">
+                            Итог по позициям: {formatMoney(receiptParseResult.totalByItems)}
+                            {receiptParseResult.receiptTotal != null && receiptParseResult.receiptTotal > 0 && (
+                              <> · По чеку: {formatMoney(receiptParseResult.receiptTotal)}</>
+                            )}
+                            {receiptParseResult.totalsMatch === false && (
+                              <span className="text-amber-700 ml-1"> · расхождение</span>
+                            )}
+                            {receiptParseResult.totalsMatch === true && (
+                              <span className="text-emerald-700 ml-1"> · совпадает</span>
+                            )}
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <p className="text-xs text-emerald-700 line-clamp-2" title={receiptParseResult.comment}>
                       Комментарий: {receiptParseResult.comment}
                     </p>
