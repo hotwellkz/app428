@@ -336,6 +336,15 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [editManagerColor, setEditManagerColor] = useState('#3B82F6');
   const [deletingManager, setDeletingManager] = useState<{ manager: ChatManagerRecord; dealCount: number } | null>(null);
   const [deleteManagerLoading, setDeleteManagerLoading] = useState(false);
+  const [citySaving, setCitySaving] = useState(false);
+  const [citySaveFeedback, setCitySaveFeedback] = useState<'idle' | 'success' | 'error'>('idle');
+  const [showAddCityModal, setShowAddCityModal] = useState(false);
+  const [newCityName, setNewCityName] = useState('');
+  const [cityContextMenu, setCityContextMenu] = useState<{ x: number; y: number; cityName: string } | null>(null);
+  const [deletingCity, setDeletingCity] = useState<string | null>(null);
+  const [deleteCityLoading, setDeleteCityLoading] = useState(false);
+  const [renamingCity, setRenamingCity] = useState<string | null>(null);
+  const [renameCityValue, setRenameCityValue] = useState('');
   const managerMenuPosition = useClampedMenuPosition(
     !!managerContextMenu,
     managerContextMenu?.x ?? 0,
@@ -346,15 +355,6 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     cityContextMenu?.x ?? 0,
     cityContextMenu?.y ?? 0
   );
-  const [citySaving, setCitySaving] = useState(false);
-  const [citySaveFeedback, setCitySaveFeedback] = useState<'idle' | 'success' | 'error'>('idle');
-  const [showAddCityModal, setShowAddCityModal] = useState(false);
-  const [newCityName, setNewCityName] = useState('');
-  const [cityContextMenu, setCityContextMenu] = useState<{ x: number; y: number; cityName: string } | null>(null);
-  const [deletingCity, setDeletingCity] = useState<string | null>(null);
-  const [deleteCityLoading, setDeleteCityLoading] = useState(false);
-  const [renamingCity, setRenamingCity] = useState<string | null>(null);
-  const [renameCityValue, setRenameCityValue] = useState('');
 
   const [pipelineDeal, setPipelineDeal] = useState<Deal | null>(null);
   const [pipelineStages, setPipelineStages] = useState<Array<{ id: string; name: string; color?: string | null }>>([]);
