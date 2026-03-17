@@ -88,6 +88,10 @@ export const Transactions: React.FC = () => {
       console.error('[transactions] merged contained wrong companyId', { companyId, bad });
       setCategories([]);
     } else {
+      if (import.meta.env?.DEV && merged.some((c) => c.row === 3)) {
+        const projects = merged.filter((c) => c.row === 3);
+        console.log('[TX_PAGE] карточки проектов (row=3) для отображения:', projects.map((c) => ({ id: c.id, title: c.title, amount: c.amount })));
+      }
       setCategories(merged);
     }
     setFromCache(false);

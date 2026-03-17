@@ -180,6 +180,12 @@ export const useCategories = () => {
                   companyId: data.companyId as string | undefined
                 } as CategoryCardType;
               });
+            if (import.meta.env?.DEV && fullList.length > 0) {
+              const projects = fullList.filter((c) => c.row === 3);
+              if (projects.length > 0) {
+                console.log('[TX_CATEGORIES] категории (row=3 проекты) из Firestore:', projects.map((c) => ({ id: c.id, title: c.title, amount: c.amount })));
+              }
+            }
             setCategories(fullList.sort((a, b) => (a.row || 0) - (b.row || 0)));
             setLoading(false);
             setError(null);

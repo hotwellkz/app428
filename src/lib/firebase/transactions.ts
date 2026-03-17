@@ -762,8 +762,13 @@ export const approveTransaction = async (transactionId: string): Promise<void> =
     const income = incomeSnap.data() as any;
 
     const amount = Math.abs(Number(expense.amount));
-    const sourceCategoryId = expense.categoryId as string;
-    const targetCategoryId = income.categoryId as string;
+    // Железное правило: отправитель = expense (списание), получатель = income (пополнение). Знак не зависит от типа сущности.
+    const sourceCategoryId = expense.categoryId as string; // отправитель — всегда минус
+    const targetCategoryId = income.categoryId as string;   // получатель — всегда плюс
+
+    if (sourceCategoryId === targetCategoryId) {
+      throw new Error('Отправитель и получатель не могут совпадать');
+    }
 
     const sourceRef = doc(db, 'categories', sourceCategoryId);
     const targetRef = doc(db, 'categories', targetCategoryId);
@@ -773,17 +778,45 @@ export const approveTransaction = async (transactionId: string): Promise<void> =
       throw new Error('Категория отправителя или получателя не найдена');
     }
 
-    const sourceBalance = parseAmount(sourceSnap.data().amount);
-    const targetBalance = parseAmount(targetSnap.data().amount);
+    const safeParseBalance = (raw: unknown): number => {
+      if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+      const s = String(raw ?? '0');
+      const n = parseAmount(s);
+      return Number.isFinite(n) ? n : 0;
+    };
+    const sourceBalance = safeParseBalance(sourceSnap.data().amount);
+    const targetBalance = safeParseBalance(targetSnap.data().amount);
+    const newSourceBalance = sourceBalance - amount;
+    const newTargetBalance = targetBalance + amount;
+
+    if (import.meta.env?.DEV) {
+      console.log('[TX_APPROVE]', {
+        transactionId,
+        senderCategoryId: sourceCategoryId,
+        senderFromUser: expense.fromUser,
+        receiverCategoryId: targetCategoryId,
+        receiverToUser: expense.toUser,
+        amount,
+        sourceBalanceBefore: sourceBalance,
+        targetBalanceBefore: targetBalance,
+        sourceBalanceAfter: newSourceBalance,
+        targetBalanceAfter: newTargetBalance,
+        rule: 'sender=decrease, receiver=increase'
+      });
+    }
+
+    if (!Number.isFinite(newSourceBalance) || !Number.isFinite(newTargetBalance)) {
+      throw new Error('Некорректный расчёт баланса после одобрения');
+    }
 
     const timestamp = serverTimestamp();
 
     tx.update(sourceRef, {
-      amount: formatAmount(sourceBalance - amount),
+      amount: formatAmount(newSourceBalance),
       updatedAt: timestamp
     });
     tx.update(targetRef, {
-      amount: formatAmount(targetBalance + amount),
+      amount: formatAmount(newTargetBalance),
       updatedAt: timestamp
     });
 
@@ -798,6 +831,28 @@ export const approveTransaction = async (transactionId: string): Promise<void> =
       approvedBy
     });
   });
+
+  // Диагностика: что реально записалось в Firestore (только в dev)
+  if (import.meta.env?.DEV) {
+    try {
+      const expenseSnapAfter = await getDoc(doc(db, 'transactions', transactionId));
+      const expenseAfter = expenseSnapAfter.data() as any;
+      if (expenseAfter?.categoryId && expenseAfter?.relatedTransactionId) {
+        const incomeSnapAfter = await getDoc(doc(db, 'transactions', expenseAfter.relatedTransactionId));
+        const incomeAfter = incomeSnapAfter.data() as any;
+        const srcCat = await getDoc(doc(db, 'categories', expenseAfter.categoryId));
+        const tgtCat = await getDoc(doc(db, 'categories', incomeAfter?.categoryId));
+        console.log('[TX_APPROVE] после записи Firestore:', {
+          senderCategoryId: expenseAfter.categoryId,
+          senderAmountInFirestore: srcCat.data()?.amount,
+          receiverCategoryId: incomeAfter?.categoryId,
+          receiverAmountInFirestore: tgtCat.data()?.amount
+        });
+      }
+    } catch (e) {
+      console.warn('[TX_APPROVE] проверка после записи', e);
+    }
+  }
 
   // После успешного применения — обновляем агрегаты и usage
   const expenseSnap = await getDoc(doc(db, 'transactions', transactionId));
