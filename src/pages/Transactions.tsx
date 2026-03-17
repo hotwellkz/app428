@@ -23,6 +23,7 @@ import {
 import { CategoryRow } from '../components/transactions/CategoryRow';
 import { useCategories } from '../hooks/useCategories';
 import { useCompanyId } from '../contexts/CompanyContext';
+import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { CategoryCardType } from '../types';
 import { TransactionHistory } from '../components/transactions/history/TransactionHistory';
@@ -40,6 +41,7 @@ import {
 
 export const Transactions: React.FC = () => {
   const companyId = useCompanyId();
+  const { companyUser } = useCurrentCompanyUser();
   const [deleteInProgress, setDeleteInProgress] = useState(false);
   const { categories: loadedCategories, loading, error } = useCategories();
   const [categories, setCategories] = useState<CategoryCardType[]>([]);
@@ -347,6 +349,14 @@ export const Transactions: React.FC = () => {
     setShowHistory(true);
   };
 
+  const handleEmployeeHistoryClick = (category: CategoryCardType) => {
+    if (maskAmountEmployeeCategoryIds.has(category.id)) {
+      showErrorNotification('Недостаточно прав для просмотра');
+      return;
+    }
+    handleHistoryClick(category);
+  };
+
   const handleDeleteCategory = async (category: CategoryCardType) => {
     if (!companyId || deleteInProgress) return;
     try {
@@ -418,6 +428,15 @@ export const Transactions: React.FC = () => {
   const employeeCategories = visibleCategories.filter(c => c.row === 2);
   const projectCategories = visibleCategories.filter(c => c.row === 3);
   const warehouseCategories = visibleCategories.filter(c => c.row === 4);
+
+  const isOwnerOrAdmin = companyUser?.role === 'owner' || companyUser?.role === 'admin';
+  const viewAllEmployeeBalances =
+    isOwnerOrAdmin || companyUser?.permissions?.viewAllEmployeeBalances !== false;
+  const ownEmployeeCategoryId = companyUser?.permissions?.employeeCategoryId;
+  const maskAmountEmployeeCategoryIds =
+    !viewAllEmployeeBalances && employeeCategories.length > 0
+      ? new Set(employeeCategories.filter((c) => c.id !== ownEmployeeCategoryId).map((c) => c.id))
+      : new Set<string>();
 
   const hasNoObjects = visibleCategories.length === 0;
 
@@ -538,10 +557,11 @@ export const Transactions: React.FC = () => {
               <CategoryRow
                 title="Сотрудники"
                 categories={employeeCategories}
-                onHistoryClick={handleHistoryClick}
+                onHistoryClick={handleEmployeeHistoryClick}
                 onDeleteCategory={handleDeleteCategory}
                 onEditCategory={handleEditCategory}
                 rowNumber={2}
+                maskAmountCategoryIds={maskAmountEmployeeCategoryIds}
               />
               
               <CategoryRow

@@ -15,12 +15,15 @@ interface DroppableCategoryProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onHistoryClick?: () => void;
+  /** Скрыть сумму (например, для чужих карточек сотрудников при ограничении прав). */
+  maskAmount?: boolean;
 }
 
 export const DroppableCategory: React.FC<DroppableCategoryProps> = ({
   category,
   onEdit,
   onDelete,
+  maskAmount,
 }) => {
   console.log('DroppableCategory получил onDelete:', !!onDelete, 'для категории:', category.title);
   const navigate = useNavigate();
@@ -116,6 +119,7 @@ export const DroppableCategory: React.FC<DroppableCategoryProps> = ({
         <CategoryCard
           category={category}
           onHistoryClick={handleViewHistory}
+          maskAmount={maskAmount}
         />
       </div>
 

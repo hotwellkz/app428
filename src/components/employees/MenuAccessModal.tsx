@@ -9,6 +9,9 @@ import {
 } from '../../types/menuAccess';
 import { getCompanyUser, updateCompanyUserMenuAccess, updateCompanyUserPermissions } from '../../lib/firebase/companies';
 import { showSuccessNotification, showErrorNotification } from '../../utils/notifications';
+import { useCompanyId } from '../../contexts/CompanyContext';
+import { collection, getDocs, query, where } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
 
 interface MenuAccessModalProps {
   isOpen: boolean;
@@ -18,6 +21,11 @@ interface MenuAccessModalProps {
   onSaved?: () => void;
 }
 
+interface EmployeeCategoryOption {
+  id: string;
+  title: string;
+}
+
 export const MenuAccessModal: React.FC<MenuAccessModalProps> = ({
   isOpen,
   onClose,
@@ -25,10 +33,14 @@ export const MenuAccessModal: React.FC<MenuAccessModalProps> = ({
   userName,
   onSaved
 }) => {
+  const companyId = useCompanyId();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [access, setAccess] = useState<MenuAccess>({ ...DEFAULT_MENU_ACCESS });
   const [approveTransactions, setApproveTransactions] = useState(false);
+  const [viewAllEmployeeBalances, setViewAllEmployeeBalances] = useState(true);
+  const [employeeCategoryId, setEmployeeCategoryId] = useState<string>('');
+  const [employeeCategories, setEmployeeCategories] = useState<EmployeeCategoryOption[]>([]);
 
   useEffect(() => {
     if (!isOpen || !userId) return;
@@ -39,13 +51,32 @@ export const MenuAccessModal: React.FC<MenuAccessModalProps> = ({
         if (cu?.menuAccess) setAccess({ ...base, ...cu.menuAccess });
         else setAccess(base);
         setApproveTransactions(cu?.permissions?.approveTransactions === true);
+        setViewAllEmployeeBalances(cu?.permissions?.viewAllEmployeeBalances !== false);
+        setEmployeeCategoryId(cu?.permissions?.employeeCategoryId ?? '');
       })
       .catch(() => {
         setAccess({ ...DEFAULT_MENU_ACCESS });
         setApproveTransactions(false);
+        setViewAllEmployeeBalances(true);
+        setEmployeeCategoryId('');
       })
       .finally(() => setLoading(false));
   }, [isOpen, userId]);
+
+  useEffect(() => {
+    if (!isOpen || !companyId) return;
+    const q = query(
+      collection(db, 'categories'),
+      where('companyId', '==', companyId),
+      where('row', '==', 2)
+    );
+    getDocs(q)
+      .then((snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, title: (d.data().title as string) || 'Без названия' }));
+        setEmployeeCategories(list);
+      })
+      .catch(() => setEmployeeCategories([]));
+  }, [isOpen, companyId]);
 
   const handleToggle = (sectionId: MenuSectionId) => {
     setAccess((prev) => ({ ...prev, [sectionId]: !prev[sectionId] }));
@@ -73,7 +104,11 @@ export const MenuAccessModal: React.FC<MenuAccessModalProps> = ({
     setSaving(true);
     try {
       await updateCompanyUserMenuAccess(userId, access);
-      await updateCompanyUserPermissions(userId, { approveTransactions });
+      await updateCompanyUserPermissions(userId, {
+        approveTransactions,
+        viewAllEmployeeBalances,
+        employeeCategoryId: employeeCategoryId.trim() || undefined
+      });
       showSuccessNotification('Права доступа сохранены');
       onSaved?.();
       onClose();
@@ -137,18 +172,54 @@ export const MenuAccessModal: React.FC<MenuAccessModalProps> = ({
               </ul>
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Дополнительные права</p>
-                <li className="flex items-center gap-3 list-none">
-                  <input
-                    type="checkbox"
-                    id="permission-approve-transactions"
-                    checked={approveTransactions}
-                    onChange={() => setApproveTransactions((v) => !v)}
-                    className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-                  />
-                  <label htmlFor="permission-approve-transactions" className="text-sm font-medium text-gray-700 cursor-pointer">
-                    Одобрение транзакций
-                  </label>
-                </li>
+                <ul className="space-y-2 list-none">
+                  <li className="flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      id="permission-approve-transactions"
+                      checked={approveTransactions}
+                      onChange={() => setApproveTransactions((v) => !v)}
+                      className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                    />
+                    <label htmlFor="permission-approve-transactions" className="text-sm font-medium text-gray-700 cursor-pointer">
+                      Одобрение транзакций
+                    </label>
+                  </li>
+                  <li className="flex flex-col gap-2 pt-2">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        id="permission-view-all-balances"
+                        checked={viewAllEmployeeBalances}
+                        onChange={() => setViewAllEmployeeBalances((v) => !v)}
+                        className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <label htmlFor="permission-view-all-balances" className="text-sm font-medium text-gray-700 cursor-pointer">
+                        Видеть все суммы сотрудников
+                      </label>
+                    </div>
+                    {!viewAllEmployeeBalances && (
+                      <div className="pl-7">
+                        <label htmlFor="employee-category-select" className="text-xs text-gray-500 block mb-1">
+                          Карточка сотрудника (своя сумма):
+                        </label>
+                        <select
+                          id="employee-category-select"
+                          value={employeeCategoryId}
+                          onChange={(e) => setEmployeeCategoryId(e.target.value)}
+                          className="w-full text-sm border border-gray-300 rounded-lg px-2 py-1.5"
+                        >
+                          <option value="">— Выберите карточку —</option>
+                          {employeeCategories.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.title}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </li>
+                </ul>
               </div>
             </>
           )}

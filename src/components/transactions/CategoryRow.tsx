@@ -11,6 +11,8 @@ interface CategoryRowProps {
   onEditCategory?: (category: CategoryCardType) => void;
   onAddCategory?: () => void;
   rowNumber: number;
+  /** ID категорий, у которых сумму нужно скрыть (например, чужие сотрудники при ограничении прав). */
+  maskAmountCategoryIds?: Set<string>;
 }
 
 export const CategoryRow: React.FC<CategoryRowProps> = ({
@@ -20,7 +22,8 @@ export const CategoryRow: React.FC<CategoryRowProps> = ({
   onDeleteCategory,
   onEditCategory,
   onAddCategory,
-  rowNumber
+  rowNumber,
+  maskAmountCategoryIds
 }) => {
   console.log('CategoryRow получил onDeleteCategory:', !!onDeleteCategory);
   const [isCollapsed, setIsCollapsed] = useState(rowNumber === 1);
@@ -108,6 +111,7 @@ export const CategoryRow: React.FC<CategoryRowProps> = ({
                 onEdit={onEditCategory ? () => {
                   onEditCategory(category);
                 } : undefined}
+                maskAmount={maskAmountCategoryIds?.has(category.id)}
               />
             </div>
           ))}

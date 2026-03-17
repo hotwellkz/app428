@@ -20,6 +20,7 @@ import { auth } from '../lib/firebase';
 import { useTransactionsPaginated } from '../hooks/useTransactionsPaginated';
 import { useAuth } from '../hooks/useAuth';
 import { useExpenseCategories } from '../hooks/useExpenseCategories';
+import { useCurrentCompanyUser } from '../hooks/useCurrentCompanyUser';
 import {
   VirtualizedTransactionsList,
   buildFlattenedRowsFromGrouped,
@@ -202,6 +203,7 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
   const [isExportOpen, setIsExportOpen] = useState(false);
 
   const { user } = useAuth();
+  const { companyUser } = useCurrentCompanyUser();
   const { toggle: toggleMobileSidebar } = useMobileSidebar();
   const { categories: expenseCategories } = useExpenseCategories(user?.uid);
   const expenseCategoryById = useMemo(() => {
@@ -362,7 +364,7 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Загрузка названия категории
+  // Загрузка названия категории и проверка прав на просмотр истории сотрудника
   useEffect(() => {
     if (!categoryId) return;
 
@@ -370,7 +372,18 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
       try {
         const categoryDoc = await getDoc(doc(db, 'categories', categoryId));
         if (categoryDoc.exists()) {
-          const title = categoryDoc.data().title;
+          const data = categoryDoc.data();
+          const title = data.title;
+          const row = data.row;
+          const isEmployeeCategory = row === 2;
+          const isOwnerOrAdmin = companyUser?.role === 'owner' || companyUser?.role === 'admin';
+          const viewAllBalances = isOwnerOrAdmin || companyUser?.permissions?.viewAllEmployeeBalances !== false;
+          const ownCategoryId = companyUser?.permissions?.employeeCategoryId;
+          if (isEmployeeCategory && !viewAllBalances && categoryId !== ownCategoryId) {
+            showErrorNotification('Недостаточно прав для просмотра');
+            navigate('/transactions', { replace: true });
+            return;
+          }
           setCategoryTitle(title);
           setError(null);
           if (process.env.NODE_ENV === 'development') {
@@ -409,7 +422,7 @@ export const OptimizedTransactionHistoryPage: React.FC = () => {
     };
 
     loadCategoryTitle();
-  }, [categoryId]);
+  }, [categoryId, companyUser?.role, companyUser?.permissions?.viewAllEmployeeBalances, companyUser?.permissions?.employeeCategoryId, navigate]);
 
   // Сохранение настроек статистики
   useEffect(() => {

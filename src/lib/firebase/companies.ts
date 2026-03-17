@@ -34,6 +34,10 @@ export interface CompanyRow {
 export interface CompanyUserPermissions {
   /** Право одобрять/отклонять транзакции (в рамках своей компании). */
   approveTransactions?: boolean;
+  /** Если false — на странице «Транзакции» пользователь видит только сумму своей карточки сотрудника; чужие скрыты. */
+  viewAllEmployeeBalances?: boolean;
+  /** ID категории (карточки сотрудника row=2), которая считается «своей» при viewAllEmployeeBalances === false. */
+  employeeCategoryId?: string;
 }
 
 export interface CompanyUserRow {

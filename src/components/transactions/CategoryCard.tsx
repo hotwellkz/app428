@@ -4,19 +4,22 @@ import { useDraggable } from '@dnd-kit/core';
 import { formatAmount } from '../../utils/formatUtils';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { Home } from 'lucide-react';
+import { Home, Lock } from 'lucide-react';
 import { usePendingSummaryByCategoryId } from '../../contexts/PendingTransactionsContext';
 
 interface CategoryCardProps {
   category: CategoryCardType;
   onHistoryClick?: (e: React.MouseEvent) => void;
   isDragging?: boolean;
+  /** Скрыть сумму (для чужих карточек сотрудников при ограничении прав). */
+  maskAmount?: boolean;
 }
 
 export const CategoryCard: React.FC<CategoryCardProps> = ({ 
   category, 
   onHistoryClick,
-  isDragging = false
+  isDragging = false,
+  maskAmount = false
 }) => {
   const { attributes, listeners, setNodeRef, transform } = useDraggable({
     id: category.id,
@@ -92,7 +95,7 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
     >
       <div className={`relative w-12 h-12 ${category.color || 'bg-emerald-500'} rounded-full flex items-center justify-center shadow-lg`}>
         {renderIcon()}
-        {pendingAmount !== 0 && (
+        {!maskAmount && pendingAmount !== 0 && (
           <div
             className="absolute -top-1 -right-1 inline-flex items-center justify-center px-1.5 sm:px-2 rounded-full shadow-md"
             style={{
@@ -130,7 +133,12 @@ export const CategoryCard: React.FC<CategoryCardProps> = ({
         <div className="text-[10px] font-medium text-gray-700 truncate max-w-[60px]">
           {category.title}
         </div>
-        {category.row === 4 && category.title === 'Склад' ? (
+        {maskAmount ? (
+          <div className="text-[10px] font-medium text-gray-400 flex items-center gap-0.5 justify-center" title="Недостаточно прав для просмотра">
+            <Lock className="w-3 h-3 flex-shrink-0" />
+            <span>Скрыто</span>
+          </div>
+        ) : category.row === 4 && category.title === 'Склад' ? (
           <div className="text-[10px] font-medium text-emerald-500">
             {formatAmount(warehouseTotal)}
           </div>
