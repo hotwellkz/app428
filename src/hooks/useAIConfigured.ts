@@ -25,6 +25,7 @@ export function useAIConfigured(): AIConfiguredState {
       if (!token) {
         setConfigured(false);
         setApiKeyMasked(null);
+        setError('Войдите в аккаунт для проверки настроек AI');
         return;
       }
       const res = await fetch(OPENAI_INTEGRATION_URL, {
@@ -35,7 +36,12 @@ export function useAIConfigured(): AIConfiguredState {
       if (!res.ok) {
         setConfigured(false);
         setApiKeyMasked(null);
-        setError((data?.error as string) ?? 'Не удалось загрузить настройки AI');
+        const serverMessage = (data?.error as string) ?? '';
+        setError(
+          res.status === 401
+            ? 'Сессия истекла или требуется повторный вход. Обновите страницу и войдите снова.'
+            : serverMessage || 'Не удалось загрузить настройки AI'
+        );
         return;
       }
       setConfigured(data.configured ?? false);
