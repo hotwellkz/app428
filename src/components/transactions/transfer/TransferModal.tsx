@@ -1250,7 +1250,23 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                 </div>
               )}
 
-              <div className="hidden md:flex justify-end mt-2">
+              <div className="hidden md:flex justify-end items-center gap-2 mt-2">
+                {files.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={fillFromReceipt}
+                    disabled={receiptParseLoading || (aiLoading === false && aiConfigured === false)}
+                    title={aiConfigured === false && !aiLoading ? 'Подключите AI в Интеграциях' : 'Заполнить по чеку'}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {receiptParseLoading ? (
+                      <span className="animate-spin inline-block w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full" />
+                    ) : (
+                      <ScanLine className="h-4 w-4" />
+                    )}
+                    Зап. по чеку
+                  </button>
+                )}
                 <button
                   type="submit"
                   disabled={loading || files.some(f => f.status === 'uploading' || f.status === 'pending')}
@@ -1267,35 +1283,6 @@ export const TransferModal: React.FC<TransferModalProps> = ({
 
             {files.length > 0 && (
               <div className={isFuelTransfer ? 'space-y-1.5' : 'space-y-2'}>
-                {firstUploadedImage && (
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="text-xs text-slate-500">Можно распознать чек по первому изображению</span>
-                    <button
-                      type="button"
-                      onClick={fillFromReceipt}
-                      disabled={receiptParseLoading || (aiLoading === false && aiConfigured === false)}
-                      title={aiConfigured === false && !aiLoading ? 'Подключите AI API key в разделе Интеграции' : undefined}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-violet-200 bg-violet-50 text-violet-800 text-sm font-medium hover:bg-violet-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      {receiptParseLoading ? (
-                        <>
-                          <span className="animate-spin inline-block w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full" />
-                          Распознаём чек…
-                        </>
-                      ) : (
-                        <>
-                          <ScanLine className="w-4 h-4" />
-                          Заполнить по чеку
-                        </>
-                      )}
-                    </button>
-                    {!aiLoading && aiConfigured === false && (
-                      <p className="text-xs text-amber-700 mt-1">
-                        Подключите AI API key в разделе Интеграции
-                      </p>
-                    )}
-                  </div>
-                )}
                 {fuelReceiptParseResult && (
                   <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
                     <p className="text-sm font-medium text-blue-900">Распознано по фото</p>
@@ -1494,9 +1481,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
             )}
           </div>
 
-          {/* Нижняя панель (mobile): скрепка, камера, отправка. Визуально отделена; для «Заправка» — фон, чтобы кнопка отправки не терялась. pr-14 — safe-area от плавающего сайдбара. */}
+          {/* Нижняя панель (mobile): камера, скрепка, при наличии файла — «Зап. по чеку», отправка. pr-14 — safe-area от плавающего сайдбара. */}
           <div
-            className={`flex-shrink-0 md:hidden flex items-center justify-end gap-3 p-2.5 pr-14 border-t border-gray-200 ${isFuelTransfer ? 'bg-gray-50' : 'bg-white'}`}
+            className={`flex-shrink-0 md:hidden flex items-center justify-end gap-2 p-2.5 pr-14 border-t border-gray-200 ${isFuelTransfer ? 'bg-gray-50' : 'bg-white'}`}
           >
             <button
               type="button"
@@ -1514,10 +1501,27 @@ export const TransferModal: React.FC<TransferModalProps> = ({
               <input {...getInputProps()} />
               <PaperclipIcon className="h-5 w-5" />
             </button>
+            {files.length > 0 && (
+              <button
+                type="button"
+                onClick={fillFromReceipt}
+                disabled={receiptParseLoading || (aiLoading === false && aiConfigured === false)}
+                title={aiConfigured === false && !aiLoading ? 'Подключите AI в Интеграциях' : 'Заполнить по чеку'}
+                aria-label="Заполнить по чеку"
+                className="inline-flex items-center gap-1.5 px-2.5 py-2 rounded-full text-xs font-medium border border-violet-200 bg-violet-50 text-violet-800 hover:bg-violet-100 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
+              >
+                {receiptParseLoading ? (
+                  <span className="animate-spin inline-block w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full" />
+                ) : (
+                  <ScanLine className="h-4 w-4 shrink-0" />
+                )}
+                <span>Зап. по чеку</span>
+              </button>
+            )}
             <button
               type="submit"
               disabled={loading || files.some(f => f.status === 'uploading' || f.status === 'pending')}
-              className={`p-2.5 text-white rounded-full transition-colors
+              className={`p-2.5 text-white rounded-full transition-colors shrink-0
                 ${loading || files.some(f => f.status === 'uploading' || f.status === 'pending')
                   ? 'bg-blue-400 cursor-not-allowed'
                   : 'bg-blue-500 hover:bg-blue-600'
