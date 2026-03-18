@@ -49,6 +49,26 @@ export interface Transaction {
   files?: TransactionFile[];
   status?: 'pending' | 'approved' | 'rejected';
   needsReview?: boolean;
+  fuelData?: {
+    vehicleId: string;
+    vehicleName: string;
+    odometerKm: number;
+    liters?: number | null;
+    pricePerLiter?: number | null;
+    fuelType?: string | null;
+    gasStation?: string | null;
+    isFullTank?: boolean;
+    receiptRecognized?: boolean;
+    receiptFileUrl?: string | null;
+    receiptRef?: string | null;
+    recognizedAt?: unknown;
+    recognizedSource?: 'ai' | 'manual';
+    derivedFuelStats?: {
+      previousOdometerKm?: number | null;
+      distanceSincePrevFuelingKm?: number | null;
+      estimatedConsumptionLPer100?: number | null;
+    } | null;
+  };
 }
 
 export interface GroupedTransactions {

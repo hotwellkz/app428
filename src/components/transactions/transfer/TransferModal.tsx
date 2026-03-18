@@ -120,6 +120,21 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     totalsMatch?: boolean;
   } | null>(null);
 
+  const isFuelTransfer = targetCategory.title === 'Заправка';
+
+  const VEHICLES: { id: string; name: string }[] = [
+    { id: 'sprinter-1', name: 'Sprinter 1' },
+    { id: 'sprinter-2', name: 'Sprinter 2' }
+  ];
+
+  const [vehicleId, setVehicleId] = useState<string>('');
+  const [odometerKm, setOdometerKm] = useState<string>('');
+  const [liters, setLiters] = useState<string>('');
+  const [pricePerLiter, setPricePerLiter] = useState<string>('');
+  const [fuelType, setFuelType] = useState<string>('ДТ');
+  const [gasStation, setGasStation] = useState<string>('');
+  const [isFullTank, setIsFullTank] = useState<boolean>(false);
+
   const isFromTopRow =
     sourceCategory.type === 'employee' || sourceCategory.type === 'company' ||
     (sourceCategory.row === 1 || sourceCategory.row === 2);
@@ -459,6 +474,18 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       setError('Сумма должна быть больше нуля');
       return;
     }
+    if (isFuelTransfer) {
+      if (!vehicleId) {
+        setError('Выберите транспорт для заправки');
+        return;
+      }
+      const odo = odometerKm.trim();
+      const odoNum = odo ? Number(odo.replace(',', '.')) : NaN;
+      if (!odo || !Number.isFinite(odoNum) || odoNum < 0) {
+        setError('Укажите пробег на одометре (км)');
+        return;
+      }
+    }
     if (showExpenseCategory && !expenseCategoryId) {
       setError('Выберите категорию расхода');
       return;
@@ -486,6 +513,30 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         path
       }));
 
+      let fuelData;
+      if (isFuelTransfer) {
+        const odoNum = Number(odometerKm.trim().replace(',', '.'));
+        const litersNum = liters.trim() ? Number(liters.trim().replace(',', '.')) : null;
+        const priceNum = pricePerLiter.trim() ? Number(pricePerLiter.trim().replace(',', '.')) : null;
+        const vehicle = VEHICLES.find(v => v.id === vehicleId);
+        fuelData = {
+          vehicleId,
+          vehicleName: vehicle?.name ?? vehicleId,
+          odometerKm: odoNum,
+          liters: litersNum,
+          pricePerLiter: priceNum,
+          fuelType: fuelType || null,
+          gasStation: gasStation.trim() || null,
+          isFullTank,
+          receiptRecognized: false,
+          receiptFileUrl: uploadedOnly[0]?.url ?? null,
+          receiptRef: uploadedOnly[0]?.path ?? null,
+          recognizedAt: null,
+          recognizedSource: 'manual' as const,
+          derivedFuelStats: null
+        };
+      }
+
       if (!companyId) return;
       await transferFunds({
         sourceCategory,
@@ -499,6 +550,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         isCashless,
         expenseCategoryId: showExpenseCategory ? expenseCategoryId || undefined : undefined,
         needsReview,
+        fuelData,
         companyId
       });
 
@@ -571,6 +623,120 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                 required
               />
             </div>
+
+            {isFuelTransfer && (
+              <div className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Транспорт <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={vehicleId}
+                      onChange={(e) => setVehicleId(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="">Выберите машину</option>
+                      {VEHICLES.map((v) => (
+                        <option key={v.id} value={v.id}>
+                          {v.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Пробег на одометре, км <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      inputMode="numeric"
+                      value={odometerKm}
+                      onChange={(e) => setOdometerKm(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Введите текущий пробег машины"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Литры
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      inputMode="decimal"
+                      value={liters}
+                      onChange={(e) => setLiters(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Количество литров"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Цена за литр
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      inputMode="decimal"
+                      value={pricePerLiter}
+                      onChange={(e) => setPricePerLiter(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Цена за литр"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Тип топлива
+                    </label>
+                    <select
+                      value={fuelType}
+                      onChange={(e) => setFuelType(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      <option value="ДТ">ДТ</option>
+                      <option value="АИ-92">АИ-92</option>
+                      <option value="АИ-95">АИ-95</option>
+                      <option value="Газ">Газ</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      АЗС
+                    </label>
+                    <input
+                      type="text"
+                      value={gasStation}
+                      onChange={(e) => setGasStation(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Название АЗС"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    id="fuel-full-tank"
+                    type="checkbox"
+                    checked={isFullTank}
+                    onChange={(e) => setIsFullTank(e.target.checked)}
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                  />
+                  <label htmlFor="fuel-full-tank" className="text-sm text-gray-700">
+                    Полный бак
+                  </label>
+                </div>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">

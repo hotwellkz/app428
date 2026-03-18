@@ -8,6 +8,7 @@ import {
   FileText,
   LayoutDashboard,
 } from 'lucide-react';
+import { buildWhatsAppUrl, WHATSAPP_CONTACT_NUMBER } from '../../config/whatsapp';
 
 const TITLE = 'CRM для Kaspi-магазина в Казахстане — интеграция заказов, WhatsApp и клиентов | 2wix';
 const DESCRIPTION =
@@ -71,17 +72,53 @@ const FAQ_ITEMS = [
   { q: 'Можно ли подключить несколько магазинов?', a: 'У каждой компании в CRM — свой набор интеграций. Одна компания подключает один свой Kaspi-магазин. Если у вас несколько юрлиц или брендов — для каждого можно создать отдельную компанию в CRM и подключить свой магазин.' },
 ];
 
-/** Ссылка на WhatsApp для контакта (заменить на реальный номер при необходимости) */
-const WHATSAPP_LINK = 'https://wa.me/77001234567';
+interface FormState {
+  name: string;
+  phone: string;
+  company: string;
+  comment: string;
+}
+
+interface FormErrors {
+  name?: string;
+  phone?: string;
+  general?: string;
+}
+
+function buildFormWhatsAppMessage(values: FormState): string {
+  const parts: string[] = [];
+  parts.push('Здравствуйте! Хочу подключить CRM для Kaspi-магазина.');
+  parts.push('');
+  if (values.name.trim()) parts.push(`Имя: ${values.name.trim()}`);
+  if (values.phone.trim()) parts.push(`Телефон: ${values.phone.trim()}`);
+  if (values.company.trim()) parts.push(`Магазин/компания: ${values.company.trim()}`);
+  if (values.comment.trim()) parts.push(`Комментарий: ${values.comment.trim()}`);
+  parts.push('');
+  parts.push('Пожалуйста, свяжитесь со мной.');
+  return parts.join('\n');
+}
 
 export const CrmDlyaKaspiPage: React.FC = () => {
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', phone: '', company: '', comment: '' });
+  const [form, setForm] = useState<FormState>({ name: '', phone: '', company: '', comment: '' });
+  const [errors, setErrors] = useState<FormErrors>({});
   const [formSent, setFormSent] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.name.trim() || !form.phone.trim()) return;
+    const nextErrors: FormErrors = {};
+    if (!form.name.trim()) nextErrors.name = 'Введите имя';
+    if (!form.phone.trim()) nextErrors.phone = 'Введите телефон';
+    if (nextErrors.name || nextErrors.phone) {
+      nextErrors.general = 'Заполните обязательные поля, чтобы отправить заявку в WhatsApp.';
+      setErrors(nextErrors);
+      return;
+    }
+    setErrors({});
+
+    const message = buildFormWhatsAppMessage(form);
+    const url = buildWhatsAppUrl(message, WHATSAPP_CONTACT_NUMBER);
+    window.open(url, '_blank', 'noopener,noreferrer');
     setFormSent(true);
     setForm({ name: '', phone: '', company: '', comment: '' });
   };
@@ -335,10 +372,10 @@ export const CrmDlyaKaspiPage: React.FC = () => {
       <section id="form" className="py-16 md:py-20 bg-sf-backgroundSection/80 scroll-mt-24">
         <div className="max-w-xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl md:text-3xl font-bold text-sf-text-primary text-center mb-4">
-            Оставить заявку
+            Оставить заявку в WhatsApp
           </h2>
           <p className="text-sf-text-secondary text-center mb-8">
-            Оставьте контакты — мы свяжемся с вами и покажем, как подключить Kaspi к CRM.
+            Оставьте контакты — мы свяжемся с вами и покажем, как подключить Kaspi к CRM. После отправки откроется WhatsApp с готовым сообщением.
           </p>
           {formSent ? (
             <div className="rounded-sfCard bg-sf-primaryLight border border-sf-cardBorder p-6 text-center text-sf-text-primary">
@@ -359,6 +396,7 @@ export const CrmDlyaKaspiPage: React.FC = () => {
                   className="w-full rounded-sfButton border border-sf-border px-4 py-2.5 text-sf-text-primary focus:ring-2 focus:ring-sf-primary focus:border-sf-primary"
                   placeholder="Как к вам обращаться"
                 />
+                {errors.name && <p className="mt-1 text-xs text-red-600">{errors.name}</p>}
               </div>
               <div>
                 <label htmlFor="lead-phone" className="block text-sm font-medium text-sf-text-primary mb-1">
@@ -373,6 +411,7 @@ export const CrmDlyaKaspiPage: React.FC = () => {
                   className="w-full rounded-sfButton border border-sf-border px-4 py-2.5 text-sf-text-primary focus:ring-2 focus:ring-sf-primary focus:border-sf-primary"
                   placeholder="+7 (___) ___-__-__"
                 />
+                {errors.phone && <p className="mt-1 text-xs text-red-600">{errors.phone}</p>}
               </div>
               <div>
                 <label htmlFor="lead-company" className="block text-sm font-medium text-sf-text-primary mb-1">
@@ -400,11 +439,16 @@ export const CrmDlyaKaspiPage: React.FC = () => {
                   placeholder="Что вас интересует: демо, консультация, подключение"
                 />
               </div>
+              {errors.general && (
+                <p className="text-xs text-red-600">
+                  {errors.general}
+                </p>
+              )}
               <button
                 type="submit"
                 className="w-full inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-sfCard font-semibold text-sf-text-inverse bg-sf-primary hover:bg-sf-primaryHover shadow-md transition-all"
               >
-                Отправить заявку
+                Отправить заявку в WhatsApp
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>

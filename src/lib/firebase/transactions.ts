@@ -93,6 +93,27 @@ export const secureDeleteTransaction = async (
   await deleteTransaction(transactionId, currentUser.uid);
 };
 
+interface FuelData {
+  vehicleId: string;
+  vehicleName: string;
+  odometerKm: number;
+  liters?: number | null;
+  pricePerLiter?: number | null;
+  fuelType?: string | null;
+  gasStation?: string | null;
+  isFullTank?: boolean;
+  receiptRecognized?: boolean;
+  receiptFileUrl?: string | null;
+  receiptRef?: string | null;
+  recognizedAt?: unknown;
+  recognizedSource?: 'ai' | 'manual';
+  derivedFuelStats?: {
+    previousOdometerKm?: number | null;
+    distanceSincePrevFuelingKm?: number | null;
+    estimatedConsumptionLPer100?: number | null;
+  } | null;
+}
+
 interface TransferOptions {
   isSalary?: boolean;
   isCashless?: boolean;
@@ -101,6 +122,7 @@ interface TransferOptions {
   expenseCategoryId?: string;
   skipTelegram?: boolean;
   needsReview?: boolean;
+  fuelData?: FuelData;
   metadata?: {
     editType?: 'reversal' | 'correction';
     reversalOf?: string;
@@ -121,6 +143,7 @@ export const transferFunds = async ({
   expenseCategoryId,
   skipTelegram,
   needsReview,
+  fuelData,
   metadata,
   companyId
 }: {
@@ -136,6 +159,7 @@ export const transferFunds = async ({
   expenseCategoryId?: string;
   skipTelegram?: boolean;
   needsReview?: boolean;
+  fuelData?: FuelData;
   companyId: string;
   metadata?: {
     editType?: 'reversal' | 'correction';
@@ -213,6 +237,10 @@ export const transferFunds = async ({
         if (metadata.correctedFrom) {
           withdrawalData.correctedFrom = metadata.correctedFrom;
         }
+      }
+
+      if (fuelData) {
+        withdrawalData.fuelData = fuelData;
       }
 
       // Данные для пополнения средств

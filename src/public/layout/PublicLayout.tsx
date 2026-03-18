@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { PublicHeader } from './PublicHeader';
 import { PublicFooter } from './PublicFooter';
 import { publicTokens } from '../theme';
+import { FloatingWhatsAppButton } from '../components/FloatingWhatsAppButton';
 
 interface PublicLayoutProps {
   children: React.ReactNode;
@@ -54,6 +55,7 @@ export const PublicLayout: React.FC<PublicLayoutProps> = ({ children }) => {
     <div className={publicTokens.layout.wrapper} data-public-site>
       <PublicHeader />
       <main>{children}</main>
+      <FloatingWhatsAppButton />
       <PublicFooter />
     </div>
   );

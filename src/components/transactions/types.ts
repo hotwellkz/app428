@@ -35,4 +35,14 @@ export interface Transaction {
   expenseCategoryId?: string;
   status?: 'pending' | 'approved' | 'rejected';
   needsReview?: boolean;
+  fuelData?: {
+    vehicleId: string;
+    vehicleName: string;
+    odometerKm: number;
+    liters?: number | null;
+    pricePerLiter?: number | null;
+    fuelType?: string | null;
+    gasStation?: string | null;
+    isFullTank?: boolean;
+  };
 }
