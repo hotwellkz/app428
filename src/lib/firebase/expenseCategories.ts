@@ -14,6 +14,9 @@ import type { ExpenseCategory, ExpenseCategoryCreate } from '../../types/expense
 
 export const DEFAULT_EXPENSE_CATEGORY_NAME = 'Прочее';
 
+/** Название категории расхода для топлива (иконка «Заправка»). Единая категория для аналитики. */
+export const FUEL_EXPENSE_CATEGORY_NAME = 'Заправка';
+
 /** Палитра цветов для категорий (если не задан color в документе — назначается по индексу) */
 export const EXPENSE_CATEGORY_COLORS = [
   'red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal',
@@ -159,6 +162,16 @@ export const ensureDefaultExpenseCategory = async (userId: string): Promise<stri
   const other = existing.find((c) => c.name === DEFAULT_EXPENSE_CATEGORY_NAME);
   if (other) return other.id;
   return createExpenseCategory(DEFAULT_EXPENSE_CATEGORY_NAME, userId);
+};
+
+/**
+ * Находит категорию «Заправка» в справочнике или создаёт её один раз. Используется для переводов на иконку «Заправка», чтобы все расходы на топливо шли в одну категорию аналитики.
+ */
+export const ensureFuelExpenseCategory = async (userId: string): Promise<string> => {
+  const existing = await getExpenseCategories();
+  const fuel = existing.find((c) => c.name === FUEL_EXPENSE_CATEGORY_NAME);
+  if (fuel) return fuel.id;
+  return createExpenseCategory(FUEL_EXPENSE_CATEGORY_NAME, userId);
 };
 
 /**

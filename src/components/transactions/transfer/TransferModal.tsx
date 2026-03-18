@@ -5,7 +5,9 @@ import {
   createExpenseCategory,
   updateExpenseCategory,
   ensureDefaultExpenseCategory,
-  DEFAULT_EXPENSE_CATEGORY_NAME
+  ensureFuelExpenseCategory,
+  DEFAULT_EXPENSE_CATEGORY_NAME,
+  FUEL_EXPENSE_CATEGORY_NAME
 } from '../../../lib/firebase/expenseCategories';
 import { showErrorNotification, showSuccessNotification } from '../../../utils/notifications';
 import { formatMoney } from '../../../utils/formatMoney';
@@ -104,6 +106,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const [manageModalOpen, setManageModalOpen] = useState(false);
   const expenseDropdownRef = useRef<HTMLDivElement>(null);
   const hasSetDefaultCategoryForOpen = useRef(false);
+  const hasSetFuelCategoryForOpen = useRef(false);
   const isMobile = useIsMobile(768);
   const submittedSuccessRef = useRef(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -197,6 +200,28 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       console.error('ensureDefaultExpenseCategory:', err);
     });
   }, [isOpen, showExpenseCategory, user?.uid, expenseCategories]);
+
+  // Для формы «Заправка»: автоматически подставляем категорию расхода «Заправка» (находим в справочнике или создаём один раз)
+  useEffect(() => {
+    if (!isOpen) {
+      hasSetFuelCategoryForOpen.current = false;
+      return;
+    }
+    if (!isFuelTransfer || !user?.uid) return;
+    if (hasSetFuelCategoryForOpen.current) return;
+    hasSetFuelCategoryForOpen.current = true;
+    const fuel = expenseCategories.find((c) => c.name === FUEL_EXPENSE_CATEGORY_NAME);
+    if (fuel) {
+      setExpenseCategoryId(fuel.id);
+      return;
+    }
+    ensureFuelExpenseCategory(user.uid).then((id) => {
+      setExpenseCategoryId(id);
+    }).catch((err) => {
+      console.error('ensureFuelExpenseCategory:', err);
+      hasSetFuelCategoryForOpen.current = false;
+    });
+  }, [isOpen, isFuelTransfer, user?.uid, expenseCategories]);
 
   // Закрытие dropdown при клике снаружи
   useEffect(() => {
@@ -612,6 +637,11 @@ export const TransferModal: React.FC<TransferModalProps> = ({
       }
 
       if (!companyId) return;
+      const effectiveExpenseCategoryId = showExpenseCategory
+        ? expenseCategoryId || undefined
+        : isFuelTransfer && user?.uid
+          ? (expenseCategoryId || await ensureFuelExpenseCategory(user.uid))
+          : undefined;
       await transferFunds({
         sourceCategory,
         targetCategory,
@@ -622,7 +652,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         waybillData: {},
         isSalary,
         isCashless,
-        expenseCategoryId: showExpenseCategory ? expenseCategoryId || undefined : undefined,
+        expenseCategoryId: effectiveExpenseCategoryId,
         needsReview,
         fuelData,
         companyId
