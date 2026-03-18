@@ -108,10 +108,109 @@ interface FuelData {
   recognizedAt?: unknown;
   recognizedSource?: 'ai' | 'manual';
   derivedFuelStats?: {
+    previousFuelTransactionId?: string | null;
     previousOdometerKm?: number | null;
     distanceSincePrevFuelingKm?: number | null;
     estimatedConsumptionLPer100?: number | null;
+    status: 'normal' | 'warning' | 'critical' | 'insufficient_data';
+    note?: string | null;
   } | null;
+}
+
+const FUEL_CONSUMPTION_NORMAL_MAX = 14.5;
+const FUEL_CONSUMPTION_WARNING_MAX = 15.5;
+
+async function computeDerivedFuelStats(
+  companyId: string,
+  fuelData: FuelData
+): Promise<FuelData['derivedFuelStats']> {
+  const liters = fuelData.liters ?? null;
+  const currentOdo = fuelData.odometerKm;
+  if (!companyId || liters == null || !Number.isFinite(liters) || !Number.isFinite(currentOdo)) {
+    return {
+      previousFuelTransactionId: null,
+      previousOdometerKm: null,
+      distanceSincePrevFuelingKm: null,
+      estimatedConsumptionLPer100: null,
+      status: 'insufficient_data',
+      note: 'Недостаточно данных для расчёта расхода топлива'
+    };
+  }
+
+  try {
+    const q = query(
+      collection(db, 'transactions'),
+      where('companyId', '==', companyId),
+      where('type', '==', 'expense'),
+      where('status', '==', 'approved'),
+      where('fuelData.vehicleId', '==', fuelData.vehicleId || ''),
+      orderBy('date', 'desc'),
+      limit(1)
+    );
+    const snap = await getDocs(q);
+    if (snap.empty) {
+      return {
+        previousFuelTransactionId: null,
+        previousOdometerKm: null,
+        distanceSincePrevFuelingKm: null,
+        estimatedConsumptionLPer100: null,
+        status: 'insufficient_data',
+        note: 'Не найдена предыдущая заправка для этой машины'
+      };
+    }
+    const prevDoc = snap.docs[0];
+    const prevData = prevDoc.data() as Transaction & { fuelData?: FuelData };
+    const prevFuel = prevData.fuelData;
+    const prevOdo = prevFuel?.odometerKm;
+    if (!Number.isFinite(prevOdo)) {
+      return {
+        previousFuelTransactionId: prevDoc.id,
+        previousOdometerKm: null,
+        distanceSincePrevFuelingKm: null,
+        estimatedConsumptionLPer100: null,
+        status: 'insufficient_data',
+        note: 'У предыдущей заправки не указан пробег'
+      };
+    }
+    const distance = currentOdo - prevOdo!;
+    if (!Number.isFinite(distance) || distance <= 0) {
+      return {
+        previousFuelTransactionId: prevDoc.id,
+        previousOdometerKm: prevOdo!,
+        distanceSincePrevFuelingKm: null,
+        estimatedConsumptionLPer100: null,
+        status: 'insufficient_data',
+        note: 'Текущий пробег меньше или равен предыдущему'
+      };
+    }
+    const distanceRounded = Math.round(distance * 10) / 10;
+    const consumptionRaw = (liters / distance) * 100;
+    const consumption = Math.round(consumptionRaw * 10) / 10;
+
+    let status: 'normal' | 'warning' | 'critical';
+    if (consumption <= FUEL_CONSUMPTION_NORMAL_MAX) status = 'normal';
+    else if (consumption <= FUEL_CONSUMPTION_WARNING_MAX) status = 'warning';
+    else status = 'critical';
+
+    return {
+      previousFuelTransactionId: prevDoc.id,
+      previousOdometerKm: prevOdo!,
+      distanceSincePrevFuelingKm: distanceRounded,
+      estimatedConsumptionLPer100: consumption,
+      status,
+      note: null
+    };
+  } catch (e) {
+    console.error('[fuel] computeDerivedFuelStats failed', e);
+    return {
+      previousFuelTransactionId: null,
+      previousOdometerKm: null,
+      distanceSincePrevFuelingKm: null,
+      estimatedConsumptionLPer100: null,
+      status: 'insufficient_data',
+      note: 'Ошибка при расчёте расхода топлива'
+    };
+  }
 }
 
 interface TransferOptions {
@@ -179,6 +278,12 @@ export const transferFunds = async ({
   }
 
   try {
+    let enrichedFuelData: FuelData | undefined = fuelData;
+    if (fuelData && companyId) {
+      const derived = await computeDerivedFuelStats(companyId, fuelData);
+      enrichedFuelData = { ...fuelData, derivedFuelStats: derived };
+    }
+
     const status: TransactionStatus = await getTransactionStatusForCompany(companyId);
 
     await runTransaction(db, async (transaction) => {
@@ -239,8 +344,8 @@ export const transferFunds = async ({
         }
       }
 
-      if (fuelData) {
-        withdrawalData.fuelData = fuelData;
+      if (enrichedFuelData) {
+        withdrawalData.fuelData = enrichedFuelData;
       }
 
       // Данные для пополнения средств

@@ -44,5 +44,13 @@ export interface Transaction {
     fuelType?: string | null;
     gasStation?: string | null;
     isFullTank?: boolean;
+    derivedFuelStats?: {
+      previousFuelTransactionId?: string | null;
+      previousOdometerKm?: number | null;
+      distanceSincePrevFuelingKm?: number | null;
+      estimatedConsumptionLPer100?: number | null;
+      status: 'normal' | 'warning' | 'critical' | 'insufficient_data';
+      note?: string | null;
+    } | null;
   };
 }

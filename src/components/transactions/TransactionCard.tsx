@@ -136,6 +136,20 @@ export const TransactionCard = React.memo<TransactionCardProps>(function Transac
   const isCashless = !!transaction.isCashless;
   const showNeedsReviewBadge = !!transaction.needsReview;
 
+  const fuel = transaction.fuelData;
+  const fuelStats = fuel?.derivedFuelStats;
+
+  const fuelStatusMeta =
+    fuelStats?.status === 'normal'
+      ? { label: 'Норма', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' }
+      : fuelStats?.status === 'warning'
+        ? { label: 'Повышенный расход', className: 'bg-amber-50 text-amber-700 border-amber-200' }
+        : fuelStats?.status === 'critical'
+          ? { label: 'Подозрительно высокий расход', className: 'bg-red-50 text-red-700 border-red-200' }
+          : fuelStats?.status === 'insufficient_data'
+            ? { label: 'Недостаточно данных', className: 'bg-gray-50 text-gray-600 border-gray-200' }
+            : null;
+
   return (
     <div className="relative overflow-hidden">
       <div
@@ -293,6 +307,54 @@ export const TransactionCard = React.memo<TransactionCardProps>(function Transac
               </span>
             </div>
           </div>
+
+          {fuel && (
+            <div className="mt-3 border-t border-gray-100 pt-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
+                <div className="space-y-0.5">
+                  <div>
+                    <span className="font-medium">Заправка:</span>{' '}
+                    {fuel.vehicleName} · {fuel.odometerKm} км
+                  </div>
+                  <div className="space-x-2">
+                    {fuel.liters != null && (
+                      <span>{fuel.liters} л</span>
+                    )}
+                    {fuel.pricePerLiter != null && (
+                      <span>{fuel.pricePerLiter} ₸/л</span>
+                    )}
+                    {fuel.fuelType && <span>{fuel.fuelType}</span>}
+                    {fuel.gasStation && <span>АЗС: {fuel.gasStation}</span>}
+                  </div>
+                </div>
+                {fuelStats && fuelStatusMeta && (
+                  <div className={`px-2 py-1 rounded-md border text-[11px] font-medium ${fuelStatusMeta.className}`}>
+                    {fuelStatusMeta.label}
+                    {fuelStats.estimatedConsumptionLPer100 != null && (
+                      <span className="ml-1">
+                        · {fuelStats.estimatedConsumptionLPer100} л/100 км
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {fuelStats && (fuelStats.previousOdometerKm != null || fuelStats.distanceSincePrevFuelingKm != null) && (
+                <div className="mt-1 text-[11px] text-gray-500 flex flex-wrap gap-2">
+                  {fuelStats.previousOdometerKm != null && (
+                    <span>Предыдущий пробег: {fuelStats.previousOdometerKm} км</span>
+                  )}
+                  {fuelStats.distanceSincePrevFuelingKm != null && (
+                    <span>Пройдено: {fuelStats.distanceSincePrevFuelingKm} км</span>
+                  )}
+                </div>
+              )}
+              {fuelStats?.note && (
+                <div className="mt-1 text-[11px] text-gray-500">
+                  {fuelStats.note}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-2 pt-2 border-t border-gray-200">
             <div className="flex flex-col gap-1">

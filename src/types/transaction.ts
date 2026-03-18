@@ -64,9 +64,12 @@ export interface Transaction {
     recognizedAt?: unknown;
     recognizedSource?: 'ai' | 'manual';
     derivedFuelStats?: {
+      previousFuelTransactionId?: string | null;
       previousOdometerKm?: number | null;
       distanceSincePrevFuelingKm?: number | null;
       estimatedConsumptionLPer100?: number | null;
+      status: 'normal' | 'warning' | 'critical' | 'insufficient_data';
+      note?: string | null;
     } | null;
   };
 }
