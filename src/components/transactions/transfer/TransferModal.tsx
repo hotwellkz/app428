@@ -595,8 +595,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
             onChange={handleCameraCapture}
             aria-label="Сделать фото"
           />
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div className="mb-6 space-y-1 pb-2">
+          <div className={`flex-1 overflow-y-auto flex flex-col min-h-0 ${isFuelTransfer ? 'p-4 md:p-5 space-y-3' : 'p-6 space-y-6'}`}>
+          <div className={`space-y-1 pb-2 ${isFuelTransfer ? 'mb-2' : 'mb-6'}`}>
             <div className="flex justify-between text-sm">
               <span className="text-gray-600">От: {sourceCategory.title}</span>
               <span className="text-gray-600">Кому: {targetCategory.title}</span>
@@ -609,152 +609,203 @@ export const TransferModal: React.FC<TransferModalProps> = ({
             </div>
           </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Сумма перевода
-              </label>
-              <input
-                type="text"
-                inputMode="numeric"
-                value={amount}
-                onChange={handleAmountChange}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="1 000 000"
-                required
-              />
-            </div>
-
-            {isFuelTransfer && (
-              <div className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-4">
+            {isFuelTransfer ? (
+              /* Форма «Заправка»: 3 блока, на desktop — 2 колонки */
+              <div className="grid md:grid-cols-2 gap-4 md:gap-5 md:items-start">
+                {/* Левая колонка (desktop): Основное + Комментарий */}
+                <div className="space-y-3 md:space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Транспорт <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={vehicleId}
-                      onChange={(e) => setVehicleId(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Основное</p>
+                    <div className="space-y-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Сумма перевода</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={amount}
+                          onChange={handleAmountChange}
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="1 000 000"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Транспорт <span className="text-red-500">*</span></label>
+                        <select
+                          value={vehicleId}
+                          onChange={(e) => setVehicleId(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Выберите машину</option>
+                          {VEHICLES.map((v) => (
+                            <option key={v.id} value={v.id}>{v.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Пробег, км <span className="text-red-500">*</span></label>
+                        <input
+                          type="number"
+                          min={0}
+                          inputMode="numeric"
+                          value={odometerKm}
+                          onChange={(e) => setOdometerKm(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Текущий пробег"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-0.5">Комментарий</label>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-h-[60px] md:min-h-[56px] resize-y"
+                      placeholder="Назначение перевода"
+                      rows={2}
+                    />
+                    {needsReview && (
+                      <p className="mt-1 text-xs text-amber-700">Контролер проверит категорию.</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Правая колонка (desktop): Данные по топливу + Чек */}
+                <div className="space-y-3 md:space-y-4">
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Данные по топливу</p>
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Литры</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            inputMode="decimal"
+                            value={liters}
+                            onChange={(e) => setLiters(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Л"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Цена/л</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step="0.01"
+                            inputMode="decimal"
+                            value={pricePerLiter}
+                            onChange={(e) => setPricePerLiter(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="₸"
+                          />
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Тип топлива</label>
+                          <select
+                            value={fuelType}
+                            onChange={(e) => setFuelType(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="ДТ">ДТ</option>
+                            <option value="АИ-92">АИ-92</option>
+                            <option value="АИ-95">АИ-95</option>
+                            <option value="Газ">Газ</option>
+                          </select>
+                        </div>
+                        <div className="flex items-end pb-1">
+                          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+                            <input
+                              id="fuel-full-tank"
+                              type="checkbox"
+                              checked={isFullTank}
+                              onChange={(e) => setIsFullTank(e.target.checked)}
+                              className="h-3.5 w-3.5 text-blue-600 border-gray-300 rounded"
+                            />
+                            Полный бак
+                          </label>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">АЗС</label>
+                        <input
+                          type="text"
+                          value={gasStation}
+                          onChange={(e) => setGasStation(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          placeholder="Название АЗС"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Чек</p>
+                      <button
+                        type="button"
+                        onClick={() => cameraInputRef.current?.click()}
+                        disabled={files.length >= MAX_FILES}
+                        className="p-1.5 text-gray-500 hover:text-gray-700 rounded border border-gray-300 hover:border-gray-400 transition-colors disabled:opacity-50"
+                        title="Камера"
+                      >
+                        <Camera className="h-4 w-4" />
+                      </button>
+                    </div>
+                    <div
+                      {...getRootProps()}
+                      className={`border border-dashed rounded-md cursor-pointer transition-colors p-2.5 text-center
+                        ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
+                        ${files.length > 0 ? 'hidden' : ''}`}
                     >
-                      <option value="">Выберите машину</option>
-                      {VEHICLES.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.name}
-                        </option>
-                      ))}
-                    </select>
+                      <input {...getInputProps()} />
+                      <PaperclipIcon className="h-5 w-5 text-gray-400 mx-auto mb-0.5" />
+                      <p className="text-xs text-gray-500">Файл или фото чека</p>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Пробег на одометре, км <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      inputMode="numeric"
-                      value={odometerKm}
-                      onChange={(e) => setOdometerKm(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Введите текущий пробег машины"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Литры
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      inputMode="decimal"
-                      value={liters}
-                      onChange={(e) => setLiters(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Количество литров"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Цена за литр
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      inputMode="decimal"
-                      value={pricePerLiter}
-                      onChange={(e) => setPricePerLiter(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Цена за литр"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Тип топлива
-                    </label>
-                    <select
-                      value={fuelType}
-                      onChange={(e) => setFuelType(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    >
-                      <option value="ДТ">ДТ</option>
-                      <option value="АИ-92">АИ-92</option>
-                      <option value="АИ-95">АИ-95</option>
-                      <option value="Газ">Газ</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      АЗС
-                    </label>
-                    <input
-                      type="text"
-                      value={gasStation}
-                      onChange={(e) => setGasStation(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Название АЗС"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    id="fuel-full-tank"
-                    type="checkbox"
-                    checked={isFullTank}
-                    onChange={(e) => setIsFullTank(e.target.checked)}
-                    className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                  />
-                  <label htmlFor="fuel-full-tank" className="text-sm text-gray-700">
-                    Полный бак
-                  </label>
                 </div>
               </div>
-            )}
+            ) : (
+              /* Обычная форма переводов */
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Сумма перевода
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={amount}
+                    onChange={handleAmountChange}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="1 000 000"
+                    required
+                  />
+                </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Комментарий к переводу
-              </label>
-              <textarea
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Укажите назначение перевода"
-                rows={3}
-              />
-              {needsReview && (
-                <p className="mt-1 text-xs text-amber-700">
-                  Контролер проверит категорию перевода.
-                </p>
-              )}
-            </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Комментарий к переводу
+                  </label>
+                  <textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Укажите назначение перевода"
+                    rows={3}
+                  />
+                  {needsReview && (
+                    <p className="mt-1 text-xs text-amber-700">
+                      Контролер проверит категорию перевода.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
 
             {showExpenseCategory && (
               <div className="relative">
@@ -935,110 +986,122 @@ export const TransferModal: React.FC<TransferModalProps> = ({
               </div>
             )}
 
-            {/* Чекбоксы в одну строку, на узком экране перенос */}
-            <div className="flex flex-wrap items-center gap-3 sm:gap-4">
-              <label className="flex items-center space-x-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={isSalary}
-                  onChange={(e) => setIsSalary(e.target.checked)}
-                  className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
-                />
-                <span className="text-gray-700">ЗП</span>
-              </label>
-              <label className="flex items-center space-x-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={isCashless}
-                  onChange={(e) => {
-                    userTouchedCashlessRef.current = true;
-                    setIsCashless(e.target.checked);
-                  }}
-                  className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
-                />
-                <span className="text-gray-700">Безнал</span>
-              </label>
-              <label
-                className="flex items-center space-x-2 text-sm"
-                title="Требует уточнения"
-              >
-                <input
-                  type="checkbox"
-                  checked={needsReview}
-                  onChange={(e) => setNeedsReview(e.target.checked)}
-                  className="h-4 w-4 text-amber-500 focus:ring-amber-500 border-gray-300 rounded"
-                />
-                <span className="text-gray-700">Треб.ут.</span>
-              </label>
-            </div>
-
-            {/* Десктопная версия кнопок */}
-            <div className="hidden md:block">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <label className="block text-sm font-medium text-gray-700">
-                    Прикрепить файлы
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => cameraInputRef.current?.click()}
-                    disabled={files.length >= MAX_FILES}
-                    className="p-1.5 text-gray-500 hover:text-gray-700 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors disabled:opacity-50"
-                    title="Камера"
-                  >
-                    <Camera className="h-4 w-4" />
-                  </button>
-                </div>
-                <div
-                  {...getRootProps()}
-                  className={`border-2 border-dashed rounded-lg cursor-pointer transition-colors
-                    ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
-                    p-4`}
+            {/* Чекбоксы: для «Заправка» скрываем ЗП; Безнал/Треб.ут. — компактно в «Дополнительно» */}
+            {!isFuelTransfer && (
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                <label className="flex items-center space-x-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isSalary}
+                    onChange={(e) => setIsSalary(e.target.checked)}
+                    className="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 rounded"
+                  />
+                  <span className="text-gray-700">ЗП</span>
+                </label>
+                <label className="flex items-center space-x-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isCashless}
+                    onChange={(e) => {
+                      userTouchedCashlessRef.current = true;
+                      setIsCashless(e.target.checked);
+                    }}
+                    className="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
+                  />
+                  <span className="text-gray-700">Безнал</span>
+                </label>
+                <label
+                  className="flex items-center space-x-2 text-sm"
+                  title="Требует уточнения"
                 >
-                  <input {...getInputProps()} />
-                  {/* Desktop и планшетная версия */}
-                  <div className="hidden md:flex flex-col items-center justify-center">
-                    <svg
-                      className="mx-auto h-12 w-12 text-gray-400"
-                      stroke="currentColor"
-                      fill="none"
-                      viewBox="0 0 48 48"
+                  <input
+                    type="checkbox"
+                    checked={needsReview}
+                    onChange={(e) => setNeedsReview(e.target.checked)}
+                    className="h-4 w-4 text-amber-500 focus:ring-amber-500 border-gray-300 rounded"
+                  />
+                  <span className="text-gray-700">Треб.ут.</span>
+                </label>
+              </div>
+            )}
+            {isFuelTransfer && (
+              <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
+                <span className="text-gray-500">Дополнительно:</span>
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={isCashless}
+                    onChange={(e) => {
+                      userTouchedCashlessRef.current = true;
+                      setIsCashless(e.target.checked);
+                    }}
+                    className="h-3.5 w-3.5 text-purple-600 border-gray-300 rounded"
+                  />
+                  <span>Безнал</span>
+                </label>
+                <label className="flex items-center gap-1.5" title="Требует уточнения">
+                  <input
+                    type="checkbox"
+                    checked={needsReview}
+                    onChange={(e) => setNeedsReview(e.target.checked)}
+                    className="h-3.5 w-3.5 text-amber-500 border-gray-300 rounded"
+                  />
+                  <span>Треб. ут.</span>
+                </label>
+              </div>
+            )}
+
+            {/* Десктопная версия: для «Заправка» только кнопка отправки; для остальных — блок прикрепления + кнопка */}
+            <div className="hidden md:block">
+              {!isFuelTransfer && (
+                <div>
+                  <div className="flex items-center gap-2 mb-1">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Прикрепить файлы
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current?.click()}
+                      disabled={files.length >= MAX_FILES}
+                      className="p-1.5 text-gray-500 hover:text-gray-700 rounded-lg border border-gray-300 hover:border-gray-400 transition-colors disabled:opacity-50"
+                      title="Камера"
                     >
-                      <path
-                        d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    <p className="mt-1 text-sm text-gray-600">
-                      Перетащите файлы сюда или нажмите для выбора
-                    </p>
-                    <p className="mt-1 text-xs text-gray-500">
-                      Поддерживаются изображения, PDF и документы Word (до 10MB)
-                    </p>
+                      <Camera className="h-4 w-4" />
+                    </button>
                   </div>
-                  {/* Мобильная версия */}
-                  <div className="md:hidden flex items-center justify-center">
-                    <svg
-                      className="h-6 w-6 text-gray-400"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-                      />
-                    </svg>
+                  <div
+                    {...getRootProps()}
+                    className={`border-2 border-dashed rounded-lg cursor-pointer transition-colors
+                      ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-gray-400'}
+                      p-4`}
+                  >
+                    <input {...getInputProps()} />
+                    <div className="flex flex-col items-center justify-center">
+                      <svg
+                        className="mx-auto h-12 w-12 text-gray-400"
+                        stroke="currentColor"
+                        fill="none"
+                        viewBox="0 0 48 48"
+                      >
+                        <path
+                          d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      <p className="mt-1 text-sm text-gray-600">
+                        Перетащите файлы сюда или нажмите для выбора
+                      </p>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Поддерживаются изображения, PDF и документы Word (до 10MB)
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Десктопная кнопка отправки */}
-              <div className="hidden md:flex justify-end">
+              <div className="hidden md:flex justify-end mt-2">
                 <button
                   type="submit"
                   disabled={loading || files.some(f => f.status === 'uploading' || f.status === 'pending')}
@@ -1054,7 +1117,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
             </div>
 
             {files.length > 0 && (
-              <div className="space-y-2">
+              <div className={isFuelTransfer ? 'space-y-1.5' : 'space-y-2'}>
                 {firstUploadedImage && (
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="text-xs text-slate-500">Можно распознать чек по первому изображению</span>
@@ -1174,9 +1237,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                 {files.map((file, index) => (
                   <div
                     key={file.id}
-                    className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg"
+                    className={`flex items-center gap-2 bg-gray-50 ${isFuelTransfer ? 'p-2 rounded-md' : 'p-3 rounded-lg'}`}
                   >
-                    <div className="flex-shrink-0 relative w-14 h-14 rounded-lg bg-gray-200 overflow-hidden flex items-center justify-center">
+                    <div className={`flex-shrink-0 relative bg-gray-200 overflow-hidden flex items-center justify-center ${isFuelTransfer ? 'w-10 h-10 rounded-md' : 'w-14 h-14 rounded-lg'}`}>
                       {file.file.type.startsWith('image/') && (file.previewUrl || file.url) ? (
                         <img
                           src={file.previewUrl || file.url}
@@ -1197,7 +1260,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     </div>
                     <div className="flex-1 min-w-0 relative">
                       <div className="flex justify-between items-center">
-                        <p className="text-sm font-medium text-gray-900 truncate">
+                        <p className={`font-medium text-gray-900 truncate ${isFuelTransfer ? 'text-xs' : 'text-sm'}`}>
                           {file.file.name}
                         </p>
                         <button
@@ -1205,10 +1268,10 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                           onClick={() => removeFile(index)}
                           className="text-gray-400 hover:text-gray-500 flex-shrink-0"
                         >
-                          <XMarkIcon className="h-5 w-5" />
+                          <XMarkIcon className={isFuelTransfer ? 'h-4 w-4' : 'h-5 w-5'} />
                         </button>
                       </div>
-                      <p className="text-xs text-gray-500">
+                      <p className={`text-gray-500 ${isFuelTransfer ? 'text-[11px]' : 'text-xs'}`}>
                         {(file.file.size / 1024).toFixed(1)} KB
                         {file.status === 'uploading' && ' · загрузка...'}
                         {file.status === 'uploaded' && ' · загружен'}
@@ -1235,10 +1298,9 @@ export const TransferModal: React.FC<TransferModalProps> = ({
             )}
           </div>
 
-          {/* Нижняя панель (mobile): скрепка, камера, отправка. pr-14 — safe-area от плавающего сайдбара (StickyNavigation) справа. */}
+          {/* Нижняя панель (mobile): скрепка, камера, отправка. Визуально отделена; для «Заправка» — фон, чтобы кнопка отправки не терялась. pr-14 — safe-area от плавающего сайдбара. */}
           <div
-            className="flex-shrink-0 md:hidden flex items-center justify-end gap-3 p-3 pr-14 bg-white"
-            style={{ borderTop: '1px solid #e5e7eb' }}
+            className={`flex-shrink-0 md:hidden flex items-center justify-end gap-3 p-2.5 pr-14 border-t border-gray-200 ${isFuelTransfer ? 'bg-gray-50' : 'bg-white'}`}
           >
             <button
               type="button"
