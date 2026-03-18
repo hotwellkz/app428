@@ -62,6 +62,14 @@ export interface ConversationListItem {
   /** Город клиента из CRM (для фильтра и отображения). */
   city?: string | null;
   channel?: 'whatsapp' | 'instagram';
+  /** Kaspi-заказ, связанный с диалогом (если есть) */
+  kaspiOrderNumber?: string | null;
+  kaspiOrderAmount?: number | null;
+  kaspiOrderStatus?: string | null;
+  kaspiOrderCustomerName?: string | null;
+  kaspiOrderAddress?: string | null;
+  kaspiOrderUrl?: string | null;
+  kaspiOrderItems?: Array<{ name: string; quantity: number }> | null;
   /** Тест: AI-бот включён для этого чата */
   aiBotEnabled?: boolean;
   /** Тест: разрешить боту отправлять КП */
@@ -525,6 +533,16 @@ function conversationToListItem(
     dealStageColor: c.dealStageColor ?? null,
     dealTitle: c.dealTitle ?? null,
     dealResponsibleName: c.dealResponsibleName ?? null,
+    kaspiOrderNumber: (c as unknown as { kaspiOrderNumber?: string | null }).kaspiOrderNumber ?? null,
+    kaspiOrderAmount: (c as unknown as { kaspiOrderAmount?: number | null }).kaspiOrderAmount ?? null,
+    kaspiOrderStatus: (c as unknown as { kaspiOrderStatus?: string | null }).kaspiOrderStatus ?? null,
+    kaspiOrderCustomerName:
+      (c as unknown as { kaspiOrderCustomerName?: string | null }).kaspiOrderCustomerName ?? null,
+    kaspiOrderAddress: (c as unknown as { kaspiOrderAddress?: string | null }).kaspiOrderAddress ?? null,
+    kaspiOrderUrl: (c as unknown as { kaspiOrderUrl?: string | null }).kaspiOrderUrl ?? null,
+    kaspiOrderItems:
+      (c as unknown as { kaspiOrderItems?: Array<{ name: string; quantity: number }> | null }).kaspiOrderItems ??
+      null,
     aiBotEnabled: c.aiBotEnabled === true,
     aiBotAutoProposalEnabled: c.aiBotAutoProposalEnabled === true
   };

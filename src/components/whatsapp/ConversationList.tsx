@@ -72,6 +72,7 @@ const ConversationRow = memo(function ConversationRow({
   const attention = getConversationAttentionState(item);
   const isNeedReply = attention === 'need_reply';
   const waitingDuration = !hasUnread && isNeedReply ? getWaitingDurationText(item) : null;
+  const isKaspiOrder = !!item.kaspiOrderNumber;
   const dealStageName = item.dealStageName;
   const dealStageColor = item.dealStageColor;
   const dealStatusColor = dealStageColor || item.dealStatusColor;
@@ -157,7 +158,17 @@ const ConversationRow = memo(function ConversationRow({
                 hasUnread ? 'font-semibold text-gray-900' : 'font-medium text-gray-900'
               }`}
             >
-              {item.displayTitle ?? item.phone ?? item.client?.phone ?? item.clientId ?? '—'}
+              {isKaspiOrder ? (
+                <>
+                  <span className="inline-flex items-center gap-1 mr-1 text-xs font-semibold text-amber-700">
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-400" aria-hidden />
+                    Kaspi
+                  </span>
+                  {item.kaspiOrderCustomerName || item.displayTitle || item.client?.name || 'Клиент Kaspi'}
+                </>
+              ) : (
+                item.displayTitle ?? item.phone ?? item.client?.phone ?? item.clientId ?? '—'
+              )}
             </span>
             {item.channel === 'instagram' && (
               <span
@@ -200,11 +211,15 @@ const ConversationRow = memo(function ConversationRow({
                 hasUnread ? 'text-gray-700 font-medium' : 'text-gray-500'
               }`}
             >
-              {item.lastMessage.attachments?.length
-                ? '[медиа]'
-                : item.lastMessage.text.startsWith('[media') || item.lastMessage.text === '[no text]'
+              {isKaspiOrder
+                ? `Заказ №${item.kaspiOrderNumber}${
+                    item.phone ? ` • ${item.phone}` : item.client?.phone ? ` • ${item.client?.phone}` : ''
+                  }`
+                : item.lastMessage.attachments?.length
                   ? '[медиа]'
-                  : item.lastMessage.text || '[медиа]'}
+                  : item.lastMessage.text.startsWith('[media') || item.lastMessage.text === '[no text]'
+                    ? '[медиа]'
+                    : item.lastMessage.text || '[медиа]'}
             </span>
           </div>
         )}

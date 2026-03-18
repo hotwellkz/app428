@@ -273,6 +273,13 @@ interface ClientInfoPanelProps {
   aiBotFlagsSaving?: boolean;
   /** Зарегистрировать функцию применения фактов из AI-бота (город и т.д.) к карточке клиента. Вызывается после ответа бота с extractedFacts. */
   registerAiBotApplyFacts?: (fn: ((facts: { city?: string | null; area_m2?: number | null; floors?: number | null }) => void) | null) => void;
+  /** Метаданные заказа Kaspi для выбранного диалога (если есть) */
+  kaspiOrderNumber?: string | null;
+  kaspiOrderAmount?: number | null;
+  kaspiOrderStatus?: string | null;
+  kaspiOrderCustomerName?: string | null;
+  kaspiOrderAddress?: string | null;
+  kaspiOrderUrl?: string | null;
 }
 
 const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 py-0 rounded-[10px] text-[11px] font-medium bg-[#f1f3f5] text-[#555] flex-shrink-0';
@@ -311,6 +318,12 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   onAiBotFlagsChange,
   aiBotFlagsSaving = false,
   registerAiBotApplyFacts,
+  kaspiOrderNumber,
+  kaspiOrderAmount,
+  kaspiOrderStatus,
+  kaspiOrderCustomerName,
+  kaspiOrderAddress,
+  kaspiOrderUrl,
 }) => {
   const companyId = useCompanyId();
   const navigate = useNavigate();
@@ -1079,6 +1092,58 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
         <p className="mt-2 text-sm text-gray-500">Загрузка…</p>
       ) : (
         <>
+          {kaspiOrderNumber && (
+            <div className="mb-4 p-3 rounded-xl border border-amber-200 bg-amber-50">
+              <h3 className="text-xs font-semibold text-amber-800 uppercase tracking-wide flex items-center gap-1">
+                <span className="inline-block w-2 h-2 rounded-full bg-amber-400" aria-hidden />
+                Kaspi заказ
+              </h3>
+              <p className="mt-1 text-sm font-medium text-gray-900">
+                Заказ №{kaspiOrderNumber}
+                {typeof kaspiOrderAmount === 'number' && kaspiOrderAmount > 0 && (
+                  <span className="ml-1 text-xs text-gray-700">
+                    • {kaspiOrderAmount.toLocaleString('ru-RU')} ₸
+                  </span>
+                )}
+              </p>
+              {kaspiOrderCustomerName && (
+                <p className="text-xs text-gray-700 mt-1">Клиент: {kaspiOrderCustomerName}</p>
+              )}
+              {kaspiOrderAddress && (
+                <p className="text-xs text-gray-600 mt-1">Адрес: {kaspiOrderAddress}</p>
+              )}
+              <div className="mt-3 flex flex-col gap-2">
+                {onInsertNextMessage && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const template =
+                        'Здравствуйте!\nПишем по вашему заказу из Kaspi Магазина.\nХотели уточнить несколько деталей.';
+                      const current = getCurrentInputValue ? getCurrentInputValue() : '';
+                      const mode =
+                        typeof current === 'string' && current.trim().length > 0 ? ('append' as const) : ('replace' as const);
+                      onInsertNextMessage(template, mode);
+                    }}
+                    className="w-full py-2 text-xs font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700"
+                  >
+                    Вставить сообщение для WhatsApp
+                  </button>
+                )}
+                {kaspiOrderUrl && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (kaspiOrderUrl) window.open(kaspiOrderUrl, '_blank', 'noopener,noreferrer');
+                    }}
+                    className="w-full py-2 text-xs font-medium text-amber-800 border border-amber-300 rounded-lg hover:bg-amber-100"
+                  >
+                    Открыть заказ в Kaspi
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <p className="mt-1 text-base font-medium text-gray-900">
             {client ? (client.name || client.phone) : 'Новый клиент'}
           </p>

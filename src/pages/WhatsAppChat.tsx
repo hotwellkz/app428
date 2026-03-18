@@ -2692,34 +2692,40 @@ const WhatsAppChat: React.FC = () => {
             >
               <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
                 <ClientInfoPanel
-                phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null}
-                conversationId={selectedId}
-                conversationDealId={selectedItem?.dealId ?? null}
-                messages={messages}
-                dealStatuses={dealStatuses}
-                managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
-                dealStatusCounts={dealStatusCounts}
-                managerCounts={managerCounts}
-                cities={citiesForFilter}
-                cityCounts={cityCounts}
-                onAddCity={handleAddCity}
-                fillWidth
-                getCurrentInputValue={() => inputText}
-                onInsertNextMessage={(text, mode) => {
-                  if (mode === 'replace') setInputText(text);
-                  else setInputText((prev) => (prev ? prev + '\n' + text : text));
-                }}
-                isTranscribeBatchRunning={batchTranscribeRunning}
-                onPrepareForAnalysisStart={() => setPrepareForAnalysisRunning(true)}
-                onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}
-                aiBotEnabled={selectedItem?.aiBotEnabled ?? false}
-                aiBotAutoProposalEnabled={selectedItem?.aiBotAutoProposalEnabled ?? false}
-                onAiBotFlagsChange={selectedId ? handleAiBotFlagsChange : undefined}
-                aiBotFlagsSaving={aiBotFlagsSaving}
-                registerAiBotApplyFacts={(fn) => {
-                  aiBotApplyFactsRef.current = fn ?? null;
-                }}
-              />
+                  phone={selectedItem?.phone && selectedItem.phone !== '…' ? selectedItem.phone : null}
+                  conversationId={selectedId}
+                  conversationDealId={selectedItem?.dealId ?? null}
+                  messages={messages}
+                  dealStatuses={dealStatuses}
+                  managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
+                  dealStatusCounts={dealStatusCounts}
+                  managerCounts={managerCounts}
+                  cities={citiesForFilter}
+                  cityCounts={cityCounts}
+                  onAddCity={handleAddCity}
+                  fillWidth
+                  getCurrentInputValue={() => inputText}
+                  onInsertNextMessage={(text, mode) => {
+                    if (mode === 'replace') setInputText(text);
+                    else setInputText((prev) => (prev ? prev + '\n' + text : text));
+                  }}
+                  isTranscribeBatchRunning={batchTranscribeRunning}
+                  onPrepareForAnalysisStart={() => setPrepareForAnalysisRunning(true)}
+                  onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}
+                  aiBotEnabled={selectedItem?.aiBotEnabled ?? false}
+                  aiBotAutoProposalEnabled={selectedItem?.aiBotAutoProposalEnabled ?? false}
+                  onAiBotFlagsChange={selectedId ? handleAiBotFlagsChange : undefined}
+                  aiBotFlagsSaving={aiBotFlagsSaving}
+                  registerAiBotApplyFacts={(fn) => {
+                    aiBotApplyFactsRef.current = fn ?? null;
+                  }}
+                  kaspiOrderNumber={selectedItem?.kaspiOrderNumber ?? null}
+                  kaspiOrderAmount={selectedItem?.kaspiOrderAmount ?? null}
+                  kaspiOrderStatus={selectedItem?.kaspiOrderStatus ?? null}
+                  kaspiOrderCustomerName={selectedItem?.kaspiOrderCustomerName ?? null}
+                  kaspiOrderAddress={selectedItem?.kaspiOrderAddress ?? null}
+                  kaspiOrderUrl={selectedItem?.kaspiOrderUrl ?? null}
+                />
               </div>
             </div>
           </>
@@ -2822,6 +2828,12 @@ const WhatsAppChat: React.FC = () => {
                 registerAiBotApplyFacts={(fn) => {
                   aiBotApplyFactsRef.current = fn ?? null;
                 }}
+                kaspiOrderNumber={selectedItem.kaspiOrderNumber ?? null}
+                kaspiOrderAmount={selectedItem.kaspiOrderAmount ?? null}
+                kaspiOrderStatus={selectedItem.kaspiOrderStatus ?? null}
+                kaspiOrderCustomerName={selectedItem.kaspiOrderCustomerName ?? null}
+                kaspiOrderAddress={selectedItem.kaspiOrderAddress ?? null}
+                kaspiOrderUrl={selectedItem.kaspiOrderUrl ?? null}
               />
             </div>
           </div>
