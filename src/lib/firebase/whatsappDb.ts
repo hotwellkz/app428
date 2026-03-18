@@ -450,10 +450,14 @@ export async function setConversationAiBotLastProcessedMessageId(
   await updateDoc(ref, { aiBotLastMessageIdProcessed: messageId });
 }
 
+export type DialogStage = 'city' | 'area' | 'floors' | 'roof' | 'calculation' | 'finish';
+
 export interface AiBotLeadContext {
   city?: string | null;
   area_m2?: number | null;
   floors?: number | null;
+  roofType?: string | null;
+  stage?: DialogStage | null;
 }
 
 /**

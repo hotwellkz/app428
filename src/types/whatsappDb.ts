@@ -66,8 +66,14 @@ export interface WhatsAppConversation {
   aiBotLastMessageIdProcessed?: string | null;
   /** Время последней автоотправки КП ботом (защита от дублей) */
   aiBotLastProposalAt?: Date | Timestamp | null;
-  /** Контекст лида для AI-бота: город, площадь, этажность (из переписки) */
-  aiBotLeadContext?: { city?: string | null; area_m2?: number | null; floors?: number | null } | null;
+  /** Контекст лида для AI-бота: город, площадь, этажность, крыша, этап диалога (state machine) */
+  aiBotLeadContext?: {
+    city?: string | null;
+    area_m2?: number | null;
+    floors?: number | null;
+    roofType?: string | null;
+    stage?: 'city' | 'area' | 'floors' | 'roof' | 'calculation' | 'finish' | null;
+  } | null;
   /** Метаданные заказа Kaspi, если диалог создан из Kaspi Shop */
   kaspiOrderNumber?: string | null;
   kaspiOrderAmount?: number | null;

@@ -1342,7 +1342,9 @@ const WhatsAppChat: React.FC = () => {
         const clientContext = {
           city: selectedItem?.client?.city ?? leadCtx?.city ?? null,
           area_m2: leadCtx?.area_m2 ?? null,
-          floors: leadCtx?.floors ?? null
+          floors: leadCtx?.floors ?? null,
+          roofType: leadCtx?.roofType ?? null,
+          stage: leadCtx?.stage ?? null
         };
         if (import.meta.env.DEV) {
           console.log('[WhatsApp] AI bot request clientContext', clientContext, 'lastClientText', payloadMessages.filter((m) => m.role === 'client').pop()?.text?.slice(0, 80));
