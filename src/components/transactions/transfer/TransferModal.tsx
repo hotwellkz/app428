@@ -700,26 +700,47 @@ export const TransferModal: React.FC<TransferModalProps> = ({
             aria-label="Сделать фото"
           />
           <div className={`flex-1 overflow-y-auto flex flex-col min-h-0 ${isFuelTransfer ? 'p-4 md:p-5 space-y-3' : 'p-6 space-y-6'}`}>
+          {/* Верхний блок: для мобильной «Заправка» — одна компактная строка (От | баланс | Кому) без подписи «Текущий баланс» */}
           <div className={`space-y-1 pb-2 ${isFuelTransfer ? 'mb-2' : 'mb-6'}`}>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600">От: {sourceCategory.title}</span>
-              <span className="text-gray-600">Кому: {targetCategory.title}</span>
-            </div>
-            <div className="text-sm text-gray-500">
-              Текущий баланс:{' '}
-              <span className={balanceValue < 0 ? 'text-red-500' : 'text-green-600'}>
-                {balanceValue < 0 ? `−${formatMoney(Math.abs(balanceValue))}` : formatMoney(balanceValue)}
-              </span>
-            </div>
+            {isFuelTransfer ? (
+              <>
+                <div className="flex items-center justify-between gap-2 text-sm flex-wrap">
+                  <span className="text-gray-600 shrink-0">От: {sourceCategory.title}</span>
+                  <span className={balanceValue < 0 ? 'text-red-500 font-medium' : 'text-green-600 font-medium'} aria-label="Баланс">
+                    {balanceValue < 0 ? `−${formatMoney(Math.abs(balanceValue))}` : formatMoney(balanceValue)}
+                  </span>
+                  <span className="text-gray-600 shrink-0">Кому: {targetCategory.title}</span>
+                </div>
+                <div className="hidden md:block text-sm text-gray-500">
+                  Текущий баланс:{' '}
+                  <span className={balanceValue < 0 ? 'text-red-500' : 'text-green-600'}>
+                    {balanceValue < 0 ? `−${formatMoney(Math.abs(balanceValue))}` : formatMoney(balanceValue)}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">От: {sourceCategory.title}</span>
+                  <span className="text-gray-600">Кому: {targetCategory.title}</span>
+                </div>
+                <div className="text-sm text-gray-500">
+                  Текущий баланс:{' '}
+                  <span className={balanceValue < 0 ? 'text-red-500' : 'text-green-600'}>
+                    {balanceValue < 0 ? `−${formatMoney(Math.abs(balanceValue))}` : formatMoney(balanceValue)}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
             {isFuelTransfer ? (
               /* Форма «Заправка»: 3 блока, на desktop — 2 колонки */
               <div className="grid md:grid-cols-2 gap-4 md:gap-5 md:items-start">
-                {/* Левая колонка (desktop): Основное + Комментарий */}
+                {/* Левая колонка (desktop): Основное + Комментарий. На mobile: сумма первая, затем одна строка Пробег + Транспорт, заголовок «Основное» скрыт. */}
                 <div className="space-y-3 md:space-y-4">
                   <div>
-                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Основное</p>
+                    <p className="hidden md:block text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Основное</p>
                     <div className="space-y-2">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">Сумма перевода</label>
@@ -733,30 +754,32 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                           required
                         />
                       </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Транспорт <span className="text-red-500">*</span></label>
-                        <select
-                          value={vehicleId}
-                          onChange={(e) => setVehicleId(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="">Выберите машину</option>
-                          {VEHICLES.map((v) => (
-                            <option key={v.id} value={v.id}>{v.name}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Пробег, км <span className="text-red-500">*</span></label>
-                        <input
-                          type="number"
-                          min={0}
-                          inputMode="numeric"
-                          value={odometerKm}
-                          onChange={(e) => setOdometerKm(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder="Текущий пробег"
-                        />
+                      <div className="grid grid-cols-2 md:grid-cols-1 gap-2">
+                        <div className="md:order-2">
+                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Пробег, км <span className="text-red-500">*</span></label>
+                          <input
+                            type="number"
+                            min={0}
+                            inputMode="numeric"
+                            value={odometerKm}
+                            onChange={(e) => setOdometerKm(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="км"
+                          />
+                        </div>
+                        <div className="md:order-1">
+                          <label className="block text-xs font-medium text-gray-600 mb-0.5">Транспорт <span className="text-red-500">*</span></label>
+                          <select
+                            value={vehicleId}
+                            onChange={(e) => setVehicleId(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                          >
+                            <option value="">Машина</option>
+                            {VEHICLES.map((v) => (
+                              <option key={v.id} value={v.id}>{v.name}</option>
+                            ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
                   </div>
