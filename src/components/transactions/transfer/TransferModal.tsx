@@ -120,6 +120,19 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     totalsMatch?: boolean;
   } | null>(null);
 
+  /** Результат распознавания фото для формы «Заправка»: сумма, пробег, литры, АЗС и т.д. */
+  const [fuelReceiptParseResult, setFuelReceiptParseResult] = useState<{
+    totalAmount?: number;
+    odometerKm?: number;
+    liters?: number;
+    pricePerLiter?: number;
+    gasStation?: string | null;
+    fuelType?: string | null;
+    confidence: 'high' | 'medium' | 'low';
+    odometerConfidence?: 'high' | 'medium' | 'low';
+    amountConfidence?: 'high' | 'medium' | 'low';
+  } | null>(null);
+
   const isFuelTransfer = targetCategory.title === 'Заправка';
 
   const VEHICLES: { id: string; name: string }[] = [
@@ -392,6 +405,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     if (!firstUploadedImage?.file) return;
     setReceiptParseLoading(true);
     setReceiptParseResult(null);
+    setFuelReceiptParseResult(null);
     setError(null);
     try {
       const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -401,39 +415,62 @@ export const TransferModal: React.FC<TransferModalProps> = ({
         reader.readAsDataURL(firstUploadedImage.file);
       });
       const token = await getAuthToken();
+      const body = isFuelTransfer
+        ? { imageDataUrl: dataUrl, mode: 'fuel' as const }
+        : { imageDataUrl: dataUrl };
       const res = await fetch('/.netlify/functions/ai-receipt-parse', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ imageDataUrl: dataUrl }),
+        body: JSON.stringify(body),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data?.error ?? 'Ошибка распознавания чека');
         return;
       }
-      if (data.totalAmount == null && !data.comment) {
-        setError('Не удалось уверенно распознать чек. Проверьте сумму и комментарий вручную.');
-        return;
+      if (isFuelTransfer) {
+        const hasAny = data.totalAmount != null || data.odometerKm != null || data.liters != null ||
+          data.gasStation != null || data.fuelType != null;
+        if (!hasAny) {
+          setError('Не удалось распознать данные с фото. Проверьте сумму и пробег вручную.');
+          return;
+        }
+        setFuelReceiptParseResult({
+          totalAmount: typeof data.totalAmount === 'number' ? data.totalAmount : undefined,
+          odometerKm: typeof data.odometerKm === 'number' ? data.odometerKm : undefined,
+          liters: typeof data.liters === 'number' ? data.liters : undefined,
+          pricePerLiter: typeof data.pricePerLiter === 'number' ? data.pricePerLiter : undefined,
+          gasStation: data.gasStation != null ? String(data.gasStation).trim() || null : null,
+          fuelType: data.fuelType != null ? String(data.fuelType).trim() || null : null,
+          confidence: ['high', 'medium', 'low'].includes(data.confidence) ? data.confidence : 'medium',
+          odometerConfidence: ['high', 'medium', 'low'].includes(data.odometerConfidence) ? data.odometerConfidence : undefined,
+          amountConfidence: ['high', 'medium', 'low'].includes(data.amountConfidence) ? data.amountConfidence : undefined,
+        });
+      } else {
+        if (data.totalAmount == null && !data.comment) {
+          setError('Не удалось уверенно распознать чек. Проверьте сумму и комментарий вручную.');
+          return;
+        }
+        setReceiptParseResult({
+          totalAmount: Number(data.totalAmount) || 0,
+          comment: typeof data.comment === 'string' ? data.comment : 'По чеку/накладной',
+          structuredComment: typeof data.structuredComment === 'string' && data.structuredComment.trim() ? data.structuredComment.trim() : undefined,
+          confidence: ['high', 'medium', 'low'].includes(data.confidence) ? data.confidence : 'medium',
+          items: Array.isArray(data.items) ? data.items : undefined,
+          totalByItems: typeof data.totalByItems === 'number' ? data.totalByItems : undefined,
+          receiptTotal: typeof data.receiptTotal === 'number' ? data.receiptTotal : undefined,
+          totalsMatch: data.totalsMatch === true || data.totalsMatch === false ? data.totalsMatch : undefined,
+        });
       }
-      setReceiptParseResult({
-        totalAmount: Number(data.totalAmount) || 0,
-        comment: typeof data.comment === 'string' ? data.comment : 'По чеку/накладной',
-        structuredComment: typeof data.structuredComment === 'string' && data.structuredComment.trim() ? data.structuredComment.trim() : undefined,
-        confidence: ['high', 'medium', 'low'].includes(data.confidence) ? data.confidence : 'medium',
-        items: Array.isArray(data.items) ? data.items : undefined,
-        totalByItems: typeof data.totalByItems === 'number' ? data.totalByItems : undefined,
-        receiptTotal: typeof data.receiptTotal === 'number' ? data.receiptTotal : undefined,
-        totalsMatch: data.totalsMatch === true || data.totalsMatch === false ? data.totalsMatch : undefined,
-      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Ошибка при распознавании чека');
     } finally {
       setReceiptParseLoading(false);
     }
-  }, [firstUploadedImage]);
+  }, [firstUploadedImage, isFuelTransfer]);
 
   const applyReceiptResult = useCallback(() => {
     if (!receiptParseResult) return;
@@ -454,6 +491,35 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     showSuccessNotification('Заполнено по чеку');
   }, [receiptParseResult]);
 
+  /** Применить результат распознавания фото для формы «Заправка»: сумма (округлённая), пробег, литры, АЗС и т.д. Комментарий не заполняем. */
+  const applyFuelReceiptResult = useCallback(() => {
+    if (!fuelReceiptParseResult) return;
+    if (fuelReceiptParseResult.totalAmount != null) {
+      const overwriteAmount = fuelReceiptParseResult.amountConfidence !== 'low' || !amount.trim();
+      if (overwriteAmount) {
+        const rounded = Math.round(fuelReceiptParseResult.totalAmount);
+        setAmount(formatNumber(String(rounded)));
+      }
+    }
+    if (fuelReceiptParseResult.odometerKm != null && fuelReceiptParseResult.odometerConfidence !== 'low') {
+      setOdometerKm(String(fuelReceiptParseResult.odometerKm));
+    }
+    if (fuelReceiptParseResult.liters != null) {
+      setLiters(String(fuelReceiptParseResult.liters));
+    }
+    if (fuelReceiptParseResult.pricePerLiter != null) {
+      setPricePerLiter(String(fuelReceiptParseResult.pricePerLiter));
+    }
+    if (fuelReceiptParseResult.gasStation != null && fuelReceiptParseResult.gasStation.trim()) {
+      setGasStation(fuelReceiptParseResult.gasStation.trim());
+    }
+    if (fuelReceiptParseResult.fuelType != null && fuelReceiptParseResult.fuelType.trim()) {
+      setFuelType(fuelReceiptParseResult.fuelType.trim());
+    }
+    setFuelReceiptParseResult(null);
+    showSuccessNotification('Поля заправки заполнены по фото');
+  }, [fuelReceiptParseResult, amount]);
+
   useEffect(() => {
     if (!isOpen) return;
     submittedSuccessRef.current = false;
@@ -462,6 +528,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   useEffect(() => {
     if (isOpen) return;
     setReceiptParseResult(null);
+    setFuelReceiptParseResult(null);
     const toDelete = files.filter(f => f.status === 'uploaded' && f.path);
     if (!submittedSuccessRef.current && toDelete.length > 0) {
       toDelete.forEach(({ path }) => {
@@ -1152,6 +1219,53 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                         Подключите AI API key в разделе Интеграции
                       </p>
                     )}
+                  </div>
+                )}
+                {fuelReceiptParseResult && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
+                    <p className="text-sm font-medium text-blue-900">Распознано по фото</p>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      {fuelReceiptParseResult.totalAmount != null && (
+                        <li>Сумма: <strong>{formatMoney(Math.round(fuelReceiptParseResult.totalAmount))} ₸</strong></li>
+                      )}
+                      {fuelReceiptParseResult.odometerKm != null && (
+                        <li>
+                          Пробег: <strong>{formatNumber(String(fuelReceiptParseResult.odometerKm))} км</strong>
+                          {fuelReceiptParseResult.odometerConfidence === 'low' && (
+                            <span className="text-amber-700 text-xs ml-1">(низкая уверенность)</span>
+                          )}
+                        </li>
+                      )}
+                      {fuelReceiptParseResult.liters != null && (
+                        <li>Литры: <strong>{fuelReceiptParseResult.liters}</strong></li>
+                      )}
+                      {fuelReceiptParseResult.pricePerLiter != null && (
+                        <li>Цена за литр: <strong>{formatMoney(fuelReceiptParseResult.pricePerLiter)} ₸</strong></li>
+                      )}
+                      {fuelReceiptParseResult.gasStation && (
+                        <li>АЗС: <strong>{fuelReceiptParseResult.gasStation}</strong></li>
+                      )}
+                      {fuelReceiptParseResult.fuelType && (
+                        <li>Тип топлива: <strong>{fuelReceiptParseResult.fuelType}</strong></li>
+                      )}
+                    </ul>
+                    <p className="text-xs text-blue-700">Будут заполнены поля формы заправки.</p>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={applyFuelReceiptResult}
+                        className="px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+                      >
+                        Применить
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setFuelReceiptParseResult(null)}
+                        className="px-3 py-1.5 text-sm rounded-lg border border-blue-300 text-blue-800 hover:bg-blue-100"
+                      >
+                        Отмена
+                      </button>
+                    </div>
                   </div>
                 )}
                 {receiptParseResult && (
