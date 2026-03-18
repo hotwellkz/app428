@@ -65,7 +65,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const res = await fetch(url, {
       method: 'GET',
       headers: {
-        Accept: 'application/json',
+        Accept: 'application/vnd.api+json;charset=UTF-8',
         'X-Auth-Token': apiKey
       }
     });

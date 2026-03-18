@@ -59,7 +59,7 @@ export async function runKaspiSyncForCompany(companyId: string): Promise<RunSync
 
     const res = await fetch(url.toString(), {
       method: 'GET',
-      headers: { Accept: 'application/json', 'X-Auth-Token': apiKey }
+      headers: { Accept: 'application/vnd.api+json;charset=UTF-8', 'X-Auth-Token': apiKey }
     });
 
     if (!res.ok) {
