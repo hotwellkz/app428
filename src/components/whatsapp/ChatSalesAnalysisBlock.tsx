@@ -5,6 +5,7 @@ import { useAIConfigured } from '../../hooks/useAIConfigured';
 import type { WhatsAppMessage } from '../../types/whatsappDb';
 
 const SALES_ANALYZE_ENDPOINTS = ['/.netlify/functions/ai-analyze-sales', '/api/ai/analyze-sales'] as const;
+const CLIENT_ANALYZE_ENDPOINTS = ['/.netlify/functions/ai-analyze-client', '/api/ai/analyze-client'] as const;
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
@@ -69,6 +70,8 @@ interface ChatSalesAnalysisBlockProps {
   ) => Promise<{ status: 'none' | 'done' | 'partial' | 'failed'; updates: Record<string, string>; done: number; errors: number; total: number }>;
   /** Идёт ли массовая расшифровка из кнопки «Расшифровать всё» — дизейблить «Проанализировать чат» */
   isTranscribeBatchRunning?: boolean;
+  /** После успешного анализа продаж: вызвать извлечение города (ai-analyze-client) и передать сюда для автоподстановки */
+  onExtractedCity?: (city: string) => void;
 }
 
 export function ChatSalesAnalysisBlock({
@@ -83,6 +86,7 @@ export function ChatSalesAnalysisBlock({
   getCurrentInputValue,
   onPrepareForAnalysis,
   isTranscribeBatchRunning = false,
+  onExtractedCity,
 }: ChatSalesAnalysisBlockProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -189,6 +193,27 @@ export function ChatSalesAnalysisBlock({
         leadIntent: typeof data.leadIntent === 'string' ? data.leadIntent : undefined,
       };
       onCacheResult(conversationId, result);
+      if (onExtractedCity && payload.messages.length > 0) {
+        getAuthToken().then((token) => {
+          const req = () =>
+            fetch(CLIENT_ANALYZE_ENDPOINTS[0], {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify(payload),
+            });
+          req()
+            .then((r) => r.json().catch(() => ({})))
+            .then((body: { city?: string | null; error?: string }) => {
+              const city =
+                typeof body.city === 'string' && body.city.trim().length > 0 ? body.city.trim() : null;
+              if (city) onExtractedCity(city);
+            })
+            .catch(() => {});
+        });
+      }
     } catch (e) {
       setError('Не удалось выполнить анализ. Попробуйте позже.');
       if (import.meta.env.DEV) console.warn('[ChatSalesAnalysis]', e);
@@ -196,7 +221,7 @@ export function ChatSalesAnalysisBlock({
       setLoading(false);
       runGuardRef.current = false;
     }
-  }, [phone, conversationId, getRecentWithOverrides, onCacheResult]);
+  }, [phone, conversationId, getRecentWithOverrides, onCacheResult, onExtractedCity]);
 
   const copyFull = useCallback(() => {
     if (!cachedResult) return;

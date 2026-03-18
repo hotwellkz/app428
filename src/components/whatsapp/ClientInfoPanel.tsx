@@ -20,7 +20,7 @@ import { getChatAiAnalysis, setChatAiAnalysis } from '../../lib/firebase/chatAiA
 import { useCompanyId } from '../../contexts/CompanyContext';
 import { useAIConfigured } from '../../hooks/useAIConfigured';
 import { createDeal, ensureDefaultPipeline, listStages, moveDealToStage } from '../../lib/firebase/deals';
-import { removeCompanyCity, renameCompanyCity } from '../../lib/firebase/companyCities';
+import { removeCompanyCity, renameCompanyCity, resolveCityForAutoAssign } from '../../lib/firebase/companyCities';
 import { useClampedMenuPosition } from '../../hooks/useClampedMenuPosition';
 import type { Deal } from '../../types/deals';
 import toast from 'react-hot-toast';
@@ -800,6 +800,13 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       });
       setExtractedClientVisible(true);
       setExtractedClientEditMode(false);
+      if (city && cities?.length > 0) {
+        const toAssign = resolveCityForAutoAssign(city, cities, client?.city);
+        if (toAssign) {
+          await saveCity(toAssign);
+          toast.success(`Город определён из переписки: ${toAssign}`);
+        }
+      }
     } catch (e) {
       setAiError('Ошибка AI анализа. Попробуйте позже.');
       console.error('AI error', e);
@@ -908,6 +915,20 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
       }
     },
     [phone, companyId, client]
+  );
+
+  /** Автоподстановка города после AI-анализа (Проанализировать чат): город извлечён, сверяем со справочником и сохраняем только если у контакта нет города. */
+  const handleExtractedCityFromAnalysis = useCallback(
+    (detectedCity: string) => {
+      if (!cities?.length) return;
+      const toAssign = resolveCityForAutoAssign(detectedCity, cities, client?.city);
+      if (toAssign) {
+        saveCity(toAssign).then(() => {
+          toast.success(`Город определён из переписки: ${toAssign}`);
+        });
+      }
+    },
+    [cities, client?.city, saveCity]
   );
 
   /** Заполнить карточку клиента из блока «Извлечено из переписки» (только непустые поля) */
@@ -1654,6 +1675,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                 getCurrentInputValue={getCurrentInputValue}
                 onPrepareForAnalysis={prepareForAnalysis}
                 isTranscribeBatchRunning={isTranscribeBatchRunning}
+                onExtractedCity={handleExtractedCityFromAnalysis}
               />
 
               {/* Извлечено из переписки */}

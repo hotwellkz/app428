@@ -31,6 +31,31 @@ function sameCity(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
+/**
+ * Нормализация сырого названия города из AI: trim, убрать префикс "г.", привести к виду для сравнения.
+ */
+export function normalizeDetectedCity(raw: string): string {
+  const t = (raw ?? '').trim().replace(/^\s*г\.?\s*/i, '').trim();
+  return normalizeCityDisplay(t);
+}
+
+/**
+ * Определить, можно ли автоматически подставить город в карточку после AI-анализа.
+ * Возвращает каноническое название города из справочника или null.
+ * Правила: не перезаписывать ручной выбор; только если город есть в справочнике; двусмысленность не подставляем.
+ */
+export function resolveCityForAutoAssign(
+  detectedCity: string,
+  companyCities: string[],
+  currentClientCity: string | null | undefined
+): string | null {
+  const normalized = normalizeDetectedCity(detectedCity);
+  if (!normalized) return null;
+  if (typeof currentClientCity === 'string' && currentClientCity.trim().length > 0) return null;
+  const match = companyCities.find((c) => c.trim().toLowerCase() === normalized.trim().toLowerCase());
+  return match ?? null;
+}
+
 export interface CompanyCitiesDoc {
   cities: string[];
   updatedAt?: unknown;
