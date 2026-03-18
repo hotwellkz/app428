@@ -13,8 +13,107 @@ const COLLECTIONS = {
   COMPANY_USERS: 'company_users',
   USERS: 'users',
   WAZZUP_INTEGRATIONS: 'wazzupIntegrations',
-  OPENAI_INTEGRATIONS: 'openaiIntegrations'
+  OPENAI_INTEGRATIONS: 'openaiIntegrations',
+  KASPI_INTEGRATIONS: 'kaspiIntegrations',
+  KASPI_SYNC: 'kaspiSync'
 } as const;
+
+/** Режим синхронизации заказов Kaspi */
+export type KaspiSyncMode = 'manual' | 'four_times_daily' | 'every_4h' | 'every_2h';
+
+/** Настройки интеграции Kaspi для компании (свой магазин на компанию). */
+export interface KaspiIntegrationRow {
+  companyId: string;
+  enabled: boolean;
+  apiKey: string;
+  merchantId: string | null;
+  merchantName: string | null;
+  syncMode: KaspiSyncMode;
+  lastSyncAt: Timestamp | null;
+  lastSyncStatus: 'success' | 'error' | null;
+  lastSyncMessage: string | null;
+  lastSyncOrdersCount: number | null;
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+}
+
+export async function getKaspiIntegration(companyId: string): Promise<KaspiIntegrationRow | null> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.KASPI_INTEGRATIONS).doc(companyId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const d = snap.data()!;
+  return {
+    companyId,
+    enabled: (d.enabled as boolean) ?? false,
+    apiKey: (d.apiKey as string) ?? '',
+    merchantId: (d.merchantId as string) ?? null,
+    merchantName: (d.merchantName as string) ?? null,
+    syncMode: (d.syncMode as KaspiSyncMode) ?? 'manual',
+    lastSyncAt: (d.lastSyncAt as Timestamp) ?? null,
+    lastSyncStatus: (d.lastSyncStatus as 'success' | 'error') ?? null,
+    lastSyncMessage: (d.lastSyncMessage as string) ?? null,
+    lastSyncOrdersCount: (d.lastSyncOrdersCount as number) ?? null,
+    createdAt: d.createdAt as Timestamp,
+    updatedAt: d.updatedAt as Timestamp
+  };
+}
+
+function maskKaspiApiKey(key: string): string {
+  if (!key || key.length <= 4) return '****';
+  return '****' + key.slice(-4);
+}
+
+export async function setKaspiIntegration(
+  companyId: string,
+  data: {
+    enabled?: boolean;
+    apiKey?: string;
+    merchantId?: string | null;
+    merchantName?: string | null;
+    syncMode?: KaspiSyncMode;
+    lastSyncAt?: Timestamp | null;
+    lastSyncStatus?: 'success' | 'error' | null;
+    lastSyncMessage?: string | null;
+    lastSyncOrdersCount?: number | null;
+  }
+): Promise<void> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.KASPI_INTEGRATIONS).doc(companyId);
+  const snap = await ref.get();
+  const now = Timestamp.now();
+  const payload: Record<string, unknown> = {
+    companyId,
+    updatedAt: now
+  };
+  if (data.enabled !== undefined) payload.enabled = data.enabled;
+  if (data.apiKey !== undefined && data.apiKey.trim()) {
+    payload.apiKey = data.apiKey.trim();
+    payload.apiKeyMasked = maskKaspiApiKey(data.apiKey.trim());
+  }
+  if (data.merchantId !== undefined) payload.merchantId = data.merchantId?.trim() || null;
+  if (data.merchantName !== undefined) payload.merchantName = data.merchantName?.trim() || null;
+  if (data.syncMode !== undefined) payload.syncMode = data.syncMode;
+  if (data.lastSyncAt !== undefined) payload.lastSyncAt = data.lastSyncAt;
+  if (data.lastSyncStatus !== undefined) payload.lastSyncStatus = data.lastSyncStatus;
+  if (data.lastSyncMessage !== undefined) payload.lastSyncMessage = data.lastSyncMessage;
+  if (data.lastSyncOrdersCount !== undefined) payload.lastSyncOrdersCount = data.lastSyncOrdersCount;
+  if (!snap.exists) {
+    payload.createdAt = now;
+    payload.enabled = payload.enabled ?? false;
+    payload.merchantId = payload.merchantId ?? null;
+    payload.merchantName = payload.merchantName ?? null;
+    payload.syncMode = payload.syncMode ?? 'manual';
+    payload.lastSyncAt = null;
+    payload.lastSyncStatus = null;
+    payload.lastSyncMessage = null;
+    payload.lastSyncOrdersCount = null;
+    if (!payload.apiKey) payload.apiKey = '';
+    await ref.set(payload);
+  } else {
+    await ref.update(payload);
+  }
+}
 
 function normalizePhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');

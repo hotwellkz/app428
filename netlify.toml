@@ -3,6 +3,10 @@
 [build.environment]
   SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
 
+# Kaspi: синхронизация заказов 4 раза в день (09:00, 13:00, 17:00, 21:00 UTC)
+[functions.kaspi-sync-scheduled]
+  schedule = "0 9,13,17,21 * * *"
+
 # Webhook Wazzup → Netlify function (должен быть выше правила /*)
 [[redirects]]
   from = "/api/wazzup/webhook"
@@ -81,6 +85,24 @@
 [[redirects]]
   from = "/api/calculator/estimate"
   to = "/.netlify/functions/calculator-estimate"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/kaspi-integration"
+  to = "/.netlify/functions/kaspi-integration"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/kaspi-verify"
+  to = "/.netlify/functions/kaspi-verify"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/kaspi-sync-orders"
+  to = "/.netlify/functions/kaspi-sync-orders"
   status = 200
   force = true
 

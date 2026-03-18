@@ -1,13 +1,31 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getAuthToken } from '../lib/firebase/auth';
-import { Plug, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Loader2, Sparkles } from 'lucide-react';
+import { Plug, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Loader2, Sparkles, ShoppingBag } from 'lucide-react';
 
 const API_INTEGRATION = '/.netlify/functions/wazzup-integration';
 const API_VERIFY = '/.netlify/functions/wazzup-verify';
 const API_OPENAI_INTEGRATION = '/.netlify/functions/openai-integration';
+const API_KASPI_INTEGRATION = '/.netlify/functions/kaspi-integration';
+const API_KASPI_VERIFY = '/.netlify/functions/kaspi-verify';
+const API_KASPI_SYNC = '/.netlify/functions/kaspi-sync-orders';
 
 const looksLikeEmail = (s: string) => /@/.test(s.trim());
+
+type KaspiSyncMode = 'manual' | 'four_times_daily' | 'every_4h' | 'every_2h';
+
+interface KaspiState {
+  configured: boolean;
+  enabled: boolean;
+  apiKeyMasked: string | null;
+  merchantId: string | null;
+  merchantName: string | null;
+  syncMode: KaspiSyncMode;
+  lastSyncAt: string | null;
+  lastSyncStatus: 'success' | 'error' | null;
+  lastSyncMessage: string | null;
+  lastSyncOrdersCount: number | null;
+}
 
 interface IntegrationState {
   configured: boolean;
@@ -53,6 +71,32 @@ export const IntegrationsSettings: React.FC = () => {
   const [aiSaving, setAiSaving] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiSuccess, setAiSuccess] = useState<string | null>(null);
+
+  const [kaspiState, setKaspiState] = useState<KaspiState>({
+    configured: false,
+    enabled: false,
+    apiKeyMasked: null,
+    merchantId: null,
+    merchantName: null,
+    syncMode: 'manual',
+    lastSyncAt: null,
+    lastSyncStatus: null,
+    lastSyncMessage: null,
+    lastSyncOrdersCount: null
+  });
+  const [kaspiForm, setKaspiForm] = useState({
+    apiKey: '',
+    merchantId: '',
+    merchantName: '',
+    enabled: true,
+    syncMode: 'four_times_daily' as KaspiSyncMode
+  });
+  const [kaspiLoading, setKaspiLoading] = useState(true);
+  const [kaspiSaving, setKaspiSaving] = useState(false);
+  const [kaspiVerifying, setKaspiVerifying] = useState(false);
+  const [kaspiSyncing, setKaspiSyncing] = useState(false);
+  const [kaspiError, setKaspiError] = useState<string | null>(null);
+  const [kaspiSuccess, setKaspiSuccess] = useState<string | null>(null);
 
   const fetchIntegration = async () => {
     if (!user) return;
@@ -131,6 +175,180 @@ export const IntegrationsSettings: React.FC = () => {
   useEffect(() => {
     fetchAIIntegration();
   }, [user?.uid]);
+
+  const fetchKaspi = async () => {
+    if (!user) return;
+    setKaspiLoading(true);
+    setKaspiError(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch(API_KASPI_INTEGRATION, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        configured?: boolean;
+        enabled?: boolean;
+        apiKeyMasked?: string | null;
+        merchantId?: string | null;
+        merchantName?: string | null;
+        syncMode?: KaspiSyncMode;
+        lastSyncAt?: string | null;
+        lastSyncStatus?: 'success' | 'error' | null;
+        lastSyncMessage?: string | null;
+        lastSyncOrdersCount?: number | null;
+      };
+      if (!res.ok) {
+        setKaspiState((s) => ({ ...s, configured: false, enabled: false }));
+        return;
+      }
+      setKaspiState({
+        configured: data.configured ?? false,
+        enabled: data.enabled ?? false,
+        apiKeyMasked: data.apiKeyMasked ?? null,
+        merchantId: data.merchantId ?? null,
+        merchantName: data.merchantName ?? null,
+        syncMode: data.syncMode ?? 'manual',
+        lastSyncAt: data.lastSyncAt ?? null,
+        lastSyncStatus: data.lastSyncStatus ?? null,
+        lastSyncMessage: data.lastSyncMessage ?? null,
+        lastSyncOrdersCount: data.lastSyncOrdersCount ?? null
+      });
+      if (data.configured && !kaspiForm.apiKey) {
+        setKaspiForm((f) => ({
+          ...f,
+          merchantId: data.merchantId ?? '',
+          merchantName: data.merchantName ?? '',
+          enabled: data.enabled ?? false,
+          syncMode: data.syncMode ?? 'four_times_daily'
+        }));
+      }
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[IntegrationsSettings] fetchKaspi', e);
+    } finally {
+      setKaspiLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchKaspi();
+  }, [user?.uid]);
+
+  const handleKaspiVerify = async () => {
+    const apiKey = kaspiForm.apiKey.trim();
+    if (!user) return;
+    if (!apiKey && !kaspiState.configured) {
+      setKaspiError('Введите API ключ Kaspi или сохраните его в настройках.');
+      return;
+    }
+    setKaspiVerifying(true);
+    setKaspiError(null);
+    setKaspiSuccess(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setKaspiError('Ошибка авторизации.');
+        return;
+      }
+      const res = await fetch(API_KASPI_VERIFY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(apiKey ? { apiKey } : {})
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; message?: string };
+      if (data.ok) {
+        setKaspiSuccess(data.message ?? 'Подключение успешно. Ключ действителен.');
+      } else {
+        setKaspiError(data.error ?? 'Проверка не пройдена');
+      }
+    } catch (e) {
+      setKaspiError('Не удалось проверить подключение.');
+    } finally {
+      setKaspiVerifying(false);
+    }
+  };
+
+  const handleKaspiSave = async () => {
+    if (!user) return;
+    const apiKey = kaspiForm.apiKey.trim();
+    if (!apiKey && !kaspiState.configured) {
+      setKaspiError('Укажите API ключ Kaspi для сохранения.');
+      return;
+    }
+    setKaspiSaving(true);
+    setKaspiError(null);
+    setKaspiSuccess(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setKaspiError('Ошибка авторизации.');
+        setKaspiSaving(false);
+        return;
+      }
+      const res = await fetch(API_KASPI_INTEGRATION, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          ...(apiKey ? { apiKey } : {}),
+          merchantId: kaspiForm.merchantId.trim() || null,
+          merchantName: kaspiForm.merchantName.trim() || null,
+          enabled: kaspiForm.enabled,
+          syncMode: kaspiForm.syncMode
+        })
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        setKaspiError(data.error ?? 'Ошибка сохранения');
+        setKaspiSaving(false);
+        return;
+      }
+      setKaspiSuccess(data.message ?? 'Настройки Kaspi сохранены.');
+      setKaspiForm((f) => ({ ...f, apiKey: '' }));
+      fetchKaspi();
+    } catch (e) {
+      setKaspiError('Не удалось сохранить настройки.');
+    } finally {
+      setKaspiSaving(false);
+    }
+  };
+
+  const handleKaspiSyncNow = async () => {
+    if (!user || !kaspiState.configured) {
+      setKaspiError('Сначала сохраните API ключ Kaspi и включите интеграцию.');
+      return;
+    }
+    setKaspiSyncing(true);
+    setKaspiError(null);
+    setKaspiSuccess(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        setKaspiError('Ошибка авторизации.');
+        setKaspiSyncing(false);
+        return;
+      }
+      const res = await fetch(API_KASPI_SYNC, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; processed?: number; found?: number };
+      if (data.ok) {
+        setKaspiSuccess(
+          data.processed !== undefined
+            ? `Синхронизация завершена. Новых заказов: ${data.processed}${data.found != null ? ` (найдено: ${data.found})` : ''}.`
+            : 'Синхронизация запущена.'
+        );
+        fetchKaspi();
+      } else {
+        setKaspiError(data.error ?? 'Ошибка синхронизации');
+      }
+    } catch (e) {
+      setKaspiError('Не удалось запустить синхронизацию.');
+    } finally {
+      setKaspiSyncing(false);
+    }
+  };
 
   const handleSaveAI = async () => {
     const apiKey = aiFormKey.trim();
@@ -477,6 +695,161 @@ export const IntegrationsSettings: React.FC = () => {
                 >
                   {aiSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                   Сохранить ключ
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Блок Kaspi — заказы магазина */}
+      <div className="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+          <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+            <ShoppingBag className="w-4 h-4 text-amber-600" />
+            Kaspi — заказы магазина
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Подключите свой магазин на Kaspi.kz — заказы будут подтягиваться в CRM и отображаться в разделе Чаты. У каждой компании свой магазин и свои реквизиты.
+          </p>
+        </div>
+        <div className="p-4 space-y-4">
+          {kaspiLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Загрузка…
+            </div>
+          ) : (
+            <>
+              {kaspiState.configured && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm text-emerald-800">
+                    <CheckCircle className="w-4 h-4 shrink-0" />
+                    <span>Ключ сохранён</span>
+                    {kaspiState.apiKeyMasked && (
+                      <span className="text-emerald-600">({kaspiState.apiKeyMasked})</span>
+                    )}
+                  </div>
+                  {(kaspiState.lastSyncAt || kaspiState.lastSyncStatus) && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+                      {kaspiState.lastSyncAt && (
+                        <span>Последняя синхронизация: {new Date(kaspiState.lastSyncAt).toLocaleString('ru-RU')}</span>
+                      )}
+                      {kaspiState.lastSyncStatus === 'success' && kaspiState.lastSyncOrdersCount != null && (
+                        <span>Заказов: {kaspiState.lastSyncOrdersCount}</span>
+                      )}
+                      {kaspiState.lastSyncStatus === 'error' && kaspiState.lastSyncMessage && (
+                        <span className="text-amber-700">Ошибка: {kaspiState.lastSyncMessage}</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  API ключ (токен) Kaspi <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={kaspiForm.apiKey}
+                  onChange={(e) => setKaspiForm((f) => ({ ...f, apiKey: e.target.value }))}
+                  placeholder="Токен из личного кабинета Магазина на Kaspi.kz → Настройки → API"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Merchant ID / ID магазина
+                </label>
+                <input
+                  type="text"
+                  value={kaspiForm.merchantId}
+                  onChange={(e) => setKaspiForm((f) => ({ ...f, merchantId: e.target.value }))}
+                  placeholder="Если требуется API Kaspi — укажите идентификатор магазина"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Название магазина
+                </label>
+                <input
+                  type="text"
+                  value={kaspiForm.merchantName}
+                  onChange={(e) => setKaspiForm((f) => ({ ...f, merchantName: e.target.value }))}
+                  placeholder="Для отображения в интерфейсе (необязательно)"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="kaspi-enabled"
+                  checked={kaspiForm.enabled}
+                  onChange={(e) => setKaspiForm((f) => ({ ...f, enabled: e.target.checked }))}
+                  className="rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                />
+                <label htmlFor="kaspi-enabled" className="text-sm font-medium text-gray-700">
+                  Интеграция активна
+                </label>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Частота синхронизации
+                </label>
+                <select
+                  value={kaspiForm.syncMode}
+                  onChange={(e) => setKaspiForm((f) => ({ ...f, syncMode: e.target.value as KaspiSyncMode }))}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500/30 focus:border-amber-400"
+                >
+                  <option value="manual">Только вручную</option>
+                  <option value="four_times_daily">4 раза в день</option>
+                  <option value="every_4h">Каждые 4 часа</option>
+                  <option value="every_2h">Каждые 2 часа</option>
+                </select>
+              </div>
+
+              {kaspiError && (
+                <div className="flex items-center gap-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-sm text-red-700">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {kaspiError}
+                </div>
+              )}
+              {kaspiSuccess && (
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-2 text-sm text-emerald-700">
+                  <CheckCircle className="w-4 h-4 shrink-0" />
+                  {kaspiSuccess}
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={handleKaspiVerify}
+                  disabled={kaspiVerifying || (!kaspiForm.apiKey.trim() && !kaspiState.configured)}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {kaspiVerifying ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Проверить подключение
+                </button>
+                <button
+                  type="button"
+                  onClick={handleKaspiSave}
+                  disabled={kaspiSaving || (!kaspiForm.apiKey.trim() && !kaspiState.configured)}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-amber-600 rounded-lg hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {kaspiSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Сохранить
+                </button>
+                <button
+                  type="button"
+                  onClick={handleKaspiSyncNow}
+                  disabled={kaspiSyncing || !kaspiState.configured}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {kaspiSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Синхронизировать сейчас
                 </button>
               </div>
             </>
