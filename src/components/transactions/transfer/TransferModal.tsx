@@ -107,6 +107,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
   const expenseDropdownRef = useRef<HTMLDivElement>(null);
   const hasSetDefaultCategoryForOpen = useRef(false);
   const hasSetFuelCategoryForOpen = useRef(false);
+  const hasSetDefaultCommentForOpen = useRef(false);
   const isMobile = useIsMobile(768);
   const submittedSuccessRef = useRef(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -135,6 +136,19 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     odometerConfidence?: 'high' | 'medium' | 'low';
     amountConfidence?: 'high' | 'medium' | 'low';
   } | null>(null);
+
+  /** Редактируемые значения перед применением распознанного чека (только для «Заправка»). */
+  const [editableFuelParse, setEditableFuelParse] = useState<{
+    amount: string;
+    odometerKm: string;
+    liters: string;
+    pricePerLiter: string;
+    gasStation: string;
+    fuelType: string;
+  } | null>(null);
+
+  /** URL изображения для полноэкранного просмотра (чек/фото). */
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
   const isFuelTransfer = targetCategory.title === 'Заправка';
 
@@ -178,6 +192,18 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     if (isOpen && targetCategory.title === 'Заправка') {
       setIsFullTank(true);
     }
+  }, [isOpen, targetCategory?.title]);
+
+  // Для формы «Заправка»: при первом открытии подставить комментарий «Заправка», если поле пустое
+  useEffect(() => {
+    if (!isOpen) {
+      hasSetDefaultCommentForOpen.current = false;
+      return;
+    }
+    if (targetCategory.title !== 'Заправка') return;
+    if (hasSetDefaultCommentForOpen.current) return;
+    hasSetDefaultCommentForOpen.current = true;
+    setDescription((prev) => (prev.trim() === '' ? 'Заправка' : prev));
   }, [isOpen, targetCategory?.title]);
 
   // Категория "Прочее" по умолчанию только при открытии модалки (не при каждом обновлении списка)
@@ -516,44 +542,49 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     showSuccessNotification('Заполнено по чеку');
   }, [receiptParseResult]);
 
-  /** Применить результат распознавания фото для формы «Заправка»: сумма (округлённая), пробег, литры, АЗС и т.д. Комментарий не заполняем. */
-  const applyFuelReceiptResult = useCallback(() => {
-    if (!fuelReceiptParseResult) return;
-    if (fuelReceiptParseResult.totalAmount != null) {
-      const overwriteAmount = fuelReceiptParseResult.amountConfidence !== 'low' || !amount.trim();
-      if (overwriteAmount) {
-        const rounded = Math.round(fuelReceiptParseResult.totalAmount);
-        setAmount(formatNumber(String(rounded)));
-      }
-    }
-    if (fuelReceiptParseResult.odometerKm != null && fuelReceiptParseResult.odometerConfidence !== 'low') {
-      setOdometerKm(String(fuelReceiptParseResult.odometerKm));
-    }
-    if (fuelReceiptParseResult.liters != null) {
-      setLiters(String(fuelReceiptParseResult.liters));
-    }
-    if (fuelReceiptParseResult.pricePerLiter != null) {
-      setPricePerLiter(String(fuelReceiptParseResult.pricePerLiter));
-    }
-    if (fuelReceiptParseResult.gasStation != null && fuelReceiptParseResult.gasStation.trim()) {
-      setGasStation(fuelReceiptParseResult.gasStation.trim());
-    }
-    if (fuelReceiptParseResult.fuelType != null && fuelReceiptParseResult.fuelType.trim()) {
-      setFuelType(fuelReceiptParseResult.fuelType.trim());
-    }
+  /** Применить (отредактированные) значения распознанного чека в форму «Заправка». Использует editableFuelParse, если есть. */
+  const applyEditedFuelParse = useCallback(() => {
+    if (!editableFuelParse) return;
+    const a = editableFuelParse.amount.trim();
+    if (a) setAmount(formatNumber(a));
+    if (editableFuelParse.odometerKm.trim()) setOdometerKm(editableFuelParse.odometerKm.trim());
+    if (editableFuelParse.liters.trim()) setLiters(editableFuelParse.liters.trim());
+    if (editableFuelParse.pricePerLiter.trim()) setPricePerLiter(editableFuelParse.pricePerLiter.trim());
+    if (editableFuelParse.gasStation.trim()) setGasStation(editableFuelParse.gasStation.trim());
+    if (editableFuelParse.fuelType.trim()) setFuelType(editableFuelParse.fuelType.trim());
     setFuelReceiptParseResult(null);
-    showSuccessNotification('Поля заправки заполнены по фото');
-  }, [fuelReceiptParseResult, amount]);
+    setEditableFuelParse(null);
+    showSuccessNotification('Поля заправки заполнены');
+  }, [editableFuelParse]);
 
   useEffect(() => {
     if (!isOpen) return;
     submittedSuccessRef.current = false;
   }, [isOpen]);
 
+  // Синхронизация редактируемых полей с результатом распознавания (Заправка)
+  useEffect(() => {
+    if (!fuelReceiptParseResult) {
+      setEditableFuelParse(null);
+      return;
+    }
+    const r = fuelReceiptParseResult;
+    setEditableFuelParse({
+      amount: r.totalAmount != null ? String(Math.round(r.totalAmount)) : '',
+      odometerKm: r.odometerKm != null ? String(r.odometerKm) : '',
+      liters: r.liters != null ? String(r.liters) : '',
+      pricePerLiter: r.pricePerLiter != null ? String(r.pricePerLiter) : '',
+      gasStation: r.gasStation ?? '',
+      fuelType: r.fuelType ?? '',
+    });
+  }, [fuelReceiptParseResult]);
+
   useEffect(() => {
     if (isOpen) return;
     setReceiptParseResult(null);
     setFuelReceiptParseResult(null);
+    setEditableFuelParse(null);
+    setImagePreviewUrl(null);
     const toDelete = files.filter(f => f.status === 'uploaded' && f.path);
     if (!submittedSuccessRef.current && toDelete.length > 0) {
       toDelete.forEach(({ path }) => {
@@ -1283,46 +1314,73 @@ export const TransferModal: React.FC<TransferModalProps> = ({
 
             {files.length > 0 && (
               <div className={isFuelTransfer ? 'space-y-1.5' : 'space-y-2'}>
-                {fuelReceiptParseResult && (
-                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
+                {editableFuelParse && (
+                  <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-3">
                     <p className="text-sm font-medium text-blue-900">Распознано по фото</p>
-                    <ul className="text-sm text-blue-800 space-y-1">
-                      {fuelReceiptParseResult.totalAmount != null && (
-                        <li>Сумма: <strong>{formatMoney(Math.round(fuelReceiptParseResult.totalAmount))} ₸</strong></li>
-                      )}
-                      {fuelReceiptParseResult.odometerKm != null && (
-                        <li>
-                          Пробег: <strong>{formatNumber(String(fuelReceiptParseResult.odometerKm))} км</strong>
-                          {fuelReceiptParseResult.odometerConfidence === 'low' && (
-                            <span className="text-amber-700 text-xs ml-1">(низкая уверенность)</span>
-                          )}
-                        </li>
-                      )}
-                      {fuelReceiptParseResult.liters != null && (
-                        <li>Литры: <strong>{fuelReceiptParseResult.liters}</strong></li>
-                      )}
-                      {fuelReceiptParseResult.pricePerLiter != null && (
-                        <li>Цена за литр: <strong>{formatMoney(fuelReceiptParseResult.pricePerLiter)} ₸</strong></li>
-                      )}
-                      {fuelReceiptParseResult.gasStation && (
-                        <li>АЗС: <strong>{fuelReceiptParseResult.gasStation}</strong></li>
-                      )}
-                      {fuelReceiptParseResult.fuelType && (
-                        <li>Тип топлива: <strong>{fuelReceiptParseResult.fuelType}</strong></li>
-                      )}
-                    </ul>
-                    <p className="text-xs text-blue-700">Будут заполнены поля формы заправки.</p>
+                    <p className="text-xs text-blue-700">Проверьте и при необходимости измените значения перед применением.</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Сумма, ₸</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={editableFuelParse.amount}
+                          onChange={(e) => setEditableFuelParse((prev) => prev ? { ...prev, amount: e.target.value } : null)}
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Пробег, км</label>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={editableFuelParse.odometerKm}
+                          onChange={(e) => setEditableFuelParse((prev) => prev ? { ...prev, odometerKm: e.target.value } : null)}
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Литры</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={editableFuelParse.liters}
+                          onChange={(e) => setEditableFuelParse((prev) => prev ? { ...prev, liters: e.target.value } : null)}
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">Цена/л, ₸</label>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={editableFuelParse.pricePerLiter}
+                          onChange={(e) => setEditableFuelParse((prev) => prev ? { ...prev, pricePerLiter: e.target.value } : null)}
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md bg-white"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs font-medium text-gray-600 mb-0.5">АЗС</label>
+                        <input
+                          type="text"
+                          value={editableFuelParse.gasStation}
+                          onChange={(e) => setEditableFuelParse((prev) => prev ? { ...prev, gasStation: e.target.value } : null)}
+                          className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md bg-white"
+                          placeholder="Название АЗС"
+                        />
+                      </div>
+                    </div>
                     <div className="flex gap-2 pt-1">
                       <button
                         type="button"
-                        onClick={applyFuelReceiptResult}
+                        onClick={applyEditedFuelParse}
                         className="px-3 py-1.5 text-sm font-medium rounded-lg bg-blue-600 text-white hover:bg-blue-700"
                       >
                         Применить
                       </button>
                       <button
                         type="button"
-                        onClick={() => setFuelReceiptParseResult(null)}
+                        onClick={() => { setFuelReceiptParseResult(null); setEditableFuelParse(null); }}
                         className="px-3 py-1.5 text-sm rounded-lg border border-blue-300 text-blue-800 hover:bg-blue-100"
                       >
                         Отмена
@@ -1417,15 +1475,22 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     </div>
                   </div>
                 )}
-                {files.map((file, index) => (
+                {files.map((file, index) => {
+                  const imageUrl = file.file.type.startsWith('image/') ? (file.previewUrl || file.url) : null;
+                  return (
                   <div
                     key={file.id}
                     className={`flex items-center gap-2 bg-gray-50 ${isFuelTransfer ? 'p-2 rounded-md' : 'p-3 rounded-lg'}`}
                   >
-                    <div className={`flex-shrink-0 relative bg-gray-200 overflow-hidden flex items-center justify-center ${isFuelTransfer ? 'w-10 h-10 rounded-md' : 'w-14 h-14 rounded-lg'}`}>
-                      {file.file.type.startsWith('image/') && (file.previewUrl || file.url) ? (
+                    <div
+                      className={`flex-shrink-0 relative bg-gray-200 overflow-hidden flex items-center justify-center cursor-pointer ${isFuelTransfer ? 'w-10 h-10 rounded-md' : 'w-14 h-14 rounded-lg'} ${imageUrl ? 'ring-1 ring-gray-300 hover:ring-blue-400' : ''}`}
+                      onClick={imageUrl ? () => setImagePreviewUrl(imageUrl) : undefined}
+                      role={imageUrl ? 'button' : undefined}
+                      aria-label={imageUrl ? 'Открыть в полном размере' : undefined}
+                    >
+                      {imageUrl ? (
                         <img
-                          src={file.previewUrl || file.url}
+                          src={imageUrl}
                           alt=""
                           className="w-full h-full object-cover"
                         />
@@ -1443,7 +1508,12 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                     </div>
                     <div className="flex-1 min-w-0 relative">
                       <div className="flex justify-between items-center">
-                        <p className={`font-medium text-gray-900 truncate ${isFuelTransfer ? 'text-xs' : 'text-sm'}`}>
+                        <p
+                          className={`font-medium text-gray-900 truncate ${isFuelTransfer ? 'text-xs' : 'text-sm'} ${imageUrl ? 'cursor-pointer hover:text-blue-600' : ''}`}
+                          onClick={imageUrl ? () => setImagePreviewUrl(imageUrl) : undefined}
+                          role={imageUrl ? 'button' : undefined}
+                          title={imageUrl ? 'Открыть в полном размере' : undefined}
+                        >
                           {file.file.name}
                         </p>
                         <button
@@ -1472,7 +1542,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                       )}
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -1531,6 +1602,32 @@ export const TransferModal: React.FC<TransferModalProps> = ({
             </button>
           </div>
         </form>
+
+        {/* Полноэкранный просмотр прикреплённого изображения (чек/фото) */}
+        {imagePreviewUrl && (
+          <div
+            className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4"
+            onClick={() => setImagePreviewUrl(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Просмотр изображения"
+          >
+            <button
+              type="button"
+              onClick={() => setImagePreviewUrl(null)}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white"
+              aria-label="Закрыть"
+            >
+              <XMarkIcon className="h-6 w-6" />
+            </button>
+            <img
+              src={imagePreviewUrl}
+              alt="Чек"
+              className="max-w-full max-h-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
