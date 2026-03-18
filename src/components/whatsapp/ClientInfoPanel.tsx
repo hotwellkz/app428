@@ -271,6 +271,8 @@ interface ClientInfoPanelProps {
   onAiBotFlagsChange?: (flags: { aiBotEnabled?: boolean; aiBotAutoProposalEnabled?: boolean }) => void;
   /** Идёт сохранение флагов AI-бота — дизейблить переключатель */
   aiBotFlagsSaving?: boolean;
+  /** Зарегистрировать функцию применения фактов из AI-бота (город и т.д.) к карточке клиента. Вызывается после ответа бота с extractedFacts. */
+  registerAiBotApplyFacts?: (fn: ((facts: { city?: string | null; area_m2?: number | null; floors?: number | null }) => void) | null) => void;
 }
 
 const COUNT_BADGE_CLASS = 'inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 py-0 rounded-[10px] text-[11px] font-medium bg-[#f1f3f5] text-[#555] flex-shrink-0';
@@ -308,6 +310,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   aiBotAutoProposalEnabled = false,
   onAiBotFlagsChange,
   aiBotFlagsSaving = false,
+  registerAiBotApplyFacts,
 }) => {
   const companyId = useCompanyId();
   const navigate = useNavigate();
@@ -930,6 +933,24 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     },
     [cities, client?.city, saveCity]
   );
+
+  /** Регистрация функции применения фактов из AI-бота (город и т.д.) — вызывается после ответа бота при голосовых/текстовых сообщениях. */
+  useEffect(() => {
+    if (!registerAiBotApplyFacts || !cities?.length) return;
+    const apply = (facts: { city?: string | null; area_m2?: number | null; floors?: number | null }) => {
+      if (!facts.city || typeof facts.city !== 'string' || !facts.city.trim()) return;
+      const toAssign = resolveCityForAutoAssign(facts.city.trim(), cities, client?.city);
+      if (toAssign) {
+        saveCity(toAssign).then(() => {
+          toast.success(`Город определён из переписки: ${toAssign}`);
+        });
+      }
+    };
+    registerAiBotApplyFacts(apply);
+    return () => {
+      registerAiBotApplyFacts(null);
+    };
+  }, [registerAiBotApplyFacts, cities, client?.city, saveCity]);
 
   /** Заполнить карточку клиента из блока «Извлечено из переписки» (только непустые поля) */
   const handleFillCardFromExtracted = useCallback(async () => {

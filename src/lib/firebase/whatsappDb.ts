@@ -150,7 +150,9 @@ function docToConversation(docId: string, data: Record<string, unknown>): WhatsA
     aiBotLastMessageIdProcessed:
       (data.aiBotLastMessageIdProcessed as string | null | undefined) ?? null,
     aiBotLastProposalAt:
-      (data.aiBotLastProposalAt as WhatsAppConversation['aiBotLastProposalAt']) ?? null
+      (data.aiBotLastProposalAt as WhatsAppConversation['aiBotLastProposalAt']) ?? null,
+    aiBotLeadContext:
+      (data.aiBotLeadContext as WhatsAppConversation['aiBotLeadContext']) ?? null
   };
 }
 
@@ -438,6 +440,24 @@ export async function setConversationAiBotLastProcessedMessageId(
 ): Promise<void> {
   const ref = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
   await updateDoc(ref, { aiBotLastMessageIdProcessed: messageId });
+}
+
+export interface AiBotLeadContext {
+  city?: string | null;
+  area_m2?: number | null;
+  floors?: number | null;
+}
+
+/**
+ * Записать контекст лида AI-бота (город, площадь, этажность) в документе диалога.
+ * Обычно передаётся уже объединённый контекст из ответа бота (extractedFacts).
+ */
+export async function setConversationAiBotLeadContext(
+  conversationId: string,
+  context: AiBotLeadContext
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
+  await updateDoc(ref, { aiBotLeadContext: context });
 }
 
 /**

@@ -66,6 +66,8 @@ export interface WhatsAppConversation {
   aiBotLastMessageIdProcessed?: string | null;
   /** Время последней автоотправки КП ботом (защита от дублей) */
   aiBotLastProposalAt?: Date | Timestamp | null;
+  /** Контекст лида для AI-бота: город, площадь, этажность (из переписки) */
+  aiBotLeadContext?: { city?: string | null; area_m2?: number | null; floors?: number | null } | null;
 }
 
 /** Направление сообщения */

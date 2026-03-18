@@ -23,17 +23,104 @@ interface AiMessage {
   text: string;
 }
 
+/** Извлечённые факты из сообщений (город, площадь, этажность) */
+export interface ExtractedFacts {
+  city?: string | null;
+  area_m2?: number | null;
+  floors?: number | null;
+}
+
 interface ChatBotReplyBody {
   messages?: AiMessage[];
   knowledgeBase?: Array<{ title?: string; content?: string; category?: string | null }>;
   quickReplies?: Array<{ title?: string; text?: string; keywords?: string; category?: string }>;
-  /** Контекст клиента/чата для бота */
+  /** Контекст клиента/чата для бота (известные город, площадь, этажность + CRM) */
   clientContext?: {
     city?: string | null;
+    area_m2?: number | null;
+    floors?: number | null;
     comment?: string | null;
     dealStageName?: string | null;
     responsibleName?: string | null;
   };
+}
+
+/** Алиасы городов: нормализация к каноническому названию */
+const CITY_ALIASES: Record<string, string> = {
+  алматы: 'Алматы',
+  алмата: 'Алматы',
+  'г алматы': 'Алматы',
+  'г. алматы': 'Алматы',
+  'в алматы': 'Алматы',
+  астана: 'Астана',
+  'в астане': 'Астана',
+  'г астана': 'Астана',
+  'г. астана': 'Астана',
+  актобе: 'Актобе',
+  'в актобе': 'Актобе',
+  шымкент: 'Шымкент',
+  караганда: 'Караганда',
+  'в караганде': 'Караганда',
+  павлодар: 'Павлодар',
+  усть: 'Усть-Каменогорск',
+  'усть-каменогорск': 'Усть-Каменогорск',
+  семей: 'Семей',
+  семипалатинск: 'Семей',
+  уральск: 'Уральск',
+  костанай: 'Костанай',
+  петропавловск: 'Петропавловск',
+  тараз: 'Тараз',
+  атырау: 'Атырау',
+  актау: 'Актау',
+  туркестан: 'Туркестан'
+};
+
+function normalizeCityFromText(raw: string): string | null {
+  const t = (raw ?? '').trim().toLowerCase().replace(/^\s*г\.?\s*/i, '').trim();
+  if (!t) return null;
+  const canonical = CITY_ALIASES[t] ?? CITY_ALIASES[t.replace(/\s+/g, ' ')];
+  if (canonical) return canonical;
+  const firstUpper = t.charAt(0).toUpperCase() + t.slice(1);
+  return firstUpper;
+}
+
+/**
+ * Извлечь город, площадь, этажность из одного текста сообщения (текст или ASR-транскрипт).
+ */
+function extractClientFacts(text: string): Partial<ExtractedFacts> {
+  const out: Partial<ExtractedFacts> = {};
+  if (!text || typeof text !== 'string') return out;
+  const lower = text.toLowerCase();
+
+  for (const [alias, city] of Object.entries(CITY_ALIASES)) {
+    const re = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (re.test(text) || lower.includes(alias)) {
+      out.city = city;
+      break;
+    }
+  }
+  if (!out.city) {
+    const cityMatch = text.match(/\b(алматы|астана|актобе|шымкент|караганда|павлодар|семей|уральск|костанай|тараз|атырау|актау|туркестан)\b/i);
+    if (cityMatch) out.city = normalizeCityFromText(cityMatch[1]) ?? cityMatch[1].charAt(0).toUpperCase() + cityMatch[1].slice(1).toLowerCase();
+  }
+
+  const areaMatch = text.match(/(\d{1,4})\s*(м²|м2|кв\.?\s*м|квадрат|кв\.?м|м\s*²)/i) ?? text.match(/(\d{1,4})\s*(?:квадрат\w*|кв\.?\s*м)/i) ?? text.match(/(?:площад\w*|дом\s+)(?:в\s+)?(\d{1,4})/i) ?? text.match(/(\d{1,4})\s*(?:кв|м²|м2)/i);
+  if (areaMatch) {
+    const n = parseInt(areaMatch[1], 10);
+    if (Number.isFinite(n) && n >= 20 && n <= 2000) out.area_m2 = n;
+  }
+  const numOnlyArea = text.match(/\b(\d{2,4})\s*(?=м|кв|квадрат|этаж|этажа|этажей)/i);
+  if (!out.area_m2 && numOnlyArea) {
+    const n = parseInt(numOnlyArea[1], 10);
+    if (Number.isFinite(n) && n >= 20 && n <= 2000) out.area_m2 = n;
+  }
+
+  if (/\b(одноэтаж|1\s*этаж|один\s*этаж|одним\s*этаж|одно\s*этаж)\b/i.test(text)) out.floors = 1;
+  else if (/\b(двухэтаж|2\s*этаж|два\s*этаж|двумя\s*этаж|два\s*этажа)\b/i.test(text)) out.floors = 2;
+  else if (/\b(1|один)\s*этаж\w*\b/i.test(text)) out.floors = 1;
+  else if (/\b(2|два)\s*этаж\w*\b/i.test(text)) out.floors = 2;
+
+  return out;
 }
 
 const BOT_SYSTEM_PROMPT = `Ты — Юля, менеджер строительной компании HotWell.kz. Обрабатываешь первичные заявки в чате.
@@ -195,20 +282,47 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reply: '' })
+      body: JSON.stringify({ reply: '', extractedFacts: null })
     });
   }
 
   const lastClientMessage = messages.filter((m) => m.role === 'client').pop()?.text ?? messages[messages.length - 1]?.text ?? '';
+  const clientMessages = messages.filter((m) => m.role === 'client');
+  const extractedFromDialogue: ExtractedFacts = {};
+  for (const m of clientMessages) {
+    const one = extractClientFacts(m.text);
+    if (one.city) extractedFromDialogue.city = one.city;
+    if (one.area_m2 != null) extractedFromDialogue.area_m2 = one.area_m2;
+    if (one.floors != null) extractedFromDialogue.floors = one.floors;
+  }
+  const mergedFacts: ExtractedFacts = {
+    city: ctx.city ?? extractedFromDialogue.city ?? null,
+    area_m2: ctx.area_m2 ?? extractedFromDialogue.area_m2 ?? null,
+    floors: ctx.floors ?? extractedFromDialogue.floors ?? null
+  };
+
+  if (process.env.NODE_ENV !== 'production' || process.env.DEBUG) {
+    log('rawMessages=', rawMessages.length, 'normalizedCount=', messages.length, 'lastClientText=', lastClientMessage.slice(0, 80));
+    log('extractedFromDialogue=', JSON.stringify(extractedFromDialogue), 'mergedFacts=', JSON.stringify(mergedFacts));
+  }
+
   const contextParts: string[] = [
     'Переписка (client = клиент, manager = менеджер):\n' +
       JSON.stringify(messages.map((m) => ({ role: m.role, text: m.text })), null, 2)
   ];
-  if (ctx.city || ctx.comment || ctx.dealStageName) {
+  contextParts.push(
+    'ИЗВЕСТНЫЕ ДАННЫЕ (уже есть, НЕ СПРАШИВАЙ повторно): ' +
+      JSON.stringify({
+        город: mergedFacts.city ?? 'не указан',
+        площадь_м2: mergedFacts.area_m2 ?? 'не указана',
+        этажность: mergedFacts.floors ?? 'не указана'
+      }) +
+      '\nЗапрещено задавать вопрос про параметр, который уже указан выше.'
+  );
+  if (ctx.comment || ctx.dealStageName) {
     contextParts.push(
       'Контекст по клиенту/чату: ' +
         JSON.stringify({
-          city: ctx.city ?? undefined,
           comment: ctx.comment ?? undefined,
           этап_сделки: ctx.dealStageName ?? undefined,
           ответственный: ctx.responsibleName ?? undefined
@@ -266,10 +380,14 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const raw = (data.choices?.[0]?.message?.content ?? '') || '';
     const reply = String(raw).trim();
 
+    if (process.env.NODE_ENV !== 'production' || process.env.DEBUG) {
+      log('nextReplyLength=', reply.length, 'extractedFacts=', JSON.stringify(mergedFacts));
+    }
+
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reply })
+      body: JSON.stringify({ reply, extractedFacts: mergedFacts })
     });
   } catch (e) {
     log('OpenAI request failed:', e);

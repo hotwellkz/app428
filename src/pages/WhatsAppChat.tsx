@@ -21,8 +21,10 @@ import {
   deleteClientWithConversation,
   updateConversationAiBotFlags,
   setConversationAiBotLastProcessedMessageId,
+  setConversationAiBotLeadContext,
   COLLECTIONS,
-  type ConversationListItem
+  type ConversationListItem,
+  type AiBotLeadContext
 } from '../lib/firebase/whatsappDb';
 import { showErrorNotification } from '../utils/notifications';
 import toast from 'react-hot-toast';
@@ -255,6 +257,8 @@ const WhatsAppChat: React.FC = () => {
   const selectedItemRef = useRef<ConversationListItem | undefined>(undefined);
   /** AI-бот: ID последнего обработанного входящего (чтобы не отвечать дважды). */
   const aiBotLastProcessedMessageIdRef = useRef<string | null>(null);
+  const aiBotLeadContextRef = useRef<AiBotLeadContext | null>(null);
+  const aiBotApplyFactsRef = useRef<((facts: { city?: string | null; area_m2?: number | null; floors?: number | null }) => void) | null>(null);
   const aiBotProcessingRef = useRef(false);
 
   /** Чаты, открытые в этой сессии: в списке для них всегда показываем unreadCount=0 (защита от stale snapshot). */
@@ -1268,8 +1272,12 @@ const WhatsAppChat: React.FC = () => {
     let cancelled = false;
     getDoc(doc(db, COLLECTIONS.CONVERSATIONS, selectedId)).then((snap) => {
       if (cancelled || !snap.exists()) return;
-      const data = snap.data() as { aiBotLastMessageIdProcessed?: string | null };
+      const data = snap.data() as {
+        aiBotLastMessageIdProcessed?: string | null;
+        aiBotLeadContext?: AiBotLeadContext | null;
+      };
       aiBotLastProcessedMessageIdRef.current = data.aiBotLastMessageIdProcessed ?? null;
+      aiBotLeadContextRef.current = data.aiBotLeadContext ?? null;
     });
     return () => {
       cancelled = true;
@@ -1330,22 +1338,45 @@ const WhatsAppChat: React.FC = () => {
         const token = await getAuthToken();
         if (!token) return;
 
+        const leadCtx = aiBotLeadContextRef.current;
+        const clientContext = {
+          city: selectedItem?.client?.city ?? leadCtx?.city ?? null,
+          area_m2: leadCtx?.area_m2 ?? null,
+          floors: leadCtx?.floors ?? null
+        };
+        if (import.meta.env.DEV) {
+          console.log('[WhatsApp] AI bot request clientContext', clientContext, 'lastClientText', payloadMessages.filter((m) => m.role === 'client').pop()?.text?.slice(0, 80));
+        }
         const res = await fetch('/.netlify/functions/ai-chat-bot-reply', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
             messages: payloadMessages,
+            clientContext,
             knowledgeBase: knowledgeBase.length > 0 ? knowledgeBase.map((k) => ({ title: k.title, content: k.content, category: k.category ?? null })) : undefined,
             quickReplies: quickReplies.length > 0 ? quickReplies.map((q) => ({ title: q.title, text: q.text, keywords: q.keywords, category: q.category })) : undefined
           })
         });
-        const data = (await res.json().catch(() => ({}))) as { reply?: string; error?: string };
+        const data = (await res.json().catch(() => ({}))) as {
+          reply?: string;
+          error?: string;
+          extractedFacts?: AiBotLeadContext | null;
+        };
         if (!res.ok || data.error) {
           if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot reply failed', res.status, data);
           return;
         }
         const reply = typeof data.reply === 'string' ? data.reply.trim() : '';
         if (!reply) return;
+
+        if (data.extractedFacts && typeof data.extractedFacts === 'object') {
+          aiBotLeadContextRef.current = data.extractedFacts;
+          setConversationAiBotLeadContext(selectedId, data.extractedFacts).catch(() => {});
+          aiBotApplyFactsRef.current?.(data.extractedFacts);
+          if (import.meta.env.DEV) {
+            console.log('[WhatsApp] AI bot extractedFacts applied', data.extractedFacts);
+          }
+        }
 
         const sendRes = await fetch(SEND_API, {
           method: 'POST',
@@ -2685,6 +2716,9 @@ const WhatsAppChat: React.FC = () => {
                 aiBotAutoProposalEnabled={selectedItem?.aiBotAutoProposalEnabled ?? false}
                 onAiBotFlagsChange={selectedId ? handleAiBotFlagsChange : undefined}
                 aiBotFlagsSaving={aiBotFlagsSaving}
+                registerAiBotApplyFacts={(fn) => {
+                  aiBotApplyFactsRef.current = fn ?? null;
+                }}
               />
               </div>
             </div>
@@ -2785,6 +2819,9 @@ const WhatsAppChat: React.FC = () => {
                 isTranscribeBatchRunning={batchTranscribeRunning}
                 onPrepareForAnalysisStart={() => setPrepareForAnalysisRunning(true)}
                 onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}
+                registerAiBotApplyFacts={(fn) => {
+                  aiBotApplyFactsRef.current = fn ?? null;
+                }}
               />
             </div>
           </div>
