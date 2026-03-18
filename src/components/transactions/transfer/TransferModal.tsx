@@ -831,6 +831,7 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                           />
                         </div>
                       </div>
+                      {/* Desktop: Тип топлива | Полный бак, затем АЗС. Mobile: одна строка Тип топлива | АЗС, Полный бак перенесён в нижние чекбоксы */}
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="block text-xs font-medium text-gray-600 mb-0.5">Тип топлива</label>
@@ -845,10 +846,10 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                             <option value="Газ">Газ</option>
                           </select>
                         </div>
-                        <div className="flex items-end pb-1">
+                        <div className="hidden md:flex items-end pb-1">
                           <label className="flex items-center gap-1.5 text-xs text-gray-600">
                             <input
-                              id="fuel-full-tank"
+                              id="fuel-full-tank-desktop"
                               type="checkbox"
                               checked={isFullTank}
                               onChange={(e) => setIsFullTank(e.target.checked)}
@@ -857,8 +858,18 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                             Полный бак
                           </label>
                         </div>
+                        <div className="md:hidden">
+                          <label className="block text-xs font-medium text-gray-600 mb-0.5">АЗС</label>
+                          <input
+                            type="text"
+                            value={gasStation}
+                            onChange={(e) => setGasStation(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            placeholder="Название АЗС"
+                          />
+                        </div>
                       </div>
-                      <div>
+                      <div className="hidden md:block">
                         <label className="block text-xs font-medium text-gray-600 mb-0.5">АЗС</label>
                         <input
                           type="text"
@@ -870,7 +881,8 @@ export const TransferModal: React.FC<TransferModalProps> = ({
                       </div>
                     </div>
                   </div>
-                  <div>
+                  {/* На mobile скрыт: нижняя панель уже даёт камеру и прикрепление; на desktop — блок «Чек» с зоной загрузки */}
+                  <div className="hidden md:block">
                     <div className="flex items-center justify-between mb-1.5">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Чек</p>
                       <button
@@ -1153,7 +1165,17 @@ export const TransferModal: React.FC<TransferModalProps> = ({
             )}
             {isFuelTransfer && (
               <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">
-                <span className="text-gray-500">Дополнительно:</span>
+                <span className="text-gray-500 hidden md:inline">Дополнительно:</span>
+                <label className="flex items-center gap-1.5 md:hidden">
+                  <input
+                    id="fuel-full-tank-mobile"
+                    type="checkbox"
+                    checked={isFullTank}
+                    onChange={(e) => setIsFullTank(e.target.checked)}
+                    className="h-3.5 w-3.5 text-blue-600 border-gray-300 rounded"
+                  />
+                  <span>Полный бак</span>
+                </label>
                 <label className="flex items-center gap-1.5">
                   <input
                     type="checkbox"
