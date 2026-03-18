@@ -53,9 +53,10 @@ export async function runKaspiSyncForCompany(companyId: string): Promise<RunSync
 
   try {
     const url = new URL(KASPI_ORDERS_BASE + '/orders');
-    const params: Record<string, string> = { page: '0', size: '50', status: 'NEW' };
-    if (lastSync) params['from'] = lastSync;
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+    url.searchParams.set('page[number]', '0');
+    url.searchParams.set('page[size]', '50');
+    url.searchParams.set('filter[orders][state]', 'NEW');
+    if (lastSync) url.searchParams.set('from', lastSync);
 
     const res = await fetch(url.toString(), {
       method: 'GET',

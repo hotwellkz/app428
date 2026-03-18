@@ -60,7 +60,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     return json(400, { error: 'Укажите API ключ Kaspi или сохраните его в настройках интеграции.' });
   }
 
-  const url = `${KASPI_ORDERS_BASE}/orders?page=0&size=1`;
+  const url = `${KASPI_ORDERS_BASE}/orders?page[number]=0&page[size]=1&filter[orders][state]=NEW`;
   try {
     const res = await fetch(url, {
       method: 'GET',
