@@ -61,7 +61,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   const nowMs = Date.now();
-  const geMs = nowMs - 30 * 24 * 60 * 60 * 1000; // последние 30 дней для проверки
+  const geMs = nowMs - 14 * 24 * 60 * 60 * 1000; // последние 14 дней (макс. диапазон API)
   const url = `${KASPI_ORDERS_BASE}/orders?page[number]=0&page[size]=1&filter[orders][state]=NEW&filter[orders][creationDate][$ge]=${geMs}&filter[orders][creationDate][$le]=${nowMs}`;
   try {
     const res = await fetch(url, {

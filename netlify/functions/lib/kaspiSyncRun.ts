@@ -58,7 +58,7 @@ export async function runKaspiSyncForCompany(companyId: string): Promise<RunSync
     url.searchParams.set('filter[orders][state]', 'NEW');
     // Обязательный фильтр: дата создания заказа >= (в миллисекундах с эпохи)
     const nowMs = Date.now();
-    const geMs = lastSync ? Math.min(new Date(lastSync).getTime(), nowMs - 1000) : nowMs - 30 * 24 * 60 * 60 * 1000; // при первом запросе — последние 30 дней
+    const geMs = lastSync ? Math.min(new Date(lastSync).getTime(), nowMs - 1000) : nowMs - 14 * 24 * 60 * 60 * 1000; // при первом запросе — последние 14 дней (лимит API)
     url.searchParams.set('filter[orders][creationDate][$ge]', String(geMs));
     url.searchParams.set('filter[orders][creationDate][$le]', String(nowMs));
 
