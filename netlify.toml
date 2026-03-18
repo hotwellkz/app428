@@ -79,6 +79,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/calculator/estimate"
+  to = "/.netlify/functions/calculator-estimate"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
