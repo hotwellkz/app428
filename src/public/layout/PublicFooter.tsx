@@ -23,6 +23,7 @@ const FOOTER_GROUPS = [
       { label: 'CRM для строительной компании', to: '/crm-dlya-stroitelnoi-kompanii' },
       { label: 'CRM для производства', to: '/crm-dlya-proizvodstva' },
       { label: 'CRM для сферы услуг', to: '/crm-dlya-uslug' },
+      { label: 'CRM для Kaspi-магазина', to: '/crm-dlya-kaspi' },
     ],
   },
   {

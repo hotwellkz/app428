@@ -22,6 +22,7 @@ export { ChtoTakoeCrmPage } from './ChtoTakoeCrmPage';
 export { KakVybratCrmPage } from './KakVybratCrmPage';
 export { ZachemNuzhnaCrmPage } from './ZachemNuzhnaCrmPage';
 export { CrmIliExcelPage } from './CrmIliExcelPage';
+export { CrmDlyaKaspiPage } from './CrmDlyaKaspiPage';
 export {
   KlientyPage,
   WhatsAppChatyPage,

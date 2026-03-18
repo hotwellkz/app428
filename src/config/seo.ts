@@ -41,6 +41,7 @@ export const SEO_PUBLIC_PATHS = [
   '/kak-vybrat-crm',
   '/zachem-nuzhna-crm',
   '/crm-ili-excel',
+  '/crm-dlya-kaspi',
 ] as const;
 
 /** Пути CRM и служебные — не индексировать. */
