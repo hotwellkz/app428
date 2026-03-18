@@ -314,7 +314,9 @@ export const TransactionCard = React.memo<TransactionCardProps>(function Transac
                 <div className="space-y-0.5">
                   <div>
                     <span className="font-medium">Заправка:</span>{' '}
-                    {fuel.vehicleName} · {fuel.odometerKm} км
+                    {[fuel.vehicleName, fuel.odometerKm != null ? `${fuel.odometerKm} км` : null]
+                      .filter(Boolean)
+                      .join(' · ') || '—'}
                   </div>
                   <div className="space-x-2">
                     {fuel.liters != null && (

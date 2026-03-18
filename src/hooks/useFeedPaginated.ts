@@ -36,6 +36,25 @@ interface FeedTransaction {
   isCashless?: boolean;
   attachments?: Array<{ name: string; url: string; type: string }>;
   reversedAt?: unknown;
+  /** Данные заправки — для расширенного отображения в Ленте (как в истории «Заправка») */
+  fuelData?: {
+    vehicleId: string;
+    vehicleName: string;
+    odometerKm: number;
+    liters?: number | null;
+    pricePerLiter?: number | null;
+    fuelType?: string | null;
+    gasStation?: string | null;
+    isFullTank?: boolean;
+    derivedFuelStats?: {
+      previousFuelTransactionId?: string | null;
+      previousOdometerKm?: number | null;
+      distanceSincePrevFuelingKm?: number | null;
+      estimatedConsumptionLPer100?: number | null;
+      status: 'normal' | 'warning' | 'critical' | 'insufficient_data';
+      note?: string | null;
+    } | null;
+  };
 }
 
 const PAGE_SIZE = 30; // размер одной порции из Firestore (после фильтра может быть меньше)
@@ -91,7 +110,8 @@ function processSnapshot(
       isSalary: !!data.isSalary,
       isCashless: !!data.isCashless,
       attachments: data.attachments as FeedTransaction['attachments'],
-      reversedAt: data.reversedAt
+      reversedAt: data.reversedAt,
+      fuelData: data.fuelData as FeedTransaction['fuelData']
     };
     transactionsMap.set(d.id, transaction);
   });
