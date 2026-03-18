@@ -157,6 +157,13 @@ export const TransferModal: React.FC<TransferModalProps> = ({
     setIsCashless(true);
   }, [isOpen, sourceCategory?.id, sourceCategory?.title]);
 
+  // Для формы «Заправка»: чекбокс «Полный бак» включён по умолчанию при каждом открытии
+  useEffect(() => {
+    if (isOpen && targetCategory.title === 'Заправка') {
+      setIsFullTank(true);
+    }
+  }, [isOpen, targetCategory?.title]);
+
   // Категория "Прочее" по умолчанию только при открытии модалки (не при каждом обновлении списка)
   useEffect(() => {
     if (!isOpen) {
