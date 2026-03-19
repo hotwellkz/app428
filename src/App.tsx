@@ -101,6 +101,7 @@ const AnalyticsPage = lazy(withChunkErrorRecovery(() => import('./pages/Analytic
 const KnowledgeBaseSettings = lazy(withChunkErrorRecovery(() => import('./pages/KnowledgeBaseSettings')));
 const QuickRepliesSettings = lazy(withChunkErrorRecovery(() => import('./pages/QuickRepliesSettings')));
 const IntegrationsSettings = lazy(withChunkErrorRecovery(() => import('./pages/IntegrationsSettings').then(m => ({ default: m.IntegrationsSettings }))));
+const GpsMonitoring = lazy(withChunkErrorRecovery(() => import('./pages/GpsMonitoringPage').then(m => ({ default: m.GpsMonitoringPage }))));
 
 // Fallback компонент для Suspense
 const PageLoader = () => (
@@ -207,6 +208,11 @@ const AppContent: React.FC = () => {
             <Route path="/feed" element={
               <ApprovalGuard>
                 <Feed />
+              </ApprovalGuard>
+            } />
+            <Route path="/gps-monitoring" element={
+              <ApprovalGuard>
+                <GpsMonitoring />
               </ApprovalGuard>
             } />
             <Route path="/templates" element={

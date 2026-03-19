@@ -212,6 +212,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
   const allMenuItems: MenuItem[] = [
     { icon: <ArrowLeftRight size={20} />, label: 'Транзакции', path: '/transactions', sectionId: 'transactions', isActive: location.pathname === '/transactions' },
     { icon: <ScrollText size={20} />, label: 'Лента', path: '/feed', sectionId: 'feed', isActive: location.pathname === '/feed' },
+    { icon: <Pin size={20} />, label: 'GPS-мониторинг', path: '/gps-monitoring', sectionId: 'gpsMonitoring', isActive: location.pathname === '/gps-monitoring' },
     { icon: <Users size={20} />, label: 'Клиенты', path: '/clients', sectionId: 'clients', isActive: location.pathname === '/clients' },
     { icon: <Warehouse className="w-5 h-5" />, label: 'Склад', path: '/warehouse', sectionId: 'warehouse', isActive: location.pathname === '/warehouse' },
     { icon: <Calculator className="w-5 h-5" />, label: 'Калькулятор', path: '/calculator', sectionId: 'calculator', isActive: location.pathname === '/calculator' },

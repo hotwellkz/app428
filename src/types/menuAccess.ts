@@ -5,6 +5,7 @@
 export type MenuSectionId =
   | 'transactions'
   | 'feed'
+  | 'gpsMonitoring'
   | 'clients'
   | 'warehouse'
   | 'calculator'
@@ -22,6 +23,7 @@ export type MenuSectionId =
 export interface MenuAccess {
   transactions: boolean;
   feed: boolean;
+  gpsMonitoring: boolean;
   clients: boolean;
   warehouse: boolean;
   calculator: boolean;
@@ -42,6 +44,7 @@ export interface MenuAccess {
 export const DEFAULT_MENU_ACCESS: MenuAccess = {
   transactions: true,
   feed: true,
+  gpsMonitoring: true,
   clients: true,
   warehouse: true,
   calculator: true,
@@ -74,6 +77,7 @@ export function defaultMenuAccessForRole(role: CompanyUserRole): MenuAccess {
 export const MENU_SECTIONS: { id: MenuSectionId; label: string; path: string }[] = [
   { id: 'transactions', label: 'Транзакции', path: '/transactions' },
   { id: 'feed', label: 'Лента', path: '/feed' },
+  { id: 'gpsMonitoring', label: 'GPS-мониторинг', path: '/gps-monitoring' },
   { id: 'clients', label: 'Клиенты', path: '/clients' },
   { id: 'warehouse', label: 'Склад', path: '/warehouse' },
   { id: 'calculator', label: 'Калькулятор', path: '/calculator' },
