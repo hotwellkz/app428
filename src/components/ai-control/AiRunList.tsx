@@ -55,7 +55,11 @@ export const AiRunList: React.FC<{
   onResolve: (run: WhatsAppAiBotRunRecord) => Promise<void> | void;
   onIgnore: (run: WhatsAppAiBotRunRecord) => Promise<void> | void;
   onEscalate: (run: WhatsAppAiBotRunRecord) => Promise<void> | void;
-}> = ({ runs, botNames, aggregated, workflowByRunId, workflowBusyByRunId, onTakeInWork, onResolve, onIgnore, onEscalate }) => {
+  selectedRunIds: string[];
+  onToggleSelected: (runId: string) => void;
+  onSelectAllFiltered: () => void;
+  areAllFilteredSelected: boolean;
+}> = ({ runs, botNames, aggregated, workflowByRunId, workflowBusyByRunId, onTakeInWork, onResolve, onIgnore, onEscalate, selectedRunIds, onToggleSelected, onSelectAllFiltered, areAllFilteredSelected }) => {
   const navigate = useNavigate();
   const [mobileActionsFor, setMobileActionsFor] = useState<string | null>(null);
   if (runs.length === 0) {
@@ -68,10 +72,16 @@ export const AiRunList: React.FC<{
 
   return (
     <div className="space-y-2">
+      <div className="flex items-center justify-between px-1">
+        <label className="inline-flex items-center gap-2 text-xs text-gray-600">
+          <input type="checkbox" checked={areAllFilteredSelected} onChange={onSelectAllFiltered} />
+          Выбрать все в текущей выдаче
+        </label>
+      </div>
       {runs.map((run) => {
         const agg = aggregated[run.id] ?? 'skipped';
         const p = deriveAiRunListPresentation(run, agg);
-        const wf = deriveAiRunWorkflow(p.requiresAttention, workflowByRunId[run.id] ?? null);
+        const wf = deriveAiRunWorkflow(run, p, workflowByRunId[run.id] ?? null);
         const busy = !!workflowBusyByRunId[run.id];
         const botName = botNames[run.botId] ?? run.botId.slice(0, 8);
         const clientId = run.clientIdSnapshot || run.appliedClientId || null;
@@ -229,12 +239,31 @@ export const AiRunList: React.FC<{
             key={run.id}
             to={`/ai-control/${run.id}`}
             className={`block rounded-xl border bg-white p-3 sm:p-4 hover:border-indigo-300 hover:shadow-sm transition-shadow ${
-              wf.isNewProblem ? 'border-red-200 bg-red-50/20' : 'border-gray-200'
+              wf.isOverdue && wf.priority === 'critical'
+                ? 'border-red-300 bg-red-50/40'
+                : wf.isOverdue
+                  ? 'border-amber-300 bg-amber-50/30'
+                  : wf.isNewProblem
+                    ? 'border-red-200 bg-red-50/20'
+                    : 'border-gray-200'
             }`}
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2 mb-1">
+                  <input
+                    type="checkbox"
+                    checked={selectedRunIds.includes(run.id)}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onChange={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onToggleSelected(run.id);
+                    }}
+                  />
                   <AiRunStatusBadge status={agg} />
                   <span className="text-xs text-gray-500">{fmtTime(run)}</span>
                   <span className="text-xs font-medium text-gray-800 truncate max-w-[200px]" title={botName}>
@@ -254,11 +283,18 @@ export const AiRunList: React.FC<{
                   <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
                     {wf.statusLabel}
                   </span>
+                  <span className={`px-1.5 py-0.5 rounded ${wf.priority === 'critical' ? 'bg-red-100 text-red-800' : wf.priority === 'high' ? 'bg-amber-100 text-amber-800' : wf.priority === 'normal' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'}`}>
+                    {wf.priorityLabel}
+                  </span>
+                  {wf.isOverdue ? <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-800">Просрочено</span> : null}
                   <span className="text-gray-500">Назначен: {wf.assigneeName || 'Не назначен'}</span>
                   {wf.updatedAtMs ? (
                     <span className="text-gray-400">{format(new Date(wf.updatedAtMs), 'dd.MM HH:mm')}</span>
                   ) : null}
                 </div>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  {wf.dueAtMs ? `SLA до ${format(new Date(wf.dueAtMs), 'dd.MM HH:mm')}` : 'SLA не задан'} · Возраст: {wf.ageMinutes != null ? `${wf.ageMinutes} мин` : '—'}
+                </p>
                 {wf.lastComment ? (
                   <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">Комментарий: {wf.lastComment}</p>
                 ) : null}

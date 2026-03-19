@@ -36,6 +36,7 @@ import { humanizeFallbackReasons } from '../lib/ai-control/fallbackReasonLabels'
 import { deriveAiRunListPresentation } from '../lib/ai-control/deriveAiRunListPresentation';
 import { deriveAiRunWorkflow } from '../lib/ai-control/deriveAiRunWorkflow';
 import {
+  appendWhatsappAiRunWorkflowEvent,
   subscribeWhatsappAiRunWorkflowByRunId,
   upsertWhatsappAiRunWorkflow,
   type WhatsAppAiRunWorkflowRecord
@@ -68,6 +69,16 @@ function dataSourceLabel(snapshotValue: unknown, fallbackValue: unknown): string
   if (snapshotValue != null && String(snapshotValue).trim()) return 'Snapshot run';
   if (fallbackValue != null && String(fallbackValue).trim()) return 'Fallback aiRuntime';
   return 'Нет данных';
+}
+
+function tsToMs(v: unknown): number | null {
+  if (!v) return null;
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === 'object' && v && 'toMillis' in (v as { toMillis?: unknown })) {
+    const fn = (v as { toMillis?: () => number }).toMillis;
+    if (typeof fn === 'function') return fn();
+  }
+  return null;
 }
 
 export const AiControlRunDetailsPage: React.FC = () => {
@@ -311,7 +322,7 @@ export const AiControlRunDetailsPage: React.FC = () => {
   const agg = computeAggregatedStatus(run);
   const flags = computeRunResultFlags(run);
   const presentation = deriveAiRunListPresentation(run, agg);
-  const derivedWorkflow = deriveAiRunWorkflow(presentation.requiresAttention, workflow);
+  const derivedWorkflow = deriveAiRunWorkflow(run, presentation, workflow);
   const dealOpenId = run.createdDealId || run.dealId || dealPreview?.id;
   const clientOpenId = run.clientIdSnapshot || run.appliedClientId || null;
   const runtimeMode = run.runtimeMode || run.mode || 'unknown';
@@ -328,7 +339,29 @@ export const AiControlRunDetailsPage: React.FC = () => {
     try {
       await upsertWhatsappAiRunWorkflow(companyId, runId, {
         ...patch,
-        updatedBy: meName
+        updatedBy: meName,
+        firstAttentionAt: workflow?.firstAttentionAt ?? (presentation.requiresAttention ? new Date() : null),
+        dueAt: patch.status === 'resolved' || patch.status === 'ignored' ? null : derivedWorkflow.dueAtMs ? new Date(derivedWorkflow.dueAtMs) : null,
+        slaMinutes: derivedWorkflow.slaMinutes,
+        priority: derivedWorkflow.priority,
+        priorityReason: derivedWorkflow.priorityReasons
+      });
+      await appendWhatsappAiRunWorkflowEvent(companyId, runId, {
+        type:
+          patch.status === 'resolved'
+            ? 'resolved'
+            : patch.status === 'ignored'
+              ? 'ignored'
+              : patch.status === 'escalated'
+                ? 'escalated'
+                : patch.status
+                  ? 'status_changed'
+                  : patch.lastComment != null
+                    ? 'comment_saved'
+                    : 'assigned',
+        by: me?.uid ?? null,
+        byName: meName,
+        payload: { status: patch.status ?? null, resolutionType: patch.resolutionType ?? null }
       });
       toast.success('Статус обработки обновлён');
     } catch (e) {
@@ -588,6 +621,10 @@ export const AiControlRunDetailsPage: React.FC = () => {
         <h2 className="font-semibold text-gray-900 mb-2">Обработка менеджером</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm mb-3">
           <p><span className="text-gray-500">Статус:</span> {derivedWorkflow.statusLabel}</p>
+          <p><span className="text-gray-500">Приоритет:</span> {derivedWorkflow.priorityLabel}</p>
+          <p><span className="text-gray-500">SLA до:</span> {derivedWorkflow.dueAtMs ? new Date(derivedWorkflow.dueAtMs).toLocaleString('ru-RU') : '—'}</p>
+          <p><span className="text-gray-500">Просрочка:</span> {derivedWorkflow.isOverdue ? 'Да' : 'Нет'}</p>
+          <p><span className="text-gray-500">Возраст:</span> {derivedWorkflow.ageMinutes != null ? `${derivedWorkflow.ageMinutes} мин` : '—'}</p>
           <p><span className="text-gray-500">Назначен:</span> {derivedWorkflow.assigneeName || 'Не назначен'}</p>
           <p><span className="text-gray-500">Обновил:</span> {derivedWorkflow.updatedBy || '—'}</p>
           <p>
@@ -682,6 +719,14 @@ export const AiControlRunDetailsPage: React.FC = () => {
           </button>
         </div>
         <div className="mt-3 pt-3 border-t border-gray-100">
+          <p className="text-xs text-gray-500 mb-2">Почему такой приоритет</p>
+          <ul className="text-xs text-gray-600 mb-3 space-y-0.5">
+            {derivedWorkflow.priorityReasons.map((reason, idx) => (
+              <li key={`${reason}-${idx}`}>• {reason}</li>
+            ))}
+          </ul>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-100">
           <p className="text-xs text-gray-500 mb-2">Ручные действия</p>
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40" title="Пока нет backend-обработчика retry CRM apply">
@@ -696,6 +741,17 @@ export const AiControlRunDetailsPage: React.FC = () => {
             <button type="button" disabled className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40" title="Пока нет backend-обработчика retry/re-run AI из AI-control">
               Retry / re-run AI
             </button>
+          </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <p className="text-xs text-gray-500 mb-2">История обработки</p>
+          <div className="space-y-1.5">
+            {(derivedWorkflow.history ?? []).slice(-10).reverse().map((ev, idx) => (
+              <p key={`${ev.type}-${idx}`} className="text-xs text-gray-600">
+                {ev.byName || ev.by || 'Пользователь'} · {ev.type} · {tsToMs(ev.at) ? new Date(tsToMs(ev.at) as number).toLocaleString('ru-RU') : '—'}
+              </p>
+            ))}
+            {(derivedWorkflow.history?.length ?? 0) === 0 ? <p className="text-xs text-gray-500">История пока пуста</p> : null}
           </div>
         </div>
       </section>

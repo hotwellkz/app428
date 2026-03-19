@@ -31,6 +31,15 @@ export type AiRunWorkflowResolutionType =
   | 'ignored'
   | 'escalated';
 export type AiControlWorkflowFilter = 'all' | 'new' | 'in_progress' | 'escalated' | 'resolved' | 'ignored';
+export type AiRunWorkflowPriority = 'critical' | 'high' | 'normal' | 'low';
+export type AiRunWorkflowEventType =
+  | 'created'
+  | 'assigned'
+  | 'status_changed'
+  | 'comment_saved'
+  | 'escalated'
+  | 'resolved'
+  | 'ignored';
 
 export interface AiControlFiltersState {
   period: AiControlPeriodPreset;
@@ -51,10 +60,15 @@ export interface AiControlFiltersState {
   onlyCrmApply: boolean;
   onlyWithDeal: boolean;
   onlyWithTask: boolean;
-  sortBy: 'newest' | 'problem_first' | 'deal_task_first';
   workflowFilter: AiControlWorkflowFilter;
   onlyMine: boolean;
   onlyNewProblem: boolean;
+  onlyOverdue: boolean;
+  onlyCritical: boolean;
+  onlyUnassigned: boolean;
+  onlyMyOverdue: boolean;
+  onlyReactionToday: boolean;
+  sortBy: 'newest' | 'problem_first' | 'deal_task_first' | 'overdue_first' | 'critical_first' | 'unassigned_first' | 'oldest_problem_first' | 'workflow_recently_updated';
 }
 
 export const DEFAULT_AI_CONTROL_FILTERS: AiControlFiltersState = {
@@ -75,10 +89,15 @@ export const DEFAULT_AI_CONTROL_FILTERS: AiControlFiltersState = {
   onlyCrmApply: false,
   onlyWithDeal: false,
   onlyWithTask: false,
-  sortBy: 'newest',
   workflowFilter: 'all',
   onlyMine: false,
-  onlyNewProblem: false
+  onlyNewProblem: false,
+  onlyOverdue: false,
+  onlyCritical: false,
+  onlyUnassigned: false,
+  onlyMyOverdue: false,
+  onlyReactionToday: false,
+  sortBy: 'newest'
 };
 
 /** Флаги результата run (для фильтров и метрик) */

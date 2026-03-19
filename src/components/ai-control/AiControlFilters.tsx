@@ -52,7 +52,12 @@ const PRESET_VIEWS: { v: AiControlFiltersState['presetView']; l: string }[] = [
 const SORT_OPTIONS: { v: AiControlFiltersState['sortBy']; l: string }[] = [
   { v: 'newest', l: 'Новые сверху' },
   { v: 'problem_first', l: 'Сначала проблемные' },
-  { v: 'deal_task_first', l: 'Сначала сделки/задачи' }
+  { v: 'deal_task_first', l: 'Сначала сделки/задачи' },
+  { v: 'overdue_first', l: 'Сначала просроченные' },
+  { v: 'critical_first', l: 'Сначала критичные' },
+  { v: 'unassigned_first', l: 'Сначала без ответственного' },
+  { v: 'oldest_problem_first', l: 'Сначала самые старые проблемные' },
+  { v: 'workflow_recently_updated', l: 'Сначала недавно обновлённые workflow' }
 ];
 
 export const AiControlFilters: React.FC<{
@@ -125,6 +130,51 @@ export const AiControlFilters: React.FC<{
             onClick={() => set({ onlyNewProblem: !filters.onlyNewProblem })}
           >
             Только новые проблемные
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyOverdue ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyOverdue: !filters.onlyOverdue })}
+          >
+            Только просроченные
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyCritical ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyCritical: !filters.onlyCritical })}
+          >
+            Только критичные
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyUnassigned ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyUnassigned: !filters.onlyUnassigned })}
+          >
+            Только без ответственного
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyMyOverdue ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyMyOverdue: !filters.onlyMyOverdue })}
+          >
+            Только мои просроченные
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyReactionToday ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyReactionToday: !filters.onlyReactionToday })}
+          >
+            Только требующие реакции сегодня
           </button>
         </div>
       </div>
