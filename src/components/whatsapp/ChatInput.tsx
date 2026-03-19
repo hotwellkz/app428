@@ -569,8 +569,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
           </>
         )}
 
-        {/* Контейнер ввода: [слева иконки] [textarea на всю ширину] [справа иконки + отправить] */}
-        <div className="flex items-end gap-1.5 md:gap-2 max-w-full min-w-0">
+        {/* Контейнер ввода: мобильный и десктоп — две строки: (1) только textarea на всю ширину (2) панель кнопок */}
+        <div className="flex items-stretch gap-1.5 md:gap-2 max-w-full min-w-0">
           <div className="flex-1 min-w-0 relative flex flex-col">
             {mediaQuickRepliesOpen && (
               <MediaQuickRepliesPopup
@@ -586,9 +586,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 onSelect={insertQuickReply}
               />
             )}
-            {/* Мобильный: 2 строки (textarea | иконки). Десктоп: 1 строка (иконки | textarea | иконки) */}
-            <div className="chat-input flex flex-col md:flex-row md:items-end gap-1.5 md:gap-2 p-1.5 px-2 md:py-2 md:px-3 rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 min-h-0 md:min-h-[42px]">
-              <div className="chat-input-text order-1 md:order-2 w-full md:flex-1 md:min-w-0 flex flex-col">
+            <div className="chat-composer chat-input flex flex-col gap-1.5 md:gap-2 p-1.5 px-2 md:py-2 md:px-3 rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 min-h-0">
+              <div className="chat-composer__input-row chat-input-text order-1 w-full min-w-0 flex flex-col">
                 <textarea
                   ref={textareaRef}
                   value={value}
@@ -597,10 +596,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   onFocus={() => setShowEmojiPicker(false)}
                   placeholder={hasAttachment ? 'Подпись к файлу (необязательно)' : 'Сообщение...'}
                   rows={TEXTAREA_MIN_ROWS}
-                  className="message-input chat-textarea w-full min-h-[40px] max-h-[140px] md:min-h-[42px] md:max-h-[160px] resize-none bg-transparent border-0 outline-none rounded-2xl py-2 px-2.5 md:py-2.5 md:px-3 leading-[1.4] text-base md:text-sm overflow-y-auto"
+                  className="message-input chat-textarea w-full min-h-[40px] max-h-[140px] md:min-h-[42px] md:max-h-[160px] resize-none bg-transparent border-0 outline-none rounded-2xl md:rounded-lg py-2 px-2.5 md:py-2 md:px-3 leading-[1.4] text-base md:text-sm overflow-y-auto"
                 />
               </div>
-              <div className="chat-actions chat-input-actions order-2 flex min-w-0 items-center justify-between gap-1.5 md:contents">
+              <div className="chat-composer__actions-row chat-actions chat-input-actions order-2 flex w-full min-w-0 max-md:flex-nowrap flex-wrap items-center justify-between gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-1.5 md:pt-0.5">
                 <div className="left-icons flex flex-shrink-0 items-center gap-1.5">
                   <button
                     type="button"
@@ -648,7 +647,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   )}
                 </div>
                 {onAiReply && (
-                  <div className="ai-tools ai-buttons flex min-w-0 flex-1 justify-center gap-1 md:order-3 md:flex-shrink-0 md:gap-1.5">
+                  <div className="ai-tools ai-buttons flex min-w-0 flex-1 justify-center gap-1 md:gap-1.5">
                     <button
                       type="button"
                       onClick={() => onAiReply('normal')}
@@ -690,7 +689,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                     </button>
                   </div>
                 )}
-                <div className="right-icons flex flex-shrink-0 items-center gap-1.5 md:order-4 md:gap-1">
+                <div className="right-icons flex flex-shrink-0 items-center gap-1.5 md:gap-1">
                   {onFileSelect && (
                     <button
                       type="button"
