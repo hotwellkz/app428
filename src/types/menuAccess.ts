@@ -110,6 +110,8 @@ export function canAccessSection(
 
 export function getSectionByPath(pathname: string): MenuSectionId | null {
   const normalized = pathname.split('?')[0].replace(/\/$/, '') || '/';
+  /** Журнал AI-срабатываний — то же право, что и «Автоворонки». */
+  if (normalized === '/ai-control' || normalized.startsWith('/ai-control/')) return 'autovoronki';
   if (normalized === '/analytics') return 'analytics';
   if (normalized === '/client-files' || /^\/clients\/[^/]+\/files/.test(normalized)) return 'clientFiles';
   const byPath = MENU_SECTIONS.filter((s) => s.id !== 'clientFiles').find(

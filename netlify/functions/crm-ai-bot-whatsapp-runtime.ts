@@ -178,6 +178,13 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       body: JSON.stringify({ error: 'Бот в архиве, runtime отключён' })
     });
   }
+  if (status === 'paused') {
+    return withCors({
+      statusCode: 400,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Бот на паузе, runtime отключён' })
+    });
+  }
 
   const botMeta: CrmAiBotPromptMeta = {
     name: String(botData.name ?? 'Бот').trim().slice(0, 200),

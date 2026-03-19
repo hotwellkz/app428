@@ -1875,6 +1875,10 @@ const WhatsAppChat: React.FC = () => {
           await finishSkip(!botMeta ? 'Бот не найден или нет доступа' : 'Бот в архиве');
           return;
         }
+        if (botMeta.status === 'paused') {
+          await finishSkip('Бот на паузе');
+          return;
+        }
 
         const phone = selectedItem.phone!;
         const voiceItems = getVoiceMessagesToTranscribe(messages);

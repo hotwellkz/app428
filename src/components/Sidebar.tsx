@@ -24,7 +24,8 @@ import {
   Pin,
   PinOff,
   Plug,
-  Bot
+  Bot,
+  Activity
 } from 'lucide-react';
 import { useUnapprovedCount } from '../hooks/useUnapprovedCount';
 import { useWhatsAppFloatingButtonState } from '../hooks/useWhatsAppFloatingButtonState';
@@ -225,6 +226,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
     { icon: <MessageSquare className="w-5 h-5" />, label: 'Быстрые ответы', path: '/settings/quick-replies', sectionId: 'quickReplies', isActive: location.pathname === '/settings/quick-replies' },
     { icon: <Plug className="w-5 h-5" />, label: 'Интеграции', path: '/settings/integrations', sectionId: 'integrations', isActive: location.pathname === '/settings/integrations' },
     { icon: <Bot className="w-5 h-5" />, label: 'Автоворонки', path: '/autovoronki', sectionId: 'autovoronki', isActive: location.pathname === '/autovoronki' || location.pathname.startsWith('/autovoronki/') },
+    { icon: <Activity className="w-5 h-5" />, label: 'AI-контроль', path: '/ai-control', sectionId: 'autovoronki', isActive: location.pathname === '/ai-control' || location.pathname.startsWith('/ai-control/') },
     { icon: <Building2 className="w-5 h-5" />, label: 'Сделки', path: '/deals', sectionId: 'deals', isActive: location.pathname === '/deals' || location.pathname.startsWith('/deals/') },
     { icon: <BarChart3 className="w-5 h-5" />, label: 'Аналитика', path: '/analytics', sectionId: 'analytics', isActive: location.pathname === '/analytics' },
   ];
