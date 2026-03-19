@@ -117,7 +117,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       dealCreateReason: result.message,
       dealRecommendationStatus: rec?.status ?? null,
       dealRecommendationReason: rec?.reason ?? null,
-      dealDraftTitle: rec?.draftTitle ?? null
+      dealDraftTitle: rec?.draftTitle ?? null,
+      routing: rec?.routing ?? null
     });
     return withCors({
       statusCode: statusMap[code] ?? 400,
@@ -139,7 +140,14 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     createdDealTitle: result.dealTitle,
     createdDealAt: new Date().toISOString(),
     dealRecommendationStatus: 'recommended',
-    dealDraftTitle: result.dealTitle
+    dealDraftTitle: result.dealTitle,
+    finalPipelineId: result.pipelineId,
+    finalPipelineName: result.pipelineName,
+    finalStageId: result.stageId,
+    finalStageName: result.stageName,
+    finalAssigneeId: result.assigneeId,
+    finalAssigneeName: result.assigneeName,
+    createUsedFallbacks: result.usedFallbacks
   });
 
   log('created deal', result.dealId, conversationId);
@@ -151,9 +159,13 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       ok: true,
       dealId: result.dealId,
       dealTitle: result.dealTitle,
+      pipelineName: result.pipelineName,
       stageId: result.stageId,
       stageName: result.stageName,
-      pipelineId: result.pipelineId
+      pipelineId: result.pipelineId,
+      assigneeId: result.assigneeId,
+      assigneeName: result.assigneeName,
+      usedFallbacks: result.usedFallbacks
     })
   });
 };

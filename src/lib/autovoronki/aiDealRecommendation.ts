@@ -1,6 +1,9 @@
 import type { CrmAiBotExtractionResult } from '../../types/crmAiBotExtraction';
 import type { CrmAiBotConfig } from '../../types/crmAiBotConfig';
-import type { AiDealRecommendationSnapshot } from '../../types/aiDealRecommendation';
+import type {
+  AiDealRecommendationSnapshot,
+  AiDealRoutingSnapshot
+} from '../../types/aiDealRecommendation';
 import { mapExtractionToCrmDraft } from './extractionCrmMapper';
 import { buildAppendNextStepSegment, buildAppendSegmentWithoutNextStep } from './extractionCrmMapper';
 
@@ -111,6 +114,7 @@ export function buildAiDealRecommendationSnapshot(params: {
   botId: string;
   botName: string;
   dealRecommendationForLog: string | null;
+  routing?: AiDealRoutingSnapshot;
 }): AiDealRecommendationSnapshot {
   const {
     extraction,
@@ -137,7 +141,18 @@ export function buildAiDealRecommendationSnapshot(params: {
     createdFromConversationId: conversationId,
     createdAt: new Date().toISOString(),
     payloadHash: '',
-    dealRecommendationForLog
+    dealRecommendationForLog,
+    routing: params.routing ?? {
+      recommendedPipelineId: null,
+      recommendedPipelineName: null,
+      recommendedStageId: null,
+      recommendedStageName: null,
+      recommendedAssigneeId: null,
+      recommendedAssigneeName: null,
+      routingReason: [],
+      routingConfidence: 'low',
+      routingWarnings: ['Routing пока не рассчитан']
+    }
   });
 
   if (!crmActions.suggestCreateDeal) {

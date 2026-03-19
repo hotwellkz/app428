@@ -150,6 +150,20 @@ type RuntimeExtractionApplyApi = {
   dealRecommendationForLog: string | null;
 };
 
+type CreateDealFromRecommendationApi = {
+  ok?: boolean;
+  error?: string;
+  dealId?: string;
+  dealTitle?: string;
+  stageId?: string;
+  stageName?: string;
+  pipelineId?: string;
+  pipelineName?: string;
+  assigneeId?: string | null;
+  assigneeName?: string | null;
+  usedFallbacks?: string[];
+};
+
 function patchAiRuntimeFromExtractionApply(apply: RuntimeExtractionApplyApi): WhatsAppAiRuntimePatch {
   return {
     lastExtractionApplyStatus: apply.extractionApplyStatus,
@@ -883,14 +897,7 @@ const WhatsAppChat: React.FC = () => {
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ conversationId: selectedId, payloadHash: dr.payloadHash })
       });
-      const body = (await res.json().catch(() => ({}))) as {
-        ok?: boolean;
-        error?: string;
-        dealId?: string;
-        dealTitle?: string;
-        stageId?: string;
-        stageName?: string;
-      };
+      const body = (await res.json().catch(() => ({}))) as CreateDealFromRecommendationApi;
       if (!res.ok || !body.ok) {
         toast.error(typeof body.error === 'string' ? body.error : 'Не удалось создать сделку');
         return;
@@ -911,7 +918,14 @@ const WhatsAppChat: React.FC = () => {
               createdDealId: body.dealId ?? null,
               createdDealTitle: body.dealTitle ?? null,
               createdDealAt: new Date().toISOString(),
-              createdFromPayloadHash: dr.payloadHash
+              createdFromPayloadHash: dr.payloadHash,
+              finalPipelineId: body.pipelineId ?? null,
+              finalPipelineName: body.pipelineName ?? null,
+              finalStageId: body.stageId ?? null,
+              finalStageName: body.stageName ?? null,
+              finalAssigneeId: body.assigneeId ?? null,
+              finalAssigneeName: body.assigneeName ?? null,
+              createUsedFallbacks: Array.isArray(body.usedFallbacks) ? body.usedFallbacks : null
             }
           }
         };
@@ -1846,7 +1860,22 @@ const WhatsAppChat: React.FC = () => {
             ? {
                 dealRecommendationStatus: data.dealRecommendation.status,
                 dealRecommendationReason: data.dealRecommendation.reason,
-                dealDraftTitle: data.dealRecommendation.draftTitle
+                dealDraftTitle: data.dealRecommendation.draftTitle,
+                dealRoutingPipelineId: data.dealRecommendation.routing?.recommendedPipelineId ?? null,
+                dealRoutingPipelineName: data.dealRecommendation.routing?.recommendedPipelineName ?? null,
+                dealRoutingStageId: data.dealRecommendation.routing?.recommendedStageId ?? null,
+                dealRoutingStageName: data.dealRecommendation.routing?.recommendedStageName ?? null,
+                dealRoutingAssigneeId: data.dealRecommendation.routing?.recommendedAssigneeId ?? null,
+                dealRoutingAssigneeName: data.dealRecommendation.routing?.recommendedAssigneeName ?? null,
+                dealRoutingReason:
+                  (data.dealRecommendation.routing?.routingReason?.length ?? 0) > 0
+                    ? data.dealRecommendation.routing!.routingReason
+                    : null,
+                dealRoutingWarnings:
+                  (data.dealRecommendation.routing?.routingWarnings?.length ?? 0) > 0
+                    ? data.dealRecommendation.routing!.routingWarnings
+                    : null,
+                dealRoutingConfidence: data.dealRecommendation.routing?.routingConfidence ?? null
               }
             : {};
 

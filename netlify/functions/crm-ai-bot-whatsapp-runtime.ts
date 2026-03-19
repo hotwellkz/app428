@@ -13,6 +13,7 @@ import type { CrmAiBotExtractionResult } from '../../src/types/crmAiBotExtractio
 import { emptyCrmAiBotExtraction } from '../../src/types/crmAiBotExtraction';
 import { buildAiDealRecommendationSnapshot } from '../../src/lib/autovoronki/aiDealRecommendation';
 import type { AiDealRecommendationSnapshot } from '../../src/types/aiDealRecommendation';
+import { buildAiDealRoutingSnapshot } from './lib/aiDealRouting';
 import {
   tryApplyWhatsappRuntimeExtraction,
   type WhatsappRuntimeExtractionApplyPayload
@@ -348,6 +349,19 @@ ${text}
     const extractionForDeal = extracted ?? emptyCrmAiBotExtraction();
     let dealRecommendation: AiDealRecommendationSnapshot;
     try {
+      let clientData: Record<string, unknown> = {};
+      if (clientIdConv) {
+        const clientSnap = await db.collection('clients').doc(clientIdConv).get().catch(() => null);
+        const c = clientSnap?.data() as Record<string, unknown> | undefined;
+        if (c && c.companyId === auth.companyId) {
+          clientData = c;
+        }
+      }
+      const routing = await buildAiDealRoutingSnapshot({
+        companyId: auth.companyId,
+        clientData,
+        extraction: extractionForDeal
+      });
       dealRecommendation = buildAiDealRecommendationSnapshot({
         extraction: extractionForDeal,
         crmActions: config.crmActions,
@@ -356,7 +370,8 @@ ${text}
         conversationId,
         botId,
         botName: botMeta.name,
-        dealRecommendationForLog: extractionApply.dealRecommendationForLog
+        dealRecommendationForLog: extractionApply.dealRecommendationForLog,
+        routing
       });
     } catch (e) {
       log('dealRecommendation build failed', e);

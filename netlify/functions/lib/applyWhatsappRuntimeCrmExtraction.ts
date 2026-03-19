@@ -1,12 +1,12 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { getDb } from './firebaseAdmin';
-import type { CrmAiBotExtractionResult } from '../../src/types/crmAiBotExtraction';
-import type { CrmAiBotConfig } from '../../src/types/crmAiBotConfig';
+import type { CrmAiBotExtractionResult } from '../../../src/types/crmAiBotExtraction';
+import type { CrmAiBotConfig } from '../../../src/types/crmAiBotConfig';
 import {
   buildDealRecommendationForLog,
   buildGatedCrmApplyPreview,
   previewHasWritableChanges
-} from '../../src/lib/autovoronki/extractionCrmMapper';
+} from '../../../src/lib/autovoronki/extractionCrmMapper';
 
 const CRM_CLIENTS = 'clients';
 

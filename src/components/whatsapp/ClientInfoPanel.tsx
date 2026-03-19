@@ -1434,6 +1434,22 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                           <div className="space-y-2 text-[11px] text-gray-700">
                             <p className="text-emerald-800 font-medium">Сделка уже создана из рекомендации</p>
                             <p className="break-words">{aiRuntime.dealFromAi.createdDealTitle ?? '—'}</p>
+                            <div className="text-[10px] text-gray-600 space-y-0.5">
+                              {(aiRuntime.dealFromAi.finalPipelineName ?? '').length > 0 && (
+                                <p>Воронка: {aiRuntime.dealFromAi.finalPipelineName}</p>
+                              )}
+                              {(aiRuntime.dealFromAi.finalStageName ?? '').length > 0 && (
+                                <p>Этап: {aiRuntime.dealFromAi.finalStageName}</p>
+                              )}
+                              {(aiRuntime.dealFromAi.finalAssigneeName ?? '').length > 0 && (
+                                <p>Ответственный: {aiRuntime.dealFromAi.finalAssigneeName}</p>
+                              )}
+                              {(aiRuntime.dealFromAi.createUsedFallbacks?.length ?? 0) > 0 && (
+                                <p className="text-amber-700">
+                                  Fallback: {(aiRuntime.dealFromAi.createUsedFallbacks ?? []).join(', ')}
+                                </p>
+                              )}
+                            </div>
                             <button
                               type="button"
                               onClick={() =>
@@ -1481,6 +1497,38 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                                 Признаки: {(aiRuntime.dealRecommendation.signals ?? []).join(', ')}
                               </p>
                             )}
+                            <div className="rounded border border-emerald-200 bg-white/70 p-2 text-[10px] text-gray-700 space-y-1">
+                              <p>
+                                <span className="text-gray-500">Воронка: </span>
+                                {aiRuntime.dealRecommendation.routing?.recommendedPipelineName ?? '—'}
+                              </p>
+                              <p>
+                                <span className="text-gray-500">Этап: </span>
+                                {aiRuntime.dealRecommendation.routing?.recommendedStageName ?? '—'}
+                              </p>
+                              <p>
+                                <span className="text-gray-500">Ответственный: </span>
+                                {aiRuntime.dealRecommendation.routing?.recommendedAssigneeName ?? 'не назначен'}
+                              </p>
+                              {(aiRuntime.dealRecommendation.routing?.routingReason?.length ?? 0) > 0 && (
+                                <p className="text-gray-600">
+                                  Причина: {(aiRuntime.dealRecommendation.routing?.routingReason ?? []).join('; ')}
+                                </p>
+                              )}
+                              {(aiRuntime.dealRecommendation.routing?.routingWarnings?.length ?? 0) > 0 && (
+                                <p className="text-amber-700">
+                                  Предупреждения: {(aiRuntime.dealRecommendation.routing?.routingWarnings ?? []).join('; ')}
+                                </p>
+                              )}
+                              <p>
+                                <span className="text-gray-500">Уверенность routing: </span>
+                                {aiRuntime.dealRecommendation.routing?.routingConfidence === 'high'
+                                  ? 'высокая'
+                                  : aiRuntime.dealRecommendation.routing?.routingConfidence === 'medium'
+                                    ? 'средняя'
+                                    : 'низкая'}
+                              </p>
+                            </div>
                             <p className="text-[10px] text-gray-500">
                               Уверенность:{' '}
                               {aiRuntime.dealRecommendation.confidence === 'high'

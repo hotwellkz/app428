@@ -30,6 +30,22 @@ export interface WhatsAppAiBotRunLogInput {
   dealRecommendationStatus?: string | null;
   dealRecommendationReason?: string | null;
   dealDraftTitle?: string | null;
+  dealRoutingPipelineId?: string | null;
+  dealRoutingPipelineName?: string | null;
+  dealRoutingStageId?: string | null;
+  dealRoutingStageName?: string | null;
+  dealRoutingAssigneeId?: string | null;
+  dealRoutingAssigneeName?: string | null;
+  dealRoutingReason?: string[] | null;
+  dealRoutingWarnings?: string[] | null;
+  dealRoutingConfidence?: 'high' | 'medium' | 'low' | null;
+  createUsedFallbacks?: string[] | null;
+  finalPipelineId?: string | null;
+  finalPipelineName?: string | null;
+  finalStageId?: string | null;
+  finalStageName?: string | null;
+  finalAssigneeId?: string | null;
+  finalAssigneeName?: string | null;
 }
 
 /** Аудит запусков AI в WhatsApp (отладка и поддержка). */

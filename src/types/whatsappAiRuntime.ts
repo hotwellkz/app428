@@ -125,6 +125,41 @@ export function parseWhatsAppAiRuntime(data: Record<string, unknown>): WhatsAppA
       r.confidence === 'high' || r.confidence === 'medium' || r.confidence === 'low'
         ? r.confidence
         : 'low';
+    const routingRaw =
+      r.routing && typeof r.routing === 'object' ? (r.routing as Record<string, unknown>) : null;
+    const routing = routingRaw
+      ? {
+          recommendedPipelineId: strOrNull(routingRaw.recommendedPipelineId),
+          recommendedPipelineName: strOrNull(routingRaw.recommendedPipelineName),
+          recommendedStageId: strOrNull(routingRaw.recommendedStageId),
+          recommendedStageName: strOrNull(routingRaw.recommendedStageName),
+          recommendedAssigneeId: strOrNull(routingRaw.recommendedAssigneeId),
+          recommendedAssigneeName: strOrNull(routingRaw.recommendedAssigneeName),
+          routingReason: Array.isArray(routingRaw.routingReason)
+            ? routingRaw.routingReason.map((x) => String(x).trim()).filter(Boolean)
+            : [],
+          routingConfidence:
+            routingRaw.routingConfidence === 'high' ||
+            routingRaw.routingConfidence === 'medium' ||
+            routingRaw.routingConfidence === 'low'
+              ? routingRaw.routingConfidence
+              : 'low',
+          routingWarnings: Array.isArray(routingRaw.routingWarnings)
+            ? routingRaw.routingWarnings.map((x) => String(x).trim()).filter(Boolean)
+            : []
+        }
+      : {
+          recommendedPipelineId: null,
+          recommendedPipelineName: null,
+          recommendedStageId: null,
+          recommendedStageName: null,
+          recommendedAssigneeId: null,
+          recommendedAssigneeName: null,
+          routingReason: [],
+          routingConfidence: 'low' as const,
+          routingWarnings: []
+        };
+
     return {
       status,
       reason: strOrNull(r.reason),
@@ -139,7 +174,8 @@ export function parseWhatsAppAiRuntime(data: Record<string, unknown>): WhatsAppA
       createdFromConversationId: strOrNull(r.createdFromConversationId) ?? '',
       createdAt: strOrNull(r.createdAt) ?? '',
       payloadHash: strOrNull(r.payloadHash) ?? '',
-      dealRecommendationForLog: strOrNull(r.dealRecommendationForLog)
+      dealRecommendationForLog: strOrNull(r.dealRecommendationForLog),
+      routing
     };
   };
 
@@ -150,7 +186,16 @@ export function parseWhatsAppAiRuntime(data: Record<string, unknown>): WhatsAppA
       createdDealId: strOrNull(r.createdDealId),
       createdDealTitle: strOrNull(r.createdDealTitle),
       createdDealAt: strOrNull(r.createdDealAt),
-      createdFromPayloadHash: strOrNull(r.createdFromPayloadHash)
+      createdFromPayloadHash: strOrNull(r.createdFromPayloadHash),
+      finalPipelineId: strOrNull(r.finalPipelineId),
+      finalPipelineName: strOrNull(r.finalPipelineName),
+      finalStageId: strOrNull(r.finalStageId),
+      finalStageName: strOrNull(r.finalStageName),
+      finalAssigneeId: strOrNull(r.finalAssigneeId),
+      finalAssigneeName: strOrNull(r.finalAssigneeName),
+      createUsedFallbacks: Array.isArray(r.createUsedFallbacks)
+        ? r.createUsedFallbacks.map((x) => String(x).trim()).filter(Boolean)
+        : null
     };
   };
 

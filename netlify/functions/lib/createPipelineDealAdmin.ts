@@ -15,6 +15,7 @@ function normalizePhone(phone: string): string {
 
 export async function resolveDefaultPipelineFirstStage(companyId: string): Promise<{
   pipelineId: string;
+  pipelineName: string;
   stageId: string;
   stageName: string;
   stageColor: string | null;
@@ -40,6 +41,7 @@ export async function resolveDefaultPipelineFirstStage(companyId: string): Promi
   const sd = s.data();
   return {
     pipelineId: p.id,
+    pipelineName: String((p.data().name as string) ?? 'Воронка'),
     stageId: s.id,
     stageName: String(sd.name ?? 'Новый'),
     stageColor: sd.color != null ? String(sd.color) : null
@@ -52,8 +54,12 @@ export type CreateDealFromRecommendationResult =
       dealId: string;
       dealTitle: string;
       pipelineId: string;
+      pipelineName: string;
       stageId: string;
       stageName: string;
+      assigneeId: string | null;
+      assigneeName: string | null;
+      usedFallbacks: string[];
     }
   | { ok: false; code: 'duplicate' | 'invalid' | 'no_pipeline' | 'forbidden' | 'error'; message: string };
 
@@ -65,6 +71,17 @@ function asRecommendation(raw: unknown): {
   clientId: string | null;
   summary: string | null;
   createdFromBotId: string;
+  routing: {
+    recommendedPipelineId: string | null;
+    recommendedPipelineName: string | null;
+    recommendedStageId: string | null;
+    recommendedStageName: string | null;
+    recommendedAssigneeId: string | null;
+    recommendedAssigneeName: string | null;
+    routingReason: string[];
+    routingConfidence: 'high' | 'medium' | 'low';
+    routingWarnings: string[];
+  } | null;
 } | null {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
@@ -78,7 +95,52 @@ function asRecommendation(raw: unknown): {
     draftNote: typeof r.draftNote === 'string' ? r.draftNote : null,
     clientId: typeof r.clientId === 'string' ? r.clientId : null,
     summary: typeof r.summary === 'string' ? r.summary : null,
-    createdFromBotId: typeof r.createdFromBotId === 'string' ? r.createdFromBotId : ''
+    createdFromBotId: typeof r.createdFromBotId === 'string' ? r.createdFromBotId : '',
+    routing:
+      r.routing && typeof r.routing === 'object'
+        ? {
+            recommendedPipelineId:
+              typeof (r.routing as Record<string, unknown>).recommendedPipelineId === 'string'
+                ? ((r.routing as Record<string, unknown>).recommendedPipelineId as string)
+                : null,
+            recommendedPipelineName:
+              typeof (r.routing as Record<string, unknown>).recommendedPipelineName === 'string'
+                ? ((r.routing as Record<string, unknown>).recommendedPipelineName as string)
+                : null,
+            recommendedStageId:
+              typeof (r.routing as Record<string, unknown>).recommendedStageId === 'string'
+                ? ((r.routing as Record<string, unknown>).recommendedStageId as string)
+                : null,
+            recommendedStageName:
+              typeof (r.routing as Record<string, unknown>).recommendedStageName === 'string'
+                ? ((r.routing as Record<string, unknown>).recommendedStageName as string)
+                : null,
+            recommendedAssigneeId:
+              typeof (r.routing as Record<string, unknown>).recommendedAssigneeId === 'string'
+                ? ((r.routing as Record<string, unknown>).recommendedAssigneeId as string)
+                : null,
+            recommendedAssigneeName:
+              typeof (r.routing as Record<string, unknown>).recommendedAssigneeName === 'string'
+                ? ((r.routing as Record<string, unknown>).recommendedAssigneeName as string)
+                : null,
+            routingReason: Array.isArray((r.routing as Record<string, unknown>).routingReason)
+              ? ((r.routing as Record<string, unknown>).routingReason as unknown[])
+                  .map((x) => String(x).trim())
+                  .filter(Boolean)
+              : [],
+            routingConfidence:
+              (r.routing as Record<string, unknown>).routingConfidence === 'high' ||
+              (r.routing as Record<string, unknown>).routingConfidence === 'medium' ||
+              (r.routing as Record<string, unknown>).routingConfidence === 'low'
+                ? ((r.routing as Record<string, unknown>).routingConfidence as 'high' | 'medium' | 'low')
+                : 'low',
+            routingWarnings: Array.isArray((r.routing as Record<string, unknown>).routingWarnings)
+              ? ((r.routing as Record<string, unknown>).routingWarnings as unknown[])
+                  .map((x) => String(x).trim())
+                  .filter(Boolean)
+              : []
+          }
+        : null
   };
 }
 
@@ -140,9 +202,71 @@ export async function createDealFromAiRecommendationAdmin(params: {
     return { ok: false, code: 'forbidden', message: 'Клиент другой компании' };
   }
 
-  const stageInfo = await resolveDefaultPipelineFirstStage(companyId);
-  if (!stageInfo) {
+  const stageInfoDefault = await resolveDefaultPipelineFirstStage(companyId);
+  if (!stageInfoDefault) {
     return { ok: false, code: 'no_pipeline', message: 'Нет воронки или этапов. Создайте воронку в CRM.' };
+  }
+  const usedFallbacks: string[] = [];
+
+  let finalPipelineId = stageInfoDefault.pipelineId;
+  let finalPipelineName = stageInfoDefault.pipelineName;
+  let finalStageId = stageInfoDefault.stageId;
+  let finalStageName = stageInfoDefault.stageName;
+
+  if (recommendation.routing?.recommendedPipelineId) {
+    const pSnap = await db.collection(PIPELINES).doc(recommendation.routing.recommendedPipelineId).get().catch(() => null);
+    const pd = pSnap?.data();
+    if (pSnap?.exists && pd && (pd.companyId as string) === companyId && pd.isActive !== false) {
+      finalPipelineId = pSnap.id;
+      finalPipelineName = String(pd.name ?? recommendation.routing.recommendedPipelineName ?? 'Воронка');
+    } else {
+      usedFallbacks.push('pipeline_fallback_first_active');
+    }
+  } else {
+    usedFallbacks.push('pipeline_fallback_first_active');
+  }
+
+  const stagesSnap = await db
+    .collection(STAGES)
+    .where('companyId', '==', companyId)
+    .where('pipelineId', '==', finalPipelineId)
+    .where('isActive', '==', true)
+    .orderBy('sortOrder', 'asc')
+    .limit(200)
+    .get()
+    .catch(() => null);
+  const stages = stagesSnap?.docs ?? [];
+  if (!stages.length) {
+    usedFallbacks.push('stage_fallback_to_default_pipeline');
+    finalPipelineId = stageInfoDefault.pipelineId;
+    finalPipelineName = stageInfoDefault.pipelineName;
+    finalStageId = stageInfoDefault.stageId;
+    finalStageName = stageInfoDefault.stageName;
+  }
+  const preferredStageId = recommendation.routing?.recommendedStageId ?? null;
+  const preferredStageDoc = preferredStageId ? stages.find((d) => d.id === preferredStageId) ?? null : null;
+  const finalStageDoc = stages.length ? preferredStageDoc ?? stages[0] : null;
+  if (stages.length && !preferredStageDoc) usedFallbacks.push('stage_fallback_first_in_pipeline');
+  if (finalStageDoc) {
+    finalStageId = finalStageDoc.id;
+    const finalStageData = finalStageDoc.data();
+    finalStageName = String(finalStageData.name ?? 'Этап');
+  }
+  const finalStageColor = finalStageDoc?.data().color != null ? String(finalStageDoc?.data().color) : stageInfoDefault.stageColor;
+
+  let finalAssigneeId: string | null = null;
+  let finalAssigneeName: string | null = null;
+  if (recommendation.routing?.recommendedAssigneeId) {
+    const ms = await db.collection('chatManagers').doc(recommendation.routing.recommendedAssigneeId).get().catch(() => null);
+    const md = ms?.data();
+    if (ms?.exists && md && (md.companyId as string) === companyId) {
+      finalAssigneeId = ms.id;
+      finalAssigneeName = String(md.name ?? recommendation.routing.recommendedAssigneeName ?? '');
+    } else {
+      usedFallbacks.push('assignee_fallback_missing_or_inactive');
+    }
+  } else {
+    usedFallbacks.push('assignee_fallback_null');
   }
 
   const phoneRaw =
@@ -157,16 +281,16 @@ export async function createDealFromAiRecommendationAdmin(params: {
   try {
     const dealRef = await db.collection(DEALS).add({
       companyId,
-      pipelineId: stageInfo.pipelineId,
-      stageId: stageInfo.stageId,
+      pipelineId: finalPipelineId,
+      stageId: finalStageId,
       title: recommendation.draftTitle!.trim().slice(0, 500),
       clientId: recommendation.clientId,
       clientNameSnapshot,
       clientPhoneSnapshot: clientPhoneSnapshot || null,
       amount: null,
       currency: 'KZT',
-      responsibleUserId: null,
-      responsibleNameSnapshot: null,
+      responsibleUserId: finalAssigneeId,
+      responsibleNameSnapshot: finalAssigneeName,
       status: null,
       priority: null,
       note,
@@ -193,7 +317,7 @@ export async function createDealFromAiRecommendationAdmin(params: {
       companyId,
       dealId,
       type: 'created',
-      payload: { pipelineId: stageInfo.pipelineId, stageId: stageInfo.stageId, source: 'ai_recommendation' },
+      payload: { pipelineId: finalPipelineId, stageId: finalStageId, source: 'ai_recommendation' },
       createdBy: null,
       createdAt: now
     });
@@ -210,16 +334,23 @@ export async function createDealFromAiRecommendationAdmin(params: {
 
     await convRef.update({
       dealId,
-      dealStageId: stageInfo.stageId,
-      dealStageName: stageInfo.stageName,
-      dealStageColor: stageInfo.stageColor,
+      dealStageId: finalStageId,
+      dealStageName: finalStageName,
+      dealStageColor: finalStageColor,
       dealTitle,
-      dealResponsibleName: null,
+      dealResponsibleName: finalAssigneeName,
       'aiRuntime.dealFromAi': {
         createdDealId: dealId,
         createdDealTitle: dealTitle,
         createdDealAt: createdAtIso,
-        createdFromPayloadHash: payloadHash
+        createdFromPayloadHash: payloadHash,
+        finalPipelineId,
+        finalPipelineName,
+        finalStageId,
+        finalStageName,
+        finalAssigneeId,
+        finalAssigneeName,
+        createUsedFallbacks: usedFallbacks
       }
     });
 
@@ -227,9 +358,13 @@ export async function createDealFromAiRecommendationAdmin(params: {
       ok: true,
       dealId,
       dealTitle,
-      pipelineId: stageInfo.pipelineId,
-      stageId: stageInfo.stageId,
-      stageName: stageInfo.stageName
+      pipelineId: finalPipelineId,
+      pipelineName: finalPipelineName,
+      stageId: finalStageId,
+      stageName: finalStageName,
+      assigneeId: finalAssigneeId,
+      assigneeName: finalAssigneeName,
+      usedFallbacks
     };
   } catch (e) {
     console.error('[createDealFromAiRecommendationAdmin]', e);
