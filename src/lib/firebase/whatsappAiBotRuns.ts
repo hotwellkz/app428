@@ -46,6 +46,18 @@ export interface WhatsAppAiBotRunLogInput {
   finalStageName?: string | null;
   finalAssigneeId?: string | null;
   finalAssigneeName?: string | null;
+  /** Рекомендация задачи (следующий шаг) */
+  taskRecommendationStatus?: string | null;
+  taskRecommendationTitle?: string | null;
+  taskRecommendationType?: string | null;
+  taskRecommendationPriority?: string | null;
+  taskRecommendationDueHint?: string | null;
+  taskPayloadHash?: string | null;
+  taskCreateStatus?: string | null;
+  taskCreateReason?: string | null;
+  taskId?: string | null;
+  dealId?: string | null;
+  finalNextActionAt?: string | null;
 }
 
 /** Аудит запусков AI в WhatsApp (отладка и поддержка). */

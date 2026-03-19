@@ -125,6 +125,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/crm-ai-create-task-from-recommendation"
+  to = "/.netlify/functions/crm-ai-create-task-from-recommendation"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

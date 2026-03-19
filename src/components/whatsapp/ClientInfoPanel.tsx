@@ -24,7 +24,7 @@ import { removeCompanyCity, renameCompanyCity, resolveCityForAutoAssign } from '
 import { useClampedMenuPosition } from '../../hooks/useClampedMenuPosition';
 import type { Deal } from '../../types/deals';
 import toast from 'react-hot-toast';
-import { Sparkles, MoreVertical, X, ExternalLink, GitBranch, Bot } from 'lucide-react';
+import { Sparkles, MoreVertical, X, ExternalLink, GitBranch, Bot, ListChecks } from 'lucide-react';
 import { ChatSalesAnalysisBlock, type SalesAnalysisResult } from './ChatSalesAnalysisBlock';
 import {
   transcribeVoiceBatch,
@@ -292,6 +292,9 @@ interface ClientInfoPanelProps {
   onCreateDealFromAiRecommendation?: () => void | Promise<void>;
   /** Идёт создание сделки по рекомендации AI */
   creatingAiDealFromRec?: boolean;
+  /** Записать следующий шаг на сделку по рекомендации AI (Netlify) */
+  onCreateTaskFromAiRecommendation?: () => void | Promise<void>;
+  creatingAiTaskFromRec?: boolean;
   /** Метаданные заказа Kaspi для выбранного диалога (если есть) */
   kaspiOrderNumber?: string | null;
   kaspiOrderAmount?: number | null;
@@ -344,6 +347,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   aiRuntimeSaving = false,
   onCreateDealFromAiRecommendation,
   creatingAiDealFromRec = false,
+  onCreateTaskFromAiRecommendation,
+  creatingAiTaskFromRec = false,
   kaspiOrderNumber,
   kaspiOrderAmount,
   kaspiOrderStatus,
@@ -1547,6 +1552,124 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                             </button>
                           </div>
                         )}
+                      </div>
+                    )}
+                  {conversationChannel === 'whatsapp' &&
+                    aiRuntime.taskRecommendation &&
+                    aiRuntime.taskRecommendation.status !== 'skipped' &&
+                    onCreateTaskFromAiRecommendation && (
+                      <div className="mt-2 pt-2 border-t border-indigo-200/70 rounded-lg bg-indigo-50/50 p-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <ListChecks className="w-3.5 h-3.5 text-indigo-700 shrink-0" />
+                          <p className="text-[10px] font-semibold text-indigo-900 uppercase">
+                            Следующее действие от AI
+                          </p>
+                        </div>
+                        {(() => {
+                          const tr = aiRuntime.taskRecommendation!;
+                          const tf = aiRuntime.taskFromAi;
+                          const created =
+                            tf?.createdFromPayloadHash &&
+                            tr.payloadHash &&
+                            tf.createdFromPayloadHash === tr.payloadHash;
+                          const priLabel =
+                            tr.recommendedPriority === 'urgent'
+                              ? 'срочно'
+                              : tr.recommendedPriority === 'high'
+                                ? 'высокий'
+                                : tr.recommendedPriority === 'low'
+                                  ? 'низкий'
+                                  : 'обычный';
+                          const typeLabel: Record<string, string> = {
+                            send_quote: 'КП / коммерческое',
+                            call_back: 'Звонок',
+                            clarify_parameters: 'Уточнение параметров',
+                            schedule_meeting: 'Встреча',
+                            prepare_estimate: 'Расчёт / смета',
+                            consultation: 'Консультация',
+                            follow_up: 'Связаться',
+                            manual_review: 'Ручная проверка'
+                          };
+                          const statusLabel =
+                            tr.status === 'recommended'
+                              ? 'готово'
+                              : tr.status === 'manual_review'
+                                ? 'ручная проверка'
+                                : tr.status === 'insufficient_data'
+                                  ? 'мало данных'
+                                  : tr.status;
+                          return (
+                            <div className="space-y-1.5 text-[11px] text-gray-800">
+                              <p className="text-[10px] text-indigo-800">
+                                Статус: <span className="font-medium">{statusLabel}</span>
+                                {tr.confidence ? (
+                                  <>
+                                    {' '}
+                                    · уверенность:{' '}
+                                    {tr.confidence === 'high' ? 'высокая' : tr.confidence === 'medium' ? 'средняя' : 'низкая'}
+                                  </>
+                                ) : null}
+                              </p>
+                              <p className="font-semibold text-gray-900">{tr.recommendedTaskTitle}</p>
+                              {tr.recommendedTaskDescription ? (
+                                <p className="text-[10px] text-gray-600 whitespace-pre-wrap break-words max-h-20 overflow-y-auto">
+                                  {tr.recommendedTaskDescription}
+                                </p>
+                              ) : null}
+                              <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-gray-600">
+                                <span>Тип: {typeLabel[tr.recommendedTaskType] ?? tr.recommendedTaskType}</span>
+                                <span>Приоритет: {priLabel}</span>
+                                <span>
+                                  Срок:{' '}
+                                  {tr.recommendedDueAt
+                                    ? new Date(tr.recommendedDueAt).toLocaleString('ru-RU', {
+                                        day: 'numeric',
+                                        month: 'short',
+                                        hour: '2-digit',
+                                        minute: '2-digit'
+                                      })
+                                    : tr.dueHint || 'уточнить'}
+                                </span>
+                              </div>
+                              {(tr.reasons?.length ?? 0) > 0 && (
+                                <p className="text-[10px] text-gray-600">
+                                  <span className="text-gray-500">Почему: </span>
+                                  {(tr.reasons ?? []).join('; ')}
+                                </p>
+                              )}
+                              {(tr.warnings?.length ?? 0) > 0 && (
+                                <p className="text-[10px] text-amber-800">
+                                  {(tr.warnings ?? []).join(' ')}
+                                </p>
+                              )}
+                              {created && tf?.dealId ? (
+                                <div className="space-y-2 pt-1">
+                                  <p className="text-emerald-800 font-medium text-[11px]">
+                                    Следующий шаг записан в сделку
+                                  </p>
+                                  <button
+                                    type="button"
+                                    onClick={() => navigate(`/deals?deal=${encodeURIComponent(tf.dealId)}`)}
+                                    className="w-full py-1.5 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-1"
+                                  >
+                                    <ExternalLink className="w-3.5 h-3.5" />
+                                    Открыть сделку
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  disabled={creatingAiTaskFromRec || !tr.canCreateTask}
+                                  onClick={() => void onCreateTaskFromAiRecommendation()}
+                                  className="w-full py-2 text-xs font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title={!tr.canCreateTask ? 'Сначала создайте сделку или дождитесь данных' : ''}
+                                >
+                                  {creatingAiTaskFromRec ? 'Создание…' : 'Создать задачу (след. шаг)'}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                   {aiRuntime.lastGeneratedReply && (

@@ -12,6 +12,7 @@ import { runCrmAiBotExtraction } from './lib/crmAiBotExtractionOpenAi';
 import type { CrmAiBotExtractionResult } from '../../src/types/crmAiBotExtraction';
 import { emptyCrmAiBotExtraction } from '../../src/types/crmAiBotExtraction';
 import { buildAiDealRecommendationSnapshot } from '../../src/lib/autovoronki/aiDealRecommendation';
+import { buildAiTaskRecommendationSnapshot } from '../../src/lib/autovoronki/aiTaskRecommendation';
 import type { AiDealRecommendationSnapshot } from '../../src/types/aiDealRecommendation';
 import { buildAiDealRoutingSnapshot } from './lib/aiDealRouting';
 import {
@@ -47,6 +48,7 @@ interface RequestBody {
   botId?: string;
   conversationId?: string;
   messages?: ChatMessage[];
+  triggerMessageId?: string;
 }
 
 const MAX_MESSAGES = 40;
@@ -387,6 +389,64 @@ ${text}
       });
     }
 
+    const triggerMid =
+      typeof body.triggerMessageId === 'string' ? body.triggerMessageId.trim() : null;
+
+    const aiRtConv = (convD.aiRuntime ?? {}) as Record<string, unknown>;
+    const dfAi = aiRtConv.dealFromAi as { createdDealId?: string } | undefined;
+    const dealIdGuess =
+      (typeof convD.dealId === 'string' && convD.dealId.trim()) ||
+      (typeof dfAi?.createdDealId === 'string' && dfAi.createdDealId.trim()) ||
+      '';
+
+    let dealContext: {
+      dealId: string;
+      responsibleUserId: string | null;
+      responsibleNameSnapshot: string | null;
+    } | null = null;
+
+    if (dealIdGuess) {
+      try {
+        const ds = await db.collection('deals').doc(dealIdGuess).get();
+        const dd = ds.data();
+        if (ds.exists && dd && (dd.companyId as string) === auth.companyId) {
+          dealContext = {
+            dealId: dealIdGuess,
+            responsibleUserId: (dd.responsibleUserId as string | null) ?? null,
+            responsibleNameSnapshot: (dd.responsibleNameSnapshot as string | null) ?? null
+          };
+        }
+      } catch (e) {
+        log('deal read for task rec failed', e);
+      }
+    }
+
+    let taskRecommendation;
+    try {
+      taskRecommendation = buildAiTaskRecommendationSnapshot({
+        extraction: extractionForDeal,
+        dealRecommendation,
+        conversationId,
+        botId,
+        botName: botMeta.name,
+        triggerMessageId: triggerMid,
+        channel,
+        dealContext
+      });
+    } catch (e) {
+      log('taskRecommendation build failed', e);
+      taskRecommendation = buildAiTaskRecommendationSnapshot({
+        extraction: emptyCrmAiBotExtraction(),
+        dealRecommendation,
+        conversationId,
+        botId,
+        botName: botMeta.name,
+        triggerMessageId: triggerMid,
+        channel,
+        dealContext: null
+      });
+    }
+
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -396,6 +456,7 @@ ${text}
         extractionError,
         extractionApply,
         dealRecommendation,
+        taskRecommendation,
         knowledgeMeta,
         usage: {
           answer: data.usage ?? null,

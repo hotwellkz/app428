@@ -62,6 +62,10 @@ export interface Deal {
   whatsappConversationId?: string | null;
   deletedAt?: Date | Timestamp | null;
   source?: string | null;
+  /** Следующий шаг записан из AI-рекомендации WhatsApp */
+  aiTaskFromRecommendation?: boolean;
+  aiTaskRecommendationPayloadHash?: string | null;
+  aiTaskRecommendationType?: string | null;
 }
 
 export interface DealHistoryEntry {

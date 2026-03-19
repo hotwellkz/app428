@@ -3,6 +3,15 @@ import type {
   AiDealCreatedFromRecommendationSnapshot,
   AiDealRecommendationSnapshot
 } from './aiDealRecommendation';
+import type {
+  AiTaskCreatedFromRecommendationSnapshot,
+  AiTaskRecommendationSnapshot
+} from './aiTaskRecommendation';
+
+type TaskRecStatus = AiTaskRecommendationSnapshot['status'];
+type TaskRecType = AiTaskRecommendationSnapshot['recommendedTaskType'];
+type TaskRecPri = AiTaskRecommendationSnapshot['recommendedPriority'];
+type TaskRecDue = AiTaskRecommendationSnapshot['recommendedDueMode'];
 
 /** Режим ответа AI из модуля «Автоворонки» в WhatsApp-чате */
 export type WhatsAppAiRuntimeMode = 'off' | 'draft' | 'auto';
@@ -43,6 +52,14 @@ export interface WhatsAppAiRuntime {
   dealRecommendation: AiDealRecommendationSnapshot | null;
   /** Факт создания сделки по кнопке менеджера */
   dealFromAi: AiDealCreatedFromRecommendationSnapshot | null;
+  /** Рекомендация следующего действия (задачи) для менеджера */
+  taskRecommendation: AiTaskRecommendationSnapshot | null;
+  /** Запись следующего шага на сделке по кнопке (nextAction) */
+  taskFromAi: AiTaskCreatedFromRecommendationSnapshot | null;
+  /** Краткие поля последнего create task (аудит) */
+  lastTaskCreateStatus?: 'created' | 'duplicate' | 'error' | 'skipped' | null;
+  lastTaskCreateReason?: string | null;
+  lastTaskCreateAt?: string | null;
 }
 
 export function defaultWhatsAppAiRuntime(): WhatsAppAiRuntime {
@@ -64,7 +81,12 @@ export function defaultWhatsAppAiRuntime(): WhatsAppAiRuntime {
     lastExtractionAppliedClientId: null,
     lastExtractionAppliedAt: null,
     dealRecommendation: null,
-    dealFromAi: null
+    dealFromAi: null,
+    taskRecommendation: null,
+    taskFromAi: null,
+    lastTaskCreateStatus: null,
+    lastTaskCreateReason: null,
+    lastTaskCreateAt: null
   };
 }
 
@@ -199,6 +221,94 @@ export function parseWhatsAppAiRuntime(data: Record<string, unknown>): WhatsAppA
     };
   };
 
+  const TASK_TYPES = new Set([
+    'send_quote',
+    'call_back',
+    'clarify_parameters',
+    'schedule_meeting',
+    'prepare_estimate',
+    'consultation',
+    'follow_up',
+    'manual_review'
+  ]);
+  const TASK_STATUS = new Set(['recommended', 'manual_review', 'insufficient_data', 'skipped']);
+  const TASK_PRI = new Set(['low', 'normal', 'high', 'urgent']);
+  const TASK_DUE = new Set([
+    'asap',
+    'today',
+    'tomorrow',
+    'scheduled_datetime',
+    'after_client_reply',
+    'manual'
+  ]);
+
+  const parseTaskRec = (v: unknown): AiTaskRecommendationSnapshot | null => {
+    if (!v || typeof v !== 'object') return null;
+    const r = v as Record<string, unknown>;
+    const st = r.status;
+    if (typeof st !== 'string' || !TASK_STATUS.has(st)) return null;
+    const tt = r.recommendedTaskType;
+    const taskType = typeof tt === 'string' && TASK_TYPES.has(tt) ? tt : 'follow_up';
+    const rp = r.recommendedPriority;
+    const pri =
+      typeof rp === 'string' && TASK_PRI.has(rp) ? rp : 'normal';
+    const dm = r.recommendedDueMode;
+    const dueMode = typeof dm === 'string' && TASK_DUE.has(dm) ? dm : 'manual';
+    const conf =
+      r.confidence === 'high' || r.confidence === 'medium' || r.confidence === 'low' ? r.confidence : 'low';
+    return {
+      status: st as TaskRecStatus,
+      reason: strOrNull(r.reason),
+      recommendedTaskTitle: strOrNull(r.recommendedTaskTitle) ?? '—',
+      recommendedTaskDescription: typeof r.recommendedTaskDescription === 'string' ? r.recommendedTaskDescription : '',
+      recommendedTaskType: taskType as TaskRecType,
+      recommendedPriority: pri as TaskRecPri,
+      recommendedDueMode: dueMode as TaskRecDue,
+      recommendedDueAt: strOrNull(r.recommendedDueAt),
+      dueHint: strOrNull(r.dueHint),
+      reasons: Array.isArray(r.reasons) ? r.reasons.map((x) => String(x).trim()).filter(Boolean) : [],
+      warnings: Array.isArray(r.warnings) ? r.warnings.map((x) => String(x).trim()).filter(Boolean) : [],
+      confidence: conf,
+      payloadHash: strOrNull(r.payloadHash) ?? '',
+      dealId: strOrNull(r.dealId),
+      suggestedResponsibleUserId: strOrNull(r.suggestedResponsibleUserId),
+      suggestedResponsibleNameSnapshot: strOrNull(r.suggestedResponsibleNameSnapshot),
+      canCreateTask: r.canCreateTask === true,
+      createdFromBotId: strOrNull(r.createdFromBotId) ?? '',
+      createdFromConversationId: strOrNull(r.createdFromConversationId) ?? '',
+      createdAt: strOrNull(r.createdAt) ?? '',
+      triggerMessageId: strOrNull(r.triggerMessageId)
+    };
+  };
+
+  const parseTaskFromAi = (v: unknown): AiTaskCreatedFromRecommendationSnapshot | null => {
+    if (!v || typeof v !== 'object') return null;
+    const r = v as Record<string, unknown>;
+    const dealId = strOrNull(r.dealId);
+    const taskId = strOrNull(r.taskId);
+    if (!dealId || !taskId) return null;
+    const rt = r.recommendedTaskType;
+    return {
+      appliedAt: strOrNull(r.appliedAt) ?? '',
+      createdFromPayloadHash: strOrNull(r.createdFromPayloadHash) ?? '',
+      dealId,
+      taskId,
+      finalResponsibleUserId: strOrNull(r.finalResponsibleUserId),
+      finalResponsibleNameSnapshot: strOrNull(r.finalResponsibleNameSnapshot),
+      finalNextActionAt: strOrNull(r.finalNextActionAt),
+      dueHintStored: strOrNull(r.dueHintStored),
+      createUsedFallbacks: Array.isArray(r.createUsedFallbacks)
+        ? r.createUsedFallbacks.map((x) => String(x).trim()).filter(Boolean)
+        : null,
+      recommendedTaskType:
+        typeof rt === 'string' && TASK_TYPES.has(rt)
+          ? (rt as AiTaskCreatedFromRecommendationSnapshot['recommendedTaskType'])
+          : null,
+      aiBotId: strOrNull(r.aiBotId),
+      whatsappConversationId: strOrNull(r.whatsappConversationId)
+    };
+  };
+
   return {
     enabled: o.enabled === true,
     botId: strOrNull(o.botId),
@@ -217,6 +327,17 @@ export function parseWhatsAppAiRuntime(data: Record<string, unknown>): WhatsAppA
     lastExtractionAppliedClientId: strOrNull(o.lastExtractionAppliedClientId),
     lastExtractionAppliedAt: strOrNull(o.lastExtractionAppliedAt),
     dealRecommendation: parseDealRec(o.dealRecommendation) ?? null,
-    dealFromAi: parseDealFromAi(o.dealFromAi) ?? null
+    dealFromAi: parseDealFromAi(o.dealFromAi) ?? null,
+    taskRecommendation: parseTaskRec(o.taskRecommendation) ?? null,
+    taskFromAi: parseTaskFromAi(o.taskFromAi) ?? null,
+    lastTaskCreateStatus:
+      o.lastTaskCreateStatus === 'created' ||
+      o.lastTaskCreateStatus === 'duplicate' ||
+      o.lastTaskCreateStatus === 'error' ||
+      o.lastTaskCreateStatus === 'skipped'
+        ? o.lastTaskCreateStatus
+        : null,
+    lastTaskCreateReason: strOrNull(o.lastTaskCreateReason),
+    lastTaskCreateAt: strOrNull(o.lastTaskCreateAt)
   };
 }

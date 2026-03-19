@@ -87,7 +87,10 @@ export function docToDeal(id: string, data: Record<string, unknown>): Deal {
     isArchived: Boolean(data.isArchived),
     whatsappConversationId: (data.whatsappConversationId as string) ?? null,
     deletedAt: (data.deletedAt as Deal['deletedAt']) ?? null,
-    source: (data.source as string) ?? null
+    source: (data.source as string) ?? null,
+    aiTaskFromRecommendation: data.aiTaskFromRecommendation === true,
+    aiTaskRecommendationPayloadHash: (data.aiTaskRecommendationPayloadHash as string) ?? null,
+    aiTaskRecommendationType: (data.aiTaskRecommendationType as string) ?? null
   };
 }
 

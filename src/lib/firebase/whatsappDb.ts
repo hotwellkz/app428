@@ -29,6 +29,10 @@ import type {
 } from '../../types/whatsappDb';
 import type { WhatsAppAiRuntime, WhatsAppAiRuntimeMode } from '../../types/whatsappAiRuntime';
 import type { AiDealRecommendationSnapshot, AiDealCreatedFromRecommendationSnapshot } from '../../types/aiDealRecommendation';
+import type {
+  AiTaskCreatedFromRecommendationSnapshot,
+  AiTaskRecommendationSnapshot
+} from '../../types/aiTaskRecommendation';
 import { parseWhatsAppAiRuntime } from '../../types/whatsappAiRuntime';
 
 export const COLLECTIONS = {
@@ -477,6 +481,11 @@ export interface WhatsAppAiRuntimePatch {
   lastExtractionAppliedAt?: string | null;
   dealRecommendation?: AiDealRecommendationSnapshot | null;
   dealFromAi?: AiDealCreatedFromRecommendationSnapshot | null;
+  taskRecommendation?: AiTaskRecommendationSnapshot | null;
+  taskFromAi?: AiTaskCreatedFromRecommendationSnapshot | null;
+  lastTaskCreateStatus?: 'created' | 'duplicate' | 'error' | 'skipped' | null;
+  lastTaskCreateReason?: string | null;
+  lastTaskCreateAt?: string | null;
 }
 
 export interface UpdateWhatsAppConversationAiRuntimeOptions {
@@ -531,6 +540,21 @@ export async function updateWhatsAppConversationAiRuntime(
   }
   if (patch.dealFromAi !== undefined) {
     payload[`${AI_RT}.dealFromAi`] = patch.dealFromAi;
+  }
+  if (patch.taskRecommendation !== undefined) {
+    payload[`${AI_RT}.taskRecommendation`] = patch.taskRecommendation;
+  }
+  if (patch.taskFromAi !== undefined) {
+    payload[`${AI_RT}.taskFromAi`] = patch.taskFromAi;
+  }
+  if (patch.lastTaskCreateStatus !== undefined) {
+    payload[`${AI_RT}.lastTaskCreateStatus`] = patch.lastTaskCreateStatus;
+  }
+  if (patch.lastTaskCreateReason !== undefined) {
+    payload[`${AI_RT}.lastTaskCreateReason`] = patch.lastTaskCreateReason;
+  }
+  if (patch.lastTaskCreateAt !== undefined) {
+    payload[`${AI_RT}.lastTaskCreateAt`] = patch.lastTaskCreateAt;
   }
   if (Object.keys(payload).length === 0) return;
   await updateDoc(ref, payload);

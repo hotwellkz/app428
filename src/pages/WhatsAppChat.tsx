@@ -37,6 +37,7 @@ import {
   type WhatsAppAiRuntime
 } from '../types/whatsappAiRuntime';
 import type { AiDealRecommendationSnapshot } from '../types/aiDealRecommendation';
+import type { AiTaskRecommendationSnapshot } from '../types/aiTaskRecommendation';
 import { API_CONFIG } from '../config/api';
 import { showErrorNotification } from '../utils/notifications';
 import toast from 'react-hot-toast';
@@ -136,6 +137,7 @@ function showNewMessageBrowserNotification() {
 const SEND_API = '/.netlify/functions/send-whatsapp-message';
 const CRM_WHATSAPP_RUNTIME_API = `${API_CONFIG.BASE_URL}/crm-ai-bot-whatsapp-runtime`;
 const CRM_CREATE_DEAL_FROM_REC_API = `${API_CONFIG.BASE_URL}/crm-ai-create-deal-from-recommendation`;
+const CRM_CREATE_TASK_FROM_REC_API = `${API_CONFIG.BASE_URL}/crm-ai-create-task-from-recommendation`;
 
 /** Ответ Netlify: применение extraction в CRM */
 type RuntimeExtractionApplyApi = {
@@ -215,7 +217,12 @@ function mergeListItemAiRuntime(
       ? { lastExtractionAppliedAt: patch.lastExtractionAppliedAt }
       : {}),
     ...(patch.dealRecommendation !== undefined ? { dealRecommendation: patch.dealRecommendation } : {}),
-    ...(patch.dealFromAi !== undefined ? { dealFromAi: patch.dealFromAi } : {})
+    ...(patch.dealFromAi !== undefined ? { dealFromAi: patch.dealFromAi } : {}),
+    ...(patch.taskRecommendation !== undefined ? { taskRecommendation: patch.taskRecommendation } : {}),
+    ...(patch.taskFromAi !== undefined ? { taskFromAi: patch.taskFromAi } : {}),
+    ...(patch.lastTaskCreateStatus !== undefined ? { lastTaskCreateStatus: patch.lastTaskCreateStatus } : {}),
+    ...(patch.lastTaskCreateReason !== undefined ? { lastTaskCreateReason: patch.lastTaskCreateReason } : {}),
+    ...(patch.lastTaskCreateAt !== undefined ? { lastTaskCreateAt: patch.lastTaskCreateAt } : {})
   };
   return { ...item, aiRuntime: next };
 }
@@ -777,6 +784,7 @@ const WhatsAppChat: React.FC = () => {
   const [crmAiBots, setCrmAiBots] = useState<CrmAiBot[]>([]);
   const [aiRuntimeSaving, setAiRuntimeSaving] = useState(false);
   const [creatingAiDealFromRec, setCreatingAiDealFromRec] = useState(false);
+  const [creatingAiTaskFromRec, setCreatingAiTaskFromRec] = useState(false);
 
   useEffect(() => {
     if (!companyId) {
@@ -866,7 +874,12 @@ const WhatsAppChat: React.FC = () => {
             lastExtractionAppliedClientId: prevRuntime.lastExtractionAppliedClientId,
             lastExtractionAppliedAt: prevRuntime.lastExtractionAppliedAt,
             dealRecommendation: prevRuntime.dealRecommendation,
-            dealFromAi: prevRuntime.dealFromAi
+            dealFromAi: prevRuntime.dealFromAi,
+            taskRecommendation: prevRuntime.taskRecommendation,
+            taskFromAi: prevRuntime.taskFromAi,
+            lastTaskCreateStatus: prevRuntime.lastTaskCreateStatus,
+            lastTaskCreateReason: prevRuntime.lastTaskCreateReason,
+            lastTaskCreateAt: prevRuntime.lastTaskCreateAt
           };
           const revert = (c: ConversationListItem) =>
             c.id !== selectedId ? c : mergeListItemAiRuntime(c, revertPatch);
@@ -943,6 +956,109 @@ const WhatsAppChat: React.FC = () => {
       setCreatingAiDealFromRec(false);
     }
   }, [selectedId, stickySelectedChat?.id]);
+
+  const handleCreateTaskFromAiRecommendation = useCallback(async () => {
+    if (!selectedId) return;
+    const tr = selectedItemRef.current?.aiRuntime?.taskRecommendation;
+    if (!tr || !tr.payloadHash) {
+      toast.error('Нет рекомендации следующего шага');
+      return;
+    }
+    if (!tr.canCreateTask) {
+      toast.error('Создание задачи по этой рекомендации недоступно');
+      return;
+    }
+    setCreatingAiTaskFromRec(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        toast.error('Нет авторизации');
+        return;
+      }
+      const res = await fetch(CRM_CREATE_TASK_FROM_REC_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ conversationId: selectedId, taskPayloadHash: tr.payloadHash })
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        dealId?: string;
+        taskId?: string;
+        nextActionAt?: string | null;
+        usedFallbacks?: string[];
+        finalResponsibleUserId?: string | null;
+        finalResponsibleNameSnapshot?: string | null;
+      };
+      if (!res.ok || !body.ok) {
+        toast.error(typeof body.error === 'string' ? body.error : 'Не удалось создать задачу');
+        return;
+      }
+      toast.success('Следующий шаг записан в сделку');
+      const appliedIso = new Date().toISOString();
+      const mergeTask = (c: ConversationListItem) => {
+        if (c.id !== selectedId) return c;
+        const base = c.aiRuntime ?? defaultWhatsAppAiRuntime();
+        return {
+          ...c,
+          aiRuntime: {
+            ...base,
+            taskFromAi: {
+              appliedAt: appliedIso,
+              createdFromPayloadHash: tr.payloadHash,
+              dealId: body.dealId ?? '',
+              taskId: body.taskId ?? body.dealId ?? '',
+              finalResponsibleUserId: body.finalResponsibleUserId ?? tr.suggestedResponsibleUserId ?? null,
+              finalResponsibleNameSnapshot:
+                body.finalResponsibleNameSnapshot ?? tr.suggestedResponsibleNameSnapshot ?? null,
+              finalNextActionAt: body.nextActionAt ?? null,
+              dueHintStored: base.taskRecommendation?.dueHint ?? null,
+              createUsedFallbacks: Array.isArray(body.usedFallbacks) ? body.usedFallbacks : null,
+              recommendedTaskType: base.taskRecommendation?.recommendedTaskType ?? null,
+              aiBotId: base.taskRecommendation?.createdFromBotId ?? null,
+              whatsappConversationId: selectedId
+            },
+            lastTaskCreateStatus: 'created',
+            lastTaskCreateReason: null,
+            lastTaskCreateAt: appliedIso
+          }
+        };
+      };
+      setConversations((prev) => prev.map(mergeTask));
+      setSearchChats((prev) => prev.map(mergeTask));
+      if (stickySelectedChat?.id === selectedId) {
+        setStickySelectedChat((prev) => (prev ? mergeTask(prev) : null));
+      }
+      await updateWhatsAppConversationAiRuntime(
+        selectedId,
+        {
+          taskFromAi: {
+            appliedAt: appliedIso,
+            createdFromPayloadHash: tr.payloadHash,
+            dealId: body.dealId ?? '',
+            taskId: body.taskId ?? body.dealId ?? '',
+            finalResponsibleUserId: body.finalResponsibleUserId ?? tr.suggestedResponsibleUserId ?? null,
+            finalResponsibleNameSnapshot:
+              body.finalResponsibleNameSnapshot ?? tr.suggestedResponsibleNameSnapshot ?? null,
+            finalNextActionAt: body.nextActionAt ?? null,
+            dueHintStored: tr.dueHint,
+            createUsedFallbacks: Array.isArray(body.usedFallbacks) ? body.usedFallbacks : null,
+            recommendedTaskType: tr.recommendedTaskType,
+            aiBotId: tr.createdFromBotId,
+            whatsappConversationId: selectedId
+          },
+          lastTaskCreateStatus: 'created',
+          lastTaskCreateReason: null,
+          lastTaskCreateAt: appliedIso
+        },
+        companyId ? { ensureCompanyId: companyId } : undefined
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Ошибка');
+    } finally {
+      setCreatingAiTaskFromRec(false);
+    }
+  }, [selectedId, stickySelectedChat?.id, companyId]);
 
   /** Оптимистичное обновление: после отправки сообщения сразу поднимаем чат в списке по lastMessageAt. */
   const moveConversationToTopByActivity = useCallback((conversationId: string) => {
@@ -1785,6 +1901,7 @@ const WhatsAppChat: React.FC = () => {
           extracted?: Record<string, unknown> | null;
           extractionApply?: RuntimeExtractionApplyApi;
           dealRecommendation?: AiDealRecommendationSnapshot | null;
+          taskRecommendation?: AiTaskRecommendationSnapshot | null;
         };
         if (!res.ok || data.error) {
           const errText = typeof data.error === 'string' ? data.error : `HTTP ${res.status}`;
@@ -1893,6 +2010,21 @@ const WhatsAppChat: React.FC = () => {
               }
             : {};
 
+        const taskRecPatch: WhatsAppAiRuntimePatch =
+          data.taskRecommendation != null ? { taskRecommendation: data.taskRecommendation } : {};
+
+        const runLogTask =
+          data.taskRecommendation != null
+            ? {
+                taskRecommendationStatus: data.taskRecommendation.status,
+                taskRecommendationTitle: data.taskRecommendation.recommendedTaskTitle,
+                taskRecommendationType: data.taskRecommendation.recommendedTaskType,
+                taskRecommendationPriority: data.taskRecommendation.recommendedPriority,
+                taskRecommendationDueHint: data.taskRecommendation.dueHint,
+                taskPayloadHash: data.taskRecommendation.payloadHash
+              }
+            : {};
+
         if (mode === 'draft') {
           await updateWhatsAppConversationAiRuntime(
             selectedId,
@@ -1904,7 +2036,8 @@ const WhatsAppChat: React.FC = () => {
               lastProcessedIncomingMessageId: messageIdToProcess,
               lastExtractionJson: extractionJson,
               ...applyPatch,
-              ...dealRecPatch
+              ...dealRecPatch,
+              ...taskRecPatch
             },
             rtCompany
           );
@@ -1922,7 +2055,8 @@ const WhatsAppChat: React.FC = () => {
             generatedReply: reply,
             extractedSummary,
             ...runLogApply,
-            ...runLogDeal
+            ...runLogDeal,
+            ...runLogTask
           });
           toast.success('Черновик ответа готов (автоворонка)');
           return;
@@ -1943,7 +2077,8 @@ const WhatsAppChat: React.FC = () => {
               lastGeneratedReply: reply,
               lastExtractionJson: extractionJson,
               ...applyPatch,
-              ...dealRecPatch
+              ...dealRecPatch,
+              ...taskRecPatch
             },
             rtCompany
           );
@@ -1960,7 +2095,8 @@ const WhatsAppChat: React.FC = () => {
             generatedReply: reply,
             extractedSummary,
             ...runLogApply,
-            ...runLogDeal
+            ...runLogDeal,
+            ...runLogTask
           });
           toast.error('AI: не удалось отправить ответ в WhatsApp');
           return;
@@ -1975,7 +2111,8 @@ const WhatsAppChat: React.FC = () => {
             lastProcessedIncomingMessageId: messageIdToProcess,
             lastExtractionJson: extractionJson,
             ...applyPatch,
-            ...dealRecPatch
+            ...dealRecPatch,
+            ...taskRecPatch
           },
           rtCompany
         );
@@ -1993,7 +2130,8 @@ const WhatsAppChat: React.FC = () => {
           generatedReply: reply,
           extractedSummary,
           ...runLogApply,
-          ...runLogDeal
+          ...runLogDeal,
+          ...runLogTask
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'runtime error';
@@ -3369,6 +3507,8 @@ const WhatsAppChat: React.FC = () => {
                   aiRuntimeSaving={aiRuntimeSaving}
                   onCreateDealFromAiRecommendation={selectedId ? handleCreateDealFromAiRecommendation : undefined}
                   creatingAiDealFromRec={creatingAiDealFromRec}
+                  onCreateTaskFromAiRecommendation={selectedId ? handleCreateTaskFromAiRecommendation : undefined}
+                  creatingAiTaskFromRec={creatingAiTaskFromRec}
                   kaspiOrderNumber={selectedItem?.kaspiOrderNumber ?? null}
                   kaspiOrderAmount={selectedItem?.kaspiOrderAmount ?? null}
                   kaspiOrderStatus={selectedItem?.kaspiOrderStatus ?? null}
@@ -3485,6 +3625,8 @@ const WhatsAppChat: React.FC = () => {
                 aiRuntimeSaving={aiRuntimeSaving}
                 onCreateDealFromAiRecommendation={selectedId ? handleCreateDealFromAiRecommendation : undefined}
                 creatingAiDealFromRec={creatingAiDealFromRec}
+                onCreateTaskFromAiRecommendation={selectedId ? handleCreateTaskFromAiRecommendation : undefined}
+                creatingAiTaskFromRec={creatingAiTaskFromRec}
                 kaspiOrderNumber={selectedItem.kaspiOrderNumber ?? null}
                 kaspiOrderAmount={selectedItem.kaspiOrderAmount ?? null}
                 kaspiOrderStatus={selectedItem.kaspiOrderStatus ?? null}
