@@ -1,4 +1,4 @@
-import { parseCrmAiBotExtractionResult, type CrmAiBotExtractionResult } from '../../src/types/crmAiBotExtraction';
+import { parseCrmAiBotExtractionResult, type CrmAiBotExtractionResult } from '../../../src/types/crmAiBotExtraction';
 
 const LOG_PREFIX = '[crmAiBotExtraction]';
 
