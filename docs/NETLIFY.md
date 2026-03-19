@@ -115,6 +115,7 @@ location = /api/templates-delete {
 | `POST …/api/templates-delete` | `delete-quick-reply-template` |
 | `GET …/api/chats/search` | `chats-search` |
 | `POST …/api/chats-search` | `chats-search` |
+| `POST …/api/crm-ai-bot-test` | `crm-ai-bot-test` (тест-чат автоворонок; фронт по умолчанию бьёт в `/.netlify/functions/crm-ai-bot-test`) |
 
 Правило `/* → /index.html` идёт **последним** — важно, чтобы блоки `/api/*` были **выше** (в репозитории уже так).
 

@@ -10,4 +10,5 @@
 /api/templates-delete /.netlify/functions/delete-quick-reply-template 200
 /api/chats/search /.netlify/functions/chats-search 200
 /api/chats-search /.netlify/functions/chats-search 200
+/api/crm-ai-bot-test /.netlify/functions/crm-ai-bot-test 200
 /* /index.html 200

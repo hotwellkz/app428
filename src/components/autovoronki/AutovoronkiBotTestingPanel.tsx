@@ -20,10 +20,19 @@ import {
 import type { CrmAiBotConfig } from '../../types/crmAiBotConfig';
 import type { CrmAiBotExtractionResult } from '../../types/crmAiBotExtraction';
 import { useAIConfigured } from '../../hooks/useAIConfigured';
+import { API_CONFIG } from '../../config/api';
 import { extractionHasApplicableData } from '../../lib/autovoronki/extractionCrmMapper';
 import { ApplyExtractionToClientModal } from './ApplyExtractionToClientModal';
 
-const API_URL = '/api/crm-ai-bot-test';
+/**
+ * Дефолт: /.netlify/functions/crm-ai-bot-test (как WhatsApp и др.) — тот же прокси на 2wix.ru.
+ * Путь /api/crm-ai-bot-test — только redirect на Netlify (netlify.toml), без прокси часто 404.
+ * При кросс-домене задайте: VITE_CRM_AI_BOT_TEST_URL=https://….netlify.app/.netlify/functions/crm-ai-bot-test
+ */
+const API_URL =
+  (typeof import.meta.env.VITE_CRM_AI_BOT_TEST_URL === 'string' &&
+    import.meta.env.VITE_CRM_AI_BOT_TEST_URL.trim()) ||
+  `${API_CONFIG.BASE_URL}/crm-ai-bot-test`;
 
 function makeId(): string {
   return `m_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 9)}`;
