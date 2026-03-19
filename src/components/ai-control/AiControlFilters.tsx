@@ -176,6 +176,60 @@ export const AiControlFilters: React.FC<{
           >
             Только требующие реакции сегодня
           </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyUnalertedCritical ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyUnalertedCritical: !filters.onlyUnalertedCritical })}
+          >
+            Только неалерченные critical
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyOverdueNoEscalation ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyOverdueNoEscalation: !filters.onlyOverdueNoEscalation })}
+          >
+            Только overdue без эскалации
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlySnoozed ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlySnoozed: !filters.onlySnoozed })}
+          >
+            Только snoozed
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyMuted ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyMuted: !filters.onlyMuted })}
+          >
+            Только muted
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyNeedReminderNow ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyNeedReminderNow: !filters.onlyNeedReminderNow })}
+          >
+            Только требуют напоминания сейчас
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyEscalatedAlerts ? 'bg-amber-600 text-white border-amber-600' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyEscalatedAlerts: !filters.onlyEscalatedAlerts })}
+          >
+            Только уже эскалированные
+          </button>
         </div>
       </div>
       <div className="flex flex-wrap items-end gap-3">

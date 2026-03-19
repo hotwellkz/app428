@@ -41,6 +41,14 @@ export type AiRunWorkflowEventType =
   | 'resolved'
   | 'ignored';
 
+export type AiRunAlertEventType =
+  | 'new_critical_unassigned'
+  | 'new_overdue'
+  | 'still_overdue_reminder'
+  | 'escalation_required'
+  | 'assigned_to_me'
+  | 'manual_resend';
+
 export interface AiControlFiltersState {
   period: AiControlPeriodPreset;
   customFrom: string;
@@ -68,6 +76,12 @@ export interface AiControlFiltersState {
   onlyUnassigned: boolean;
   onlyMyOverdue: boolean;
   onlyReactionToday: boolean;
+  onlyUnalertedCritical: boolean;
+  onlyOverdueNoEscalation: boolean;
+  onlySnoozed: boolean;
+  onlyMuted: boolean;
+  onlyNeedReminderNow: boolean;
+  onlyEscalatedAlerts: boolean;
   sortBy: 'newest' | 'problem_first' | 'deal_task_first' | 'overdue_first' | 'critical_first' | 'unassigned_first' | 'oldest_problem_first' | 'workflow_recently_updated';
 }
 
@@ -97,6 +111,12 @@ export const DEFAULT_AI_CONTROL_FILTERS: AiControlFiltersState = {
   onlyUnassigned: false,
   onlyMyOverdue: false,
   onlyReactionToday: false,
+  onlyUnalertedCritical: false,
+  onlyOverdueNoEscalation: false,
+  onlySnoozed: false,
+  onlyMuted: false,
+  onlyNeedReminderNow: false,
+  onlyEscalatedAlerts: false,
   sortBy: 'newest'
 };
 

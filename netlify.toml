@@ -7,6 +7,9 @@
 [functions.kaspi-sync-scheduled]
   schedule = "0 9,13,17,21 * * *"
 
+[functions.ai-control-alerts-scheduled]
+  schedule = "*/5 * * * *"
+
 # Webhook Wazzup → Netlify function (должен быть выше правила /*)
 [[redirects]]
   from = "/api/wazzup/webhook"
@@ -127,6 +130,12 @@
 [[redirects]]
   from = "/api/crm-ai-create-task-from-recommendation"
   to = "/.netlify/functions/crm-ai-create-task-from-recommendation"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/ai-control-alert-dispatch"
+  to = "/.netlify/functions/ai-control-alert-dispatch"
   status = 200
   force = true
 

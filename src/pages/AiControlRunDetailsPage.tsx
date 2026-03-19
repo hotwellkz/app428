@@ -371,6 +371,28 @@ export const AiControlRunDetailsPage: React.FC = () => {
     }
   };
 
+  const triggerManualAlert = async () => {
+    if (!runId) return;
+    setWorkflowBusy(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/ai-control-alert-dispatch', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ runId })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success('Alert отправлен');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Не удалось отправить alert');
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
+
   const extRows: { label: string; value: string }[] = extraction
     ? [
         { label: 'Имя', value: extraction.clientName ?? '—' },
@@ -727,6 +749,37 @@ export const AiControlRunDetailsPage: React.FC = () => {
           </ul>
         </div>
         <div className="mt-3 pt-3 border-t border-gray-100">
+          <p className="text-xs text-gray-500 mb-2">Уведомления и эскалации</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-700 mb-2">
+            <p>Первый alert: {derivedWorkflow.firstAlertAtMs ? new Date(derivedWorkflow.firstAlertAtMs).toLocaleString('ru-RU') : '—'}</p>
+            <p>Последний alert: {derivedWorkflow.lastAlertAtMs ? new Date(derivedWorkflow.lastAlertAtMs).toLocaleString('ru-RU') : '—'}</p>
+            <p>Последний reminder: {derivedWorkflow.lastReminderAtMs ? new Date(derivedWorkflow.lastReminderAtMs).toLocaleString('ru-RU') : '—'}</p>
+            <p>Эскалация: {derivedWorkflow.lastEscalationAtMs ? new Date(derivedWorkflow.lastEscalationAtMs).toLocaleString('ru-RU') : '—'}</p>
+            <p>Состояние: {derivedWorkflow.isMuted ? 'muted' : derivedWorkflow.isSnoozed ? 'snoozed' : 'active'}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled={workflowBusy} className="px-3 py-1.5 rounded border text-xs disabled:opacity-40" onClick={() => void triggerManualAlert()}>
+              Отправить alert повторно
+            </button>
+            <button type="button" disabled={workflowBusy} className="px-3 py-1.5 rounded border text-xs disabled:opacity-40" onClick={() => void updateWorkflow({ alertState: { ...(workflow?.alertState ?? {}), snoozedUntil: new Date(Date.now() + 15 * 60000) } })}>
+              Snooze 15 мин
+            </button>
+            <button type="button" disabled={workflowBusy} className="px-3 py-1.5 rounded border text-xs disabled:opacity-40" onClick={() => void updateWorkflow({ alertState: { ...(workflow?.alertState ?? {}), snoozedUntil: new Date(Date.now() + 60 * 60000) } })}>
+              Snooze 1 час
+            </button>
+            <button type="button" disabled={workflowBusy} className="px-3 py-1.5 rounded border text-xs disabled:opacity-40" onClick={() => {
+              const end = new Date();
+              end.setHours(23, 59, 59, 999);
+              void updateWorkflow({ alertState: { ...(workflow?.alertState ?? {}), mutedUntil: end } });
+            }}>
+              Mute до конца дня
+            </button>
+            <button type="button" disabled={workflowBusy} className="px-3 py-1.5 rounded border text-xs disabled:opacity-40" onClick={() => void updateWorkflow({ alertState: { ...(workflow?.alertState ?? {}), mutedUntil: null, snoozedUntil: null } })}>
+              Снять mute/snooze
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-100">
           <p className="text-xs text-gray-500 mb-2">Ручные действия</p>
           <div className="flex flex-wrap gap-2">
             <button type="button" disabled className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40" title="Пока нет backend-обработчика retry CRM apply">
@@ -752,6 +805,19 @@ export const AiControlRunDetailsPage: React.FC = () => {
               </p>
             ))}
             {(derivedWorkflow.history?.length ?? 0) === 0 ? <p className="text-xs text-gray-500">История пока пуста</p> : null}
+          </div>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <p className="text-xs text-gray-500 mb-2">История уведомлений</p>
+          <div className="space-y-1.5">
+            {(derivedWorkflow.notificationHistory ?? []).slice(-10).reverse().map((ev, idx) => (
+              <p key={`${ev.type}-${idx}`} className="text-xs text-gray-600">
+                {ev.type} · {ev.channel} · {ev.status}
+                {ev.target ? ` · ${ev.target}` : ''}
+                {tsToMs(ev.sentAt) ? ` · ${new Date(tsToMs(ev.sentAt) as number).toLocaleString('ru-RU')}` : ''}
+              </p>
+            ))}
+            {(derivedWorkflow.notificationHistory?.length ?? 0) === 0 ? <p className="text-xs text-gray-500">История уведомлений пока пуста</p> : null}
           </div>
         </div>
       </section>

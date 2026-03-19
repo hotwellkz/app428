@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './config';
 import type {
+  AiRunAlertEventType,
   AiRunWorkflowEventType,
   AiRunWorkflowPriority,
   AiRunWorkflowResolutionType,
@@ -38,6 +39,8 @@ export interface WhatsAppAiRunWorkflowRecord {
   priority?: AiRunWorkflowPriority | null;
   priorityReason?: string[] | null;
   history?: WhatsAppAiRunWorkflowEvent[] | null;
+  alertState?: WhatsAppAiRunAlertState | null;
+  notificationHistory?: WhatsAppAiRunNotificationEvent[] | null;
 }
 
 export interface WhatsAppAiRunWorkflowEvent {
@@ -46,6 +49,29 @@ export interface WhatsAppAiRunWorkflowEvent {
   by?: string | null;
   byName?: string | null;
   payload?: Record<string, unknown> | null;
+}
+
+export interface WhatsAppAiRunAlertState {
+  firstAlertAt?: Timestamp | Date | null;
+  lastAlertAt?: Timestamp | Date | null;
+  lastReminderAt?: Timestamp | Date | null;
+  lastEscalationAt?: Timestamp | Date | null;
+  reminderCount?: number | null;
+  escalationCount?: number | null;
+  mutedUntil?: Timestamp | Date | null;
+  snoozedUntil?: Timestamp | Date | null;
+  lastAlertKey?: string | null;
+  sentKeys?: string[] | null;
+}
+
+export interface WhatsAppAiRunNotificationEvent {
+  type: AiRunAlertEventType;
+  target?: string | null;
+  channel: 'internal' | 'telegram';
+  status: 'sent' | 'skipped' | 'muted' | 'deduped' | 'failed';
+  sentAt: Timestamp | Date | null;
+  key?: string | null;
+  error?: string | null;
 }
 
 function str(v: unknown): string | null {
@@ -92,6 +118,45 @@ function parseHistory(v: unknown): WhatsAppAiRunWorkflowEvent[] | null {
     .filter(Boolean) as WhatsAppAiRunWorkflowEvent[];
 }
 
+function parseAlertState(v: unknown): WhatsAppAiRunAlertState | null {
+  const obj = (v ?? null) as Record<string, unknown> | null;
+  if (!obj || typeof obj !== 'object') return null;
+  return {
+    firstAlertAt: (obj.firstAlertAt as Timestamp | Date | null) ?? null,
+    lastAlertAt: (obj.lastAlertAt as Timestamp | Date | null) ?? null,
+    lastReminderAt: (obj.lastReminderAt as Timestamp | Date | null) ?? null,
+    lastEscalationAt: (obj.lastEscalationAt as Timestamp | Date | null) ?? null,
+    reminderCount: typeof obj.reminderCount === 'number' ? obj.reminderCount : null,
+    escalationCount: typeof obj.escalationCount === 'number' ? obj.escalationCount : null,
+    mutedUntil: (obj.mutedUntil as Timestamp | Date | null) ?? null,
+    snoozedUntil: (obj.snoozedUntil as Timestamp | Date | null) ?? null,
+    lastAlertKey: str(obj.lastAlertKey),
+    sentKeys: strArr(obj.sentKeys)
+  };
+}
+
+function parseNotificationHistory(v: unknown): WhatsAppAiRunNotificationEvent[] | null {
+  if (!Array.isArray(v)) return null;
+  return v
+    .map((item) => {
+      const obj = (item ?? {}) as Record<string, unknown>;
+      const type = str(obj.type) as AiRunAlertEventType | null;
+      const channel = str(obj.channel) as 'internal' | 'telegram' | null;
+      const status = str(obj.status) as 'sent' | 'skipped' | 'muted' | 'deduped' | 'failed' | null;
+      if (!type || !channel || !status) return null;
+      return {
+        type,
+        target: str(obj.target),
+        channel,
+        status,
+        sentAt: (obj.sentAt as Timestamp | Date | null) ?? null,
+        key: str(obj.key),
+        error: str(obj.error)
+      } as WhatsAppAiRunNotificationEvent;
+    })
+    .filter(Boolean) as WhatsAppAiRunNotificationEvent[];
+}
+
 function docToWorkflow(id: string, data: Record<string, unknown>): WhatsAppAiRunWorkflowRecord {
   return {
     id,
@@ -110,7 +175,9 @@ function docToWorkflow(id: string, data: Record<string, unknown>): WhatsAppAiRun
     slaMinutes: typeof data.slaMinutes === 'number' ? data.slaMinutes : null,
     priority: parsePriority(data.priority),
     priorityReason: strArr(data.priorityReason),
-    history: parseHistory(data.history)
+    history: parseHistory(data.history),
+    alertState: parseAlertState(data.alertState),
+    notificationHistory: parseNotificationHistory(data.notificationHistory)
   };
 }
 

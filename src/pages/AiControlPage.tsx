@@ -163,6 +163,12 @@ function applyFilters(
     if (filters.onlyUnassigned && !w.isUnassigned) return false;
     if (filters.onlyMyOverdue && !(w.isOverdue && currentUserId && workflowByRunId[run.id]?.assigneeId === currentUserId)) return false;
     if (filters.onlyReactionToday && !w.needsReactionToday) return false;
+    if (filters.onlyUnalertedCritical && !(w.priority === 'critical' && !w.firstAlertAtMs)) return false;
+    if (filters.onlyOverdueNoEscalation && !(w.isOverdue && !w.escalationSent)) return false;
+    if (filters.onlySnoozed && !w.isSnoozed) return false;
+    if (filters.onlyMuted && !w.isMuted) return false;
+    if (filters.onlyNeedReminderNow && !w.needsReminderNow) return false;
+    if (filters.onlyEscalatedAlerts && !w.escalationSent) return false;
 
     if (q) {
       const botName = (botsById[run.botId]?.name ?? '').toLowerCase();
@@ -296,13 +302,23 @@ function metricsFor(
   }
   let overdue = 0,
     critical = 0,
-    unassigned = 0;
+    unassigned = 0,
+    needAlertNow = 0,
+    overdueNoReaction = 0,
+    snoozed = 0,
+    muted = 0,
+    failedAttempts = 0;
   for (const r of runs) {
     const p = deriveAiRunListPresentation(r, agg[r.id] ?? 'skipped');
     const wf = deriveAiRunWorkflow(r, p, workflowByRunId[r.id] ?? null);
     if (wf.isOverdue) overdue++;
     if (wf.priority === 'critical') critical++;
     if (wf.isUnassigned && p.requiresAttention) unassigned++;
+    if (wf.needsAlertNow || wf.needsReminderNow || wf.needsEscalationNow) needAlertNow++;
+    if (wf.isOverdue && !wf.lastAlertAtMs) overdueNoReaction++;
+    if (wf.isSnoozed) snoozed++;
+    if (wf.isMuted) muted++;
+    if ((wf.notificationHistory ?? []).some((n) => n.status === 'failed')) failedAttempts++;
   }
   return {
     total: runs.length,
@@ -320,7 +336,12 @@ function metricsFor(
     resolvedToday,
     overdue,
     critical,
-    unassigned
+    unassigned,
+    needAlertNow,
+    overdueNoReaction,
+    snoozed,
+    muted,
+    failedAttempts
   };
 }
 
@@ -507,10 +528,15 @@ export const AiControlPage: React.FC = () => {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-10 gap-2 mb-4">
         {[
+          { k: 'Требуют alert сейчас', v: metrics.needAlertNow },
+          { k: 'Просроченные без реакции', v: metrics.overdueNoReaction },
           { k: 'Просроченные', v: metrics.overdue },
           { k: 'Критичные', v: metrics.critical },
+          { k: 'Snoozed', v: metrics.snoozed },
+          { k: 'Muted', v: metrics.muted },
+          { k: 'Failed alerts', v: metrics.failedAttempts },
           { k: 'Без ответственного', v: metrics.unassigned },
           { k: 'В работе', v: metrics.inProgress },
           { k: 'Эскалированные', v: metrics.escalated },

@@ -287,13 +287,17 @@ export const AiRunList: React.FC<{
                     {wf.priorityLabel}
                   </span>
                   {wf.isOverdue ? <span className="px-1.5 py-0.5 rounded bg-red-100 text-red-800">Просрочено</span> : null}
+                  {wf.firstAlertAtMs ? <span className="px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800">Alerted</span> : <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">Not alerted</span>}
+                  {wf.escalationSent ? <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">Escalated alert</span> : null}
+                  {wf.isSnoozed ? <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">Snoozed</span> : null}
+                  {wf.isMuted ? <span className="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">Muted</span> : null}
                   <span className="text-gray-500">Назначен: {wf.assigneeName || 'Не назначен'}</span>
                   {wf.updatedAtMs ? (
                     <span className="text-gray-400">{format(new Date(wf.updatedAtMs), 'dd.MM HH:mm')}</span>
                   ) : null}
                 </div>
                 <p className="text-[11px] text-gray-500 mt-0.5">
-                  {wf.dueAtMs ? `SLA до ${format(new Date(wf.dueAtMs), 'dd.MM HH:mm')}` : 'SLA не задан'} · Возраст: {wf.ageMinutes != null ? `${wf.ageMinutes} мин` : '—'}
+                  {wf.dueAtMs ? `SLA до ${format(new Date(wf.dueAtMs), 'dd.MM HH:mm')}` : 'SLA не задан'} · Возраст: {wf.ageMinutes != null ? `${wf.ageMinutes} мин` : '—'} · last alert: {wf.lastAlertAtMs ? format(new Date(wf.lastAlertAtMs), 'dd.MM HH:mm') : '—'}
                 </p>
                 {wf.lastComment ? (
                   <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">Комментарий: {wf.lastComment}</p>

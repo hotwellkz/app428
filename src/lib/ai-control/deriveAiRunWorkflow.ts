@@ -20,9 +20,20 @@ export interface DerivedAiRunWorkflow {
   slaMinutes: number | null;
   isOverdue: boolean;
   needsReactionToday: boolean;
+  isMuted: boolean;
+  isSnoozed: boolean;
+  needsAlertNow: boolean;
+  needsReminderNow: boolean;
+  needsEscalationNow: boolean;
+  escalationSent: boolean;
+  firstAlertAtMs: number | null;
+  lastAlertAtMs: number | null;
+  lastReminderAtMs: number | null;
+  lastEscalationAtMs: number | null;
   isUnassigned: boolean;
   isNewProblem: boolean;
   history: WhatsAppAiRunWorkflowRecord['history'];
+  notificationHistory: WhatsAppAiRunWorkflowRecord['notificationHistory'];
 }
 
 function toMs(v: unknown): number | null {
@@ -100,6 +111,20 @@ function calcSla(priority: AiRunWorkflowPriority): number | null {
   return null;
 }
 
+function reminderCooldownMinutes(priority: AiRunWorkflowPriority): number | null {
+  if (priority === 'critical') return 15;
+  if (priority === 'high') return 60;
+  if (priority === 'normal') return 240;
+  return null;
+}
+
+function escalationThresholdMinutes(priority: AiRunWorkflowPriority): number | null {
+  if (priority === 'critical') return 30;
+  if (priority === 'high') return 240;
+  if (priority === 'normal') return 1440;
+  return null;
+}
+
 export function deriveAiRunWorkflow(
   run: WhatsAppAiBotRunRecord,
   presentation: AiRunListPresentation,
@@ -117,6 +142,40 @@ export function deriveAiRunWorkflow(
   const dueAtMs = toMs(workflow?.dueAt) ?? (firstAttentionAtMs && slaMinutes ? firstAttentionAtMs + slaMinutes * 60_000 : null);
   const isOverdue = !!(dueAtMs && dueAtMs < nowMs && status !== 'resolved' && status !== 'ignored');
   const ageMinutes = firstAttentionAtMs ? Math.max(0, Math.floor((nowMs - firstAttentionAtMs) / 60000)) : null;
+  const firstAlertAtMs = toMs(workflow?.alertState?.firstAlertAt);
+  const lastAlertAtMs = toMs(workflow?.alertState?.lastAlertAt);
+  const lastReminderAtMs = toMs(workflow?.alertState?.lastReminderAt);
+  const lastEscalationAtMs = toMs(workflow?.alertState?.lastEscalationAt);
+  const mutedUntilMs = toMs(workflow?.alertState?.mutedUntil);
+  const snoozedUntilMs = toMs(workflow?.alertState?.snoozedUntil);
+  const isMuted = !!(mutedUntilMs && mutedUntilMs > nowMs);
+  const isSnoozed = !!(snoozedUntilMs && snoozedUntilMs > nowMs);
+  const reminderCooldown = reminderCooldownMinutes(priority);
+  const escalationThreshold = escalationThresholdMinutes(priority);
+  const overdueMinutes = dueAtMs ? Math.floor((nowMs - dueAtMs) / 60000) : null;
+  const needsAlertNow =
+    !isMuted &&
+    !isSnoozed &&
+    status !== 'resolved' &&
+    status !== 'ignored' &&
+    ((priority === 'critical' && status === 'new' && !hasAssignee && !firstAlertAtMs) || (isOverdue && !firstAlertAtMs));
+  const needsReminderNow =
+    !isMuted &&
+    !isSnoozed &&
+    status !== 'resolved' &&
+    status !== 'ignored' &&
+    isOverdue &&
+    !!reminderCooldown &&
+    (lastReminderAtMs == null || nowMs - lastReminderAtMs >= reminderCooldown * 60000);
+  const needsEscalationNow =
+    !isMuted &&
+    status !== 'resolved' &&
+    status !== 'ignored' &&
+    isOverdue &&
+    !!escalationThreshold &&
+    !!overdueMinutes &&
+    overdueMinutes > escalationThreshold &&
+    !lastEscalationAtMs;
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const needsReactionToday = !!(dueAtMs && dueAtMs >= startOfToday.getTime() && dueAtMs < startOfToday.getTime() + 86400000);
@@ -137,8 +196,20 @@ export function deriveAiRunWorkflow(
     slaMinutes,
     isOverdue,
     needsReactionToday,
+    isMuted,
+    isSnoozed,
+    needsAlertNow,
+    needsReminderNow,
+    needsEscalationNow,
+    escalationSent: !!lastEscalationAtMs,
+    firstAlertAtMs,
+    lastAlertAtMs,
+    lastReminderAtMs,
+    lastEscalationAtMs,
     isUnassigned: !workflow?.assigneeId,
     isNewProblem: presentation.requiresAttention && status === 'new',
     history: workflow?.history ?? null
+    ,
+    notificationHistory: workflow?.notificationHistory ?? null
   };
 }
