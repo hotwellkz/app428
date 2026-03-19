@@ -86,6 +86,48 @@ export const AiControlFilters: React.FC<{
           </button>
         ))}
       </div>
+      <div className="pt-1 border-t border-gray-100">
+        <p className="text-xs text-gray-500 mb-2">Workflow обработка</p>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { v: 'all', l: 'Все' },
+            { v: 'new', l: 'Только новые' },
+            { v: 'in_progress', l: 'Только в работе' },
+            { v: 'escalated', l: 'Только эскалированные' },
+            { v: 'resolved', l: 'Только решённые' },
+            { v: 'ignored', l: 'Только игнор' }
+          ].map((wf) => (
+            <button
+              key={wf.v}
+              type="button"
+              className={`px-2.5 py-1 rounded-full text-xs border ${
+                filters.workflowFilter === wf.v ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300'
+              }`}
+              onClick={() => set({ workflowFilter: wf.v as AiControlFiltersState['workflowFilter'] })}
+            >
+              {wf.l}
+            </button>
+          ))}
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyMine ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyMine: !filters.onlyMine })}
+          >
+            Только мои
+          </button>
+          <button
+            type="button"
+            className={`px-2.5 py-1 rounded-full text-xs border ${
+              filters.onlyNewProblem ? 'bg-red-600 text-white border-red-600' : 'bg-white text-gray-700 border-gray-300'
+            }`}
+            onClick={() => set({ onlyNewProblem: !filters.onlyNewProblem })}
+          >
+            Только новые проблемные
+          </button>
+        </div>
+      </div>
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-xs text-gray-500 mb-1">Вид</label>

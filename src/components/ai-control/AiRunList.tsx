@@ -9,6 +9,8 @@ import { AiRunStatusBadge } from './AiRunStatusBadge';
 import { channelLabel } from './AiControlFilters';
 import { runCreatedAtMs } from '../../lib/aiControl/aggregateAiRun';
 import { deriveAiRunListPresentation } from '../../lib/ai-control/deriveAiRunListPresentation';
+import { deriveAiRunWorkflow } from '../../lib/ai-control/deriveAiRunWorkflow';
+import type { WhatsAppAiRunWorkflowRecord } from '../../lib/firebase/whatsappAiRunWorkflow';
 
 function fmtTime(run: WhatsAppAiBotRunRecord): string {
   const ms = runCreatedAtMs(run);
@@ -47,7 +49,13 @@ export const AiRunList: React.FC<{
   runs: WhatsAppAiBotRunRecord[];
   botNames: Record<string, string>;
   aggregated: Record<string, AiControlAggregatedStatus>;
-}> = ({ runs, botNames, aggregated }) => {
+  workflowByRunId: Record<string, WhatsAppAiRunWorkflowRecord>;
+  workflowBusyByRunId: Record<string, boolean>;
+  onTakeInWork: (run: WhatsAppAiBotRunRecord) => Promise<void> | void;
+  onResolve: (run: WhatsAppAiBotRunRecord) => Promise<void> | void;
+  onIgnore: (run: WhatsAppAiBotRunRecord) => Promise<void> | void;
+  onEscalate: (run: WhatsAppAiBotRunRecord) => Promise<void> | void;
+}> = ({ runs, botNames, aggregated, workflowByRunId, workflowBusyByRunId, onTakeInWork, onResolve, onIgnore, onEscalate }) => {
   const navigate = useNavigate();
   const [mobileActionsFor, setMobileActionsFor] = useState<string | null>(null);
   if (runs.length === 0) {
@@ -63,6 +71,8 @@ export const AiRunList: React.FC<{
       {runs.map((run) => {
         const agg = aggregated[run.id] ?? 'skipped';
         const p = deriveAiRunListPresentation(run, agg);
+        const wf = deriveAiRunWorkflow(p.requiresAttention, workflowByRunId[run.id] ?? null);
+        const busy = !!workflowBusyByRunId[run.id];
         const botName = botNames[run.botId] ?? run.botId.slice(0, 8);
         const clientId = run.clientIdSnapshot || run.appliedClientId || null;
         const dealId = run.createdDealId || run.dealId || null;
@@ -149,6 +159,58 @@ export const AiRunList: React.FC<{
             </button>
             <button
               type="button"
+              disabled={busy}
+              className="px-2 py-1 text-[10px] rounded border text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void onTakeInWork(run);
+              }}
+              title="Взять в работу"
+            >
+              В работу
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="px-2 py-1 text-[10px] rounded border text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void onResolve(run);
+              }}
+              title="Пометить решённым"
+            >
+              Решено
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="px-2 py-1 text-[10px] rounded border text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void onIgnore(run);
+              }}
+              title="Игнорировать"
+            >
+              Игнор
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              className="px-2 py-1 text-[10px] rounded border text-amber-700 hover:bg-amber-50 disabled:opacity-40"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void onEscalate(run);
+              }}
+              title="Эскалировать"
+            >
+              Эскалация
+            </button>
+            <button
+              type="button"
               disabled={!extractedJson.trim()}
               className="p-1.5 rounded hover:bg-gray-100 text-gray-600 disabled:opacity-40"
               onClick={(e) => {
@@ -166,7 +228,9 @@ export const AiRunList: React.FC<{
           <Link
             key={run.id}
             to={`/ai-control/${run.id}`}
-            className="block rounded-xl border border-gray-200 bg-white p-3 sm:p-4 hover:border-indigo-300 hover:shadow-sm transition-shadow"
+            className={`block rounded-xl border bg-white p-3 sm:p-4 hover:border-indigo-300 hover:shadow-sm transition-shadow ${
+              wf.isNewProblem ? 'border-red-200 bg-red-50/20' : 'border-gray-200'
+            }`}
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
@@ -186,6 +250,18 @@ export const AiRunList: React.FC<{
                 <p className="text-sm text-gray-700 truncate" title={run.conversationId}>
                   Чат: {run.conversationId.slice(0, 12)}…
                 </p>
+                <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                  <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
+                    {wf.statusLabel}
+                  </span>
+                  <span className="text-gray-500">Назначен: {wf.assigneeName || 'Не назначен'}</span>
+                  {wf.updatedAtMs ? (
+                    <span className="text-gray-400">{format(new Date(wf.updatedAtMs), 'dd.MM HH:mm')}</span>
+                  ) : null}
+                </div>
+                {wf.lastComment ? (
+                  <p className="text-[11px] text-gray-500 mt-0.5 line-clamp-1">Комментарий: {wf.lastComment}</p>
+                ) : null}
                 <p className="text-xs text-gray-500 mt-1 line-clamp-1">
                   {previewReply(p.summaryPreview || p.answerPreview || '', 160) || 'Нет краткого описания'}
                 </p>

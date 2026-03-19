@@ -34,6 +34,14 @@ import type { CrmAiBotExtractionResult } from '../types/crmAiBotExtraction';
 import { stashChatDraft } from '../lib/ai-control/openChatDraftBridge';
 import { humanizeFallbackReasons } from '../lib/ai-control/fallbackReasonLabels';
 import { deriveAiRunListPresentation } from '../lib/ai-control/deriveAiRunListPresentation';
+import { deriveAiRunWorkflow } from '../lib/ai-control/deriveAiRunWorkflow';
+import {
+  subscribeWhatsappAiRunWorkflowByRunId,
+  upsertWhatsappAiRunWorkflow,
+  type WhatsAppAiRunWorkflowRecord
+} from '../lib/firebase/whatsappAiRunWorkflow';
+import type { AiRunWorkflowResolutionType, AiRunWorkflowStatus } from '../types/aiControl';
+import { auth } from '../lib/firebase/auth';
 
 const CRM_CLIENTS = 'clients';
 const CRM_DEALS = 'deals';
@@ -81,6 +89,9 @@ export const AiControlRunDetailsPage: React.FC = () => {
   const [triggerMsg, setTriggerMsg] = useState<Record<string, unknown> | null>(null);
   const [busy, setBusy] = useState(false);
   const [showRawExtraction, setShowRawExtraction] = useState(false);
+  const [workflow, setWorkflow] = useState<WhatsAppAiRunWorkflowRecord | null>(null);
+  const [workflowBusy, setWorkflowBusy] = useState(false);
+  const [commentDraft, setCommentDraft] = useState('');
 
   const load = useCallback(async () => {
     if (!companyId || !runId || !can) return;
@@ -149,6 +160,16 @@ export const AiControlRunDetailsPage: React.FC = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!runId) return;
+    const unsub = subscribeWhatsappAiRunWorkflowByRunId(runId, (item) => {
+      if (item && companyId && item.companyId !== companyId) return;
+      setWorkflow(item);
+      setCommentDraft(item?.lastComment ?? '');
+    });
+    return () => unsub();
+  }, [runId, companyId]);
 
   const aiRt = conv ? parseWhatsAppAiRuntime(conv as Record<string, unknown>) : null;
   const extractionRawFromRun = run?.extractedSnapshotJson ?? null;
@@ -290,11 +311,32 @@ export const AiControlRunDetailsPage: React.FC = () => {
   const agg = computeAggregatedStatus(run);
   const flags = computeRunResultFlags(run);
   const presentation = deriveAiRunListPresentation(run, agg);
+  const derivedWorkflow = deriveAiRunWorkflow(presentation.requiresAttention, workflow);
   const dealOpenId = run.createdDealId || run.dealId || dealPreview?.id;
   const clientOpenId = run.clientIdSnapshot || run.appliedClientId || null;
   const runtimeMode = run.runtimeMode || run.mode || 'unknown';
   const phone = run.phoneSnapshot || client?.phone || '—';
   const runAny = run as unknown as Record<string, unknown>;
+  const me = auth.currentUser;
+  const meName = me?.displayName || me?.email || 'Пользователь';
+
+  const updateWorkflow = async (
+    patch: Partial<WhatsAppAiRunWorkflowRecord> & { status?: AiRunWorkflowStatus; resolutionType?: AiRunWorkflowResolutionType }
+  ) => {
+    if (!companyId || !runId) return;
+    setWorkflowBusy(true);
+    try {
+      await upsertWhatsappAiRunWorkflow(companyId, runId, {
+        ...patch,
+        updatedBy: meName
+      });
+      toast.success('Статус обработки обновлён');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Не удалось обновить workflow');
+    } finally {
+      setWorkflowBusy(false);
+    }
+  };
 
   const extRows: { label: string; value: string }[] = extraction
     ? [
@@ -541,6 +583,122 @@ export const AiControlRunDetailsPage: React.FC = () => {
           </ul>
         </section>
       )}
+
+      <section className="rounded-xl border bg-white p-4 mb-4">
+        <h2 className="font-semibold text-gray-900 mb-2">Обработка менеджером</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm mb-3">
+          <p><span className="text-gray-500">Статус:</span> {derivedWorkflow.statusLabel}</p>
+          <p><span className="text-gray-500">Назначен:</span> {derivedWorkflow.assigneeName || 'Не назначен'}</p>
+          <p><span className="text-gray-500">Обновил:</span> {derivedWorkflow.updatedBy || '—'}</p>
+          <p>
+            <span className="text-gray-500">Обновлено:</span>{' '}
+            {derivedWorkflow.updatedAtMs ? new Date(derivedWorkflow.updatedAtMs).toLocaleString('ru-RU') : '—'}
+          </p>
+        </div>
+        <label className="block text-xs text-gray-500 mb-1">Комментарий менеджера</label>
+        <textarea
+          className="w-full rounded-lg border px-3 py-2 text-sm min-h-[84px]"
+          placeholder="Коротко: что проверено, что сделано, что осталось"
+          value={commentDraft}
+          onChange={(e) => setCommentDraft(e.target.value)}
+        />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={workflowBusy}
+            className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40"
+            onClick={() =>
+              void updateWorkflow({
+                status: 'in_progress',
+                assigneeId: me?.uid ?? null,
+                assigneeName: meName,
+                lastComment: commentDraft || null,
+                resolutionType: null
+              })
+            }
+          >
+            Взять в работу
+          </button>
+          <button
+            type="button"
+            disabled={workflowBusy}
+            className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40"
+            onClick={() =>
+              void updateWorkflow({
+                lastComment: commentDraft || null
+              })
+            }
+          >
+            Сохранить комментарий
+          </button>
+          <button
+            type="button"
+            disabled={workflowBusy}
+            className="px-3 py-1.5 rounded-lg border text-sm text-emerald-800 border-emerald-200 bg-emerald-50 disabled:opacity-40"
+            onClick={() =>
+              void updateWorkflow({
+                status: 'resolved',
+                assigneeId: me?.uid ?? null,
+                assigneeName: meName,
+                lastComment: commentDraft || null,
+                resolvedAt: new Date(),
+                resolutionType: 'fixed'
+              })
+            }
+          >
+            Пометить решённым
+          </button>
+          <button
+            type="button"
+            disabled={workflowBusy}
+            className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40"
+            onClick={() =>
+              void updateWorkflow({
+                status: 'ignored',
+                assigneeId: me?.uid ?? null,
+                assigneeName: meName,
+                lastComment: commentDraft || null,
+                resolutionType: 'ignored'
+              })
+            }
+          >
+            Игнорировать
+          </button>
+          <button
+            type="button"
+            disabled={workflowBusy}
+            className="px-3 py-1.5 rounded-lg border text-sm text-amber-800 border-amber-200 bg-amber-50 disabled:opacity-40"
+            onClick={() =>
+              void updateWorkflow({
+                status: 'escalated',
+                assigneeId: me?.uid ?? null,
+                assigneeName: meName,
+                lastComment: commentDraft || null,
+                resolutionType: 'escalated'
+              })
+            }
+          >
+            Эскалировать
+          </button>
+        </div>
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <p className="text-xs text-gray-500 mb-2">Ручные действия</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" disabled className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40" title="Пока нет backend-обработчика retry CRM apply">
+              Повторить CRM apply
+            </button>
+            <button type="button" disabled className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40" title="Пока нет backend-обработчика ручного создания сделки из AI-control">
+              Создать сделку вручную
+            </button>
+            <button type="button" disabled className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40" title="Пока нет backend-обработчика ручного создания задачи из AI-control">
+              Создать задачу вручную
+            </button>
+            <button type="button" disabled className="px-3 py-1.5 rounded-lg border text-sm disabled:opacity-40" title="Пока нет backend-обработчика retry/re-run AI из AI-control">
+              Retry / re-run AI
+            </button>
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-xl border bg-white p-4 mb-4">
         <h2 className="font-semibold text-gray-900 mb-2 inline-flex items-center gap-2">

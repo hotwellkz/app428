@@ -8,11 +8,18 @@ import {
   subscribeWhatsappAiBotRuns,
   type WhatsAppAiBotRunRecord
 } from '../lib/firebase/whatsappAiBotRuns';
+import {
+  subscribeWhatsappAiRunWorkflow,
+  upsertWhatsappAiRunWorkflow,
+  type WhatsAppAiRunWorkflowRecord
+} from '../lib/firebase/whatsappAiRunWorkflow';
 import type { CrmAiBot } from '../types/crmAiBot';
 import {
   DEFAULT_AI_CONTROL_FILTERS,
   type AiControlFiltersState,
-  type AiControlPeriodPreset
+  type AiControlPeriodPreset,
+  type AiRunWorkflowResolutionType,
+  type AiRunWorkflowStatus
 } from '../types/aiControl';
 import { AiControlFilters } from '../components/ai-control/AiControlFilters';
 import { AiRunList } from '../components/ai-control/AiRunList';
@@ -23,6 +30,8 @@ import {
 } from '../lib/aiControl/aggregateAiRun';
 import type { AiControlAggregatedStatus } from '../types/aiControl';
 import { deriveAiRunListPresentation } from '../lib/ai-control/deriveAiRunListPresentation';
+import { deriveAiRunWorkflow } from '../lib/ai-control/deriveAiRunWorkflow';
+import { auth } from '../lib/firebase/auth';
 
 function periodBounds(
   period: AiControlPeriodPreset,
@@ -64,10 +73,22 @@ function periodBounds(
   }
 }
 
+function tsToMs(v: unknown): number | null {
+  if (!v) return null;
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === 'object' && v && 'toMillis' in (v as { toMillis?: unknown })) {
+    const fn = (v as { toMillis?: () => number }).toMillis;
+    if (typeof fn === 'function') return fn();
+  }
+  return null;
+}
+
 function applyFilters(
   runs: WhatsAppAiBotRunRecord[],
   filters: AiControlFiltersState,
-  botsById: Record<string, CrmAiBot>
+  botsById: Record<string, CrmAiBot>,
+  workflowByRunId: Record<string, WhatsAppAiRunWorkflowRecord>,
+  currentUserId: string | null
 ): WhatsAppAiBotRunRecord[] {
   const { from, to } = periodBounds(filters.period, filters.customFrom, filters.customTo);
   const q = filters.search.trim().toLowerCase();
@@ -91,6 +112,7 @@ function applyFilters(
 
     const flags = computeRunResultFlags(run);
     const p = deriveAiRunListPresentation(run, agg);
+    const w = deriveAiRunWorkflow(p.requiresAttention, workflowByRunId[run.id] ?? null);
     switch (filters.result) {
       case 'deal_created':
         if (!flags.hasDealCreate) return false;
@@ -132,6 +154,9 @@ function applyFilters(
     if (filters.onlyCrmApply && !p.hasApply) return false;
     if (filters.onlyWithDeal && !p.hasDeal) return false;
     if (filters.onlyWithTask && !p.hasTask) return false;
+    if (filters.workflowFilter !== 'all' && w.status !== filters.workflowFilter) return false;
+    if (filters.onlyMine && (!currentUserId || workflowByRunId[run.id]?.assigneeId !== currentUserId)) return false;
+    if (filters.onlyNewProblem && !w.isNewProblem) return false;
 
     if (q) {
       const botName = (botsById[run.botId]?.name ?? '').toLowerCase();
@@ -199,7 +224,8 @@ function sortRuns(
 
 function metricsFor(
   runs: WhatsAppAiBotRunRecord[],
-  agg: Record<string, AiControlAggregatedStatus>
+  agg: Record<string, AiControlAggregatedStatus>,
+  workflowByRunId: Record<string, WhatsAppAiRunWorkflowRecord>
 ) {
   let success = 0,
     warning = 0,
@@ -221,6 +247,24 @@ function metricsFor(
     if (f.isDraftMode) draft++;
     if (f.isAutoMode) auto++;
   }
+  let newProblem = 0,
+    inProgress = 0,
+    escalated = 0,
+    resolvedToday = 0;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startMs = startOfToday.getTime();
+  for (const r of runs) {
+    const p = deriveAiRunListPresentation(r, agg[r.id] ?? 'skipped');
+    const wf = deriveAiRunWorkflow(p.requiresAttention, workflowByRunId[r.id] ?? null);
+    if (wf.isNewProblem) newProblem++;
+    if (wf.status === 'in_progress') inProgress++;
+    if (wf.status === 'escalated') escalated++;
+    if (wf.status === 'resolved') {
+      const ms = tsToMs(workflowByRunId[r.id]?.resolvedAt);
+      if (ms != null && ms >= startMs) resolvedToday++;
+    }
+  }
   return {
     total: runs.length,
     success,
@@ -230,16 +274,23 @@ function metricsFor(
     deals,
     tasks,
     draft,
-    auto
+    auto,
+    newProblem,
+    inProgress,
+    escalated,
+    resolvedToday
   };
 }
 
 export const AiControlPage: React.FC = () => {
   const companyId = useCompanyId();
   const { canAccess } = useCurrentCompanyUser();
+  const user = auth.currentUser;
   const can = canAccess('autovoronki');
   const [runs, setRuns] = useState<WhatsAppAiBotRunRecord[]>([]);
+  const [workflow, setWorkflow] = useState<WhatsAppAiRunWorkflowRecord[]>([]);
   const [bots, setBots] = useState<CrmAiBot[]>([]);
+  const [workflowBusy, setWorkflowBusy] = useState<Record<string, boolean>>({});
   const [filters, setFilters] = useState<AiControlFiltersState>(DEFAULT_AI_CONTROL_FILTERS);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -265,14 +316,17 @@ export const AiControlPage: React.FC = () => {
       }
     );
     const unsubBots = subscribeCrmAiBots(companyId, setBots);
+    const unsubWorkflow = subscribeWhatsappAiRunWorkflow(companyId, setWorkflow);
     return () => {
       unsubRuns();
       unsubBots();
+      unsubWorkflow();
     };
   }, [companyId, can]);
 
   const botsById = useMemo(() => Object.fromEntries(bots.map((b) => [b.id, b])), [bots]);
   const botNames = useMemo(() => Object.fromEntries(bots.map((b) => [b.id, b.name])), [bots]);
+  const workflowByRunId = useMemo(() => Object.fromEntries(workflow.map((w) => [w.runId, w])), [workflow]);
 
   const aggregated = useMemo(() => {
     const m: Record<string, AiControlAggregatedStatus> = {};
@@ -280,9 +334,29 @@ export const AiControlPage: React.FC = () => {
     return m;
   }, [runs]);
 
-  const filteredRaw = useMemo(() => applyFilters(runs, filters, botsById), [runs, filters, botsById]);
+  const filteredRaw = useMemo(
+    () => applyFilters(runs, filters, botsById, workflowByRunId, user?.uid ?? null),
+    [runs, filters, botsById, workflowByRunId, user?.uid]
+  );
   const filtered = useMemo(() => sortRuns(filteredRaw, filters, aggregated), [filteredRaw, filters, aggregated]);
-  const metrics = useMemo(() => metricsFor(filtered, aggregated), [filtered, aggregated]);
+  const metrics = useMemo(() => metricsFor(filtered, aggregated, workflowByRunId), [filtered, aggregated, workflowByRunId]);
+
+  const updateRunWorkflow = async (
+    runId: string,
+    patch: Partial<WhatsAppAiRunWorkflowRecord> & { status?: AiRunWorkflowStatus; resolutionType?: AiRunWorkflowResolutionType }
+  ) => {
+    if (!companyId) return;
+    const currentName = user?.displayName || user?.email || 'Пользователь';
+    setWorkflowBusy((prev) => ({ ...prev, [runId]: true }));
+    try {
+      await upsertWhatsappAiRunWorkflow(companyId, runId, {
+        ...patch,
+        updatedBy: currentName
+      });
+    } finally {
+      setWorkflowBusy((prev) => ({ ...prev, [runId]: false }));
+    }
+  };
 
   if (!can) {
     return (
@@ -328,6 +402,19 @@ export const AiControlPage: React.FC = () => {
           </div>
         ))}
       </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+        {[
+          { k: 'Новые проблемные', v: metrics.newProblem },
+          { k: 'В работе', v: metrics.inProgress },
+          { k: 'Эскалированные', v: metrics.escalated },
+          { k: 'Решённые сегодня', v: metrics.resolvedToday }
+        ].map((c) => (
+          <div key={c.k} className="rounded-lg border bg-white p-2 text-center shadow-sm">
+            <div className="text-lg font-semibold text-gray-900">{c.v}</div>
+            <div className="text-[10px] text-gray-500 uppercase tracking-wide">{c.k}</div>
+          </div>
+        ))}
+      </div>
 
       <AiControlFilters filters={filters} onChange={setFilters} bots={bots} />
 
@@ -337,7 +424,46 @@ export const AiControlPage: React.FC = () => {
             <LoadingSpinner />
           </div>
         ) : (
-          <AiRunList runs={filtered} botNames={botNames} aggregated={aggregated} />
+          <AiRunList
+            runs={filtered}
+            botNames={botNames}
+            aggregated={aggregated}
+            workflowByRunId={workflowByRunId}
+            workflowBusyByRunId={workflowBusy}
+            onTakeInWork={(run) =>
+              updateRunWorkflow(run.id, {
+                status: 'in_progress',
+                assigneeId: user?.uid ?? null,
+                assigneeName: user?.displayName || user?.email || null,
+                resolutionType: null
+              })
+            }
+            onResolve={(run) =>
+              updateRunWorkflow(run.id, {
+                status: 'resolved',
+                assigneeId: user?.uid ?? null,
+                assigneeName: user?.displayName || user?.email || null,
+                resolvedAt: new Date(),
+                resolutionType: 'fixed'
+              })
+            }
+            onIgnore={(run) =>
+              updateRunWorkflow(run.id, {
+                status: 'ignored',
+                assigneeId: user?.uid ?? null,
+                assigneeName: user?.displayName || user?.email || null,
+                resolutionType: 'ignored'
+              })
+            }
+            onEscalate={(run) =>
+              updateRunWorkflow(run.id, {
+                status: 'escalated',
+                assigneeId: user?.uid ?? null,
+                assigneeName: user?.displayName || user?.email || null,
+                resolutionType: 'escalated'
+              })
+            }
+          />
         )}
       </div>
     </div>
