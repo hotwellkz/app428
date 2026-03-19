@@ -21,6 +21,7 @@ import {
 } from '../types/crmAiBot';
 import { defaultCrmAiBotConfig, type CrmAiBotConfig } from '../types/crmAiBotConfig';
 import toast from 'react-hot-toast';
+import { getFirestoreErrorMessage } from '../utils/firestoreErrors';
 
 const ROADMAP_FEATURES = [
   'Запуск бота в чате и WhatsApp',
@@ -92,7 +93,12 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!companyId || !canUse) return;
+    if (!canUse) return;
+    const cid = companyId?.trim();
+    if (!cid) {
+      toast.error('Компания не определена. Обновите страницу или проверьте привязку пользователя к компании.');
+      return;
+    }
     const trimmed = name.trim();
     if (!trimmed) {
       toast.error('Укажите название бота');
@@ -102,7 +108,7 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
     try {
       if (isCreate) {
         const id = await createCrmAiBot({
-          companyId,
+          companyId: cid,
           name: trimmed,
           description: description.trim() || null,
           botType,
@@ -123,8 +129,16 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
         });
         toast.success('Настройки бота сохранены');
       }
-    } catch {
-      toast.error(isCreate ? 'Не удалось создать бота' : 'Не удалось сохранить');
+    } catch (err) {
+      console.error(isCreate ? 'createCrmAiBot' : 'updateCrmAiBot', err);
+      const hint = getFirestoreErrorMessage(err);
+      toast.error(
+        hint
+          ? `${isCreate ? 'Не удалось создать бота' : 'Не удалось сохранить'}. ${hint}`
+          : isCreate
+            ? 'Не удалось создать бота'
+            : 'Не удалось сохранить'
+      );
     } finally {
       setSaving(false);
     }
