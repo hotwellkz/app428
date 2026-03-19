@@ -1,5 +1,6 @@
 import type { WhatsAppAiBotRunRecord } from '../firebase/whatsappAiBotRuns';
 import type { AiControlAggregatedStatus } from '../../types/aiControl';
+import { humanizeFallbackReason } from './fallbackReasonLabels';
 
 export type RunSourceType = 'snapshot' | 'fallback' | 'unknown';
 
@@ -116,6 +117,10 @@ export function deriveAiRunListPresentation(
   };
   if (runStatus === 'duplicate') summaryParts.unshift(`Duplicate: ${run.reason || 'уже применено'}`);
   if (runStatus === 'error') summaryParts.unshift(`Error: ${run.reason || 'runtime'}`);
+  if ((run.createUsedFallbacks?.length ?? 0) > 0) {
+    const firstFallback = humanizeFallbackReason(run.createUsedFallbacks?.[0] ?? '');
+    summaryParts.push(`Fallback: ${firstFallback}`);
+  }
 
   const badges = [
     sourceLabel,

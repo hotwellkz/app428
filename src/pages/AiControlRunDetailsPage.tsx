@@ -32,6 +32,7 @@ import type { CrmAiBot } from '../types/crmAiBot';
 import type { WhatsAppAiRuntimeMode } from '../types/whatsappAiRuntime';
 import type { CrmAiBotExtractionResult } from '../types/crmAiBotExtraction';
 import { stashChatDraft } from '../lib/ai-control/openChatDraftBridge';
+import { humanizeFallbackReasons } from '../lib/ai-control/fallbackReasonLabels';
 
 const CRM_CLIENTS = 'clients';
 const CRM_DEALS = 'deals';
@@ -160,6 +161,7 @@ export const AiControlRunDetailsPage: React.FC = () => {
   const applySnapshot = parseSnapshotJson<Record<string, unknown>>(run?.extractionApplySnapshotJson);
   const dealSnapshot = parseSnapshotJson<Record<string, unknown>>(run?.dealRecommendationSnapshotJson);
   const taskSnapshot = parseSnapshotJson<Record<string, unknown>>(run?.taskRecommendationSnapshotJson);
+  const fallbackHuman = humanizeFallbackReasons(run?.createUsedFallbacks);
 
   const pauseBot = async () => {
     if (!bot) return;
@@ -653,8 +655,8 @@ export const AiControlRunDetailsPage: React.FC = () => {
         {(run.dealRoutingReason?.length ?? 0) > 0 && (
           <p className="text-xs text-gray-600 mt-1">Причины: {run.dealRoutingReason!.join('; ')}</p>
         )}
-        {(run.createUsedFallbacks?.length ?? 0) > 0 && (
-          <p className="text-xs text-amber-800 mt-1">Fallback: {run.createUsedFallbacks!.join(', ')}</p>
+        {(fallbackHuman.length ?? 0) > 0 && (
+          <p className="text-xs text-amber-800 mt-1">Fallback: {fallbackHuman.join('; ')}</p>
         )}
       </section>
 
