@@ -33,6 +33,14 @@ export interface AiControlFiltersState {
   result: AiControlResultFilter;
   runtimeMode: string;
   search: string;
+  presetView: 'all' | 'errors' | 'attention' | 'deals' | 'tasks';
+  onlyErrors: boolean;
+  onlySkipped: boolean;
+  onlySnapshot: boolean;
+  onlyFallback: boolean;
+  onlyCrmApply: boolean;
+  onlyWithDeal: boolean;
+  onlyWithTask: boolean;
 }
 
 export const DEFAULT_AI_CONTROL_FILTERS: AiControlFiltersState = {
@@ -44,7 +52,15 @@ export const DEFAULT_AI_CONTROL_FILTERS: AiControlFiltersState = {
   statusBucket: '',
   result: 'all',
   runtimeMode: '',
-  search: ''
+  search: '',
+  presetView: 'all',
+  onlyErrors: false,
+  onlySkipped: false,
+  onlySnapshot: false,
+  onlyFallback: false,
+  onlyCrmApply: false,
+  onlyWithDeal: false,
+  onlyWithTask: false
 };
 
 /** Флаги результата run (для фильтров и метрик) */

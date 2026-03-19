@@ -22,6 +22,7 @@ import {
   runCreatedAtMs
 } from '../lib/aiControl/aggregateAiRun';
 import type { AiControlAggregatedStatus } from '../types/aiControl';
+import { deriveAiRunListPresentation } from '../lib/ai-control/deriveAiRunListPresentation';
 
 function periodBounds(
   period: AiControlPeriodPreset,
@@ -89,6 +90,7 @@ function applyFilters(
     if (filters.statusBucket && agg !== filters.statusBucket) return false;
 
     const flags = computeRunResultFlags(run);
+    const p = deriveAiRunListPresentation(run, agg);
     switch (filters.result) {
       case 'deal_created':
         if (!flags.hasDealCreate) return false;
@@ -117,6 +119,19 @@ function applyFilters(
       if (filters.runtimeMode === 'deal_create' && m !== 'deal_create') return false;
       if (filters.runtimeMode === 'task_create' && m !== 'task_create') return false;
     }
+
+    if (filters.presetView === 'errors' && p.runStatus !== 'error') return false;
+    if (filters.presetView === 'attention' && !p.requiresAttention) return false;
+    if (filters.presetView === 'deals' && !p.hasDeal) return false;
+    if (filters.presetView === 'tasks' && !p.hasTask) return false;
+
+    if (filters.onlyErrors && p.runStatus !== 'error') return false;
+    if (filters.onlySkipped && p.runStatus !== 'skipped') return false;
+    if (filters.onlySnapshot && !p.hasSnapshot) return false;
+    if (filters.onlyFallback && !p.isFallback) return false;
+    if (filters.onlyCrmApply && !p.hasApply) return false;
+    if (filters.onlyWithDeal && !p.hasDeal) return false;
+    if (filters.onlyWithTask && !p.hasTask) return false;
 
     if (q) {
       const botName = (botsById[run.botId]?.name ?? '').toLowerCase();

@@ -7,8 +7,8 @@ import type { WhatsAppAiBotRunRecord } from '../../lib/firebase/whatsappAiBotRun
 import type { AiControlAggregatedStatus } from '../../types/aiControl';
 import { AiRunStatusBadge } from './AiRunStatusBadge';
 import { channelLabel } from './AiControlFilters';
-import { computeRunResultFlags } from '../../lib/aiControl/aggregateAiRun';
 import { runCreatedAtMs } from '../../lib/aiControl/aggregateAiRun';
+import { deriveAiRunListPresentation } from '../../lib/ai-control/deriveAiRunListPresentation';
 
 function fmtTime(run: WhatsAppAiBotRunRecord): string {
   const ms = runCreatedAtMs(run);
@@ -45,7 +45,7 @@ export const AiRunList: React.FC<{
     <div className="space-y-2">
       {runs.map((run) => {
         const agg = aggregated[run.id] ?? 'skipped';
-        const flags = computeRunResultFlags(run);
+        const p = deriveAiRunListPresentation(run, agg);
         const botName = botNames[run.botId] ?? run.botId.slice(0, 8);
         const clientId = run.clientIdSnapshot || run.appliedClientId || null;
         const dealId = run.createdDealId || run.dealId || null;
@@ -153,7 +153,13 @@ export const AiRunList: React.FC<{
                 <p className="text-sm text-gray-700 truncate" title={run.conversationId}>
                   Чат: {run.conversationId.slice(0, 12)}…
                 </p>
-                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{previewReply(run.answerSnapshot || run.generatedReply, 120)}</p>
+                {p.answerPreview ? (
+                  <p className="text-xs text-gray-500 mt-1 line-clamp-1">{previewReply(p.answerPreview, 160)}</p>
+                ) : null}
+                {p.summaryPreview ? (
+                  <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-1">{previewReply(p.summaryPreview, 140)}</p>
+                ) : null}
+                <p className="text-[11px] text-gray-600 mt-1 line-clamp-1">{p.summaryLine}</p>
               </div>
               <div className="hidden sm:flex items-center gap-0.5">{actions}</div>
               <div className="sm:hidden relative">
@@ -176,28 +182,45 @@ export const AiRunList: React.FC<{
               </div>
               <ChevronRight className="w-5 h-5 text-gray-300 shrink-0 mt-1" />
             </div>
-            <div className="mt-2 flex flex-wrap gap-2 text-[10px]">
-              <span
-                className={
-                  flags.hasCrmApply ? 'text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded' : 'text-gray-400'
-                }
-              >
-                CRM: {run.extractionApplyStatus ?? '—'}
-              </span>
-              <span
-                className={
-                  flags.hasDealCreate ? 'text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded' : 'text-gray-400'
-                }
-              >
-                Сделка: {run.dealCreateStatus ?? run.dealRecommendationStatus ?? '—'}
-              </span>
-              <span
-                className={
-                  flags.hasTaskCreate ? 'text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded' : 'text-gray-400'
-                }
-              >
-                Задача: {run.taskCreateStatus ?? '—'}
-              </span>
+            <div className="mt-2 text-[10px]">
+              <div className="flex flex-wrap gap-1.5 sm:hidden">
+                {p.badges.slice(0, 4).map((b) => (
+                  <span
+                    key={`m-${b}`}
+                    className={`px-1.5 py-0.5 rounded ${
+                      b.includes('error')
+                        ? 'bg-red-50 text-red-700'
+                        : b.includes('skipped') || b.includes('fallback') || b.includes('no ')
+                          ? 'bg-amber-50 text-amber-800'
+                          : b.includes('success') || b.includes('created') || b.includes('applied') || b === 'snapshot'
+                            ? 'bg-emerald-50 text-emerald-700'
+                            : 'bg-gray-100 text-gray-700'
+                    }`}
+                    title={b}
+                  >
+                    {b}
+                  </span>
+                ))}
+              </div>
+              <div className="hidden sm:flex sm:flex-wrap gap-1.5">
+                {p.badges.map((b) => (
+                <span
+                  key={`d-${b}`}
+                  className={`px-1.5 py-0.5 rounded ${
+                    b.includes('error')
+                      ? 'bg-red-50 text-red-700'
+                      : b.includes('skipped') || b.includes('fallback') || b.includes('no ')
+                        ? 'bg-amber-50 text-amber-800'
+                        : b.includes('success') || b.includes('created') || b.includes('applied') || b === 'snapshot'
+                          ? 'bg-emerald-50 text-emerald-700'
+                          : 'bg-gray-100 text-gray-700'
+                  }`}
+                  title={b}
+                >
+                  {b}
+                </span>
+              ))}
+              </div>
             </div>
           </Link>
         );

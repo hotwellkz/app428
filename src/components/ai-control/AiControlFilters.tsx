@@ -42,6 +42,14 @@ const RUNTIME_MODES = [
   { v: 'task_create', l: 'Создание задачи' }
 ];
 
+const PRESET_VIEWS: { v: AiControlFiltersState['presetView']; l: string }[] = [
+  { v: 'all', l: 'Все' },
+  { v: 'errors', l: 'Ошибки' },
+  { v: 'attention', l: 'Требуют внимания' },
+  { v: 'deals', l: 'Сделки' },
+  { v: 'tasks', l: 'Задачи' }
+];
+
 export const AiControlFilters: React.FC<{
   filters: AiControlFiltersState;
   onChange: (f: AiControlFiltersState) => void;
@@ -52,6 +60,20 @@ export const AiControlFilters: React.FC<{
   return (
     <div className="space-y-3 p-4 rounded-xl border border-gray-200 bg-white shadow-sm">
       <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Вид</label>
+          <select
+            className="text-sm border rounded-lg px-2 py-1.5 min-w-[150px]"
+            value={filters.presetView}
+            onChange={(e) => set({ presetView: e.target.value as AiControlFiltersState['presetView'] })}
+          >
+            {PRESET_VIEWS.map((p) => (
+              <option key={p.v} value={p.v}>
+                {p.l}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="block text-xs text-gray-500 mb-1">Период</label>
           <select
@@ -168,6 +190,32 @@ export const AiControlFilters: React.FC<{
           value={filters.search}
           onChange={(e) => set({ search: e.target.value })}
         />
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {[
+          { key: 'onlyErrors', label: 'Только ошибки' },
+          { key: 'onlySkipped', label: 'Только skipped' },
+          { key: 'onlySnapshot', label: 'Только snapshot' },
+          { key: 'onlyFallback', label: 'Только fallback' },
+          { key: 'onlyCrmApply', label: 'Только с CRM apply' },
+          { key: 'onlyWithDeal', label: 'Только со сделкой' },
+          { key: 'onlyWithTask', label: 'Только с задачей' }
+        ].map((t) => {
+          const k = t.key as keyof AiControlFiltersState;
+          const active = Boolean(filters[k]);
+          return (
+            <button
+              key={t.key}
+              type="button"
+              className={`px-2.5 py-1 rounded-full text-xs border ${
+                active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-700 border-gray-300'
+              }`}
+              onClick={() => set({ [k]: !active } as Partial<AiControlFiltersState>)}
+            >
+              {t.label}
+            </button>
+          );
+        })}
       </div>
       <button
         type="button"
