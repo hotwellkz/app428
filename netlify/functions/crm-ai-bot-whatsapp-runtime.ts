@@ -19,6 +19,7 @@ import {
   tryApplyWhatsappRuntimeExtraction,
   type WhatsappRuntimeExtractionApplyPayload
 } from './lib/applyWhatsappRuntimeCrmExtraction';
+import { resolveCrmClientIdForWhatsappConversation } from './lib/resolveCrmClientIdFromWhatsapp';
 
 const LOG_PREFIX = '[crm-ai-bot-whatsapp-runtime]';
 const CRM_AI_BOTS = 'crmAiBots';
@@ -303,13 +304,20 @@ ${text}
       log('Extraction failed', ex.error);
     }
 
+    const convD = convSnap.data() ?? {};
+    const crmClientIdResolved = await resolveCrmClientIdForWhatsappConversation(
+      db,
+      auth.companyId,
+      convD as Record<string, unknown>,
+      typeof convD.clientId === 'string' ? convD.clientId : null
+    );
+
     let extractionApply: WhatsappRuntimeExtractionApplyPayload;
     if (extracted) {
       try {
-        const convD = convSnap.data() ?? {};
         extractionApply = await tryApplyWhatsappRuntimeExtraction({
           companyId: auth.companyId,
-          clientId: convD.clientId as string | undefined,
+          clientId: crmClientIdResolved ?? undefined,
           channel: convD.channel as string | undefined,
           extraction: extracted,
           crmActions: config.crmActions
@@ -352,15 +360,13 @@ ${text}
       };
     }
 
-    const convD = convSnap.data() ?? {};
     const channel = convD.channel as string | undefined;
-    const clientIdConv = convD.clientId as string | undefined;
     const extractionForDeal = extracted ?? emptyCrmAiBotExtraction();
     let dealRecommendation: AiDealRecommendationSnapshot;
     try {
       let clientData: Record<string, unknown> = {};
-      if (clientIdConv) {
-        const clientSnap = await db.collection('clients').doc(clientIdConv).get().catch(() => null);
+      if (crmClientIdResolved) {
+        const clientSnap = await db.collection('clients').doc(crmClientIdResolved).get().catch(() => null);
         const c = clientSnap?.data() as Record<string, unknown> | undefined;
         if (c && c.companyId === auth.companyId) {
           clientData = c;
@@ -375,7 +381,7 @@ ${text}
         extraction: extractionForDeal,
         crmActions: config.crmActions,
         channel,
-        clientId: clientIdConv,
+        clientId: crmClientIdResolved ?? undefined,
         conversationId,
         botId,
         botName: botMeta.name,
@@ -388,7 +394,7 @@ ${text}
         extraction: emptyCrmAiBotExtraction(),
         crmActions: config.crmActions,
         channel,
-        clientId: clientIdConv,
+        clientId: crmClientIdResolved ?? undefined,
         conversationId,
         botId,
         botName: botMeta.name,

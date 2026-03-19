@@ -66,7 +66,9 @@ export async function tryApplyWhatsappRuntimeExtraction(params: {
   }
 
   if (!clientId || typeof clientId !== 'string' || !clientId.trim()) {
-    return skipped('В чате нет clientId — карточка CRM не привязана');
+    return skipped(
+      'Нет карточки клиента в CRM с этим номером — создайте клиента в разделе «Клиенты» (тот же телефон, что в WhatsApp)'
+    );
   }
 
   const db = getDb();

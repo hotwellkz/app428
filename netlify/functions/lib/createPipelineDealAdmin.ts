@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore';
 import { getDb } from './firebaseAdmin';
+import { resolveCrmClientIdForWhatsappConversation } from './resolveCrmClientIdFromWhatsapp';
 const PIPELINES = 'pipelines';
 const STAGES = 'pipeline_stages';
 const DEALS = 'deals';
@@ -192,7 +193,22 @@ export async function createDealFromAiRecommendationAdmin(params: {
     };
   }
 
-  const clientRef = db.collection(CRM_CLIENTS).doc(recommendation.clientId);
+  const effectiveClientId = await resolveCrmClientIdForWhatsappConversation(
+    db,
+    companyId,
+    conv as Record<string, unknown>,
+    recommendation.clientId
+  );
+  if (!effectiveClientId) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message:
+        'Карточка клиента CRM не найдена. В чате указан контакт WhatsApp; создайте или привяжите карточку в разделе «Клиенты» с тем же номером телефона.'
+    };
+  }
+
+  const clientRef = db.collection(CRM_CLIENTS).doc(effectiveClientId);
   const clientSnap = await clientRef.get();
   if (!clientSnap.exists) {
     return { ok: false, code: 'invalid', message: 'Карточка клиента не найдена' };
@@ -284,7 +300,7 @@ export async function createDealFromAiRecommendationAdmin(params: {
       pipelineId: finalPipelineId,
       stageId: finalStageId,
       title: recommendation.draftTitle!.trim().slice(0, 500),
-      clientId: recommendation.clientId,
+      clientId: effectiveClientId,
       clientNameSnapshot,
       clientPhoneSnapshot: clientPhoneSnapshot || null,
       amount: null,
