@@ -39,7 +39,7 @@ function asTaskRecommendation(raw: unknown): {
   if (!raw || typeof raw !== 'object') return null;
   const r = raw as Record<string, unknown>;
   const ph = typeof r.payloadHash === 'string' ? r.payloadHash.trim() : '';
-  if (!ph || !ph.startsWith('tsk_')) return null;
+  if (!ph || ph.length < 6) return null;
   const title = typeof r.recommendedTaskTitle === 'string' ? r.recommendedTaskTitle.trim() : '';
   if (!title) return null;
   const priRaw = r.recommendedPriority;

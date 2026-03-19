@@ -29,7 +29,10 @@ import {
   type WhatsAppAiRuntimePatch
 } from '../lib/firebase/whatsappDb';
 import { subscribeCrmAiBots } from '../lib/firebase/crmAiBots';
-import { addWhatsAppAiBotRunLog } from '../lib/firebase/whatsappAiBotRuns';
+import {
+  addWhatsAppAiBotRunLog,
+  type WhatsAppAiBotRunLogInput
+} from '../lib/firebase/whatsappAiBotRuns';
 import type { CrmAiBot } from '../types/crmAiBot';
 import {
   defaultWhatsAppAiRuntime,
@@ -138,6 +141,15 @@ const SEND_API = '/.netlify/functions/send-whatsapp-message';
 const CRM_WHATSAPP_RUNTIME_API = `${API_CONFIG.BASE_URL}/crm-ai-bot-whatsapp-runtime`;
 const CRM_CREATE_DEAL_FROM_REC_API = `${API_CONFIG.BASE_URL}/crm-ai-create-deal-from-recommendation`;
 const CRM_CREATE_TASK_FROM_REC_API = `${API_CONFIG.BASE_URL}/crm-ai-create-task-from-recommendation`;
+
+/** Лог whatsappAiBotRuns не должен ронять runtime при PERMISSION_DENIED (если правила не задеплоены). */
+function logWhatsappAiBotRunSafe(input: WhatsAppAiBotRunLogInput): void {
+  void addWhatsAppAiBotRunLog(input).catch((err) => {
+    if (import.meta.env.DEV) {
+      console.warn('[WhatsApp] whatsappAiBotRuns: не удалось записать лог:', err);
+    }
+  });
+}
 
 /** Ответ Netlify: применение extraction в CRM */
 type RuntimeExtractionApplyApi = {
@@ -916,7 +928,11 @@ const WhatsAppChat: React.FC = () => {
       });
       const body = (await res.json().catch(() => ({}))) as CreateDealFromRecommendationApi;
       if (!res.ok || !body.ok) {
-        toast.error(typeof body.error === 'string' ? body.error : 'Не удалось создать сделку');
+        const msg =
+          typeof body.error === 'string' && body.error.trim()
+            ? body.error
+            : `Не удалось создать сделку (HTTP ${res.status})`;
+        toast.error(msg);
         return;
       }
       toast.success('Сделка создана');
@@ -983,6 +999,7 @@ const WhatsAppChat: React.FC = () => {
       const body = (await res.json().catch(() => ({}))) as {
         ok?: boolean;
         error?: string;
+        code?: string;
         dealId?: string;
         taskId?: string;
         nextActionAt?: string | null;
@@ -991,7 +1008,13 @@ const WhatsAppChat: React.FC = () => {
         finalResponsibleNameSnapshot?: string | null;
       };
       if (!res.ok || !body.ok) {
-        toast.error(typeof body.error === 'string' ? body.error : 'Не удалось создать задачу');
+        const msg =
+          typeof body.error === 'string' && body.error.trim()
+            ? body.error
+            : body.code === 'duplicate'
+              ? 'Задача по этой рекомендации уже создана'
+              : `Не удалось создать задачу (HTTP ${res.status}). Сохраните рекомендацию: дождитесь ответа AI в чате или обновите страницу.`;
+        toast.error(msg);
         return;
       }
       toast.success('Следующий шаг записан в сделку');
@@ -1830,7 +1853,7 @@ const WhatsAppChat: React.FC = () => {
         rtCompany
       );
       crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
-      await addWhatsAppAiBotRunLog({
+      logWhatsappAiBotRunSafe({
         companyId,
         conversationId: selectedId,
         botId,
@@ -1916,7 +1939,7 @@ const WhatsAppChat: React.FC = () => {
             },
             rtCompany
           );
-          await addWhatsAppAiBotRunLog({
+          logWhatsappAiBotRunSafe({
             companyId,
             conversationId: selectedId,
             botId,
@@ -2042,7 +2065,7 @@ const WhatsAppChat: React.FC = () => {
             rtCompany
           );
           crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
-          await addWhatsAppAiBotRunLog({
+          logWhatsappAiBotRunSafe({
             companyId,
             conversationId: selectedId,
             botId,
@@ -2082,7 +2105,7 @@ const WhatsAppChat: React.FC = () => {
             },
             rtCompany
           );
-          await addWhatsAppAiBotRunLog({
+          logWhatsappAiBotRunSafe({
             companyId,
             conversationId: selectedId,
             botId,
@@ -2117,7 +2140,7 @@ const WhatsAppChat: React.FC = () => {
           rtCompany
         );
         crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
-        await addWhatsAppAiBotRunLog({
+        logWhatsappAiBotRunSafe({
           companyId,
           conversationId: selectedId,
           botId,
@@ -2146,7 +2169,7 @@ const WhatsAppChat: React.FC = () => {
           },
           rtCompany
         ).catch(() => {});
-        await addWhatsAppAiBotRunLog({
+        logWhatsappAiBotRunSafe({
           companyId,
           conversationId: selectedId,
           botId,
@@ -2158,7 +2181,7 @@ const WhatsAppChat: React.FC = () => {
           reason: msg,
           generatedReply: null,
           extractedSummary: null
-        }).catch(() => {});
+        });
         toast.error(`AI (автоворонка): ${msg}`);
         crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
       } finally {
