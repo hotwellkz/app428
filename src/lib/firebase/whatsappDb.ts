@@ -479,13 +479,21 @@ export interface WhatsAppAiRuntimePatch {
   dealFromAi?: AiDealCreatedFromRecommendationSnapshot | null;
 }
 
+export interface UpdateWhatsAppConversationAiRuntimeOptions {
+  /** Подставить верхний companyId при обновлении (нужно для старых диалогов без поля — иначе Firestore rules отклоняют update). */
+  ensureCompanyId?: string | null;
+}
+
 /** Частичное обновление вложенного объекта aiRuntime (точечные поля Firestore). */
 export async function updateWhatsAppConversationAiRuntime(
   conversationId: string,
-  patch: WhatsAppAiRuntimePatch
+  patch: WhatsAppAiRuntimePatch,
+  options?: UpdateWhatsAppConversationAiRuntimeOptions
 ): Promise<void> {
   const ref = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
   const payload: Record<string, unknown> = {};
+  const cid = options?.ensureCompanyId;
+  if (cid) payload.companyId = cid;
   if (patch.enabled !== undefined) payload[`${AI_RT}.enabled`] = patch.enabled;
   if (patch.botId !== undefined) payload[`${AI_RT}.botId`] = patch.botId;
   if (patch.mode !== undefined) payload[`${AI_RT}.mode`] = patch.mode;

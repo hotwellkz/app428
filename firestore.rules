@@ -299,12 +299,32 @@ service cloud.firestore {
         || isGlobalAdmin()
       );
     }
+    // Диалоги без companyId (старые createConversation) — иначе update отклоняется и AI автоворонка падает с PERMISSION_DENIED
     match /whatsappConversations/{conversationId} {
-      allow read, update, delete: if isAuthenticated() && (
-        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
-        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
-        || isGlobalAdmin()
+      function waConvUserMatchesResourceCompany() {
+        return (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+          || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+          || isGlobalAdmin();
+      }
+      function waConvUserMatchesRequestCompany() {
+        return (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+          || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+          || isGlobalAdmin();
+      }
+      function waConvLegacyNoCompanyId() {
+        return !(resource.data.keys().hasAny(['companyId']))
+          || resource.data.companyId == null
+          || resource.data.companyId == '';
+      }
+      allow read: if isAuthenticated() && (
+        waConvUserMatchesResourceCompany()
+        || waConvLegacyNoCompanyId()
       );
+      allow update: if isAuthenticated() && (
+        waConvUserMatchesResourceCompany()
+        || (waConvLegacyNoCompanyId() && waConvUserMatchesRequestCompany())
+      );
+      allow delete: if isAuthenticated() && waConvUserMatchesResourceCompany();
       allow create: if isAuthenticated() && (
         (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
         || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)

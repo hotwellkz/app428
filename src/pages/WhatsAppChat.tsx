@@ -840,7 +840,11 @@ const WhatsAppChat: React.FC = () => {
         setStickySelectedChat((prev) => (prev ? mergeListItemAiRuntime(prev, patch) : null));
       }
       setAiRuntimeSaving(true);
-      updateWhatsAppConversationAiRuntime(selectedId, patch)
+      updateWhatsAppConversationAiRuntime(
+        selectedId,
+        patch,
+        companyId ? { ensureCompanyId: companyId } : undefined
+      )
         .then(() => {
           toast.success('Настройки AI сохранены');
         })
@@ -875,7 +879,7 @@ const WhatsAppChat: React.FC = () => {
         })
         .finally(() => setAiRuntimeSaving(false));
     },
-    [selectedId, stickySelectedChat?.id]
+    [selectedId, stickySelectedChat?.id, companyId]
   );
 
   const handleCreateDealFromAiRecommendation = useCallback(async () => {
@@ -1696,13 +1700,19 @@ const WhatsAppChat: React.FC = () => {
     const messageIdToProcess = latest.id;
     const startedAt = new Date();
 
+    const rtCompany = { ensureCompanyId: companyId };
+
     const finishSkip = async (reason: string) => {
-      await updateWhatsAppConversationAiRuntime(selectedId, {
-        lastRunAt: serverTimestamp(),
-        lastStatus: 'skipped',
-        lastReason: reason,
-        lastProcessedIncomingMessageId: messageIdToProcess
-      });
+      await updateWhatsAppConversationAiRuntime(
+        selectedId,
+        {
+          lastRunAt: serverTimestamp(),
+          lastStatus: 'skipped',
+          lastReason: reason,
+          lastProcessedIncomingMessageId: messageIdToProcess
+        },
+        rtCompany
+      );
       crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
       await addWhatsAppAiBotRunLog({
         companyId,
@@ -1778,13 +1788,17 @@ const WhatsAppChat: React.FC = () => {
         };
         if (!res.ok || data.error) {
           const errText = typeof data.error === 'string' ? data.error : `HTTP ${res.status}`;
-          await updateWhatsAppConversationAiRuntime(selectedId, {
-            lastRunAt: serverTimestamp(),
-            lastStatus: 'error',
-            lastReason: errText,
-            lastGeneratedReply: null,
-            lastProcessedIncomingMessageId: messageIdToProcess
-          });
+          await updateWhatsAppConversationAiRuntime(
+            selectedId,
+            {
+              lastRunAt: serverTimestamp(),
+              lastStatus: 'error',
+              lastReason: errText,
+              lastGeneratedReply: null,
+              lastProcessedIncomingMessageId: messageIdToProcess
+            },
+            rtCompany
+          );
           await addWhatsAppAiBotRunLog({
             companyId,
             conversationId: selectedId,
@@ -1880,16 +1894,20 @@ const WhatsAppChat: React.FC = () => {
             : {};
 
         if (mode === 'draft') {
-          await updateWhatsAppConversationAiRuntime(selectedId, {
-            lastRunAt: serverTimestamp(),
-            lastStatus: 'success',
-            lastReason: null,
-            lastGeneratedReply: reply,
-            lastProcessedIncomingMessageId: messageIdToProcess,
-            lastExtractionJson: extractionJson,
-            ...applyPatch,
-            ...dealRecPatch
-          });
+          await updateWhatsAppConversationAiRuntime(
+            selectedId,
+            {
+              lastRunAt: serverTimestamp(),
+              lastStatus: 'success',
+              lastReason: null,
+              lastGeneratedReply: reply,
+              lastProcessedIncomingMessageId: messageIdToProcess,
+              lastExtractionJson: extractionJson,
+              ...applyPatch,
+              ...dealRecPatch
+            },
+            rtCompany
+          );
           crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
           await addWhatsAppAiBotRunLog({
             companyId,
@@ -1916,15 +1934,19 @@ const WhatsAppChat: React.FC = () => {
           body: JSON.stringify(wazzupSendBody(phone, { text: formatMessageForWhatsApp(reply), companyId }))
         });
         if (!sendRes.ok) {
-          await updateWhatsAppConversationAiRuntime(selectedId, {
-            lastRunAt: serverTimestamp(),
-            lastStatus: 'error',
-            lastReason: 'Не удалось отправить ответ в чат',
-            lastGeneratedReply: reply,
-            lastExtractionJson: extractionJson,
-            ...applyPatch,
-            ...dealRecPatch
-          });
+          await updateWhatsAppConversationAiRuntime(
+            selectedId,
+            {
+              lastRunAt: serverTimestamp(),
+              lastStatus: 'error',
+              lastReason: 'Не удалось отправить ответ в чат',
+              lastGeneratedReply: reply,
+              lastExtractionJson: extractionJson,
+              ...applyPatch,
+              ...dealRecPatch
+            },
+            rtCompany
+          );
           await addWhatsAppAiBotRunLog({
             companyId,
             conversationId: selectedId,
@@ -1943,16 +1965,20 @@ const WhatsAppChat: React.FC = () => {
           toast.error('AI: не удалось отправить ответ в WhatsApp');
           return;
         }
-        await updateWhatsAppConversationAiRuntime(selectedId, {
-          lastRunAt: serverTimestamp(),
-          lastStatus: 'success',
-          lastReason: null,
-          lastGeneratedReply: reply,
-          lastProcessedIncomingMessageId: messageIdToProcess,
-          lastExtractionJson: extractionJson,
-          ...applyPatch,
-          ...dealRecPatch
-        });
+        await updateWhatsAppConversationAiRuntime(
+          selectedId,
+          {
+            lastRunAt: serverTimestamp(),
+            lastStatus: 'success',
+            lastReason: null,
+            lastGeneratedReply: reply,
+            lastProcessedIncomingMessageId: messageIdToProcess,
+            lastExtractionJson: extractionJson,
+            ...applyPatch,
+            ...dealRecPatch
+          },
+          rtCompany
+        );
         crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
         await addWhatsAppAiBotRunLog({
           companyId,
@@ -1971,13 +1997,17 @@ const WhatsAppChat: React.FC = () => {
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'runtime error';
-        await updateWhatsAppConversationAiRuntime(selectedId, {
-          lastRunAt: serverTimestamp(),
-          lastStatus: 'error',
-          lastReason: msg,
-          lastGeneratedReply: null,
-          lastProcessedIncomingMessageId: messageIdToProcess
-        }).catch(() => {});
+        await updateWhatsAppConversationAiRuntime(
+          selectedId,
+          {
+            lastRunAt: serverTimestamp(),
+            lastStatus: 'error',
+            lastReason: msg,
+            lastGeneratedReply: null,
+            lastProcessedIncomingMessageId: messageIdToProcess
+          },
+          rtCompany
+        ).catch(() => {});
         await addWhatsAppAiBotRunLog({
           companyId,
           conversationId: selectedId,
