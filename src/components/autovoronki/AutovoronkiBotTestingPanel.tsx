@@ -20,6 +20,8 @@ import {
 import type { CrmAiBotConfig } from '../../types/crmAiBotConfig';
 import type { CrmAiBotExtractionResult } from '../../types/crmAiBotExtraction';
 import { useAIConfigured } from '../../hooks/useAIConfigured';
+import { extractionHasApplicableData } from '../../lib/autovoronki/extractionCrmMapper';
+import { ApplyExtractionToClientModal } from './ApplyExtractionToClientModal';
 
 const API_URL = '/api/crm-ai-bot-test';
 
@@ -101,6 +103,12 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
   const [extractionError, setExtractionError] = useState<string | null>(null);
   const [lastKnowledgeMeta, setLastKnowledgeMeta] = useState<KnowledgeMetaResponse | null>(null);
   const [showRawJson, setShowRawJson] = useState(false);
+  const [applyModalOpen, setApplyModalOpen] = useState(false);
+  /** Ключ текущего извлечения, к которому уже применили запись в этой сессии */
+  const [appliedExtractionKey, setAppliedExtractionKey] = useState<string | null>(null);
+  const [appliedClientLabel, setAppliedClientLabel] = useState<string | null>(null);
+
+  const extractionStableKey = useMemo(() => (extracted ? JSON.stringify(extracted) : ''), [extracted]);
 
   const systemPrompt = useMemo(() => {
     void promptNonce;
@@ -160,6 +168,8 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
     setExtracted(null);
     setExtractionError(null);
     setLastKnowledgeMeta(null);
+    setAppliedExtractionKey(null);
+    setAppliedClientLabel(null);
     toast.success('Тестовый диалог очищен');
   };
 
@@ -255,8 +265,8 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
           Тестирование и промпт
         </h2>
         <p className="text-sm text-gray-500 mt-1 max-w-3xl">
-          Песочница: ответы не уходят в WhatsApp и не пишутся в CRM. Нужен API-ключ OpenAI в{' '}
-          <span className="font-medium text-gray-700">Интеграциях</span>.
+          Песочница: ответы не уходят в WhatsApp. Запись в CRM только вручную через «Применить в карточку клиента»
+          (с предпросмотром). Нужен API-ключ OpenAI в <span className="font-medium text-gray-700">Интеграциях</span>.
         </p>
         {!aiLoading && configured === false && (
           <p className="mt-2 text-sm text-amber-800 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">
@@ -466,18 +476,45 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
               D. Что бот извлёк из диалога
             </h3>
             <p className="text-xs text-gray-500 mt-1 max-w-2xl">
-              Отдельный проход модели: только факты из переписки. Не записывается в CRM — только предпросмотр.
+              Отдельный проход модели: факты из переписки. В CRM попадают только после выбора клиента и подтверждения.
             </p>
+            {extracted &&
+              appliedExtractionKey &&
+              appliedExtractionKey === extractionStableKey &&
+              appliedClientLabel && (
+                <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 mt-2 inline-block">
+                  В этой сессии уже применено к: <strong>{appliedClientLabel}</strong>
+                </p>
+              )}
           </div>
           <button
             type="button"
-            disabled
-            className="shrink-0 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-400 cursor-not-allowed"
-            title="Появится на следующем этапе"
+            disabled={!extracted || !extractionHasApplicableData(extracted)}
+            onClick={() => setApplyModalOpen(true)}
+            className="shrink-0 rounded-lg border border-violet-300 bg-violet-50 px-3 py-2 text-xs font-medium text-violet-900 hover:bg-violet-100 disabled:opacity-40 disabled:pointer-events-none disabled:border-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
+            title={
+              !extracted
+                ? 'Сначала получите извлечение из диалога'
+                : !extractionHasApplicableData(extracted)
+                  ? 'Нет данных для записи в CRM'
+                  : 'Выбрать клиента и записать'
+            }
           >
             Применить в карточку клиента
           </button>
         </div>
+
+        {extracted && (
+          <ApplyExtractionToClientModal
+            open={applyModalOpen}
+            onClose={() => setApplyModalOpen(false)}
+            extraction={extracted}
+            onApplied={({ displayName, extractionKey }) => {
+              setAppliedExtractionKey(extractionKey);
+              setAppliedClientLabel(displayName);
+            }}
+          />
+        )}
 
         {!extracted && !extractionError && messages.length === 0 && (
           <p className="text-sm text-gray-400 rounded-xl border border-dashed border-gray-200 bg-white/80 px-4 py-6 text-center">
