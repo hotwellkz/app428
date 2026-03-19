@@ -7,6 +7,9 @@ import {
   type CrmAiBotPromptMeta
 } from '../../src/lib/ai/crmAiBotPrompt';
 import { parseCrmAiBotConfig, type CrmAiBotConfig } from '../../src/types/crmAiBotConfig';
+import { buildCrmAiBotKnowledgeContext, type CrmAiBotKnowledgeMeta } from './lib/crmAiBotKnowledgeLoad';
+import { runCrmAiBotExtraction } from './lib/crmAiBotExtractionOpenAi';
+import type { CrmAiBotExtractionResult } from '../../src/types/crmAiBotExtraction';
 
 const LOG_PREFIX = '[crm-ai-bot-test]';
 const CRM_AI_BOTS = 'crmAiBots';
@@ -40,6 +43,13 @@ interface RequestBody {
 
 const MAX_MESSAGES = 40;
 const MAX_CONTENT_LEN = 12000;
+
+function lastUserContent(msgs: { role: 'user' | 'assistant'; content: string }[]): string {
+  for (let i = msgs.length - 1; i >= 0; i--) {
+    if (msgs[i].role === 'user') return msgs[i].content;
+  }
+  return '';
+}
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   if (event.httpMethod === 'OPTIONS') {
@@ -163,10 +173,42 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   const systemBase = buildCrmAiBotSystemPrompt(botMeta, config);
-  const systemContent = `${systemBase}\n\n${CRM_AI_BOT_SANDBOX_SYSTEM_APPEND}`;
+
+  let knowledgeMeta: CrmAiBotKnowledgeMeta = {
+    companyKnowledgeBaseLoaded: false,
+    quickRepliesLoaded: false,
+    knowledgeArticlesUsed: 0,
+    quickRepliesUsed: 0,
+    truncated: false
+  };
+
+  let knowledgeAppend = '';
+  const useKb = config.knowledge.useCompanyKnowledgeBase === true;
+  const useQr = config.knowledge.useQuickReplies === true;
+
+  if (useKb || useQr) {
+    const lastUser = lastUserContent(openaiMessages);
+    const { text, meta: km } = await buildCrmAiBotKnowledgeContext(db, auth.companyId, {
+      useKb,
+      useQr,
+      lastUserMessage: lastUser || 'общий контекст'
+    });
+    knowledgeMeta = km;
+    if (text.trim()) {
+      knowledgeAppend = `
+
+---
+ФАКТЫ И ШАБЛОНЫ КОМПАНИИ (источник правды для стандартов; не задавай вопросы, ответ на которые уже явно дан здесь для типового случая; если клиент хочет нестандарт — уточняй отдельно)
+
+${text}
+`;
+    }
+  }
+
+  const systemContent = `${systemBase}${knowledgeAppend}\n\n${CRM_AI_BOT_SANDBOX_SYSTEM_APPEND}`;
 
   try {
-    log('OpenAI call botId=', botId, 'messages=', openaiMessages.length);
+    log('OpenAI answer botId=', botId, 'messages=', openaiMessages.length, 'kb=', useKb, 'qr=', useQr);
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -182,8 +224,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
 
     if (!response.ok) {
-      const text = await response.text();
-      log('OpenAI error', response.status, text.slice(0, 400));
+      const textErr = await response.text();
+      log('OpenAI error', response.status, textErr.slice(0, 400));
       return withCors({
         statusCode: 502,
         headers: { 'Content-Type': 'application/json' },
@@ -193,16 +235,36 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
     const data = (await response.json()) as {
       choices?: Array<{ message?: { content?: string | null } }>;
-      usage?: { total_tokens?: number };
+      usage?: unknown;
     };
     const answer = String(data.choices?.[0]?.message?.content ?? '').trim();
+
+    let extracted: CrmAiBotExtractionResult | null = null;
+    let extractionError: string | undefined;
+    let extractUsage: unknown;
+
+    const transcriptForExtract = [...openaiMessages, { role: 'assistant' as const, content: answer }];
+    const ex = await runCrmAiBotExtraction(auth.apiKey, transcriptForExtract);
+    if (ex.ok) {
+      extracted = ex.extracted;
+      extractUsage = ex.usage;
+    } else {
+      extractionError = ex.error;
+      log('Extraction failed', ex.error);
+    }
 
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         answer,
-        usage: data.usage ?? null
+        extracted,
+        extractionError,
+        knowledgeMeta,
+        usage: {
+          answer: data.usage ?? null,
+          extract: extractUsage ?? null
+        }
       })
     });
   } catch (e) {

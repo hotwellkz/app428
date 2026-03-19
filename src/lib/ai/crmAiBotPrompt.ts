@@ -139,10 +139,10 @@ export function buildCrmAiBotLogicPreview(meta: CrmAiBotPromptMeta, config: CrmA
     crmLines.push('Ни одно CRM-действие не отмечено');
   }
   crmLines.push(
-    `База знаний компании: ${config.knowledge.useCompanyKnowledgeBase ? 'да (в тесте не подгружается)' : 'нет'}`
+    `База знаний в тесте: ${config.knowledge.useCompanyKnowledgeBase ? 'да — сервер подмешивает фрагменты' : 'выключено'}`
   );
   crmLines.push(
-    `Быстрые ответы: ${config.knowledge.useQuickReplies ? 'да (в тесте не подгружаются)' : 'нет'}`
+    `Быстрые ответы в тесте: ${config.knowledge.useQuickReplies ? 'да — релевантные шаблоны в промпт' : 'выключено'}`
   );
   cards.push({ id: 'crm', title: 'CRM и источники', lines: crmLines });
 
@@ -260,17 +260,17 @@ export function buildCrmAiBotSystemPrompt(meta: CrmAiBotPromptMeta, config: CrmA
   const kbLines: string[] = [];
   if (config.knowledge.useCompanyKnowledgeBase) {
     kbLines.push(
-      'В продакшене у компании может быть подключена AI База знаний. В этом тесте фрагменты базы НЕ подставляются — опирайся только на этот промпт и переписку. Не выдумывай детали, которых нет в переписке или в стандартах выше.'
+      'В тестовом режиме CRM к system-промпту на сервере подмешивается компактный фрагмент AI Базы знаний компании (с лимитом объёма). Опирайся на эти факты; не спрашивай то, что уже однозначно покрыто стандартом из базы. Не выдумывай детали вне переписки, промпта и этого блока.'
     );
   } else {
-    kbLines.push('База знаний для этого бота в настройках отключена — не ссылайся на внешние документы.');
+    kbLines.push('База знаний для этого бота в настройках отключена — в тесте фрагменты базы не подставляются.');
   }
   if (config.knowledge.useQuickReplies) {
     kbLines.push(
-      'Быстрые ответы компании в этом тесте недоступны; формулируй ответы сам в рамках правил.'
+      'В тесте к промпту могут подмешиваться релевантные быстрые ответы компании (шаблоны менеджеров), с лимитом объёма. Используй их для формулировок и стандартов; не копируй дословно, если это ломает естественность.'
     );
   } else {
-    kbLines.push('Быстрые ответы отключены в настройках бота.');
+    kbLines.push('Быстрые ответы отключены в настройках бота — шаблоны в тест не подставляются.');
   }
   if (config.knowledge.extraInstructions.trim()) {
     kbLines.push(`Доп. инструкции для этого бота:\n${config.knowledge.extraInstructions.trim()}`);

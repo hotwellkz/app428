@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import {
   Bot,
   ClipboardCopy,
+  Database,
   Loader2,
   MessageCircle,
   RefreshCw,
@@ -17,6 +18,7 @@ import {
   type CrmAiBotPromptMeta
 } from '../../lib/ai/crmAiBotPrompt';
 import type { CrmAiBotConfig } from '../../types/crmAiBotConfig';
+import type { CrmAiBotExtractionResult } from '../../types/crmAiBotExtraction';
 import { useAIConfigured } from '../../hooks/useAIConfigured';
 
 const API_URL = '/api/crm-ai-bot-test';
@@ -31,10 +33,58 @@ export interface TestChatMessage {
   content: string;
 }
 
+interface KnowledgeMetaResponse {
+  companyKnowledgeBaseLoaded: boolean;
+  quickRepliesLoaded: boolean;
+  knowledgeArticlesUsed: number;
+  quickRepliesUsed: number;
+  truncated: boolean;
+}
+
+interface TestApiResponse {
+  answer?: string;
+  extracted?: CrmAiBotExtractionResult | null;
+  extractionError?: string;
+  knowledgeMeta?: KnowledgeMetaResponse;
+  error?: string;
+}
+
 interface AutovoronkiBotTestingPanelProps {
   botId: string;
   botMeta: CrmAiBotPromptMeta;
   config: CrmAiBotConfig;
+}
+
+function Field({
+  label,
+  value
+}: {
+  label: string;
+  value: string | boolean | null | undefined;
+}) {
+  const display =
+    value === null || value === undefined || value === ''
+      ? '—'
+      : typeof value === 'boolean'
+        ? value
+          ? 'Да'
+          : 'Нет'
+        : String(value);
+  return (
+    <div className="flex flex-col gap-0.5 min-w-0">
+      <span className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">{label}</span>
+      <span className="text-sm text-gray-900 break-words">{display}</span>
+    </div>
+  );
+}
+
+function SubCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm space-y-3">
+      <h4 className="text-xs font-semibold text-gray-800">{title}</h4>
+      {children}
+    </div>
+  );
 }
 
 export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProps> = ({
@@ -47,6 +97,10 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
   const [messages, setMessages] = useState<TestChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [extracted, setExtracted] = useState<CrmAiBotExtractionResult | null>(null);
+  const [extractionError, setExtractionError] = useState<string | null>(null);
+  const [lastKnowledgeMeta, setLastKnowledgeMeta] = useState<KnowledgeMetaResponse | null>(null);
+  const [showRawJson, setShowRawJson] = useState(false);
 
   const systemPrompt = useMemo(() => {
     void promptNonce;
@@ -56,7 +110,7 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
   const previewCards = useMemo(() => buildCrmAiBotLogicPreview(botMeta, config), [botMeta, config]);
 
   const callApi = useCallback(
-    async (history: TestChatMessage[]): Promise<string> => {
+    async (history: TestChatMessage[]): Promise<TestApiResponse> => {
       const token = await getAuthToken();
       if (!token) {
         throw new Error('Нет авторизации');
@@ -74,7 +128,7 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
           messages: history.map(({ role, content }) => ({ role, content }))
         })
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; answer?: string };
+      const data = (await res.json().catch(() => ({}))) as TestApiResponse;
       if (!res.ok) {
         throw new Error(typeof data.error === 'string' ? data.error : 'Ошибка запроса');
       }
@@ -82,7 +136,7 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
       if (!answer) {
         throw new Error('Пустой ответ модели');
       }
-      return answer;
+      return data;
     },
     [botId, botMeta, config]
   );
@@ -103,7 +157,20 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
 
   const handleClearChat = () => {
     setMessages([]);
+    setExtracted(null);
+    setExtractionError(null);
+    setLastKnowledgeMeta(null);
     toast.success('Тестовый диалог очищен');
+  };
+
+  const applyApiResult = (data: TestApiResponse) => {
+    setLastKnowledgeMeta(data.knowledgeMeta ?? null);
+    if (data.extracted) {
+      setExtracted(data.extracted);
+      setExtractionError(null);
+    } else if (data.extractionError) {
+      setExtractionError(data.extractionError);
+    }
   };
 
   const handleSend = async () => {
@@ -119,8 +186,9 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
     setMessages(nextHistory);
     setGenerating(true);
     try {
-      const answer = await callApi(nextHistory);
-      setMessages([...nextHistory, { id: makeId(), role: 'assistant', content: answer }]);
+      const data = await callApi(nextHistory);
+      setMessages([...nextHistory, { id: makeId(), role: 'assistant', content: data.answer! }]);
+      applyApiResult(data);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Не удалось получить ответ бота');
     } finally {
@@ -145,8 +213,9 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
     setMessages(base);
     setGenerating(true);
     try {
-      const answer = await callApi(base);
-      setMessages([...base, { id: makeId(), role: 'assistant', content: answer }]);
+      const data = await callApi(base);
+      setMessages([...base, { id: makeId(), role: 'assistant', content: data.answer! }]);
+      applyApiResult(data);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Не удалось получить ответ бота');
     } finally {
@@ -169,6 +238,15 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
     toast.error('Нет ответа бота');
   };
 
+  const langLabel =
+    extracted?.detectedLanguage === 'ru'
+      ? 'Русский'
+      : extracted?.detectedLanguage === 'kz'
+        ? 'Казахский'
+        : extracted?.detectedLanguage === 'unknown'
+          ? 'Не определён'
+          : '—';
+
   return (
     <div className="rounded-2xl border-2 border-violet-100/90 bg-gradient-to-b from-white to-violet-50/20 p-5 md:p-7 shadow-sm space-y-8">
       <div>
@@ -185,6 +263,25 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
             OpenAI для компании не настроен — тест-чат не сможет вызвать модель.
           </p>
         )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="inline-flex items-center gap-1 rounded-lg bg-white border border-gray-200 px-2.5 py-1.5 text-gray-600">
+            <Database className="w-3.5 h-3.5 text-violet-500" />
+            База знаний:{' '}
+            <strong className="text-gray-800">{config.knowledge.useCompanyKnowledgeBase ? 'включена' : 'выкл.'}</strong>
+          </span>
+          <span className="inline-flex items-center gap-1 rounded-lg bg-white border border-gray-200 px-2.5 py-1.5 text-gray-600">
+            Быстрые ответы:{' '}
+            <strong className="text-gray-800">{config.knowledge.useQuickReplies ? 'включены' : 'выкл.'}</strong>
+          </span>
+          {lastKnowledgeMeta && (config.knowledge.useCompanyKnowledgeBase || config.knowledge.useQuickReplies) && (
+            <span className="inline-flex items-center gap-1 rounded-lg bg-violet-50 border border-violet-100 px-2.5 py-1.5 text-violet-900">
+              Последний запрос: статьи {lastKnowledgeMeta.knowledgeArticlesUsed}, шаблоны{' '}
+              {lastKnowledgeMeta.quickRepliesUsed}
+              {lastKnowledgeMeta.truncated ? ' · контекст усечён' : ''}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* A. Предпросмотр логики */}
@@ -232,6 +329,10 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
             </button>
           </div>
         </div>
+        <p className="text-xs text-gray-500">
+          Здесь базовый текст без блока компании. При включённых флагах знаний сервер добавляет к промпту фрагменты базы
+          и быстрых ответов (с лимитом объёма) — это видно по ответам бота и счётчику «Последний запрос».
+        </p>
         <textarea
           readOnly
           value={systemPrompt}
@@ -308,7 +409,7 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
             <div className="flex justify-start">
               <div className="inline-flex items-center gap-2 rounded-2xl bg-violet-50 border border-violet-100 px-4 py-2.5 text-sm text-violet-800">
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Генерация ответа…
+                Генерация ответа и извлечения…
               </div>
             </div>
           )}
@@ -355,6 +456,119 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
             </button>
           </div>
         </div>
+      </section>
+
+      {/* D. Извлечение */}
+      <section className="space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">
+              D. Что бот извлёк из диалога
+            </h3>
+            <p className="text-xs text-gray-500 mt-1 max-w-2xl">
+              Отдельный проход модели: только факты из переписки. Не записывается в CRM — только предпросмотр.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled
+            className="shrink-0 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2 text-xs font-medium text-gray-400 cursor-not-allowed"
+            title="Появится на следующем этапе"
+          >
+            Применить в карточку клиента
+          </button>
+        </div>
+
+        {!extracted && !extractionError && messages.length === 0 && (
+          <p className="text-sm text-gray-400 rounded-xl border border-dashed border-gray-200 bg-white/80 px-4 py-6 text-center">
+            Отправьте сообщение в тест-чат — здесь появится структура данных.
+          </p>
+        )}
+
+        {extractionError && !extracted && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-sm px-4 py-3">
+            {extractionError}
+          </div>
+        )}
+
+        {extractionError && extracted && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 text-amber-900 text-xs px-3 py-2">
+            Последний ответ получен, но извлечение не обновилось: {extractionError}
+          </div>
+        )}
+
+        {extracted && (
+          <div className="space-y-3">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <SubCard title="1. Основное">
+                <div className="grid grid-cols-1 gap-3">
+                  <Field label="Имя" value={extracted.clientName} />
+                  <Field label="Город" value={extracted.city} />
+                  <Field label="Площадь" value={extracted.areaM2} />
+                  <Field label="Этажность" value={extracted.floors} />
+                  <Field label="Тип / назначение" value={extracted.projectType} />
+                  <Field label="Формат дома" value={extracted.houseFormat} />
+                  <Field label="Стены" value={extracted.wallType} />
+                  <Field label="Кровля" value={extracted.roofType} />
+                  <Field label="Высота потолков" value={extracted.ceilingHeight} />
+                </div>
+              </SubCard>
+              <SubCard title="2. Запрос клиента">
+                <div className="grid grid-cols-1 gap-3">
+                  <Field label="Интерес / уровень" value={extracted.interestLevel} />
+                  <Field label="Бюджет" value={extracted.budget} />
+                  <Field label="Сроки" value={extracted.timeline} />
+                  <Field label="Финансирование" value={extracted.financing} />
+                  <Field label="Участок / земля" value={extracted.landStatus} />
+                  <Field label="Предпочтительный контакт" value={extracted.preferredContactMode} />
+                  <Field label="Хочет КП" value={extracted.wantsCommercialOffer} />
+                  <Field label="Нужна консультация" value={extracted.wantsConsultation} />
+                  <Field label="Свой проект" value={extracted.hasOwnProject} />
+                </div>
+              </SubCard>
+              <SubCard title="3. Следующее действие">
+                <div className="grid grid-cols-1 gap-3">
+                  <Field label="Следующий шаг" value={extracted.nextStep} />
+                  <Field label="Температура лида" value={extracted.leadTemperature} />
+                  <Field label="Язык диалога" value={langLabel} />
+                </div>
+              </SubCard>
+            </div>
+
+            <SubCard title="4. Комментарий для CRM">
+              <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">
+                {extracted.summaryComment ?? '—'}
+              </p>
+            </SubCard>
+
+            <SubCard title="5. Чего не хватает">
+              {extracted.missingFields.length ? (
+                <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+                  {extracted.missingFields.map((x, i) => (
+                    <li key={i}>{x}</li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-gray-400">Список пуст (или модель не указала пробелы).</p>
+              )}
+            </SubCard>
+
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+              <button
+                type="button"
+                onClick={() => setShowRawJson((v) => !v)}
+                className="text-xs font-medium text-violet-700 hover:underline"
+              >
+                {showRawJson ? 'Скрыть сырой JSON' : 'Показать сырой JSON'}
+              </button>
+              {showRawJson && (
+                <pre className="mt-2 text-[11px] font-mono text-gray-700 overflow-x-auto max-h-64 overflow-y-auto p-2 bg-white rounded-lg border border-gray-200">
+                  {JSON.stringify(extracted, null, 2)}
+                </pre>
+              )}
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );
