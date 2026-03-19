@@ -41,6 +41,7 @@ export interface AiControlFiltersState {
   onlyCrmApply: boolean;
   onlyWithDeal: boolean;
   onlyWithTask: boolean;
+  sortBy: 'newest' | 'problem_first' | 'deal_task_first';
 }
 
 export const DEFAULT_AI_CONTROL_FILTERS: AiControlFiltersState = {
@@ -60,7 +61,8 @@ export const DEFAULT_AI_CONTROL_FILTERS: AiControlFiltersState = {
   onlyFallback: false,
   onlyCrmApply: false,
   onlyWithDeal: false,
-  onlyWithTask: false
+  onlyWithTask: false,
+  sortBy: 'newest'
 };
 
 /** Флаги результата run (для фильтров и метрик) */

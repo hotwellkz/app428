@@ -20,6 +20,7 @@ export interface AiRunListPresentation {
   isFallback: boolean;
   hasSnapshot: boolean;
   requiresAttention: boolean;
+  attentionReasons: string[];
   badges: string[];
 }
 
@@ -80,14 +81,18 @@ export function deriveAiRunListPresentation(
           : 'success';
 
   const reason = (run.reason ?? '').toLowerCase();
-  const requiresAttention =
-    runStatus === 'error' ||
-    (runStatus === 'skipped' && (reason.includes('пауз') || reason.includes('missing') || reason.includes('permission'))) ||
-    source === 'fallback' ||
-    !hasExtraction ||
-    crmLabel === 'CRM error' ||
-    (!!dealLabel && !hasDealCreate) ||
-    (!!taskLabel && !hasTaskCreate);
+  const attentionReasons: string[] = [];
+  if (runStatus === 'error') attentionReasons.push('Ошибка runtime/API');
+  if (runStatus === 'skipped') attentionReasons.push(run.reason ? `Skipped: ${run.reason}` : 'Run пропущен');
+  if (source === 'fallback') attentionReasons.push('Использован fallback');
+  if (!hasExtraction) attentionReasons.push('Extraction не получен');
+  if (crmLabel === 'CRM error') attentionReasons.push('Ошибка при записи в CRM');
+  if (run.extractionApplyStatus === 'skipped') attentionReasons.push('CRM apply пропущен');
+  if (hasDealRec && !hasDealCreate) attentionReasons.push('Сделка рекомендована, но не создана');
+  if (hasTaskRec && !hasTaskCreate) attentionReasons.push('Задача рекомендована, но не создана');
+  if (runStatus === 'duplicate') attentionReasons.push('Обнаружен duplicate');
+  if (reason.includes('пауз') || reason.includes('paused')) attentionReasons.push('Бот на паузе');
+  const requiresAttention = attentionReasons.length > 0;
 
   const summaryParts: string[] = [];
   summaryParts.push(hasReply ? 'Ответ есть' : 'Ответа нет');
@@ -113,6 +118,7 @@ export function deriveAiRunListPresentation(
     isFallback: source === 'fallback',
     hasSnapshot,
     requiresAttention,
+    attentionReasons,
     badges: []
   };
   if (runStatus === 'duplicate') summaryParts.unshift(`Duplicate: ${run.reason || 'уже применено'}`);
@@ -122,16 +128,20 @@ export function deriveAiRunListPresentation(
     summaryParts.push(`Fallback: ${firstFallback}`);
   }
 
-  const badges = [
-    sourceLabel,
-    hasReply ? 'answer' : 'no answer',
-    hasExtraction ? 'extracted' : 'no extraction',
-    crmLabel.toLowerCase(),
-    dealLabel,
-    taskLabel,
-    runStatus,
-    (run.mode || '').toLowerCase() === 'draft' && hasReply ? 'draft ready' : null
-  ].filter(Boolean) as string[];
+  const runtimeMode = (run.runtimeMode || run.mode || '').toLowerCase();
+  const badges: string[] = [];
+  if (runStatus === 'error') badges.push('Ошибка');
+  if ((run.createUsedFallbacks?.length ?? 0) > 0 || source === 'fallback') badges.push('Fallback');
+  if (hasExtraction) badges.push('Extraction');
+  if (run.extractionApplyStatus === 'applied') badges.push('CRM apply');
+  if (hasDealCreate || hasDealRec) badges.push('Сделка');
+  if (hasTaskCreate || hasTaskRec) badges.push('Задача');
+  if (runtimeMode === 'draft') badges.push('Draft');
+  if (runtimeMode === 'auto') badges.push('Auto');
+  if (runStatus === 'skipped' || reason.includes('пауз') || reason.includes('paused')) badges.push('Paused/Skipped');
+  if (runStatus === 'duplicate' || run.dealCreateStatus === 'duplicate' || run.taskCreateStatus === 'duplicate') {
+    badges.push('Duplicate');
+  }
 
   return {
     source,
@@ -149,6 +159,7 @@ export function deriveAiRunListPresentation(
     isFallback: source === 'fallback',
     hasSnapshot,
     requiresAttention,
+    attentionReasons,
     badges
   };
 }

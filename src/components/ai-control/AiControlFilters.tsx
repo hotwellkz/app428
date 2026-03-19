@@ -49,6 +49,11 @@ const PRESET_VIEWS: { v: AiControlFiltersState['presetView']; l: string }[] = [
   { v: 'deals', l: 'Сделки' },
   { v: 'tasks', l: 'Задачи' }
 ];
+const SORT_OPTIONS: { v: AiControlFiltersState['sortBy']; l: string }[] = [
+  { v: 'newest', l: 'Новые сверху' },
+  { v: 'problem_first', l: 'Сначала проблемные' },
+  { v: 'deal_task_first', l: 'Сначала сделки/задачи' }
+];
 
 export const AiControlFilters: React.FC<{
   filters: AiControlFiltersState;
@@ -59,6 +64,28 @@ export const AiControlFilters: React.FC<{
 
   return (
     <div className="space-y-3 p-4 rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex flex-wrap gap-2">
+        {[
+          { label: 'Все', apply: { presetView: 'all', runtimeMode: '', onlyCrmApply: false, onlyFallback: false, onlyWithDeal: false, onlyWithTask: false } },
+          { label: 'Только ошибки', apply: { presetView: 'errors' } },
+          { label: 'Только fallback', apply: { presetView: 'all', onlyFallback: true } },
+          { label: 'Только со сделкой', apply: { presetView: 'deals' } },
+          { label: 'Только с задачей', apply: { presetView: 'tasks' } },
+          { label: 'Только auto', apply: { presetView: 'all', runtimeMode: 'auto' } },
+          { label: 'Только draft', apply: { presetView: 'all', runtimeMode: 'draft' } },
+          { label: 'Только применено в CRM', apply: { presetView: 'all', onlyCrmApply: true } },
+          { label: 'Только требующие внимания', apply: { presetView: 'attention' } }
+        ].map((chip) => (
+          <button
+            key={chip.label}
+            type="button"
+            className="px-2.5 py-1 rounded-full text-xs border bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+            onClick={() => set(chip.apply as Partial<AiControlFiltersState>)}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-xs text-gray-500 mb-1">Вид</label>
@@ -176,6 +203,20 @@ export const AiControlFilters: React.FC<{
             {RUNTIME_MODES.map((r) => (
               <option key={r.v || 'any'} value={r.v}>
                 {r.l}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Сортировка</label>
+          <select
+            className="text-sm border rounded-lg px-2 py-1.5 min-w-[180px]"
+            value={filters.sortBy}
+            onChange={(e) => set({ sortBy: e.target.value as AiControlFiltersState['sortBy'] })}
+          >
+            {SORT_OPTIONS.map((s) => (
+              <option key={s.v} value={s.v}>
+                {s.l}
               </option>
             ))}
           </select>

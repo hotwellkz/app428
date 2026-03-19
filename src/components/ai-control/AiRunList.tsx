@@ -26,6 +26,23 @@ function previewReply(text: string | null | undefined, n = 80): string {
   return t.length <= n ? t : t.slice(0, n) + '…';
 }
 
+function badgeTone(badge: string): string {
+  const b = badge.toLowerCase();
+  if (b.includes('ошибка') || b.includes('error')) return 'bg-red-50 text-red-700';
+  if (b.includes('fallback') || b.includes('skipped') || b.includes('paused') || b.includes('duplicate'))
+    return 'bg-amber-50 text-amber-800';
+  if (
+    b.includes('extraction') ||
+    b.includes('crm apply') ||
+    b.includes('сделка') ||
+    b.includes('задача') ||
+    b.includes('auto') ||
+    b.includes('draft')
+  )
+    return 'bg-emerald-50 text-emerald-700';
+  return 'bg-gray-100 text-gray-700';
+}
+
 export const AiRunList: React.FC<{
   runs: WhatsAppAiBotRunRecord[];
   botNames: Record<string, string>;
@@ -51,6 +68,7 @@ export const AiRunList: React.FC<{
         const dealId = run.createdDealId || run.dealId || null;
         const answer = run.answerSnapshot || run.generatedReply || '';
         const summary = run.summarySnapshot || run.extractedSummary || '';
+        const extractedJson = run.extractedSnapshotJson || '';
         const copy = async (label: string, text: string) => {
           if (!text.trim()) {
             toast.error('Пустое значение');
@@ -67,6 +85,7 @@ export const AiRunList: React.FC<{
           <>
             <button
               type="button"
+              disabled={!answer.trim()}
               className="p-1.5 rounded hover:bg-gray-100 text-gray-600"
               onClick={(e) => {
                 e.preventDefault();
@@ -111,19 +130,33 @@ export const AiRunList: React.FC<{
                 e.stopPropagation();
                 void copy('Ответ', answer);
               }}
-              title="Копировать ответ"
+              title={answer.trim() ? 'Копировать ответ' : 'Ответ отсутствует'}
             >
               <Copy className="w-4 h-4" />
             </button>
             <button
               type="button"
+              disabled={!summary.trim()}
               className="p-1.5 rounded hover:bg-gray-100 text-gray-600"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 void copy('Summary', summary);
               }}
-              title="Копировать summary"
+              title={summary.trim() ? 'Копировать summary' : 'Summary отсутствует'}
+            >
+              <Copy className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              disabled={!extractedJson.trim()}
+              className="p-1.5 rounded hover:bg-gray-100 text-gray-600 disabled:opacity-40"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                void copy('Extracted JSON', extractedJson);
+              }}
+              title={extractedJson.trim() ? 'Копировать extracted JSON' : 'Extracted JSON отсутствует'}
             >
               <Copy className="w-4 h-4" />
             </button>
@@ -153,12 +186,9 @@ export const AiRunList: React.FC<{
                 <p className="text-sm text-gray-700 truncate" title={run.conversationId}>
                   Чат: {run.conversationId.slice(0, 12)}…
                 </p>
-                {p.answerPreview ? (
-                  <p className="text-xs text-gray-500 mt-1 line-clamp-1">{previewReply(p.answerPreview, 160)}</p>
-                ) : null}
-                {p.summaryPreview ? (
-                  <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-1">{previewReply(p.summaryPreview, 140)}</p>
-                ) : null}
+                <p className="text-xs text-gray-500 mt-1 line-clamp-1">
+                  {previewReply(p.summaryPreview || p.answerPreview || '', 160) || 'Нет краткого описания'}
+                </p>
                 <p className="text-[11px] text-gray-600 mt-1 line-clamp-1">{p.summaryLine}</p>
               </div>
               <div className="hidden sm:flex items-center gap-0.5">{actions}</div>
@@ -187,15 +217,7 @@ export const AiRunList: React.FC<{
                 {p.badges.slice(0, 4).map((b) => (
                   <span
                     key={`m-${b}`}
-                    className={`px-1.5 py-0.5 rounded ${
-                      b.includes('error')
-                        ? 'bg-red-50 text-red-700'
-                        : b.includes('skipped') || b.includes('fallback') || b.includes('no ')
-                          ? 'bg-amber-50 text-amber-800'
-                          : b.includes('success') || b.includes('created') || b.includes('applied') || b === 'snapshot'
-                            ? 'bg-emerald-50 text-emerald-700'
-                            : 'bg-gray-100 text-gray-700'
-                    }`}
+                    className={`px-1.5 py-0.5 rounded ${badgeTone(b)}`}
                     title={b}
                   >
                     {b}
@@ -206,15 +228,7 @@ export const AiRunList: React.FC<{
                 {p.badges.map((b) => (
                 <span
                   key={`d-${b}`}
-                  className={`px-1.5 py-0.5 rounded ${
-                    b.includes('error')
-                      ? 'bg-red-50 text-red-700'
-                      : b.includes('skipped') || b.includes('fallback') || b.includes('no ')
-                        ? 'bg-amber-50 text-amber-800'
-                        : b.includes('success') || b.includes('created') || b.includes('applied') || b === 'snapshot'
-                          ? 'bg-emerald-50 text-emerald-700'
-                          : 'bg-gray-100 text-gray-700'
-                  }`}
+                  className={`px-1.5 py-0.5 rounded ${badgeTone(b)}`}
                   title={b}
                 >
                   {b}

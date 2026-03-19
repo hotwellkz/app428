@@ -135,6 +135,7 @@ function applyFilters(
 
     if (q) {
       const botName = (botsById[run.botId]?.name ?? '').toLowerCase();
+      const rAny = run as unknown as Record<string, unknown>;
       const hay = [
         run.id,
         run.conversationId,
@@ -151,7 +152,15 @@ function applyFilters(
         run.summarySnapshot,
         run.extractedSummary,
         run.extractedSnapshotJson,
-        run.reason
+        run.reason,
+        run.createdDealTitle,
+        run.taskRecommendationTitle,
+        run.dealDraftTitle,
+        run.dealCreateReason,
+        run.taskCreateReason,
+        Array.isArray(run.dealRoutingWarnings) ? run.dealRoutingWarnings.join(' ') : '',
+        typeof rAny.clientNameSnapshot === 'string' ? rAny.clientNameSnapshot : '',
+        typeof rAny.clientName === 'string' ? rAny.clientName : ''
       ]
         .filter(Boolean)
         .join(' ')
@@ -161,6 +170,31 @@ function applyFilters(
 
     return true;
   });
+}
+
+function sortRuns(
+  runs: WhatsAppAiBotRunRecord[],
+  filters: AiControlFiltersState,
+  aggregated: Record<string, AiControlAggregatedStatus>
+): WhatsAppAiBotRunRecord[] {
+  const list = [...runs];
+  list.sort((a, b) => {
+    const ams = runCreatedAtMs(a);
+    const bms = runCreatedAtMs(b);
+    if (filters.sortBy === 'newest') return bms - ams;
+
+    const ap = deriveAiRunListPresentation(a, aggregated[a.id] ?? 'skipped');
+    const bp = deriveAiRunListPresentation(b, aggregated[b.id] ?? 'skipped');
+    if (filters.sortBy === 'problem_first') {
+      if (ap.requiresAttention !== bp.requiresAttention) return ap.requiresAttention ? -1 : 1;
+      return bms - ams;
+    }
+    const aDealTask = (ap.hasDeal ? 1 : 0) + (ap.hasTask ? 1 : 0);
+    const bDealTask = (bp.hasDeal ? 1 : 0) + (bp.hasTask ? 1 : 0);
+    if (aDealTask !== bDealTask) return bDealTask - aDealTask;
+    return bms - ams;
+  });
+  return list;
 }
 
 function metricsFor(
@@ -246,7 +280,8 @@ export const AiControlPage: React.FC = () => {
     return m;
   }, [runs]);
 
-  const filtered = useMemo(() => applyFilters(runs, filters, botsById), [runs, filters, botsById]);
+  const filteredRaw = useMemo(() => applyFilters(runs, filters, botsById), [runs, filters, botsById]);
+  const filtered = useMemo(() => sortRuns(filteredRaw, filters, aggregated), [filteredRaw, filters, aggregated]);
   const metrics = useMemo(() => metricsFor(filtered, aggregated), [filtered, aggregated]);
 
   if (!can) {
