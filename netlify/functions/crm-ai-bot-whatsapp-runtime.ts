@@ -10,6 +10,9 @@ import { parseCrmAiBotConfig, type CrmAiBotConfig } from '../../src/types/crmAiB
 import { buildCrmAiBotKnowledgeContext, type CrmAiBotKnowledgeMeta } from './lib/crmAiBotKnowledgeLoad';
 import { runCrmAiBotExtraction } from './lib/crmAiBotExtractionOpenAi';
 import type { CrmAiBotExtractionResult } from '../../src/types/crmAiBotExtraction';
+import { emptyCrmAiBotExtraction } from '../../src/types/crmAiBotExtraction';
+import { buildAiDealRecommendationSnapshot } from '../../src/lib/autovoronki/aiDealRecommendation';
+import type { AiDealRecommendationSnapshot } from '../../src/types/aiDealRecommendation';
 import {
   tryApplyWhatsappRuntimeExtraction,
   type WhatsappRuntimeExtractionApplyPayload
@@ -339,6 +342,36 @@ ${text}
       };
     }
 
+    const convD = convSnap.data() ?? {};
+    const channel = convD.channel as string | undefined;
+    const clientIdConv = convD.clientId as string | undefined;
+    const extractionForDeal = extracted ?? emptyCrmAiBotExtraction();
+    let dealRecommendation: AiDealRecommendationSnapshot;
+    try {
+      dealRecommendation = buildAiDealRecommendationSnapshot({
+        extraction: extractionForDeal,
+        crmActions: config.crmActions,
+        channel,
+        clientId: clientIdConv,
+        conversationId,
+        botId,
+        botName: botMeta.name,
+        dealRecommendationForLog: extractionApply.dealRecommendationForLog
+      });
+    } catch (e) {
+      log('dealRecommendation build failed', e);
+      dealRecommendation = buildAiDealRecommendationSnapshot({
+        extraction: emptyCrmAiBotExtraction(),
+        crmActions: config.crmActions,
+        channel,
+        clientId: clientIdConv,
+        conversationId,
+        botId,
+        botName: botMeta.name,
+        dealRecommendationForLog: null
+      });
+    }
+
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -347,6 +380,7 @@ ${text}
         extracted,
         extractionError,
         extractionApply,
+        dealRecommendation,
         knowledgeMeta,
         usage: {
           answer: data.usage ?? null,

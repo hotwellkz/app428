@@ -27,6 +27,9 @@ export interface WhatsAppAiBotRunLogInput {
   appliedClientId?: string | null;
   extractionAppliedAt?: string | null;
   dealRecommendationForLog?: string | null;
+  dealRecommendationStatus?: string | null;
+  dealRecommendationReason?: string | null;
+  dealDraftTitle?: string | null;
 }
 
 /** Аудит запусков AI в WhatsApp (отладка и поддержка). */

@@ -288,6 +288,10 @@ interface ClientInfoPanelProps {
   onAiRuntimePatch?: (patch: WhatsAppAiRuntimePatch) => void;
   /** Сохранение aiRuntime */
   aiRuntimeSaving?: boolean;
+  /** Создать сделку по рекомендации AI (Netlify, с проверкой) */
+  onCreateDealFromAiRecommendation?: () => void | Promise<void>;
+  /** Идёт создание сделки по рекомендации AI */
+  creatingAiDealFromRec?: boolean;
   /** Метаданные заказа Kaspi для выбранного диалога (если есть) */
   kaspiOrderNumber?: string | null;
   kaspiOrderAmount?: number | null;
@@ -338,6 +342,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   crmAiBots = [],
   onAiRuntimePatch,
   aiRuntimeSaving = false,
+  onCreateDealFromAiRecommendation,
+  creatingAiDealFromRec = false,
   kaspiOrderNumber,
   kaspiOrderAmount,
   kaspiOrderStatus,
@@ -1411,6 +1417,90 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                       </div>
                     </dl>
                   </div>
+                  {conversationChannel === 'whatsapp' &&
+                    onCreateDealFromAiRecommendation &&
+                    aiRuntime.dealRecommendation &&
+                    (aiRuntime.dealRecommendation.status === 'recommended' ||
+                      aiRuntime.dealRecommendation.status === 'insufficient_data' ||
+                      aiRuntime.dealFromAi?.createdDealId) && (
+                      <div className="mt-2 pt-2 border-t border-emerald-200/70 rounded-lg bg-emerald-50/40 p-2">
+                        <div className="flex items-center gap-2 mb-1">
+                          <GitBranch className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                          <p className="text-[10px] font-semibold text-emerald-900 uppercase">
+                            Рекомендация сделки от AI
+                          </p>
+                        </div>
+                        {aiRuntime.dealFromAi?.createdDealId ? (
+                          <div className="space-y-2 text-[11px] text-gray-700">
+                            <p className="text-emerald-800 font-medium">Сделка уже создана из рекомендации</p>
+                            <p className="break-words">{aiRuntime.dealFromAi.createdDealTitle ?? '—'}</p>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                navigate(`/deals?deal=${encodeURIComponent(aiRuntime.dealFromAi!.createdDealId!)}`)
+                              }
+                              className="w-full py-1.5 text-xs font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-1"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              Открыть сделку
+                            </button>
+                          </div>
+                        ) : conversationDealId ? (
+                          <div className="space-y-2 text-[11px] text-amber-800">
+                            <p>У чата уже привязана сделка. Создание по рекомендации недоступно.</p>
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/deals?deal=${encodeURIComponent(conversationDealId)}`)}
+                              className="w-full py-1.5 text-xs font-medium text-amber-900 border border-amber-600 rounded-lg hover:bg-amber-50 flex items-center justify-center gap-1"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              Открыть сделку чата
+                            </button>
+                          </div>
+                        ) : aiRuntime.dealRecommendation.status === 'insufficient_data' ? (
+                          <div className="text-[11px] text-gray-600 space-y-1">
+                            <p className="font-medium text-gray-700">Недостаточно данных для рекомендации</p>
+                            {aiRuntime.dealRecommendation.reason && (
+                              <p className="break-words">{aiRuntime.dealRecommendation.reason}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-2 text-[11px] text-gray-700">
+                            <p className="text-emerald-900 font-medium">Рекомендуем создать сделку</p>
+                            {aiRuntime.dealRecommendation.summary && (
+                              <p className="text-gray-600 break-words">{aiRuntime.dealRecommendation.summary}</p>
+                            )}
+                            {aiRuntime.dealRecommendation.draftTitle && (
+                              <p>
+                                <span className="text-gray-500">Название: </span>
+                                <span className="font-medium">{aiRuntime.dealRecommendation.draftTitle}</span>
+                              </p>
+                            )}
+                            {(aiRuntime.dealRecommendation.signals?.length ?? 0) > 0 && (
+                              <p className="text-[10px] text-gray-600">
+                                Признаки: {(aiRuntime.dealRecommendation.signals ?? []).join(', ')}
+                              </p>
+                            )}
+                            <p className="text-[10px] text-gray-500">
+                              Уверенность:{' '}
+                              {aiRuntime.dealRecommendation.confidence === 'high'
+                                ? 'высокая'
+                                : aiRuntime.dealRecommendation.confidence === 'medium'
+                                  ? 'средняя'
+                                  : 'низкая'}
+                            </p>
+                            <button
+                              type="button"
+                              disabled={creatingAiDealFromRec}
+                              onClick={() => void onCreateDealFromAiRecommendation()}
+                              className="w-full py-2 text-xs font-medium text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 disabled:opacity-50"
+                            >
+                              {creatingAiDealFromRec ? 'Создание…' : 'Создать сделку'}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   {aiRuntime.lastGeneratedReply && (
                     <div className="mt-2 rounded-lg border border-violet-100 bg-white/80 p-2">
                       <p className="text-[10px] font-semibold text-violet-800 uppercase mb-1">

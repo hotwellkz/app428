@@ -36,6 +36,7 @@ import {
   parseWhatsAppAiRuntime,
   type WhatsAppAiRuntime
 } from '../types/whatsappAiRuntime';
+import type { AiDealRecommendationSnapshot } from '../types/aiDealRecommendation';
 import { API_CONFIG } from '../config/api';
 import { showErrorNotification } from '../utils/notifications';
 import toast from 'react-hot-toast';
@@ -134,6 +135,7 @@ function showNewMessageBrowserNotification() {
 
 const SEND_API = '/.netlify/functions/send-whatsapp-message';
 const CRM_WHATSAPP_RUNTIME_API = `${API_CONFIG.BASE_URL}/crm-ai-bot-whatsapp-runtime`;
+const CRM_CREATE_DEAL_FROM_REC_API = `${API_CONFIG.BASE_URL}/crm-ai-create-deal-from-recommendation`;
 
 /** Ответ Netlify: применение extraction в CRM */
 type RuntimeExtractionApplyApi = {
@@ -197,7 +199,9 @@ function mergeListItemAiRuntime(
       : {}),
     ...(patch.lastExtractionAppliedAt !== undefined
       ? { lastExtractionAppliedAt: patch.lastExtractionAppliedAt }
-      : {})
+      : {}),
+    ...(patch.dealRecommendation !== undefined ? { dealRecommendation: patch.dealRecommendation } : {}),
+    ...(patch.dealFromAi !== undefined ? { dealFromAi: patch.dealFromAi } : {})
   };
   return { ...item, aiRuntime: next };
 }
@@ -758,6 +762,7 @@ const WhatsAppChat: React.FC = () => {
   const [aiBotFlagsSaving, setAiBotFlagsSaving] = useState(false);
   const [crmAiBots, setCrmAiBots] = useState<CrmAiBot[]>([]);
   const [aiRuntimeSaving, setAiRuntimeSaving] = useState(false);
+  const [creatingAiDealFromRec, setCreatingAiDealFromRec] = useState(false);
 
   useEffect(() => {
     if (!companyId) {
@@ -841,7 +846,9 @@ const WhatsAppChat: React.FC = () => {
             lastExtractionAppliedLabels: prevRuntime.lastExtractionAppliedLabels,
             lastExtractionAppliedFieldCount: prevRuntime.lastExtractionAppliedFieldCount,
             lastExtractionAppliedClientId: prevRuntime.lastExtractionAppliedClientId,
-            lastExtractionAppliedAt: prevRuntime.lastExtractionAppliedAt
+            lastExtractionAppliedAt: prevRuntime.lastExtractionAppliedAt,
+            dealRecommendation: prevRuntime.dealRecommendation,
+            dealFromAi: prevRuntime.dealFromAi
           };
           const revert = (c: ConversationListItem) =>
             c.id !== selectedId ? c : mergeListItemAiRuntime(c, revertPatch);
@@ -856,6 +863,68 @@ const WhatsAppChat: React.FC = () => {
     },
     [selectedId, stickySelectedChat?.id]
   );
+
+  const handleCreateDealFromAiRecommendation = useCallback(async () => {
+    if (!selectedId) return;
+    const dr = selectedItemRef.current?.aiRuntime?.dealRecommendation;
+    if (!dr || dr.status !== 'recommended' || !dr.payloadHash) {
+      toast.error('Нет активной рекомендации сделки');
+      return;
+    }
+    setCreatingAiDealFromRec(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) {
+        toast.error('Нет авторизации');
+        return;
+      }
+      const res = await fetch(CRM_CREATE_DEAL_FROM_REC_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ conversationId: selectedId, payloadHash: dr.payloadHash })
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        dealId?: string;
+        dealTitle?: string;
+        stageId?: string;
+        stageName?: string;
+      };
+      if (!res.ok || !body.ok) {
+        toast.error(typeof body.error === 'string' ? body.error : 'Не удалось создать сделку');
+        return;
+      }
+      toast.success('Сделка создана');
+      const mergeDeal = (c: ConversationListItem) => {
+        if (c.id !== selectedId) return c;
+        const base = c.aiRuntime ?? defaultWhatsAppAiRuntime();
+        return {
+          ...c,
+          dealId: body.dealId ?? c.dealId,
+          dealTitle: body.dealTitle ?? c.dealTitle,
+          dealStageId: body.stageId ?? c.dealStageId,
+          dealStageName: body.stageName ?? c.dealStageName,
+          aiRuntime: {
+            ...base,
+            dealFromAi: {
+              createdDealId: body.dealId ?? null,
+              createdDealTitle: body.dealTitle ?? null,
+              createdDealAt: new Date().toISOString(),
+              createdFromPayloadHash: dr.payloadHash
+            }
+          }
+        };
+      };
+      setConversations((prev) => prev.map(mergeDeal));
+      setSearchChats((prev) => prev.map(mergeDeal));
+      if (stickySelectedChat?.id === selectedId) {
+        setStickySelectedChat((prev) => (prev ? mergeDeal(prev) : null));
+      }
+    } finally {
+      setCreatingAiDealFromRec(false);
+    }
+  }, [selectedId, stickySelectedChat?.id]);
 
   /** Оптимистичное обновление: после отправки сообщения сразу поднимаем чат в списке по lastMessageAt. */
   const moveConversationToTopByActivity = useCallback((conversationId: string) => {
@@ -1691,6 +1760,7 @@ const WhatsAppChat: React.FC = () => {
           error?: string;
           extracted?: Record<string, unknown> | null;
           extractionApply?: RuntimeExtractionApplyApi;
+          dealRecommendation?: AiDealRecommendationSnapshot | null;
         };
         if (!res.ok || data.error) {
           const errText = typeof data.error === 'string' ? data.error : `HTTP ${res.status}`;
@@ -1766,6 +1836,20 @@ const WhatsAppChat: React.FC = () => {
               }
             : {};
 
+        const dealRecPatch: WhatsAppAiRuntimePatch =
+          data.dealRecommendation != null
+            ? { dealRecommendation: data.dealRecommendation }
+            : {};
+
+        const runLogDeal =
+          data.dealRecommendation != null
+            ? {
+                dealRecommendationStatus: data.dealRecommendation.status,
+                dealRecommendationReason: data.dealRecommendation.reason,
+                dealDraftTitle: data.dealRecommendation.draftTitle
+              }
+            : {};
+
         if (mode === 'draft') {
           await updateWhatsAppConversationAiRuntime(selectedId, {
             lastRunAt: serverTimestamp(),
@@ -1774,7 +1858,8 @@ const WhatsAppChat: React.FC = () => {
             lastGeneratedReply: reply,
             lastProcessedIncomingMessageId: messageIdToProcess,
             lastExtractionJson: extractionJson,
-            ...applyPatch
+            ...applyPatch,
+            ...dealRecPatch
           });
           crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
           await addWhatsAppAiBotRunLog({
@@ -1789,7 +1874,8 @@ const WhatsAppChat: React.FC = () => {
             reason: null,
             generatedReply: reply,
             extractedSummary,
-            ...runLogApply
+            ...runLogApply,
+            ...runLogDeal
           });
           toast.success('Черновик ответа готов (автоворонка)');
           return;
@@ -1807,7 +1893,8 @@ const WhatsAppChat: React.FC = () => {
             lastReason: 'Не удалось отправить ответ в чат',
             lastGeneratedReply: reply,
             lastExtractionJson: extractionJson,
-            ...applyPatch
+            ...applyPatch,
+            ...dealRecPatch
           });
           await addWhatsAppAiBotRunLog({
             companyId,
@@ -1821,7 +1908,8 @@ const WhatsAppChat: React.FC = () => {
             reason: 'send_failed',
             generatedReply: reply,
             extractedSummary,
-            ...runLogApply
+            ...runLogApply,
+            ...runLogDeal
           });
           toast.error('AI: не удалось отправить ответ в WhatsApp');
           return;
@@ -1833,7 +1921,8 @@ const WhatsAppChat: React.FC = () => {
           lastGeneratedReply: reply,
           lastProcessedIncomingMessageId: messageIdToProcess,
           lastExtractionJson: extractionJson,
-          ...applyPatch
+          ...applyPatch,
+          ...dealRecPatch
         });
         crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
         await addWhatsAppAiBotRunLog({
@@ -1848,7 +1937,8 @@ const WhatsAppChat: React.FC = () => {
           reason: null,
           generatedReply: reply,
           extractedSummary,
-          ...runLogApply
+          ...runLogApply,
+          ...runLogDeal
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'runtime error';
@@ -3218,6 +3308,8 @@ const WhatsAppChat: React.FC = () => {
                   crmAiBots={crmAiBots}
                   onAiRuntimePatch={selectedId ? handleAiRuntimePatch : undefined}
                   aiRuntimeSaving={aiRuntimeSaving}
+                  onCreateDealFromAiRecommendation={selectedId ? handleCreateDealFromAiRecommendation : undefined}
+                  creatingAiDealFromRec={creatingAiDealFromRec}
                   kaspiOrderNumber={selectedItem?.kaspiOrderNumber ?? null}
                   kaspiOrderAmount={selectedItem?.kaspiOrderAmount ?? null}
                   kaspiOrderStatus={selectedItem?.kaspiOrderStatus ?? null}
@@ -3332,6 +3424,8 @@ const WhatsAppChat: React.FC = () => {
                 crmAiBots={crmAiBots}
                 onAiRuntimePatch={selectedId ? handleAiRuntimePatch : undefined}
                 aiRuntimeSaving={aiRuntimeSaving}
+                onCreateDealFromAiRecommendation={selectedId ? handleCreateDealFromAiRecommendation : undefined}
+                creatingAiDealFromRec={creatingAiDealFromRec}
                 kaspiOrderNumber={selectedItem.kaspiOrderNumber ?? null}
                 kaspiOrderAmount={selectedItem.kaspiOrderAmount ?? null}
                 kaspiOrderStatus={selectedItem.kaspiOrderStatus ?? null}

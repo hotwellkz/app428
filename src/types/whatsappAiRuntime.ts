@@ -1,4 +1,8 @@
 import type { Timestamp } from 'firebase/firestore';
+import type {
+  AiDealCreatedFromRecommendationSnapshot,
+  AiDealRecommendationSnapshot
+} from './aiDealRecommendation';
 
 /** Режим ответа AI из модуля «Автоворонки» в WhatsApp-чате */
 export type WhatsAppAiRuntimeMode = 'off' | 'draft' | 'auto';
@@ -35,6 +39,10 @@ export interface WhatsAppAiRuntime {
   lastExtractionAppliedClientId: string | null;
   /** ISO-время с сервера при apply */
   lastExtractionAppliedAt: string | null;
+  /** Рекомендация сделки (последний проход AI runtime) */
+  dealRecommendation: AiDealRecommendationSnapshot | null;
+  /** Факт создания сделки по кнопке менеджера */
+  dealFromAi: AiDealCreatedFromRecommendationSnapshot | null;
 }
 
 export function defaultWhatsAppAiRuntime(): WhatsAppAiRuntime {
@@ -54,7 +62,9 @@ export function defaultWhatsAppAiRuntime(): WhatsAppAiRuntime {
     lastExtractionAppliedLabels: null,
     lastExtractionAppliedFieldCount: null,
     lastExtractionAppliedClientId: null,
-    lastExtractionAppliedAt: null
+    lastExtractionAppliedAt: null,
+    dealRecommendation: null,
+    dealFromAi: null
   };
 }
 
@@ -100,6 +110,50 @@ export function parseWhatsAppAiRuntime(data: Record<string, unknown>): WhatsAppA
     return null;
   };
 
+  const parseDealRec = (v: unknown): AiDealRecommendationSnapshot | null => {
+    if (!v || typeof v !== 'object') return null;
+    const r = v as Record<string, unknown>;
+    const status =
+      r.status === 'recommended' || r.status === 'skipped' || r.status === 'insufficient_data'
+        ? r.status
+        : null;
+    if (!status) return null;
+    const signals = Array.isArray(r.signals)
+      ? r.signals.map((x) => String(x).trim()).filter(Boolean)
+      : [];
+    const conf =
+      r.confidence === 'high' || r.confidence === 'medium' || r.confidence === 'low'
+        ? r.confidence
+        : 'low';
+    return {
+      status,
+      reason: strOrNull(r.reason),
+      summary: strOrNull(r.summary),
+      draftTitle: strOrNull(r.draftTitle),
+      draftNote: typeof r.draftNote === 'string' ? r.draftNote : null,
+      clientId: strOrNull(r.clientId),
+      preferredStageId: strOrNull(r.preferredStageId),
+      signals,
+      confidence: conf,
+      createdFromBotId: strOrNull(r.createdFromBotId) ?? '',
+      createdFromConversationId: strOrNull(r.createdFromConversationId) ?? '',
+      createdAt: strOrNull(r.createdAt) ?? '',
+      payloadHash: strOrNull(r.payloadHash) ?? '',
+      dealRecommendationForLog: strOrNull(r.dealRecommendationForLog)
+    };
+  };
+
+  const parseDealFromAi = (v: unknown): AiDealCreatedFromRecommendationSnapshot | null => {
+    if (!v || typeof v !== 'object') return null;
+    const r = v as Record<string, unknown>;
+    return {
+      createdDealId: strOrNull(r.createdDealId),
+      createdDealTitle: strOrNull(r.createdDealTitle),
+      createdDealAt: strOrNull(r.createdDealAt),
+      createdFromPayloadHash: strOrNull(r.createdFromPayloadHash)
+    };
+  };
+
   return {
     enabled: o.enabled === true,
     botId: strOrNull(o.botId),
@@ -116,6 +170,8 @@ export function parseWhatsAppAiRuntime(data: Record<string, unknown>): WhatsAppA
     lastExtractionAppliedLabels: strArr(o.lastExtractionAppliedLabels),
     lastExtractionAppliedFieldCount: numOrNull(o.lastExtractionAppliedFieldCount),
     lastExtractionAppliedClientId: strOrNull(o.lastExtractionAppliedClientId),
-    lastExtractionAppliedAt: strOrNull(o.lastExtractionAppliedAt)
+    lastExtractionAppliedAt: strOrNull(o.lastExtractionAppliedAt),
+    dealRecommendation: parseDealRec(o.dealRecommendation) ?? null,
+    dealFromAi: parseDealFromAi(o.dealFromAi) ?? null
   };
 }

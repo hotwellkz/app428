@@ -28,6 +28,7 @@ import type {
   MessageReaction
 } from '../../types/whatsappDb';
 import type { WhatsAppAiRuntime, WhatsAppAiRuntimeMode } from '../../types/whatsappAiRuntime';
+import type { AiDealRecommendationSnapshot, AiDealCreatedFromRecommendationSnapshot } from '../../types/aiDealRecommendation';
 import { parseWhatsAppAiRuntime } from '../../types/whatsappAiRuntime';
 
 export const COLLECTIONS = {
@@ -474,6 +475,8 @@ export interface WhatsAppAiRuntimePatch {
   lastExtractionAppliedFieldCount?: number | null;
   lastExtractionAppliedClientId?: string | null;
   lastExtractionAppliedAt?: string | null;
+  dealRecommendation?: AiDealRecommendationSnapshot | null;
+  dealFromAi?: AiDealCreatedFromRecommendationSnapshot | null;
 }
 
 /** Частичное обновление вложенного объекта aiRuntime (точечные поля Firestore). */
@@ -514,6 +517,12 @@ export async function updateWhatsAppConversationAiRuntime(
   }
   if (patch.lastExtractionAppliedAt !== undefined) {
     payload[`${AI_RT}.lastExtractionAppliedAt`] = patch.lastExtractionAppliedAt;
+  }
+  if (patch.dealRecommendation !== undefined) {
+    payload[`${AI_RT}.dealRecommendation`] = patch.dealRecommendation;
+  }
+  if (patch.dealFromAi !== undefined) {
+    payload[`${AI_RT}.dealFromAi`] = patch.dealFromAi;
   }
   if (Object.keys(payload).length === 0) return;
   await updateDoc(ref, payload);
