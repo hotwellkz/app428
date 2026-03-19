@@ -95,6 +95,24 @@ export const GarageGpsEmbedPanel: React.FC = () => {
       {/* Body */}
       {mode === 'iframe' || mode === 'loading' ? (
         <div className="relative w-full min-h-[70vh] md:h-[calc(100vh-180px)] md:min-h-0 overflow-hidden bg-white">
+          {/* UX-страховка: при нестабильном входе внутрь iframe пользователь не остается один на один с ошибкой. */}
+          <div className="absolute left-3 right-3 top-3 z-10">
+            <div className="rounded-lg border border-amber-200 bg-amber-50/90 px-3 py-2 shadow-sm backdrop-blur-sm">
+              <div className="flex items-start gap-2">
+                <div className="mt-0.5 h-2.5 w-2.5 rounded-full bg-amber-500" />
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-amber-900">
+                    Вход во встроенном режиме может быть нестабильным
+                  </div>
+                  <div className="text-xs text-amber-800 mt-0.5">
+                    Если при вводе появляется ошибка, откройте Garage GPS в новой вкладке, войдите и затем нажмите
+                    «Обновить страницу GPS».
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Встроенный iframe */}
           <iframe
             key={retryKey}
@@ -114,7 +132,9 @@ export const GarageGpsEmbedPanel: React.FC = () => {
                 <Loader2 className="w-6 h-6 animate-spin text-emerald-600" />
                 <div>
                   <div className="text-sm font-semibold">Подключаем Garage GPS...</div>
-                  <div className="text-xs text-gray-500 mt-0.5">Если встраивание будет заблокировано, появится заглушка.</div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    Если встраивание будет заблокировано или вход во встроенном режиме не сработает, вы увидите заглушку.
+                  </div>
                 </div>
               </div>
             </div>
@@ -128,10 +148,11 @@ export const GarageGpsEmbedPanel: React.FC = () => {
             </div>
 
             <h2 className="mt-5 text-xl sm:text-2xl font-semibold text-gray-900">
-              Garage GPS не разрешает встраивание в iframe
+              Не удалось выполнить вход во встроенном режиме
             </h2>
             <p className="mt-2 text-sm text-gray-600">
-              Откройте систему в новой вкладке. После этого она будет доступна так же быстро, но отдельно от CRM.
+              Встроенный просмотр Garage GPS открывается, но авторизация внутри может не завершаться. Откройте
+              систему в новой вкладке и войдите один раз.
             </p>
 
             <div className="mt-6 flex flex-col sm:flex-row gap-3 sm:justify-center">
@@ -155,7 +176,7 @@ export const GarageGpsEmbedPanel: React.FC = () => {
             </div>
 
             <div className="mt-4 text-xs text-gray-500">
-              Подсказка: если вы уже авторизованы в Garage GPS, вход через новую вкладку будет быстрее.
+              Подсказка: если вы уже авторизованы в Garage GPS, вход через новую вкладку будет быстрее. После входа вернитесь в CRM и нажмите «Обновить встроенный просмотр».
             </div>
           </div>
         </div>
