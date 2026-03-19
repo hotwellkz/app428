@@ -12,6 +12,7 @@ import {
 import { PageMetadata } from '../components/PageMetadata';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { AutovoronkiBotConfigurator } from '../components/autovoronki/AutovoronkiBotConfigurator';
+import { AutovoronkiBotTestingPanel } from '../components/autovoronki/AutovoronkiBotTestingPanel';
 import type { CrmAiBotStatus } from '../types/crmAiBot';
 import {
   CRM_AI_BOT_CHANNEL_OPTIONS,
@@ -23,7 +24,6 @@ import toast from 'react-hot-toast';
 
 const ROADMAP_FEATURES = [
   'Запуск бота в чате и WhatsApp',
-  'Песочница / тест диалога',
   'Webhooks и триггеры',
   'Аналитика и воронка',
   'Голосовой канал'
@@ -329,13 +329,26 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
             </div>
           )}
 
+          {!isCreate && effectiveBotId ? (
+            <AutovoronkiBotTestingPanel
+              botId={effectiveBotId}
+              botMeta={{
+                name,
+                description: description.trim() || null,
+                botType,
+                channel
+              }}
+              config={config}
+            />
+          ) : null}
+
           <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-5 md:p-6">
             <div className="flex items-center gap-2 mb-4">
               <Bot className="w-5 h-5 text-gray-400" />
               <h2 className="text-sm font-semibold text-gray-800">Дальнейшее развитие модуля</h2>
             </div>
             <p className="text-xs text-gray-500 mb-4">
-              Уже реализованы сценарий, правила и CRM-флаги в конфиге. Ниже — что подключим позже.
+              Сценарий, тест-чат и промпт — в блоке выше. Ниже — что подключим позже.
             </p>
             <ul className="space-y-2">
               {ROADMAP_FEATURES.map((label) => (

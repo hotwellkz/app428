@@ -107,6 +107,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/crm-ai-bot-test"
+  to = "/.netlify/functions/crm-ai-bot-test"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

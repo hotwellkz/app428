@@ -5,7 +5,7 @@ const AI_NOT_CONFIGURED_MESSAGE =
   'AI не подключен. Сохраните API ключ OpenAI в разделе Интеграции.';
 
 export type AIAuthResult =
-  | { ok: true; apiKey: string }
+  | { ok: true; apiKey: string; companyId: string }
   | { ok: false; statusCode: number; error: string };
 
 /**
@@ -43,5 +43,5 @@ export async function getAIApiKeyFromRequest(event: HandlerEvent): Promise<AIAut
     return { ok: false, statusCode: 403, error: AI_NOT_CONFIGURED_MESSAGE };
   }
 
-  return { ok: true, apiKey };
+  return { ok: true, apiKey, companyId };
 }
