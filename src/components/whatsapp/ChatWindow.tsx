@@ -15,6 +15,7 @@ import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
 import { getAuthToken } from '../../lib/firebase/auth';
 import { useAIConfigured } from '../../hooks/useAIConfigured';
 import { transcribeVoiceBatch, getVoiceMessagesToTranscribe, type TranscribeVoiceBatchResult } from '../../utils/transcribeVoiceBatch';
+import { capMessagesForTransport } from '../../utils/buildAiReplyContext';
 import { detectRuKzLang, getTargetLangForTranslate, translateRuKz } from '../../utils/translateRuKz';
 import toast from 'react-hot-toast';
 
@@ -1118,17 +1119,42 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
       }
 
       const mergedUpdates = { ...transcriptionUpdates, ...(transcribeResult?.updates ?? {}) };
-      const recent = messages
+      const chronological = messages
         .map((m) => ({
           ...m,
           _content: (mergedUpdates[m.id] ?? m.transcription ?? m.text ?? '').trim()
         }))
-        .filter((m) => m._content.length > 0 && !m.deleted)
-        .slice(-15);
+        .filter((m) => m._content.length > 0 && !m.deleted);
 
-      if (recent.length === 0) {
+      if (chronological.length === 0) {
         toast('Нет текста для генерации ответа. Расшифруйте голосовые или дождитесь сообщений.', { duration: 3500 });
         return;
+      }
+
+      const mappedMessages = chronological.map((m) => ({
+        role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
+        text: m._content.replace(/<[^>]*>/g, '').trim()
+      }));
+
+      const messagesForApi = capMessagesForTransport(mappedMessages);
+
+      const crmContext: Record<string, string | number> = {};
+      const displayName = (selectedItem.client?.name ?? '').trim() || (selectedItem.displayTitle ?? '').trim();
+      if (displayName) crmContext.clientName = displayName;
+      if (selectedItem.city?.trim()) crmContext.city = selectedItem.city.trim();
+      if (selectedItem.dealTitle?.trim()) crmContext.dealTitle = selectedItem.dealTitle.trim();
+      if (selectedItem.dealStageName?.trim()) crmContext.dealStageName = selectedItem.dealStageName.trim();
+      if (selectedItem.dealResponsibleName?.trim()) {
+        crmContext.dealResponsibleName = selectedItem.dealResponsibleName.trim();
+      }
+      if (selectedItem.kaspiOrderNumber?.trim()) {
+        crmContext.kaspiOrderNumber = selectedItem.kaspiOrderNumber.trim();
+      }
+      if (selectedItem.kaspiOrderStatus?.trim()) {
+        crmContext.kaspiOrderStatus = selectedItem.kaspiOrderStatus.trim();
+      }
+      if (typeof selectedItem.kaspiOrderAmount === 'number' && !Number.isNaN(selectedItem.kaspiOrderAmount)) {
+        crmContext.kaspiOrderAmount = selectedItem.kaspiOrderAmount;
       }
 
       const payload: {
@@ -1136,13 +1162,15 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
         messages: { role: 'client' | 'manager'; text: string }[];
         knowledgeBase?: { title?: string; content?: string; category?: string | null }[];
         quickReplies?: Array<{ title: string; text: string; keywords: string; category?: string }>;
+        crmContext?: Record<string, string | number>;
       } = {
         mode,
-        messages: recent.map((m) => ({
-          role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
-          text: m._content.replace(/<[^>]*>/g, '').trim()
-        }))
+        messages: messagesForApi
       };
+
+      if (Object.keys(crmContext).length > 0) {
+        payload.crmContext = crmContext;
+      }
 
       if (knowledgeBase && knowledgeBase.length > 0) {
         payload.knowledgeBase = knowledgeBase.map((k) => ({

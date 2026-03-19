@@ -1,5 +1,11 @@
 import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
 import { getAIApiKeyFromRequest } from './lib/aiAuth';
+import {
+  capIncomingMessagesForReply,
+  compactMessagesForAiReply,
+  MAX_INCOMING_MESSAGES,
+  type AiReplyMessage
+} from './lib/buildAiReplyContext';
 
 const LOG_PREFIX = '[ai-generate-reply]';
 
@@ -34,6 +40,18 @@ interface QuickReplyInput {
   category?: string;
 }
 
+/** Необязательный контекст из CRM для генерации ответа */
+interface CrmContextInput {
+  clientName?: string;
+  city?: string;
+  dealTitle?: string;
+  dealStageName?: string;
+  dealResponsibleName?: string;
+  kaspiOrderNumber?: string;
+  kaspiOrderStatus?: string;
+  kaspiOrderAmount?: number;
+}
+
 interface GenerateReplyBody {
   messages?: AiMessage[];
   mode?: Mode;
@@ -43,6 +61,7 @@ interface GenerateReplyBody {
     category?: string | null;
   }>;
   quickReplies?: QuickReplyInput[];
+  crmContext?: CrmContextInput;
 }
 
 /** Нормализация для сравнения: нижний регистр, лишние пробелы убраны. */
@@ -156,9 +175,22 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     (q) => q && typeof (q.title ?? q.text ?? '') === 'string' && ((q.text ?? '').trim().length > 0 || (q.title ?? '').trim().length > 0)
   );
 
-  const messages = rawMessages
-    .filter((m) => m && typeof m.text === 'string' && m.text.trim().length > 0)
-    .slice(-15);
+  const cleaned: AiReplyMessage[] = rawMessages
+    .filter(
+      (m) =>
+        m &&
+        typeof m.text === 'string' &&
+        m.text.trim().length > 0 &&
+        (m.role === 'client' || m.role === 'manager')
+    )
+    .map((m) => ({
+      role: m.role === 'manager' ? ('manager' as const) : ('client' as const),
+      text: m.text.trim()
+    }));
+
+  const capped = capIncomingMessagesForReply(cleaned, MAX_INCOMING_MESSAGES);
+  const compacted = compactMessagesForAiReply(capped);
+  const messages = compacted.messages;
 
   if (messages.length === 0) {
     return withCors({
@@ -206,6 +238,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     '- Цепочка: город/участок → площадь → этажность → тип крыши → сроки. Потом: "Отлично, спасибо 🙌 Можем сделать бесплатный расчёт."\n\n' +
     'ПЕРВЫЙ ОТВЕТ (действительно первое сообщение в диалоге): поздороваться, одно предложение о SIP-домах и бесплатном расчёте, один вопрос (город/участок).\n\n' +
     'ЗАПРЕЩЕНО: придумывать информацию, писать длинные тексты, задавать 5–6 вопросов сразу, давить на клиента, повторять приветствия в уже идущем диалоге.\n\n' +
+    'КОНТЕКСТ ПЕРЕПИСКИ: в промпте может быть начало диалога и последние сообщения; если указано что часть середины пропущена — всё равно опирайся на то, что есть, и на блок CRM. Не повторяй вопросы, если в переписке уже есть ответы клиента. Если обсуждали расчёт/КП/встречу — не игнорируй это.\n\n' +
     'Ответь одним сообщением. Без кавычек и пояснений.';
 
   const modeInstructions =
@@ -246,10 +279,38 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         )
       : '';
 
+  let contextNotes = '';
+  if (compacted.omittedMiddleCount > 0) {
+    contextNotes +=
+      `В длинной переписке не показана середина: пропущено ${compacted.omittedMiddleCount} сообщений; в контексте — начало диалога и последние реплики.\n`;
+  }
+  if (compacted.trimmedForBudget) {
+    contextNotes +=
+      'Отдельные сообщения могли быть укорочены по объёму в рамках лимита контекста.\n';
+  }
+
+  const crmRaw = body.crmContext;
+  let crmSection = '';
+  if (crmRaw && typeof crmRaw === 'object') {
+    const crmObj: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(crmRaw)) {
+      if (v == null) continue;
+      const s = typeof v === 'string' ? v.trim() : v;
+      if (s === '' || s === undefined) continue;
+      crmObj[k] = v;
+    }
+    if (Object.keys(crmObj).length > 0) {
+      crmSection =
+        '\n\nДАННЫЕ ИЗ CRM (факты; не придумывай того, чего здесь нет):\n' +
+        JSON.stringify(crmObj, null, 2);
+    }
+  }
+
   const userPrompt =
+    (contextNotes ? contextNotes + '\n' : '') +
     'Последнее сообщение клиента (на него нужно ответить): "' +
     clientMessageForContext +
-    '"\n\nВся переписка (client = клиент, manager = менеджер):\n' +
+    '"\n\nПереписка (client = клиент, manager = менеджер):\n' +
     JSON.stringify(
       messages.map((m) => ({ role: m.role, text: m.text })),
       null,
@@ -257,6 +318,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     ) +
     quickRepliesSection +
     kbSection +
+    crmSection +
     '\n\nРежим: ' +
     mode +
     '. ' +
