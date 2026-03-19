@@ -128,8 +128,14 @@ function applyFilters(
         run.createdDealId,
         run.taskId,
         run.appliedClientId,
+        run.clientIdSnapshot,
+        run.phoneSnapshot,
         botName,
+        run.answerSnapshot,
         run.generatedReply,
+        run.summarySnapshot,
+        run.extractedSummary,
+        run.extractedSnapshotJson,
         run.reason
       ]
         .filter(Boolean)

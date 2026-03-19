@@ -33,6 +33,7 @@ import {
   addWhatsAppAiBotRunLog,
   type WhatsAppAiBotRunLogInput
 } from '../lib/firebase/whatsappAiBotRuns';
+import { consumeChatDraft } from '../lib/ai-control/openChatDraftBridge';
 import type { CrmAiBot } from '../types/crmAiBot';
 import {
   defaultWhatsAppAiRuntime,
@@ -296,6 +297,7 @@ function saveWidth(key: string, value: number) {
 const WhatsAppChat: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const chatIdFromUrl = searchParams.get('chatId');
+  const draftFromUrl = searchParams.get('draftText');
 
   const isMobile = useIsMobile(MOBILE_BREAKPOINT);
   const isWideLayout = !useIsMobile(WIDE_LAYOUT_BREAKPOINT);
@@ -1184,9 +1186,20 @@ const WhatsAppChat: React.FC = () => {
     const found = conversations.some((c) => c.id === chatIdFromUrl);
     if (found) {
       setSelectedId(chatIdFromUrl);
+      const bridgedDraft = consumeChatDraft(chatIdFromUrl);
+      const nextDraft = bridgedDraft ?? draftFromUrl;
+      if (nextDraft && nextDraft.trim()) {
+        setInputText(nextDraft);
+        toast.success('Черновик подставлен в поле ответа');
+      }
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    if (conversations.length > 0) {
+      toast.error('Чат не найден или уже удалён');
       setSearchParams({}, { replace: true });
     }
-  }, [chatIdFromUrl, conversations, setSearchParams]);
+  }, [chatIdFromUrl, conversations, draftFromUrl, setSearchParams]);
 
   useEffect(() => {
     if (!companyId) {
@@ -1864,7 +1877,11 @@ const WhatsAppChat: React.FC = () => {
         status: 'skipped',
         reason,
         generatedReply: null,
-        extractedSummary: null
+        extractedSummary: null,
+        channel: selectedItem?.channel ?? 'whatsapp',
+        runtimeMode: mode,
+        clientIdSnapshot: selectedItem?.clientId ?? null,
+        phoneSnapshot: selectedItem?.phone ?? null
       });
     };
 
@@ -2052,6 +2069,40 @@ const WhatsAppChat: React.FC = () => {
               }
             : {};
 
+        const toSnapshotJson = (v: unknown, max = 12000): string | null => {
+          if (v == null) return null;
+          try {
+            return JSON.stringify(v).slice(0, max);
+          } catch {
+            return null;
+          }
+        };
+        const runLogSnapshots = {
+          channel: selectedItem?.channel ?? 'whatsapp',
+          runtimeMode: mode,
+          answerSnapshot: reply,
+          summarySnapshot: extractedSummary,
+          extractedSnapshotJson: extractionJson,
+          extractionApplySnapshotJson: toSnapshotJson(data.extractionApply, 12000),
+          dealRecommendationSnapshotJson: toSnapshotJson(data.dealRecommendation, 12000),
+          taskRecommendationSnapshotJson: toSnapshotJson(data.taskRecommendation, 12000),
+          resultFlagsSnapshotJson: toSnapshotJson(
+            {
+              mode,
+              hadReply: !!reply,
+              extractionApplyStatus: data.extractionApply?.extractionApplyStatus ?? null,
+              dealRecommendationStatus: data.dealRecommendation?.status ?? null,
+              taskRecommendationStatus: data.taskRecommendation?.status ?? null
+            },
+            4000
+          ),
+          clientIdSnapshot:
+            typeof data.extractionApply?.appliedClientId === 'string' && data.extractionApply.appliedClientId.trim()
+              ? data.extractionApply.appliedClientId.trim()
+              : selectedItem?.clientId ?? null,
+          phoneSnapshot: selectedItem?.phone ?? null
+        };
+
         if (mode === 'draft') {
           await updateWhatsAppConversationAiRuntime(
             selectedId,
@@ -2081,6 +2132,7 @@ const WhatsAppChat: React.FC = () => {
             reason: null,
             generatedReply: reply,
             extractedSummary,
+            ...runLogSnapshots,
             ...runLogApply,
             ...runLogDeal,
             ...runLogTask
@@ -2121,6 +2173,7 @@ const WhatsAppChat: React.FC = () => {
             reason: 'send_failed',
             generatedReply: reply,
             extractedSummary,
+            ...runLogSnapshots,
             ...runLogApply,
             ...runLogDeal,
             ...runLogTask
@@ -2156,6 +2209,7 @@ const WhatsAppChat: React.FC = () => {
           reason: null,
           generatedReply: reply,
           extractedSummary,
+          ...runLogSnapshots,
           ...runLogApply,
           ...runLogDeal,
           ...runLogTask
@@ -2184,7 +2238,11 @@ const WhatsAppChat: React.FC = () => {
           status: 'error',
           reason: msg,
           generatedReply: null,
-          extractedSummary: null
+          extractedSummary: null,
+          channel: selectedItem?.channel ?? 'whatsapp',
+          runtimeMode: mode,
+          clientIdSnapshot: selectedItem?.clientId ?? null,
+          phoneSnapshot: selectedItem?.phone ?? null
         });
         toast.error(`AI (автоворонка): ${msg}`);
         crmAiRuntimeLastProcessedRef.current = messageIdToProcess;

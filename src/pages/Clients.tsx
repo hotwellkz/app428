@@ -16,7 +16,7 @@ import { CategoryCardType } from '../types';
 import { deleteClientWithHistory, deleteClientIconOnly } from '../utils/clientDeletion';
 import { format, isWithinInterval } from 'date-fns';
 import clsx from 'clsx';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMobileSidebar } from '../contexts/MobileSidebarContext';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { HeaderSearchBar } from '../components/HeaderSearchBar';
@@ -56,6 +56,7 @@ const clearFiltersCache = () => {
 
 export const Clients: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const companyId = useCompanyId();
   const { toggle: toggleMobileSidebar } = useMobileSidebar();
   // Получаем сохраненные фильтры при инициализации
@@ -80,6 +81,7 @@ export const Clients: React.FC = () => {
   const [showDateRangeFilter, setShowDateRangeFilter] = useState(cachedFilters?.showDateRangeFilter ?? false);
   const [startDate, setStartDate] = useState<string>(cachedFilters?.startDate ?? '');
   const [endDate, setEndDate] = useState<string>(cachedFilters?.endDate ?? '');
+  const deepLinkClientId = searchParams.get('clientId');
 
   // Сохраняем фильтры при их изменении
   useEffect(() => {
@@ -167,6 +169,19 @@ export const Clients: React.FC = () => {
 
     return () => unsubscribe();
   }, [status, companyId]);
+
+  useEffect(() => {
+    if (!deepLinkClientId || clients.length === 0) return;
+    const found = clients.find((c) => c.id === deepLinkClientId);
+    if (found) {
+      setSelectedClient(found);
+      setShowClientPage(true);
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    showErrorNotification('Карточка клиента не найдена');
+    setSearchParams({}, { replace: true });
+  }, [deepLinkClientId, clients, setSearchParams]);
 
   const handleContextMenu = (e: React.MouseEvent, client: Client) => {
     e.preventDefault();

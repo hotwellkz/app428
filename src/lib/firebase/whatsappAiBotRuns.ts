@@ -82,6 +82,17 @@ export interface WhatsAppAiBotRunLogInput {
   runtimeMode?: string | null;
   /** Ошибка extraction с сервера */
   extractionError?: string | null;
+  /** Snapshot'ы конкретного run (чтобы не зависеть от текущего aiRuntime в чате). */
+  answerSnapshot?: string | null;
+  summarySnapshot?: string | null;
+  extractedSnapshotJson?: string | null;
+  extractionApplySnapshotJson?: string | null;
+  dealRecommendationSnapshotJson?: string | null;
+  taskRecommendationSnapshotJson?: string | null;
+  resultFlagsSnapshotJson?: string | null;
+  /** Служебные id/снимки для deep-link и поиска. */
+  clientIdSnapshot?: string | null;
+  phoneSnapshot?: string | null;
 }
 
 /** Документ журнала (чтение в AI-контроле) */
@@ -172,6 +183,15 @@ export function docToWhatsappAiBotRun(id: string, data: Record<string, unknown>)
     'channel',
     'runtimeMode',
     'extractionError',
+    'answerSnapshot',
+    'summarySnapshot',
+    'extractedSnapshotJson',
+    'extractionApplySnapshotJson',
+    'dealRecommendationSnapshotJson',
+    'taskRecommendationSnapshotJson',
+    'resultFlagsSnapshotJson',
+    'clientIdSnapshot',
+    'phoneSnapshot',
     'createdAt'
   ]);
   const extras: Record<string, unknown> = {};
@@ -251,6 +271,15 @@ export function docToWhatsappAiBotRun(id: string, data: Record<string, unknown>)
     channel: str(data.channel),
     runtimeMode: str(data.runtimeMode),
     extractionError: str(data.extractionError),
+    answerSnapshot: str(data.answerSnapshot),
+    summarySnapshot: str(data.summarySnapshot),
+    extractedSnapshotJson: str(data.extractedSnapshotJson),
+    extractionApplySnapshotJson: str(data.extractionApplySnapshotJson),
+    dealRecommendationSnapshotJson: str(data.dealRecommendationSnapshotJson),
+    taskRecommendationSnapshotJson: str(data.taskRecommendationSnapshotJson),
+    resultFlagsSnapshotJson: str(data.resultFlagsSnapshotJson),
+    clientIdSnapshot: str(data.clientIdSnapshot),
+    phoneSnapshot: str(data.phoneSnapshot),
     createdAt: (data.createdAt as Timestamp | Date | null) ?? null,
     extras: Object.keys(extras).length ? extras : undefined
   };

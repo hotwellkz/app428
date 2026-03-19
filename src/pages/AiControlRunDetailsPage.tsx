@@ -10,7 +10,9 @@ import {
   Bot,
   Ban,
   PauseCircle,
-  PlayCircle
+  PlayCircle,
+  Link2,
+  Clock3
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageMetadata } from '../components/PageMetadata';
@@ -29,6 +31,7 @@ import { parseCrmAiBotExtractionResult } from '../types/crmAiBotExtraction';
 import type { CrmAiBot } from '../types/crmAiBot';
 import type { WhatsAppAiRuntimeMode } from '../types/whatsappAiRuntime';
 import type { CrmAiBotExtractionResult } from '../types/crmAiBotExtraction';
+import { stashChatDraft } from '../lib/ai-control/openChatDraftBridge';
 
 const CRM_CLIENTS = 'clients';
 const CRM_DEALS = 'deals';
@@ -39,6 +42,15 @@ async function copyText(label: string, text: string) {
     toast.success(`${label} скопировано`);
   } catch {
     toast.error('Не удалось скопировать');
+  }
+}
+
+function parseSnapshotJson<T>(raw: string | null | undefined): T | null {
+  if (!raw || typeof raw !== 'string') return null;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return null;
   }
 }
 
@@ -81,19 +93,24 @@ export const AiControlRunDetailsPage: React.FC = () => {
       const cd = convSnap.data() as Record<string, unknown>;
       if ((cd.companyId as string) === companyId) {
         setConv(cd);
-        const cid = cd.clientId as string | undefined;
-        if (cid) {
-          const cl = await getDoc(doc(db, CRM_CLIENTS, cid));
+        const runClientId =
+          (typeof r.clientIdSnapshot === 'string' && r.clientIdSnapshot.trim()) ||
+          (typeof r.appliedClientId === 'string' && r.appliedClientId.trim()) ||
+          '';
+        let clientDoc: Record<string, unknown> | null = null;
+        if (runClientId) {
+          const cl = await getDoc(doc(db, CRM_CLIENTS, runClientId));
           if (cl.exists()) {
             const d = cl.data() as Record<string, unknown>;
-            if ((d.companyId as string) === companyId) {
-              const fn = String(d.firstName ?? '').trim();
-              const ln = String(d.lastName ?? '').trim();
-              const nm = String(d.name ?? '').trim();
-              const display = nm || [fn, ln].filter(Boolean).join(' ').trim() || '—';
-              setClient({ name: display, phone: String(d.phone ?? '').trim() || undefined });
-            }
+            if ((d.companyId as string) === companyId) clientDoc = d;
           }
+        }
+        if (clientDoc) {
+          const fn = String(clientDoc.firstName ?? '').trim();
+          const ln = String(clientDoc.lastName ?? '').trim();
+          const nm = String(clientDoc.name ?? '').trim();
+          const display = nm || [fn, ln].filter(Boolean).join(' ').trim() || '—';
+          setClient({ name: display, phone: String(clientDoc.phone ?? '').trim() || undefined });
         }
       }
     }
@@ -126,15 +143,23 @@ export const AiControlRunDetailsPage: React.FC = () => {
   }, [load]);
 
   const aiRt = conv ? parseWhatsAppAiRuntime(conv as Record<string, unknown>) : null;
+  const extractionRawFromRun = run?.extractedSnapshotJson ?? null;
+  const extractionRawFallback = aiRt?.lastExtractionJson ?? null;
+  const extractionRawActive = extractionRawFromRun || extractionRawFallback;
   const extraction: CrmAiBotExtractionResult | null = useMemo(() => {
-    const raw = aiRt?.lastExtractionJson;
+    const raw = extractionRawActive;
     if (!raw || typeof raw !== 'string') return null;
     try {
       return parseCrmAiBotExtractionResult(JSON.parse(raw));
     } catch {
       return null;
     }
-  }, [aiRt?.lastExtractionJson]);
+  }, [extractionRawActive]);
+  const answerText = run?.answerSnapshot || run?.generatedReply || '';
+  const summaryText = run?.summarySnapshot || run?.extractedSummary || '';
+  const applySnapshot = parseSnapshotJson<Record<string, unknown>>(run?.extractionApplySnapshotJson);
+  const dealSnapshot = parseSnapshotJson<Record<string, unknown>>(run?.dealRecommendationSnapshotJson);
+  const taskSnapshot = parseSnapshotJson<Record<string, unknown>>(run?.taskRecommendationSnapshotJson);
 
   const pauseBot = async () => {
     if (!bot) return;
@@ -215,6 +240,17 @@ export const AiControlRunDetailsPage: React.FC = () => {
     }
   };
 
+  const openChatWithDraft = () => {
+    if (!run) return;
+    const draft = answerText.trim();
+    if (!draft) {
+      toast.error('В этом run нет текста ответа');
+      return;
+    }
+    stashChatDraft(run.conversationId, draft);
+    navigate(`/whatsapp?chatId=${encodeURIComponent(run.conversationId)}`);
+  };
+
   if (!can) {
     return (
       <div className="p-6">
@@ -245,6 +281,7 @@ export const AiControlRunDetailsPage: React.FC = () => {
   const agg = computeAggregatedStatus(run);
   const flags = computeRunResultFlags(run);
   const dealOpenId = run.createdDealId || run.dealId || dealPreview?.id;
+  const clientOpenId = run.clientIdSnapshot || run.appliedClientId || null;
 
   const extRows: { label: string; value: string }[] = extraction
     ? [
@@ -338,20 +375,20 @@ export const AiControlRunDetailsPage: React.FC = () => {
 
         <div className="mt-4 flex flex-wrap gap-2">
           <Link
-            to="/whatsapp"
+            to={`/whatsapp?chatId=${encodeURIComponent(run.conversationId)}`}
             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700"
           >
             <MessageSquare className="w-4 h-4" />
-            Чаты
+            Открыть чат
           </Link>
-          {conv?.clientId ? (
+          {clientOpenId ? (
             <Link
-              to="/clients"
+              to={`/clients?clientId=${encodeURIComponent(clientOpenId)}`}
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm hover:bg-gray-50"
-              title={`clientId: ${String(conv.clientId)}`}
+              title={`clientId: ${clientOpenId}`}
             >
               <User className="w-4 h-4" />
-              Клиенты
+              Открыть клиента
             </Link>
           ) : null}
           {dealOpenId ? (
@@ -375,26 +412,34 @@ export const AiControlRunDetailsPage: React.FC = () => {
           <button
             type="button"
             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm"
-            onClick={() => copyText('Ответ', run.generatedReply ?? '')}
+            onClick={() => copyText('Ответ', answerText)}
           >
             <Copy className="w-4 h-4" />
             Копировать ответ
           </button>
-          {run.extractedSummary ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm"
+            onClick={openChatWithDraft}
+          >
+            <MessageSquare className="w-4 h-4" />
+            Подставить draft в чат
+          </button>
+          {summaryText ? (
             <button
               type="button"
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm"
-              onClick={() => copyText('Сводка', run.extractedSummary ?? '')}
+              onClick={() => copyText('Сводка', summaryText)}
             >
               <Copy className="w-4 h-4" />
               Копировать summary
             </button>
           ) : null}
-          {aiRt?.lastExtractionJson ? (
+          {extractionRawActive ? (
             <button
               type="button"
               className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm"
-              onClick={() => copyText('JSON', aiRt.lastExtractionJson!)}
+              onClick={() => copyText('JSON', extractionRawActive)}
             >
               <Copy className="w-4 h-4" />
               JSON extraction
@@ -451,6 +496,42 @@ export const AiControlRunDetailsPage: React.FC = () => {
       </div>
 
       <section className="rounded-xl border bg-white p-4 mb-4">
+        <h2 className="font-semibold text-gray-900 mb-2 inline-flex items-center gap-2">
+          <Link2 className="w-4 h-4" />
+          Связанные сущности
+        </h2>
+        <div className="space-y-2 text-sm">
+          {[
+            { label: 'conversationId', value: run.conversationId, open: `/whatsapp?chatId=${encodeURIComponent(run.conversationId)}` },
+            { label: 'clientId', value: clientOpenId, open: clientOpenId ? `/clients?clientId=${encodeURIComponent(clientOpenId)}` : null },
+            { label: 'dealId', value: dealOpenId, open: dealOpenId ? `/deals?deal=${encodeURIComponent(dealOpenId)}` : null },
+            { label: 'botId', value: run.botId, open: `/autovoronki/${run.botId}` },
+            { label: 'createdDealId', value: run.createdDealId, open: run.createdDealId ? `/deals?deal=${encodeURIComponent(run.createdDealId)}` : null },
+            { label: 'taskId', value: run.taskId, open: null }
+          ].map((row) => (
+            <div key={row.label} className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-gray-500 w-28">{row.label}</span>
+              <span className="font-mono text-xs break-all">{row.value || 'Не найдено'}</span>
+              {row.value ? (
+                <button
+                  type="button"
+                  className="text-xs text-indigo-600 hover:underline"
+                  onClick={() => copyText(row.label, String(row.value))}
+                >
+                  копировать
+                </button>
+              ) : null}
+              {row.open ? (
+                <Link className="text-xs text-indigo-600 hover:underline" to={row.open}>
+                  открыть
+                </Link>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="rounded-xl border bg-white p-4 mb-4">
         <h2 className="font-semibold text-gray-900 mb-2">Входящее сообщение (триггер)</h2>
         {triggerMsg ? (
           <div className="text-sm space-y-1">
@@ -478,14 +559,14 @@ export const AiControlRunDetailsPage: React.FC = () => {
           <p className="text-xs text-emerald-800 bg-emerald-50 px-2 py-1 rounded mb-2">Авто — ответ ушёл в чат (если отправка не упала)</p>
         )}
         <pre className="text-sm whitespace-pre-wrap break-words bg-gray-50 p-3 rounded max-h-64 overflow-auto">
-          {run.generatedReply || '—'}
+          {answerText || '—'}
         </pre>
       </section>
 
       <section className="rounded-xl border bg-white p-4 mb-4">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
           <h2 className="font-semibold text-gray-900">Извлечённые данные</h2>
-          {aiRt?.lastExtractionJson ? (
+          {extractionRawActive ? (
             <button
               type="button"
               className="text-xs text-indigo-600 hover:underline"
@@ -505,16 +586,19 @@ export const AiControlRunDetailsPage: React.FC = () => {
             ))}
           </dl>
         ) : (
-          <p className="text-sm text-gray-500">Нет lastExtractionJson в чате (актуальное состояние после run могло измениться)</p>
+          <p className="text-sm text-gray-500">Нет extraction snapshot для этого run</p>
         )}
-        {showRawExtraction && aiRt?.lastExtractionJson ? (
+        {showRawExtraction && extractionRawActive ? (
           <pre className="mt-3 text-xs bg-gray-900 text-gray-100 p-3 rounded overflow-auto max-h-64">
-            {aiRt.lastExtractionJson}
+            {extractionRawActive}
           </pre>
         ) : null}
-        {run.extractedSummary ? (
+        <p className="text-[11px] text-gray-500 mt-2">
+          Источник extraction: {extractionRawFromRun ? 'snapshot run' : extractionRawFallback ? 'fallback aiRuntime' : '—'}
+        </p>
+        {summaryText ? (
           <p className="text-xs text-gray-600 mt-2">
-            <span className="font-medium">Краткая сводка (лог):</span> {run.extractedSummary}
+            <span className="font-medium">Краткая сводка:</span> {summaryText}
           </p>
         ) : null}
         {run.extractionError ? (
@@ -524,10 +608,13 @@ export const AiControlRunDetailsPage: React.FC = () => {
 
       <section className="rounded-xl border bg-white p-4 mb-4">
         <h2 className="font-semibold text-gray-900 mb-2">Запись в CRM (apply)</h2>
+        {applySnapshot ? (
+          <p className="text-[11px] text-gray-500 mb-2">Источник: snapshot run</p>
+        ) : null}
         <ul className="text-sm space-y-1">
-          <li>Статус: {run.extractionApplyStatus ?? '—'}</li>
-          <li>Причина: {run.extractionApplyReason ?? '—'}</li>
-          <li>Полей: {run.extractionAppliedFieldCount ?? 0}</li>
+          <li>Статус: {String(applySnapshot?.extractionApplyStatus ?? run.extractionApplyStatus ?? '—')}</li>
+          <li>Причина: {String(applySnapshot?.extractionApplyReason ?? run.extractionApplyReason ?? '—')}</li>
+          <li>Полей: {Number(applySnapshot?.extractionAppliedFieldCount ?? run.extractionAppliedFieldCount ?? 0)}</li>
           <li>
             Ключи полей:{' '}
             {(run.extractionAppliedFields ?? []).length
@@ -541,9 +628,10 @@ export const AiControlRunDetailsPage: React.FC = () => {
 
       <section className="rounded-xl border bg-white p-4 mb-4">
         <h2 className="font-semibold text-gray-900 mb-2">Сделка</h2>
-        <p className="text-sm">Рекомендация: {run.dealRecommendationStatus ?? '—'}</p>
-        <p className="text-sm text-gray-600 text-xs">Причина рекомендации: {run.dealRecommendationReason ?? '—'}</p>
-        <p className="text-sm">Черновик: {run.dealDraftTitle ?? '—'}</p>
+        {dealSnapshot ? <p className="text-[11px] text-gray-500">Источник: snapshot run</p> : null}
+        <p className="text-sm">Рекомендация: {String(dealSnapshot?.status ?? run.dealRecommendationStatus ?? '—')}</p>
+        <p className="text-sm text-gray-600 text-xs">Причина рекомендации: {String(dealSnapshot?.reason ?? run.dealRecommendationReason ?? '—')}</p>
+        <p className="text-sm">Черновик: {String(dealSnapshot?.draftTitle ?? run.dealDraftTitle ?? '—')}</p>
         <p className="text-sm">Создание (лог): {run.dealCreateStatus ?? '—'}</p>
         <p className="text-sm text-gray-600 text-xs">{run.dealCreateReason ? `Детали: ${run.dealCreateReason}` : null}</p>
         {run.createdDealTitle ? (
@@ -572,7 +660,8 @@ export const AiControlRunDetailsPage: React.FC = () => {
 
       <section className="rounded-xl border bg-white p-4 mb-4">
         <h2 className="font-semibold text-gray-900 mb-2">Следующий шаг / задача</h2>
-        <p className="text-sm">{run.taskRecommendationTitle ?? '—'}</p>
+        {taskSnapshot ? <p className="text-[11px] text-gray-500">Источник: snapshot run</p> : null}
+        <p className="text-sm">{String(taskSnapshot?.recommendedTaskTitle ?? run.taskRecommendationTitle ?? '—')}</p>
         <p className="text-xs text-gray-600">Тип: {run.taskRecommendationType ?? '—'} · приоритет: {run.taskRecommendationPriority ?? '—'}</p>
         <p className="text-xs">Создание: {run.taskCreateStatus ?? '—'} {run.taskCreateReason ? `(${run.taskCreateReason})` : ''}</p>
         {run.finalNextActionAt ? (
@@ -591,6 +680,31 @@ export const AiControlRunDetailsPage: React.FC = () => {
             Открыть сделку
           </Link>
         ) : null}
+      </section>
+
+      <section className="rounded-xl border bg-white p-4 mb-4">
+        <h2 className="font-semibold text-gray-900 mb-3 inline-flex items-center gap-2">
+          <Clock3 className="w-4 h-4" />
+          Хронология run
+        </h2>
+        <div className="space-y-2">
+          {[
+            { key: 'incoming', ok: !!run.triggerMessageId, text: `Входящее: ${run.triggerMessageId || '—'}` },
+            { key: 'answered', ok: !!answerText, text: `Ответ AI: ${answerText ? 'сгенерирован' : 'нет'}` },
+            { key: 'extracted', ok: !!extractionRawActive, text: `Extraction: ${extractionRawActive ? 'готов' : 'нет'}` },
+            { key: 'applied', ok: run.extractionApplyStatus === 'applied', text: `CRM apply: ${run.extractionApplyStatus ?? '—'}` },
+            { key: 'deal_created', ok: run.dealCreateStatus === 'created' || !!run.createdDealId, text: `Deal: ${run.dealCreateStatus ?? run.dealRecommendationStatus ?? '—'}` },
+            { key: 'task_created', ok: run.taskCreateStatus === 'created', text: `Task: ${run.taskCreateStatus ?? '—'}` },
+            { key: 'duplicate', ok: run.dealCreateStatus === 'duplicate' || run.taskCreateStatus === 'duplicate', text: 'Дубликаты обнаружены' },
+            { key: 'error', ok: run.status === 'error', text: `Ошибка: ${run.status === 'error' ? run.reason || 'runtime error' : '—'}` },
+            { key: 'skipped', ok: run.status === 'skipped', text: `Skipped: ${run.status === 'skipped' ? run.reason || '—' : '—'}` }
+          ].map((item) => (
+            <div key={item.key} className="flex items-start gap-2 text-sm">
+              <span className={`mt-0.5 inline-block w-2.5 h-2.5 rounded-full ${item.ok ? 'bg-emerald-500' : 'bg-gray-300'}`} />
+              <span>{item.text}</span>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="rounded-xl border border-red-100 bg-red-50/40 p-4">
