@@ -17,6 +17,16 @@ export interface WhatsAppAiBotRunLogInput {
   reason?: string | null;
   generatedReply?: string | null;
   extractedSummary?: string | null;
+  /** Auto-apply extraction → CRM */
+  extractionApplied?: boolean;
+  extractionApplyStatus?: 'applied' | 'skipped' | 'error';
+  extractionApplyReason?: string | null;
+  extractionAppliedFields?: string[] | null;
+  extractionAppliedLabels?: string[] | null;
+  extractionAppliedFieldCount?: number | null;
+  appliedClientId?: string | null;
+  extractionAppliedAt?: string | null;
+  dealRecommendationForLog?: string | null;
 }
 
 /** Аудит запусков AI в WhatsApp (отладка и поддержка). */

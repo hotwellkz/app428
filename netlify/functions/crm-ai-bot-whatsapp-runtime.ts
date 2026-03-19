@@ -10,6 +10,10 @@ import { parseCrmAiBotConfig, type CrmAiBotConfig } from '../../src/types/crmAiB
 import { buildCrmAiBotKnowledgeContext, type CrmAiBotKnowledgeMeta } from './lib/crmAiBotKnowledgeLoad';
 import { runCrmAiBotExtraction } from './lib/crmAiBotExtractionOpenAi';
 import type { CrmAiBotExtractionResult } from '../../src/types/crmAiBotExtraction';
+import {
+  tryApplyWhatsappRuntimeExtraction,
+  type WhatsappRuntimeExtractionApplyPayload
+} from './lib/applyWhatsappRuntimeCrmExtraction';
 
 const LOG_PREFIX = '[crm-ai-bot-whatsapp-runtime]';
 const CRM_AI_BOTS = 'crmAiBots';
@@ -286,6 +290,55 @@ ${text}
       log('Extraction failed', ex.error);
     }
 
+    let extractionApply: WhatsappRuntimeExtractionApplyPayload;
+    if (extracted) {
+      try {
+        const convD = convSnap.data() ?? {};
+        extractionApply = await tryApplyWhatsappRuntimeExtraction({
+          companyId: auth.companyId,
+          clientId: convD.clientId as string | undefined,
+          channel: convD.channel as string | undefined,
+          extraction: extracted,
+          crmActions: config.crmActions
+        });
+        log(
+          'CRM apply',
+          extractionApply.extractionApplyStatus,
+          extractionApply.extractionApplyReason ?? '',
+          'fields',
+          extractionApply.extractionAppliedFieldCount
+        );
+      } catch (applyErr) {
+        log('CRM apply unexpected error', applyErr);
+        extractionApply = {
+          extractionApplied: false,
+          extractionApplyStatus: 'error',
+          extractionApplyReason:
+            applyErr instanceof Error ? applyErr.message : 'Неизвестная ошибка apply',
+          appliedClientId: null,
+          extractionAppliedFields: [],
+          extractionAppliedLabels: [],
+          extractionAppliedFieldCount: 0,
+          appliedAt: null,
+          dealRecommendationForLog: null
+        };
+      }
+    } else {
+      extractionApply = {
+        extractionApplied: false,
+        extractionApplyStatus: 'skipped',
+        extractionApplyReason: extractionError
+          ? `Extraction не выполнена: ${extractionError}`
+          : 'Нет результата extraction',
+        appliedClientId: null,
+        extractionAppliedFields: [],
+        extractionAppliedLabels: [],
+        extractionAppliedFieldCount: 0,
+        appliedAt: null,
+        dealRecommendationForLog: null
+      };
+    }
+
     return withCors({
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
@@ -293,6 +346,7 @@ ${text}
         answer,
         extracted,
         extractionError,
+        extractionApply,
         knowledgeMeta,
         usage: {
           answer: data.usage ?? null,

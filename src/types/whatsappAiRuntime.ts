@@ -5,6 +5,9 @@ export type WhatsAppAiRuntimeMode = 'off' | 'draft' | 'auto';
 
 export type WhatsAppAiRuntimeLastStatus = 'idle' | 'success' | 'error' | 'skipped';
 
+/** Результат серверного apply extraction в карточку clients */
+export type WhatsAppExtractionApplyStatus = 'applied' | 'skipped' | 'error';
+
 /**
  * Состояние runtime AI в документе whatsappConversations (поле aiRuntime).
  * Старые документы без aiRuntime нормализуются через parseWhatsAppAiRuntime.
@@ -21,6 +24,17 @@ export interface WhatsAppAiRuntime {
   lastProcessedIncomingMessageId: string | null;
   /** JSON последнего extraction (отладка / будущий apply) */
   lastExtractionJson: string | null;
+  /** Последний auto-apply extraction → CRM */
+  lastExtractionApplyStatus: WhatsAppExtractionApplyStatus | null;
+  lastExtractionApplyReason: string | null;
+  /** Ключи полей Firestore */
+  lastExtractionAppliedFields: string[] | null;
+  /** Подписи для UI («Город», …) */
+  lastExtractionAppliedLabels: string[] | null;
+  lastExtractionAppliedFieldCount: number | null;
+  lastExtractionAppliedClientId: string | null;
+  /** ISO-время с сервера при apply */
+  lastExtractionAppliedAt: string | null;
 }
 
 export function defaultWhatsAppAiRuntime(): WhatsAppAiRuntime {
@@ -33,7 +47,14 @@ export function defaultWhatsAppAiRuntime(): WhatsAppAiRuntime {
     lastReason: null,
     lastGeneratedReply: null,
     lastProcessedIncomingMessageId: null,
-    lastExtractionJson: null
+    lastExtractionJson: null,
+    lastExtractionApplyStatus: null,
+    lastExtractionApplyReason: null,
+    lastExtractionAppliedFields: null,
+    lastExtractionAppliedLabels: null,
+    lastExtractionAppliedFieldCount: null,
+    lastExtractionAppliedClientId: null,
+    lastExtractionAppliedAt: null
   };
 }
 
@@ -63,6 +84,22 @@ export function parseWhatsAppAiRuntime(data: Record<string, unknown>): WhatsAppA
     lastStatus = null;
   }
 
+  let lastExtractionApplyStatus: WhatsAppExtractionApplyStatus | null = null;
+  if (o.lastExtractionApplyStatus === 'applied' || o.lastExtractionApplyStatus === 'skipped' || o.lastExtractionApplyStatus === 'error') {
+    lastExtractionApplyStatus = o.lastExtractionApplyStatus;
+  }
+
+  const strArr = (v: unknown): string[] | null => {
+    if (!Array.isArray(v)) return null;
+    const out = v.map((x) => String(x).trim()).filter(Boolean);
+    return out.length ? out : null;
+  };
+
+  const numOrNull = (v: unknown): number | null => {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    return null;
+  };
+
   return {
     enabled: o.enabled === true,
     botId: strOrNull(o.botId),
@@ -72,6 +109,13 @@ export function parseWhatsAppAiRuntime(data: Record<string, unknown>): WhatsAppA
     lastReason: strOrNull(o.lastReason),
     lastGeneratedReply: strOrNull(o.lastGeneratedReply),
     lastProcessedIncomingMessageId: strOrNull(o.lastProcessedIncomingMessageId),
-    lastExtractionJson: strOrNull(o.lastExtractionJson)
+    lastExtractionJson: strOrNull(o.lastExtractionJson),
+    lastExtractionApplyStatus,
+    lastExtractionApplyReason: strOrNull(o.lastExtractionApplyReason),
+    lastExtractionAppliedFields: strArr(o.lastExtractionAppliedFields),
+    lastExtractionAppliedLabels: strArr(o.lastExtractionAppliedLabels),
+    lastExtractionAppliedFieldCount: numOrNull(o.lastExtractionAppliedFieldCount),
+    lastExtractionAppliedClientId: strOrNull(o.lastExtractionAppliedClientId),
+    lastExtractionAppliedAt: strOrNull(o.lastExtractionAppliedAt)
   };
 }

@@ -1356,6 +1356,61 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                       </DefDesc>
                     </div>
                   </dl>
+                  <div className="mt-2 pt-2 border-t border-violet-200/60">
+                    <p className="text-[10px] font-semibold text-violet-800 uppercase mb-1">
+                      Запись в CRM (extraction)
+                    </p>
+                    <dl className="space-y-1 text-[11px] text-gray-600">
+                      <div className="flex justify-between gap-2">
+                        <DefTerm className="text-gray-500 shrink-0">Статус apply</DefTerm>
+                        <DefDesc
+                          className="text-right truncate max-w-[60%]"
+                          title={aiRuntime.lastExtractionApplyReason ?? undefined}
+                        >
+                          {aiRuntime.lastExtractionApplyStatus === 'applied' && (
+                            <span className="text-emerald-700 font-medium">применено</span>
+                          )}
+                          {aiRuntime.lastExtractionApplyStatus === 'skipped' && (
+                            <span className="text-amber-800">пропуск</span>
+                          )}
+                          {aiRuntime.lastExtractionApplyStatus === 'error' && (
+                            <span className="text-red-700">ошибка</span>
+                          )}
+                          {!aiRuntime.lastExtractionApplyStatus && '—'}
+                        </DefDesc>
+                      </div>
+                      {(aiRuntime.lastExtractionApplyReason ?? '').length > 0 && (
+                        <div className="flex justify-between gap-2">
+                          <DefTerm className="text-gray-500 shrink-0">Причина</DefTerm>
+                          <DefDesc className="text-right text-[10px] max-w-[70%] break-words">
+                            {aiRuntime.lastExtractionApplyReason}
+                          </DefDesc>
+                        </div>
+                      )}
+                      <div className="flex justify-between gap-2">
+                        <DefTerm className="text-gray-500 shrink-0">Полей</DefTerm>
+                        <DefDesc className="text-right">
+                          {aiRuntime.lastExtractionAppliedFieldCount != null
+                            ? String(aiRuntime.lastExtractionAppliedFieldCount)
+                            : '—'}
+                        </DefDesc>
+                      </div>
+                      {(aiRuntime.lastExtractionAppliedLabels?.length ?? 0) > 0 && (
+                        <div className="text-[10px] text-gray-700 break-words">
+                          <span className="text-gray-500">Обновлено: </span>
+                          {(aiRuntime.lastExtractionAppliedLabels ?? []).join(', ')}
+                        </div>
+                      )}
+                      <div className="flex justify-between gap-2">
+                        <DefTerm className="text-gray-500 shrink-0">Время apply</DefTerm>
+                        <DefDesc className="text-right text-[10px]">
+                          {aiRuntime.lastExtractionAppliedAt
+                            ? new Date(aiRuntime.lastExtractionAppliedAt).toLocaleString('ru-RU')
+                            : '—'}
+                        </DefDesc>
+                      </div>
+                    </dl>
+                  </div>
                   {aiRuntime.lastGeneratedReply && (
                     <div className="mt-2 rounded-lg border border-violet-100 bg-white/80 p-2">
                       <p className="text-[10px] font-semibold text-violet-800 uppercase mb-1">

@@ -467,6 +467,13 @@ export interface WhatsAppAiRuntimePatch {
   lastGeneratedReply?: string | null;
   lastProcessedIncomingMessageId?: string | null;
   lastExtractionJson?: string | null;
+  lastExtractionApplyStatus?: WhatsAppAiRuntime['lastExtractionApplyStatus'];
+  lastExtractionApplyReason?: string | null;
+  lastExtractionAppliedFields?: string[] | null;
+  lastExtractionAppliedLabels?: string[] | null;
+  lastExtractionAppliedFieldCount?: number | null;
+  lastExtractionAppliedClientId?: string | null;
+  lastExtractionAppliedAt?: string | null;
 }
 
 /** Частичное обновление вложенного объекта aiRuntime (точечные поля Firestore). */
@@ -487,6 +494,27 @@ export async function updateWhatsAppConversationAiRuntime(
     payload[`${AI_RT}.lastProcessedIncomingMessageId`] = patch.lastProcessedIncomingMessageId;
   }
   if (patch.lastExtractionJson !== undefined) payload[`${AI_RT}.lastExtractionJson`] = patch.lastExtractionJson;
+  if (patch.lastExtractionApplyStatus !== undefined) {
+    payload[`${AI_RT}.lastExtractionApplyStatus`] = patch.lastExtractionApplyStatus;
+  }
+  if (patch.lastExtractionApplyReason !== undefined) {
+    payload[`${AI_RT}.lastExtractionApplyReason`] = patch.lastExtractionApplyReason;
+  }
+  if (patch.lastExtractionAppliedFields !== undefined) {
+    payload[`${AI_RT}.lastExtractionAppliedFields`] = patch.lastExtractionAppliedFields;
+  }
+  if (patch.lastExtractionAppliedLabels !== undefined) {
+    payload[`${AI_RT}.lastExtractionAppliedLabels`] = patch.lastExtractionAppliedLabels;
+  }
+  if (patch.lastExtractionAppliedFieldCount !== undefined) {
+    payload[`${AI_RT}.lastExtractionAppliedFieldCount`] = patch.lastExtractionAppliedFieldCount;
+  }
+  if (patch.lastExtractionAppliedClientId !== undefined) {
+    payload[`${AI_RT}.lastExtractionAppliedClientId`] = patch.lastExtractionAppliedClientId;
+  }
+  if (patch.lastExtractionAppliedAt !== undefined) {
+    payload[`${AI_RT}.lastExtractionAppliedAt`] = patch.lastExtractionAppliedAt;
+  }
   if (Object.keys(payload).length === 0) return;
   await updateDoc(ref, payload);
 }

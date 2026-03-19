@@ -135,6 +135,31 @@ function showNewMessageBrowserNotification() {
 const SEND_API = '/.netlify/functions/send-whatsapp-message';
 const CRM_WHATSAPP_RUNTIME_API = `${API_CONFIG.BASE_URL}/crm-ai-bot-whatsapp-runtime`;
 
+/** Ответ Netlify: применение extraction в CRM */
+type RuntimeExtractionApplyApi = {
+  extractionApplied: boolean;
+  extractionApplyStatus: 'applied' | 'skipped' | 'error';
+  extractionApplyReason: string | null;
+  appliedClientId: string | null;
+  extractionAppliedFields: string[];
+  extractionAppliedLabels: string[];
+  extractionAppliedFieldCount: number;
+  appliedAt: string | null;
+  dealRecommendationForLog: string | null;
+};
+
+function patchAiRuntimeFromExtractionApply(apply: RuntimeExtractionApplyApi): WhatsAppAiRuntimePatch {
+  return {
+    lastExtractionApplyStatus: apply.extractionApplyStatus,
+    lastExtractionApplyReason: apply.extractionApplyReason,
+    lastExtractionAppliedFields: apply.extractionAppliedFields.length ? apply.extractionAppliedFields : null,
+    lastExtractionAppliedLabels: apply.extractionAppliedLabels.length ? apply.extractionAppliedLabels : null,
+    lastExtractionAppliedFieldCount: apply.extractionAppliedFieldCount,
+    lastExtractionAppliedClientId: apply.appliedClientId,
+    lastExtractionAppliedAt: apply.appliedAt
+  };
+}
+
 function mergeListItemAiRuntime(
   item: ConversationListItem,
   patch: WhatsAppAiRuntimePatch
@@ -151,7 +176,28 @@ function mergeListItemAiRuntime(
     ...(patch.lastProcessedIncomingMessageId !== undefined
       ? { lastProcessedIncomingMessageId: patch.lastProcessedIncomingMessageId }
       : {}),
-    ...(patch.lastExtractionJson !== undefined ? { lastExtractionJson: patch.lastExtractionJson } : {})
+    ...(patch.lastExtractionJson !== undefined ? { lastExtractionJson: patch.lastExtractionJson } : {}),
+    ...(patch.lastExtractionApplyStatus !== undefined
+      ? { lastExtractionApplyStatus: patch.lastExtractionApplyStatus }
+      : {}),
+    ...(patch.lastExtractionApplyReason !== undefined
+      ? { lastExtractionApplyReason: patch.lastExtractionApplyReason }
+      : {}),
+    ...(patch.lastExtractionAppliedFields !== undefined
+      ? { lastExtractionAppliedFields: patch.lastExtractionAppliedFields }
+      : {}),
+    ...(patch.lastExtractionAppliedLabels !== undefined
+      ? { lastExtractionAppliedLabels: patch.lastExtractionAppliedLabels }
+      : {}),
+    ...(patch.lastExtractionAppliedFieldCount !== undefined
+      ? { lastExtractionAppliedFieldCount: patch.lastExtractionAppliedFieldCount }
+      : {}),
+    ...(patch.lastExtractionAppliedClientId !== undefined
+      ? { lastExtractionAppliedClientId: patch.lastExtractionAppliedClientId }
+      : {}),
+    ...(patch.lastExtractionAppliedAt !== undefined
+      ? { lastExtractionAppliedAt: patch.lastExtractionAppliedAt }
+      : {})
   };
   return { ...item, aiRuntime: next };
 }
@@ -788,7 +834,14 @@ const WhatsAppChat: React.FC = () => {
             lastReason: prevRuntime.lastReason,
             lastGeneratedReply: prevRuntime.lastGeneratedReply,
             lastProcessedIncomingMessageId: prevRuntime.lastProcessedIncomingMessageId,
-            lastExtractionJson: prevRuntime.lastExtractionJson
+            lastExtractionJson: prevRuntime.lastExtractionJson,
+            lastExtractionApplyStatus: prevRuntime.lastExtractionApplyStatus,
+            lastExtractionApplyReason: prevRuntime.lastExtractionApplyReason,
+            lastExtractionAppliedFields: prevRuntime.lastExtractionAppliedFields,
+            lastExtractionAppliedLabels: prevRuntime.lastExtractionAppliedLabels,
+            lastExtractionAppliedFieldCount: prevRuntime.lastExtractionAppliedFieldCount,
+            lastExtractionAppliedClientId: prevRuntime.lastExtractionAppliedClientId,
+            lastExtractionAppliedAt: prevRuntime.lastExtractionAppliedAt
           };
           const revert = (c: ConversationListItem) =>
             c.id !== selectedId ? c : mergeListItemAiRuntime(c, revertPatch);
@@ -1637,6 +1690,7 @@ const WhatsAppChat: React.FC = () => {
           answer?: string;
           error?: string;
           extracted?: Record<string, unknown> | null;
+          extractionApply?: RuntimeExtractionApplyApi;
         };
         if (!res.ok || data.error) {
           const errText = typeof data.error === 'string' ? data.error : `HTTP ${res.status}`;
@@ -1679,6 +1733,38 @@ const WhatsAppChat: React.FC = () => {
               }).slice(0, 8000)
             : null;
         const extractionJson = extracted ? JSON.stringify(extracted).slice(0, 12000) : null;
+        const applyApi = data.extractionApply;
+        const applyPatch: WhatsAppAiRuntimePatch =
+          applyApi != null
+            ? patchAiRuntimeFromExtractionApply(applyApi)
+            : {
+                lastExtractionApplyStatus: 'skipped',
+                lastExtractionApplyReason: 'Нет блока extractionApply в ответе',
+                lastExtractionAppliedFields: null,
+                lastExtractionAppliedLabels: null,
+                lastExtractionAppliedFieldCount: null,
+                lastExtractionAppliedClientId: null,
+                lastExtractionAppliedAt: null
+              };
+
+        const runLogApply =
+          applyApi != null
+            ? {
+                extractionApplied: applyApi.extractionApplied,
+                extractionApplyStatus: applyApi.extractionApplyStatus,
+                extractionApplyReason: applyApi.extractionApplyReason,
+                extractionAppliedFields: applyApi.extractionAppliedFields.length
+                  ? applyApi.extractionAppliedFields
+                  : null,
+                extractionAppliedLabels: applyApi.extractionAppliedLabels.length
+                  ? applyApi.extractionAppliedLabels
+                  : null,
+                extractionAppliedFieldCount: applyApi.extractionAppliedFieldCount,
+                appliedClientId: applyApi.appliedClientId,
+                extractionAppliedAt: applyApi.appliedAt,
+                dealRecommendationForLog: applyApi.dealRecommendationForLog
+              }
+            : {};
 
         if (mode === 'draft') {
           await updateWhatsAppConversationAiRuntime(selectedId, {
@@ -1687,7 +1773,8 @@ const WhatsAppChat: React.FC = () => {
             lastReason: null,
             lastGeneratedReply: reply,
             lastProcessedIncomingMessageId: messageIdToProcess,
-            lastExtractionJson: extractionJson
+            lastExtractionJson: extractionJson,
+            ...applyPatch
           });
           crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
           await addWhatsAppAiBotRunLog({
@@ -1701,7 +1788,8 @@ const WhatsAppChat: React.FC = () => {
             status: 'success',
             reason: null,
             generatedReply: reply,
-            extractedSummary
+            extractedSummary,
+            ...runLogApply
           });
           toast.success('Черновик ответа готов (автоворонка)');
           return;
@@ -1717,7 +1805,9 @@ const WhatsAppChat: React.FC = () => {
             lastRunAt: serverTimestamp(),
             lastStatus: 'error',
             lastReason: 'Не удалось отправить ответ в чат',
-            lastGeneratedReply: reply
+            lastGeneratedReply: reply,
+            lastExtractionJson: extractionJson,
+            ...applyPatch
           });
           await addWhatsAppAiBotRunLog({
             companyId,
@@ -1730,7 +1820,8 @@ const WhatsAppChat: React.FC = () => {
             status: 'error',
             reason: 'send_failed',
             generatedReply: reply,
-            extractedSummary
+            extractedSummary,
+            ...runLogApply
           });
           toast.error('AI: не удалось отправить ответ в WhatsApp');
           return;
@@ -1741,7 +1832,8 @@ const WhatsAppChat: React.FC = () => {
           lastReason: null,
           lastGeneratedReply: reply,
           lastProcessedIncomingMessageId: messageIdToProcess,
-          lastExtractionJson: extractionJson
+          lastExtractionJson: extractionJson,
+          ...applyPatch
         });
         crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
         await addWhatsAppAiBotRunLog({
@@ -1755,7 +1847,8 @@ const WhatsAppChat: React.FC = () => {
           status: 'success',
           reason: null,
           generatedReply: reply,
-          extractedSummary
+          extractedSummary,
+          ...runLogApply
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'runtime error';
