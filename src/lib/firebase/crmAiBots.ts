@@ -13,6 +13,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './config';
 import type { CrmAiBot, CrmAiBotStatus } from '../../types/crmAiBot';
+import { defaultCrmAiBotConfig, parseCrmAiBotConfig, type CrmAiBotConfig } from '../../types/crmAiBotConfig';
 
 export const CRM_AI_BOTS_COLLECTION = 'crmAiBots';
 
@@ -30,7 +31,8 @@ function docToCrmAiBot(d: DocumentSnapshot): CrmAiBot {
       : 'draft') as CrmAiBotStatus,
     createdAt: (data.createdAt as CrmAiBot['createdAt']) ?? null,
     updatedAt: (data.updatedAt as CrmAiBot['updatedAt']) ?? null,
-    createdBy: (data.createdBy as string) ?? null
+    createdBy: (data.createdBy as string) ?? null,
+    config: parseCrmAiBotConfig(data.config)
   };
 }
 
@@ -70,6 +72,7 @@ export interface CreateCrmAiBotInput {
 }
 
 export async function createCrmAiBot(input: CreateCrmAiBotInput): Promise<string> {
+  const config = defaultCrmAiBotConfig();
   const ref = await addDoc(collection(db, CRM_AI_BOTS_COLLECTION), {
     companyId: input.companyId,
     name: input.name.trim(),
@@ -78,6 +81,7 @@ export async function createCrmAiBot(input: CreateCrmAiBotInput): Promise<string
     channel: input.channel,
     status: input.status,
     createdBy: input.createdBy,
+    config,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp()
   });
@@ -90,17 +94,23 @@ export interface UpdateCrmAiBotInput {
   botType: string;
   channel: string;
   status: CrmAiBotStatus;
+  /** Если задан — перезаписывает весь объект config в документе */
+  config?: CrmAiBotConfig;
 }
 
 export async function updateCrmAiBot(botId: string, patch: UpdateCrmAiBotInput): Promise<void> {
-  await updateDoc(doc(db, CRM_AI_BOTS_COLLECTION, botId), {
+  const payload: Record<string, unknown> = {
     name: patch.name.trim(),
     description: patch.description?.trim() || null,
     botType: patch.botType,
     channel: patch.channel,
     status: patch.status,
     updatedAt: serverTimestamp()
-  });
+  };
+  if (patch.config !== undefined) {
+    payload.config = patch.config;
+  }
+  await updateDoc(doc(db, CRM_AI_BOTS_COLLECTION, botId), payload);
 }
 
 export async function getCrmAiBotById(botId: string): Promise<CrmAiBot | null> {

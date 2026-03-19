@@ -11,23 +11,25 @@ import {
 } from '../lib/firebase/crmAiBots';
 import { PageMetadata } from '../components/PageMetadata';
 import { LoadingSpinner } from '../components/LoadingSpinner';
+import { AutovoronkiBotConfigurator } from '../components/autovoronki/AutovoronkiBotConfigurator';
 import type { CrmAiBotStatus } from '../types/crmAiBot';
 import {
   CRM_AI_BOT_CHANNEL_OPTIONS,
   CRM_AI_BOT_STATUS_OPTIONS,
   CRM_AI_BOT_TYPE_OPTIONS
 } from '../types/crmAiBot';
+import { defaultCrmAiBotConfig, type CrmAiBotConfig } from '../types/crmAiBotConfig';
 import toast from 'react-hot-toast';
 
-const FUTURE_FEATURES = [
-  'Сценарий диалога',
-  'Правила и ограничения',
-  'Источники знаний',
-  'Автозаполнение CRM',
-  'Действия после диалога',
-  'Аналитика',
-  'Голосовой режим'
+const ROADMAP_FEATURES = [
+  'Запуск бота в чате и WhatsApp',
+  'Песочница / тест диалога',
+  'Webhooks и триггеры',
+  'Аналитика и воронка',
+  'Голосовой канал'
 ];
+
+const FORM_ID = 'autovoronki-bot-editor-form';
 
 export const AutovoronkiBotEditorPage: React.FC = () => {
   const companyId = useCompanyId();
@@ -48,6 +50,7 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
   const [botType, setBotType] = useState(CRM_AI_BOT_TYPE_OPTIONS[0].value);
   const [channel, setChannel] = useState(CRM_AI_BOT_CHANNEL_OPTIONS[0].value);
   const [status, setStatus] = useState<CrmAiBotStatus>('draft');
+  const [config, setConfig] = useState<CrmAiBotConfig>(() => defaultCrmAiBotConfig());
 
   useEffect(() => {
     if (!companyId || !canUse || isCreate || !effectiveBotId) {
@@ -75,6 +78,7 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
         setBotType(b.botType || 'other');
         setChannel(b.channel || 'other');
         setStatus(b.status);
+        setConfig(b.config);
       } catch {
         if (!cancelled) toast.error('Не удалось загрузить бота');
       } finally {
@@ -114,9 +118,10 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
           description: description.trim() || null,
           botType,
           channel,
-          status
+          status,
+          config
         });
-        toast.success('Сохранено');
+        toast.success('Настройки бота сохранены');
       }
     } catch {
       toast.error(isCreate ? 'Не удалось создать бота' : 'Не удалось сохранить');
@@ -179,35 +184,54 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
   return (
     <div className="min-h-full bg-gray-50">
       <PageMetadata title={pageTitle} description="Автоворонки — настройка AI-бота" />
-      <div className="max-w-3xl mx-auto px-4 py-6 md:py-8">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
-          <div className="flex items-start gap-3 min-w-0">
-            <Link
-              to="/autovoronki"
-              className="mt-0.5 p-2 rounded-lg text-gray-500 hover:bg-white hover:text-gray-800 border border-transparent hover:border-gray-200 transition-colors shrink-0"
-              aria-label="Назад"
-            >
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-xl md:text-2xl font-semibold text-gray-900 truncate">{pageTitle}</h1>
-                {!isCreate && (
-                  <span className="text-xs font-medium text-gray-500 px-2 py-0.5 rounded-md bg-gray-100">
-                    {CRM_AI_BOT_STATUS_OPTIONS.find((s) => s.value === status)?.label ?? status}
-                  </span>
-                )}
+      <div className="max-w-4xl mx-auto px-4 py-6 md:py-8">
+        <form id={FORM_ID} onSubmit={handleSubmit} className="space-y-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6 pb-2 border-b border-gray-200/80">
+            <div className="flex items-start gap-3 min-w-0">
+              <Link
+                to="/autovoronki"
+                className="mt-0.5 p-2 rounded-lg text-gray-500 hover:bg-white hover:text-gray-800 border border-transparent hover:border-gray-200 transition-colors shrink-0"
+                aria-label="Назад"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-xl md:text-2xl font-semibold text-gray-900 truncate">{pageTitle}</h1>
+                  {!isCreate && (
+                    <span className="text-xs font-medium text-gray-500 px-2 py-0.5 rounded-md bg-gray-100">
+                      {CRM_AI_BOT_STATUS_OPTIONS.find((s) => s.value === status)?.label ?? status}
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  {isCreate
+                    ? 'Укажите основные поля. Сценарий и настройки откроются после создания.'
+                    : 'Основная информация, сценарий и правила — одна кнопка «Сохранить».'}
+                </p>
               </div>
-              <p className="text-sm text-gray-500 mt-1">
-                {isCreate ? 'Заполните основные поля — сценарии подключим позже' : 'Основные параметры бота'}
-              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2 shrink-0 w-full sm:w-auto">
+              <button
+                type="button"
+                onClick={() => navigate('/autovoronki')}
+                className="rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors order-2 sm:order-1"
+              >
+                Назад к списку
+              </button>
+              <button
+                type="submit"
+                form={FORM_ID}
+                disabled={saving}
+                className="rounded-xl bg-emerald-600 text-white px-5 py-2.5 text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 transition-colors order-1 sm:order-2"
+              >
+                {saving ? 'Сохранение…' : 'Сохранить'}
+              </button>
             </div>
           </div>
-        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
           <div className="rounded-2xl border border-gray-200 bg-white p-5 md:p-6 shadow-sm space-y-5">
-            <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Основное</h2>
+            <h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Основная информация</h2>
 
             <div>
               <label htmlFor="bot-name" className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -296,25 +320,40 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
             </div>
           </div>
 
+          {!isCreate ? (
+            <AutovoronkiBotConfigurator config={config} onChange={setConfig} />
+          ) : (
+            <div className="rounded-2xl border border-dashed border-gray-200 bg-white/80 p-6 text-center text-sm text-gray-500">
+              После нажатия «Сохранить» бот будет создан с пустым сценарием — вы сразу сможете заполнить блок
+              «Сценарий и настройки» на этой же странице.
+            </div>
+          )}
+
           <div className="rounded-2xl border border-gray-200 bg-gray-50/80 p-5 md:p-6">
             <div className="flex items-center gap-2 mb-4">
               <Bot className="w-5 h-5 text-gray-400" />
-              <h2 className="text-sm font-semibold text-gray-800">Следующие этапы настройки</h2>
+              <h2 className="text-sm font-semibold text-gray-800">Дальнейшее развитие модуля</h2>
             </div>
             <p className="text-xs text-gray-500 mb-4">
-              Заготовка интерфейса — логика появится в следующих версиях модуля.
+              Уже реализованы сценарий, правила и CRM-флаги в конфиге. Ниже — что подключим позже.
             </p>
             <ul className="space-y-2">
-              {FUTURE_FEATURES.map((label) => (
+              {ROADMAP_FEATURES.map((label) => (
                 <li key={label} className="flex items-center gap-3 text-sm text-gray-500">
-                  <input type="checkbox" disabled className="rounded border-gray-300 text-emerald-600 opacity-50" checked={false} readOnly />
+                  <input
+                    type="checkbox"
+                    disabled
+                    className="rounded border-gray-300 text-emerald-600 opacity-50"
+                    checked={false}
+                    readOnly
+                  />
                   <span>{label}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-3 pt-2 pb-8">
             <button
               type="button"
               onClick={() => navigate('/autovoronki')}

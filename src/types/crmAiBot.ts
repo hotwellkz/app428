@@ -1,4 +1,5 @@
 import type { Timestamp } from 'firebase/firestore';
+import type { CrmAiBotConfig } from './crmAiBotConfig';
 
 /** Статус AI-бота / автоворонки */
 export type CrmAiBotStatus = 'draft' | 'active' | 'paused' | 'archived';
@@ -17,6 +18,8 @@ export interface CrmAiBot {
   createdAt: Timestamp | Date | null;
   updatedAt: Timestamp | Date | null;
   createdBy: string | null;
+  /** Сценарий, роль, правила, CRM-флаги (после этапа 2 всегда нормализуется при чтении) */
+  config: CrmAiBotConfig;
 }
 
 export const CRM_AI_BOT_TYPE_OPTIONS: { value: string; label: string }[] = [
