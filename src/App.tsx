@@ -101,6 +101,8 @@ const AnalyticsPage = lazy(withChunkErrorRecovery(() => import('./pages/Analytic
 const KnowledgeBaseSettings = lazy(withChunkErrorRecovery(() => import('./pages/KnowledgeBaseSettings')));
 const QuickRepliesSettings = lazy(withChunkErrorRecovery(() => import('./pages/QuickRepliesSettings')));
 const IntegrationsSettings = lazy(withChunkErrorRecovery(() => import('./pages/IntegrationsSettings').then(m => ({ default: m.IntegrationsSettings }))));
+const AutovoronkiListPage = lazyNamed(() => import('./pages/AutovoronkiListPage'), 'AutovoronkiListPage');
+const AutovoronkiBotEditorPage = lazyNamed(() => import('./pages/AutovoronkiBotEditorPage'), 'AutovoronkiBotEditorPage');
 
 // Fallback компонент для Suspense
 const PageLoader = () => (
@@ -310,6 +312,21 @@ const AppContent: React.FC = () => {
             <Route path="/settings/integrations" element={
               <ApprovalGuard>
                 <IntegrationsSettings />
+              </ApprovalGuard>
+            } />
+            <Route path="/autovoronki" element={
+              <ApprovalGuard>
+                <AutovoronkiListPage />
+              </ApprovalGuard>
+            } />
+            <Route path="/autovoronki/new" element={
+              <ApprovalGuard>
+                <AutovoronkiBotEditorPage />
+              </ApprovalGuard>
+            } />
+            <Route path="/autovoronki/:botId" element={
+              <ApprovalGuard>
+                <AutovoronkiBotEditorPage />
               </ApprovalGuard>
             } />
             <Route path="/finishing-materials" element={

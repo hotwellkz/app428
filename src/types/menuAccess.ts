@@ -16,6 +16,7 @@ export type MenuSectionId =
   | 'knowledgeBase'
   | 'quickReplies'
   | 'integrations'
+  | 'autovoronki'
   | 'deals'
   | 'analytics';
 
@@ -33,6 +34,8 @@ export interface MenuAccess {
   knowledgeBase: boolean;
   quickReplies: boolean;
   integrations: boolean;
+  /** Автоворонки / AI-боты (маршрут /autovoronki) */
+  autovoronki: boolean;
   deals: boolean;
   /** Доступ к /analytics (аналитический центр) */
   analytics: boolean;
@@ -53,6 +56,7 @@ export const DEFAULT_MENU_ACCESS: MenuAccess = {
   knowledgeBase: true,
   quickReplies: true,
   integrations: true,
+  autovoronki: true,
   deals: true,
   analytics: true
 };
@@ -85,6 +89,7 @@ export const MENU_SECTIONS: { id: MenuSectionId; label: string; path: string }[]
   { id: 'knowledgeBase', label: 'AI База знаний', path: '/settings/knowledge' },
   { id: 'quickReplies', label: 'Быстрые ответы', path: '/settings/quick-replies' },
   { id: 'integrations', label: 'Интеграции', path: '/settings/integrations' },
+  { id: 'autovoronki', label: 'Автоворонки', path: '/autovoronki' },
   { id: 'deals', label: 'Сделки', path: '/deals' },
   { id: 'analytics', label: 'Analytics', path: '/analytics' }
 ];
