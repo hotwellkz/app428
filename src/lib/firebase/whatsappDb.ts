@@ -27,6 +27,8 @@ import type {
   MessageAttachment,
   MessageReaction
 } from '../../types/whatsappDb';
+import type { WhatsAppAiRuntime, WhatsAppAiRuntimeMode } from '../../types/whatsappAiRuntime';
+import { parseWhatsAppAiRuntime } from '../../types/whatsappAiRuntime';
 
 export const COLLECTIONS = {
   CLIENTS: 'whatsappClients',
@@ -70,6 +72,8 @@ export interface ConversationListItem {
   kaspiOrderAddress?: string | null;
   kaspiOrderUrl?: string | null;
   kaspiOrderItems?: Array<{ name: string; quantity: number }> | null;
+  /** Runtime автоворонок в этом чате */
+  aiRuntime?: WhatsAppAiRuntime;
   /** Тест: AI-бот включён для этого чата */
   aiBotEnabled?: boolean;
   /** Тест: разрешить боту отправлять КП */
@@ -153,6 +157,7 @@ function docToConversation(docId: string, data: Record<string, unknown>): WhatsA
     lastMessageMedia: data.lastMessageMedia === true,
     awaitingReplyDismissedAt:
       (data.awaitingReplyDismissedAt as WhatsAppConversation['awaitingReplyDismissedAt']) ?? null,
+    aiRuntime: parseWhatsAppAiRuntime(data as Record<string, unknown>),
     aiBotEnabled: data.aiBotEnabled === true,
     aiBotAutoProposalEnabled: data.aiBotAutoProposalEnabled === true,
     aiBotLastMessageIdProcessed:
@@ -450,6 +455,42 @@ export async function setConversationAiBotLastProcessedMessageId(
   await updateDoc(ref, { aiBotLastMessageIdProcessed: messageId });
 }
 
+const AI_RT = 'aiRuntime' as const;
+
+export interface WhatsAppAiRuntimePatch {
+  enabled?: boolean;
+  botId?: string | null;
+  mode?: WhatsAppAiRuntimeMode;
+  lastRunAt?: ReturnType<typeof serverTimestamp> | null;
+  lastStatus?: WhatsAppAiRuntime['lastStatus'];
+  lastReason?: string | null;
+  lastGeneratedReply?: string | null;
+  lastProcessedIncomingMessageId?: string | null;
+  lastExtractionJson?: string | null;
+}
+
+/** Частичное обновление вложенного объекта aiRuntime (точечные поля Firestore). */
+export async function updateWhatsAppConversationAiRuntime(
+  conversationId: string,
+  patch: WhatsAppAiRuntimePatch
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.CONVERSATIONS, conversationId);
+  const payload: Record<string, unknown> = {};
+  if (patch.enabled !== undefined) payload[`${AI_RT}.enabled`] = patch.enabled;
+  if (patch.botId !== undefined) payload[`${AI_RT}.botId`] = patch.botId;
+  if (patch.mode !== undefined) payload[`${AI_RT}.mode`] = patch.mode;
+  if (patch.lastRunAt !== undefined) payload[`${AI_RT}.lastRunAt`] = patch.lastRunAt;
+  if (patch.lastStatus !== undefined) payload[`${AI_RT}.lastStatus`] = patch.lastStatus;
+  if (patch.lastReason !== undefined) payload[`${AI_RT}.lastReason`] = patch.lastReason;
+  if (patch.lastGeneratedReply !== undefined) payload[`${AI_RT}.lastGeneratedReply`] = patch.lastGeneratedReply;
+  if (patch.lastProcessedIncomingMessageId !== undefined) {
+    payload[`${AI_RT}.lastProcessedIncomingMessageId`] = patch.lastProcessedIncomingMessageId;
+  }
+  if (patch.lastExtractionJson !== undefined) payload[`${AI_RT}.lastExtractionJson`] = patch.lastExtractionJson;
+  if (Object.keys(payload).length === 0) return;
+  await updateDoc(ref, payload);
+}
+
 export type DialogStage = 'city' | 'area' | 'floors' | 'roof' | 'calculation' | 'finish';
 
 export interface AiBotLeadContext {
@@ -547,6 +588,7 @@ function conversationToListItem(
     kaspiOrderItems:
       (c as unknown as { kaspiOrderItems?: Array<{ name: string; quantity: number }> | null }).kaspiOrderItems ??
       null,
+    aiRuntime: c.aiRuntime,
     aiBotEnabled: c.aiBotEnabled === true,
     aiBotAutoProposalEnabled: c.aiBotAutoProposalEnabled === true
   };

@@ -1,4 +1,5 @@
 import { Timestamp } from 'firebase/firestore';
+import type { WhatsAppAiRuntime } from './whatsappAiRuntime';
 
 /**
  * Структура БД для хранения WhatsApp сообщений.
@@ -58,6 +59,8 @@ export interface WhatsAppConversation {
   lastMessagePreview?: string | null;
   lastMessageMedia?: boolean;
   awaitingReplyDismissedAt?: Date | Timestamp | null;
+  /** Runtime AI из модуля «Автоворонки» (WhatsApp) */
+  aiRuntime?: WhatsAppAiRuntime;
   /** Тест: AI-бот отвечает в этом чате (per-conversation) */
   aiBotEnabled?: boolean;
   /** Тест: разрешить боту автоматически отправлять КП через калькулятор */

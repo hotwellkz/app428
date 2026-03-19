@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   collection,
@@ -24,7 +24,7 @@ import { removeCompanyCity, renameCompanyCity, resolveCityForAutoAssign } from '
 import { useClampedMenuPosition } from '../../hooks/useClampedMenuPosition';
 import type { Deal } from '../../types/deals';
 import toast from 'react-hot-toast';
-import { Sparkles, MoreVertical, X, ExternalLink, GitBranch } from 'lucide-react';
+import { Sparkles, MoreVertical, X, ExternalLink, GitBranch, Bot } from 'lucide-react';
 import { ChatSalesAnalysisBlock, type SalesAnalysisResult } from './ChatSalesAnalysisBlock';
 import {
   transcribeVoiceBatch,
@@ -32,6 +32,11 @@ import {
   type PrepareForAnalysisResult,
   type PrepareForAnalysisStatus,
 } from '../../utils/transcribeVoiceBatch';
+import type { WhatsAppAiRuntime, WhatsAppAiRuntimeMode } from '../../types/whatsappAiRuntime';
+import { defaultWhatsAppAiRuntime } from '../../types/whatsappAiRuntime';
+import type { CrmAiBot } from '../../types/crmAiBot';
+import { labelCrmAiBotStatus } from '../../types/crmAiBot';
+import type { WhatsAppAiRuntimePatch } from '../../lib/firebase/whatsappDb';
 
 const COLLECTION_WHATSAPP_CONVERSATIONS = 'whatsappConversations';
 
@@ -273,6 +278,16 @@ interface ClientInfoPanelProps {
   aiBotFlagsSaving?: boolean;
   /** Зарегистрировать функцию применения фактов из AI-бота (город и т.д.) к карточке клиента. Вызывается после ответа бота с extractedFacts. */
   registerAiBotApplyFacts?: (fn: ((facts: { city?: string | null; area_m2?: number | null; floors?: number | null }) => void) | null) => void;
+  /** Канал диалога (runtime автоворонок только для WhatsApp) */
+  conversationChannel?: 'whatsapp' | 'instagram';
+  /** Настройки AI из модуля «Автоворонки» (поле aiRuntime в whatsappConversations) */
+  aiRuntime?: WhatsAppAiRuntime | null;
+  /** Боты компании для выбора в чате */
+  crmAiBots?: CrmAiBot[];
+  /** Частичное обновление aiRuntime */
+  onAiRuntimePatch?: (patch: WhatsAppAiRuntimePatch) => void;
+  /** Сохранение aiRuntime */
+  aiRuntimeSaving?: boolean;
   /** Метаданные заказа Kaspi для выбранного диалога (если есть) */
   kaspiOrderNumber?: string | null;
   kaspiOrderAmount?: number | null;
@@ -318,6 +333,11 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   onAiBotFlagsChange,
   aiBotFlagsSaving = false,
   registerAiBotApplyFacts,
+  conversationChannel = 'whatsapp',
+  aiRuntime: aiRuntimeProp,
+  crmAiBots = [],
+  onAiRuntimePatch,
+  aiRuntimeSaving = false,
   kaspiOrderNumber,
   kaspiOrderAmount,
   kaspiOrderStatus,
@@ -325,6 +345,8 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   kaspiOrderAddress,
   kaspiOrderUrl,
 }) => {
+  const aiRuntime = aiRuntimeProp ?? defaultWhatsAppAiRuntime();
+  const runtimeBots = useMemo(() => crmAiBots.filter((b) => b.status !== 'archived'), [crmAiBots]);
   const companyId = useCompanyId();
   const navigate = useNavigate();
   const { configured: aiConfigured, loading: aiLoadingConfigured } = useAIConfigured();
@@ -1213,6 +1235,150 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
                   >
                     {creatingPipelineDeal ? 'Создание…' : 'Создать сделку'}
                   </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Автоворонки: AI runtime в WhatsApp-чате */}
+          {conversationId && onAiRuntimePatch != null && (
+            <div className="mt-4 p-3 rounded-xl border border-violet-200/80 bg-violet-50/40">
+              <div className="flex items-center gap-2 mb-2">
+                <Bot className="w-4 h-4 text-violet-700 shrink-0" />
+                <h3 className="text-xs font-semibold text-violet-900 uppercase tracking-wide">
+                  Автоворонки · AI в чате
+                </h3>
+                {aiRuntimeSaving && <span className="text-[10px] text-violet-600">сохранение…</span>}
+              </div>
+              {conversationChannel === 'instagram' ? (
+                <p className="text-xs text-amber-800">
+                  Runtime автоворонок доступен только для канала WhatsApp.
+                </p>
+              ) : (
+                <>
+                  {!aiConfigured && !aiLoadingConfigured && (
+                    <p className="mb-2 text-xs text-amber-700">
+                      Для генерации ответов нужен API-ключ AI в разделе Интеграции.
+                    </p>
+                  )}
+                  <label className="flex items-center gap-2 cursor-pointer mb-2">
+                    <input
+                      type="checkbox"
+                      checked={aiRuntime.enabled}
+                      disabled={aiRuntimeSaving}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        if (on && !aiLoadingConfigured && !aiConfigured) {
+                          toast.error('Сначала настройте AI API ключ в Интеграциях');
+                          return;
+                        }
+                        onAiRuntimePatch({
+                          enabled: on,
+                          ...(on ? {} : { mode: 'off' as WhatsAppAiRuntimeMode })
+                        });
+                      }}
+                      className="rounded border-gray-300 text-violet-600 focus:ring-violet-500 disabled:opacity-50"
+                    />
+                    <span className="text-sm font-medium text-gray-800">AI-режим</span>
+                  </label>
+                  <div className="space-y-2">
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Бот</label>
+                      <select
+                        className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
+                        disabled={aiRuntimeSaving || !aiRuntime.enabled}
+                        value={aiRuntime.botId ?? ''}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          onAiRuntimePatch({ botId: v.length ? v : null });
+                        }}
+                      >
+                        <option value="">— не выбран —</option>
+                        {runtimeBots.map((b) => (
+                          <option key={b.id} value={b.id}>
+                            {b.name}
+                            {b.status !== 'active' ? ` (${labelCrmAiBotStatus(b.status)})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-medium text-gray-600 mb-0.5">Режим</label>
+                      <select
+                        className="w-full text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
+                        disabled={aiRuntimeSaving || !aiRuntime.enabled}
+                        value={aiRuntime.mode}
+                        onChange={(e) => {
+                          const v = e.target.value as WhatsAppAiRuntimeMode;
+                          onAiRuntimePatch({ mode: v });
+                        }}
+                      >
+                        <option value="off">Выключен</option>
+                        <option value="draft">Черновик ответа</option>
+                        <option value="auto">Автоответ</option>
+                      </select>
+                    </div>
+                  </div>
+                  <dl className="mt-2 space-y-1 text-[11px] text-gray-600">
+                    <div className="flex justify-between gap-2">
+                      <DefTerm className="text-gray-500 shrink-0">Бот</DefTerm>
+                      <DefDesc className="text-right truncate">
+                        {aiRuntime.botId
+                          ? runtimeBots.find((b) => b.id === aiRuntime.botId)?.name ?? aiRuntime.botId
+                          : 'не выбран'}
+                      </DefDesc>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <DefTerm className="text-gray-500 shrink-0">Режим</DefTerm>
+                      <DefDesc className="text-right">
+                        {aiRuntime.mode === 'off' && 'выкл.'}
+                        {aiRuntime.mode === 'draft' && 'черновик'}
+                        {aiRuntime.mode === 'auto' && 'автоответ'}
+                      </DefDesc>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <DefTerm className="text-gray-500 shrink-0">Последний запуск</DefTerm>
+                      <DefDesc className="text-right">{formatDate(aiRuntime.lastRunAt)}</DefDesc>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <DefTerm className="text-gray-500 shrink-0">Статус</DefTerm>
+                      <DefDesc className="text-right truncate max-w-[65%]" title={aiRuntime.lastReason ?? undefined}>
+                        {aiRuntime.lastStatus === 'success'
+                          ? 'успех'
+                          : aiRuntime.lastStatus === 'error'
+                            ? 'ошибка'
+                            : aiRuntime.lastStatus === 'skipped'
+                              ? 'пропуск'
+                              : aiRuntime.lastStatus === 'idle'
+                                ? 'ожидание'
+                                : '—'}
+                        {aiRuntime.lastReason ? ` · ${aiRuntime.lastReason}` : ''}
+                      </DefDesc>
+                    </div>
+                  </dl>
+                  {aiRuntime.lastGeneratedReply && (
+                    <div className="mt-2 rounded-lg border border-violet-100 bg-white/80 p-2">
+                      <p className="text-[10px] font-semibold text-violet-800 uppercase mb-1">
+                        Последний ответ AI
+                      </p>
+                      <p className="text-xs text-gray-800 whitespace-pre-wrap break-words max-h-28 overflow-y-auto">
+                        {aiRuntime.lastGeneratedReply}
+                      </p>
+                      {aiRuntime.mode === 'draft' && onInsertNextMessage && (
+                        <button
+                          type="button"
+                          className="mt-2 w-full py-1.5 text-xs font-medium text-white bg-violet-600 rounded-lg hover:bg-violet-700"
+                          onClick={() => {
+                            const cur = (getCurrentInputValue?.() ?? '').trim();
+                            onInsertNextMessage(aiRuntime.lastGeneratedReply!, cur ? 'append' : 'replace');
+                            toast.success('Текст подставлен в поле ответа');
+                          }}
+                        >
+                          Подставить в поле ответа
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>

@@ -11,4 +11,5 @@
 /api/chats/search /.netlify/functions/chats-search 200
 /api/chats-search /.netlify/functions/chats-search 200
 /api/crm-ai-bot-test /.netlify/functions/crm-ai-bot-test 200
+/api/crm-ai-bot-whatsapp-runtime /.netlify/functions/crm-ai-bot-whatsapp-runtime 200
 /* /index.html 200

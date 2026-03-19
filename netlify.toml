@@ -113,6 +113,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/crm-ai-bot-whatsapp-runtime"
+  to = "/.netlify/functions/crm-ai-bot-whatsapp-runtime"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
