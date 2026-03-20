@@ -37,6 +37,24 @@ export interface VoiceSessionVoiceLoopMetadata {
   lastTurnAtMs?: number;
 }
 
+/** Результат post-call pipeline (в metadata.postCall). */
+export interface VoicePostCallResultMetadata {
+  pipelineVersion?: string;
+  lightweight?: boolean;
+  transcriptLineCount?: number;
+  summary?: string | null;
+  summaryError?: string | null;
+  extractionJson?: string | null;
+  extractionError?: string | null;
+  dealSnapshotJson?: string | null;
+  taskSnapshotJson?: string | null;
+  dealCreateError?: string | null;
+  taskApplyError?: string | null;
+  followUpError?: string | null;
+  warnings?: string[];
+  linkedRunUpdated?: boolean;
+}
+
 /** P0: строковый идентификатор провайдера (например "twilio_v1"); без импорта SDK провайдера. */
 export type VoiceProviderId = string;
 
@@ -67,10 +85,26 @@ export interface VoiceCallSession {
   outcome?: VoiceOutcome | null;
   postCallStatus?: VoicePostCallStatus;
   postCallError?: string | null;
+  /** Начало post-call pipeline (server) */
+  postCallStartedAt?: Timestamp | Date | null;
+  /** Завершение post-call pipeline */
+  postCallCompletedAt?: Timestamp | Date | null;
+  /** Краткая сводка для списков / CRM */
+  postCallSummary?: string | null;
+  /** Статусы этапов post-call (дублируют metadata.postCall при необходимости) */
+  extractionStatus?: 'ok' | 'skipped' | 'error' | null;
+  extractionError?: string | null;
+  crmApplyStatus?: 'applied' | 'skipped' | 'error' | null;
+  crmApplyError?: string | null;
+  dealRecommendationStatus?: string | null;
+  dealRecommendationError?: string | null;
+  taskRecommendationStatus?: string | null;
+  taskRecommendationError?: string | null;
   linkedDealId?: string | null;
   linkedTaskId?: string | null;
   followUpChannel?: string | null;
   followUpStatus?: string | null;
+  followUpError?: string | null;
   metadata?: Record<string, unknown>;
   createdAt?: Timestamp | Date | null;
   updatedAt?: Timestamp | Date | null;

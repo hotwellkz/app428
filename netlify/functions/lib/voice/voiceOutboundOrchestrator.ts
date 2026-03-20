@@ -150,7 +150,8 @@ export async function orchestrateVoiceOutbound(
     await adminUpdateVoiceCallSession(companyId, callId, {
       status: 'failed',
       endReason: adapterResult.error,
-      endedAt: FieldValue.serverTimestamp()
+      endedAt: FieldValue.serverTimestamp(),
+      postCallStatus: 'pending'
     });
     await adminAppendVoiceCallEvent(companyId, callId, {
       type: 'provider.failed',

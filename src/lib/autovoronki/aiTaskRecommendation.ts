@@ -137,10 +137,10 @@ export function buildAiTaskRecommendationSnapshot(input: BuildAiTaskRecommendati
   const warnings: string[] = [];
   const reasons: string[] = [];
 
-  if (input.channel && input.channel !== 'whatsapp') {
+  if (input.channel && input.channel !== 'whatsapp' && input.channel !== 'voice') {
     return {
       status: 'skipped',
-      reason: 'Рекомендация задачи только для канала WhatsApp',
+      reason: 'Рекомендация задачи только для каналов WhatsApp и голосового звонка',
       recommendedTaskTitle: '—',
       recommendedTaskDescription: '',
       recommendedTaskType: 'manual_review',
@@ -224,7 +224,11 @@ export function buildAiTaskRecommendationSnapshot(input: BuildAiTaskRecommendati
   const priority = mapPriority(ex, taskType);
 
   const descLines: string[] = [];
-  descLines.push(`Источник: WhatsApp · AI «${input.botName}»`);
+  const sourceLabel =
+    input.channel === 'voice'
+      ? `Голосовой звонок · AI «${input.botName}»`
+      : `WhatsApp · AI «${input.botName}»`;
+  descLines.push(`Источник: ${sourceLabel}`);
   if (ex.summaryComment?.trim()) descLines.push(`Сводка: ${ex.summaryComment.trim().slice(0, 500)}`);
   if (ex.nextStep?.trim()) descLines.push(`Ожидаемый шаг клиента: ${ex.nextStep.trim().slice(0, 300)}`);
   description = descLines.join('\n').slice(0, 4000);

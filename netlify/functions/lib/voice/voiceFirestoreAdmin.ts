@@ -263,3 +263,63 @@ export async function adminListVoiceTurnsOrdered(
     };
   });
 }
+
+/** Сессии с postCallStatus=pending (для scheduled sweep). */
+export async function adminListVoiceSessionsPendingPostCall(
+  max: number
+): Promise<Array<{ id: string; companyId: string }>> {
+  const db = getDb();
+  const lim = Math.min(Math.max(max, 1), 50);
+  const q = await db
+    .collection(VOICE_CALL_SESSIONS_COLLECTION)
+    .where('postCallStatus', '==', 'pending')
+    .limit(lim)
+    .get();
+  return q.docs
+    .map((d) => ({
+      id: d.id,
+      companyId: String(d.data()?.companyId ?? '').trim()
+    }))
+    .filter((x) => x.companyId.length > 0);
+}
+
+/**
+ * Атомарно: pending → processing. При force — повторный запуск с processing (не из processing).
+ */
+export async function adminClaimVoicePostCallProcessing(
+  companyId: string,
+  callId: string,
+  force: boolean
+): Promise<{ claimed: boolean; session: (Record<string, unknown> & { id: string }) | null }> {
+  const db = getDb();
+  const ref = db.collection(VOICE_CALL_SESSIONS_COLLECTION).doc(callId);
+  return db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(ref);
+    if (!snap.exists) {
+      return { claimed: false, session: null };
+    }
+    const d = snap.data()!;
+    if (String(d.companyId ?? '') !== companyId) {
+      return { claimed: false, session: { id: snap.id, ...d } };
+    }
+    const ps = String(d.postCallStatus ?? '');
+    if (!force) {
+      if (ps === 'processing') {
+        return { claimed: false, session: { id: snap.id, ...d } };
+      }
+      if (ps !== 'pending') {
+        return { claimed: false, session: { id: snap.id, ...d } };
+      }
+    } else if (ps === 'processing') {
+      return { claimed: false, session: { id: snap.id, ...d } };
+    }
+
+    transaction.update(ref, {
+      postCallStatus: 'processing',
+      postCallStartedAt: FieldValue.serverTimestamp(),
+      postCallError: null,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    return { claimed: true, session: { id: snap.id, ...d } };
+  });
+}

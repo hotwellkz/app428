@@ -52,11 +52,15 @@ export function buildAiDealNote(params: {
   conversationId: string;
   botId: string;
   summaryOneLine?: string | null;
+  /** voice — подпись «Голосовой звонок» вместо WhatsApp */
+  channel?: string | null;
 }): string {
-  const { extraction, botName, conversationId, botId, summaryOneLine } = params;
+  const { extraction, botName, conversationId, botId, summaryOneLine, channel } = params;
   const lines: string[] = [];
-  lines.push(`Источник: WhatsApp · AI-бот «${botName}»`);
-  lines.push(`Чат: ${conversationId} · botId: ${botId}`);
+  const source =
+    channel === 'voice' ? `Голосовой звонок (Twilio) · AI-бот «${botName}»` : `WhatsApp · AI-бот «${botName}»`;
+  lines.push(`Источник: ${source}`);
+  lines.push(`Чат/сессия: ${conversationId} · botId: ${botId}`);
   if (summaryOneLine?.trim()) lines.push(`Сводка: ${summaryOneLine.trim()}`);
 
   const draft = mapExtractionToCrmDraft(extraction);
@@ -264,7 +268,8 @@ export function buildAiDealRecommendationSnapshot(params: {
     botName,
     conversationId,
     botId,
-    summaryOneLine: extraction.summaryComment?.trim() ?? null
+    summaryOneLine: extraction.summaryComment?.trim() ?? null,
+    channel
   });
 
   const confidence: AiDealRecommendationSnapshot['confidence'] =
@@ -291,6 +296,18 @@ export function buildAiDealRecommendationSnapshot(params: {
     createdFromConversationId: conversationId,
     createdAt: new Date().toISOString(),
     payloadHash,
-    dealRecommendationForLog
+    dealRecommendationForLog,
+    routing:
+      params.routing ?? {
+        recommendedPipelineId: null,
+        recommendedPipelineName: null,
+        recommendedStageId: null,
+        recommendedStageName: null,
+        recommendedAssigneeId: null,
+        recommendedAssigneeName: null,
+        routingReason: [],
+        routingConfidence: 'low',
+        routingWarnings: []
+      }
   };
 }

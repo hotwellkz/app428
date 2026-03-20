@@ -106,9 +106,17 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
     return { ok: true, callId, deduped: true, sessionUpdated: false };
   }
 
+  const terminalStatuses = new Set(['completed', 'failed', 'busy', 'no_answer', 'canceled']);
+  const postCallTerminal = String(sessionRow.postCallStatus ?? '');
+  const shouldQueuePostCall =
+    applied.patch.status != null &&
+    terminalStatuses.has(String(applied.patch.status)) &&
+    !['processing', 'done'].includes(postCallTerminal);
+
   if (applied.sessionChanged && Object.keys(fsPatch).length > 0) {
     await adminUpdateVoiceCallSession(companyId, callId, {
       ...fsPatch,
+      ...(shouldQueuePostCall ? { postCallStatus: 'pending' } : {}),
       updatedAt: FieldValue.serverTimestamp()
     });
     return { ok: true, callId, deduped: false, sessionUpdated: true };

@@ -262,3 +262,139 @@ export async function createTaskFromAiRecommendationAdmin(params: {
     };
   }
 }
+
+/**
+ * Post-call voice: применить рекомендацию задачи к сделке без whatsappConversations.
+ */
+export async function applyVoiceTaskRecommendationToDealAdmin(params: {
+  companyId: string;
+  dealId: string;
+  voiceCallId: string;
+  taskPayloadHash: string;
+  taskSnapshot: Record<string, unknown>;
+}): Promise<CreateTaskFromRecommendationResult> {
+  const { companyId, dealId: dealIdRaw, voiceCallId, taskPayloadHash } = params;
+  const taskRec = asTaskRecommendation(params.taskSnapshot);
+  if (!taskRec || taskRec.payloadHash !== taskPayloadHash) {
+    return { ok: false, code: 'invalid', message: 'Рекомендация задачи устарела или не совпадает' };
+  }
+  if (!taskRec.canCreateTask) {
+    return {
+      ok: false,
+      code: 'invalid',
+      message: 'Создание задачи по этой рекомендации недоступно'
+    };
+  }
+  if (taskRec.dealId && taskRec.dealId !== dealIdRaw) {
+    return { ok: false, code: 'invalid', message: 'Сделка не совпадает с рекомендацией' };
+  }
+
+  const db = getDb();
+  const dealRef = db.collection(DEALS).doc(dealIdRaw);
+  const dealSnap = await dealRef.get();
+  if (!dealSnap.exists) {
+    return { ok: false, code: 'invalid', message: 'Сделка не найдена' };
+  }
+  const deal = dealSnap.data()!;
+  if ((deal.companyId as string) !== companyId) {
+    return { ok: false, code: 'forbidden', message: 'Сделка другой компании' };
+  }
+  if (deal.aiTaskRecommendationPayloadHash === taskPayloadHash) {
+    return { ok: false, code: 'duplicate', message: 'Эта рекомендация уже применена к сделке' };
+  }
+
+  const usedFallbacks: string[] = [];
+  let finalResponsibleId = (deal.responsibleUserId as string | null) ?? null;
+  let finalResponsibleName = (deal.responsibleNameSnapshot as string | null) ?? null;
+
+  if (!finalResponsibleId && taskRec.suggestedResponsibleUserId) {
+    const ms = await db.collection(CHAT_MANAGERS).doc(taskRec.suggestedResponsibleUserId).get().catch(() => null);
+    const md = ms?.data();
+    if (ms?.exists && md && (md.companyId as string) === companyId) {
+      finalResponsibleId = ms.id;
+      finalResponsibleName = String(md.name ?? taskRec.suggestedResponsibleNameSnapshot ?? '');
+    } else {
+      usedFallbacks.push('assignee_fallback_no_manager_doc');
+    }
+  } else if (!finalResponsibleId) {
+    usedFallbacks.push('assignee_null_on_deal');
+  }
+
+  const nextTs = parseIsoToTimestamp(taskRec.recommendedDueAt);
+  const priority = mapDealPriority(taskRec.recommendedPriority);
+  const now = FieldValue.serverTimestamp();
+  const appliedIso = new Date().toISOString();
+
+  const noteAppend =
+    `\n\n--- Голосовой звонок • AI (автоворонка) — следующий шаг ---\n${taskRec.recommendedTaskDescription}`.slice(
+      0,
+      4000
+    );
+  const prevNote = typeof deal.note === 'string' ? deal.note : '';
+  const newNote = (prevNote + noteAppend).slice(0, 12000);
+
+  try {
+    await dealRef.update({
+      nextAction: taskRec.recommendedTaskTitle,
+      nextActionAt: nextTs,
+      priority,
+      note: newNote,
+      ...(finalResponsibleId && !(deal.responsibleUserId as string | null)
+        ? {
+            responsibleUserId: finalResponsibleId,
+            responsibleNameSnapshot: finalResponsibleName
+          }
+        : {}),
+      updatedAt: now,
+      aiTaskFromRecommendation: true,
+      aiTaskRecommendationPayloadHash: taskPayloadHash,
+      aiTaskRecommendationType: taskRec.recommendedTaskType,
+      voiceCallSessionId: voiceCallId
+    });
+
+    await db.collection(DEAL_ACTIVITY).add({
+      companyId,
+      dealId: dealIdRaw,
+      type: 'next_step_set',
+      payload: {
+        nextAction: taskRec.recommendedTaskTitle,
+        nextActionAt: taskRec.recommendedDueAt,
+        dueHint: taskRec.dueHint,
+        source: 'Голосовой звонок · AI (автоворонка)',
+        aiCreated: true,
+        createdByAiRecommendation: true,
+        aiBotId: taskRec.createdFromBotId,
+        voiceCallSessionId: voiceCallId,
+        payloadHash: taskPayloadHash,
+        recommendedTaskType: taskRec.recommendedTaskType,
+        descriptionPreview: taskRec.recommendedTaskDescription.slice(0, 500)
+      },
+      createdBy: null,
+      createdAt: now
+    });
+
+    await db.collection(DEAL_HISTORY).add({
+      companyId,
+      dealId: dealIdRaw,
+      message: `Следующий шаг (AI, голос): ${taskRec.recommendedTaskTitle}${taskRec.recommendedDueAt ? ` к ${taskRec.recommendedDueAt}` : ''}`,
+      createdAt: now
+    });
+
+    return {
+      ok: true,
+      dealId: dealIdRaw,
+      taskId: dealIdRaw,
+      nextActionAt: taskRec.recommendedDueAt,
+      usedFallbacks,
+      finalResponsibleUserId: finalResponsibleId,
+      finalResponsibleNameSnapshot: finalResponsibleName
+    };
+  } catch (e) {
+    console.error('[applyVoiceTaskRecommendationToDealAdmin]', e);
+    return {
+      ok: false,
+      code: 'error',
+      message: e instanceof Error ? e.message : 'Ошибка записи задачи'
+    };
+  }
+}

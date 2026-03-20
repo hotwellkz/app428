@@ -10,6 +10,10 @@
 [functions.ai-control-alerts-scheduled]
   schedule = "*/5 * * * *"
 
+# Voice: pending postCallStatus → summary/extraction/CRM (serverless sweep)
+[functions.voice-post-call-sweep]
+  schedule = "*/4 * * * *"
+
 # Webhook Wazzup → Netlify function (должен быть выше правила /*)
 [[redirects]]
   from = "/api/wazzup/webhook"
