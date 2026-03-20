@@ -6,6 +6,7 @@
 export type VoiceProviderFriendlyCode =
   | 'provider_webhook_signature_invalid'
   | 'provider_auth_error'
+  | 'telnyx_invalid_call_control'
   | 'provider_connection_missing'
   | 'provider_public_key_missing'
   | 'provider_default_number_missing'
@@ -23,6 +24,8 @@ const MESSAGES_RU: Record<string, string> = {
   provider_webhook_signature_invalid:
     'Подпись webhook Telnyx не прошла проверку. Проверьте Public Key в CRM и URL/настройки webhook в кабинете Telnyx.',
   provider_auth_error: 'Ошибка авторизации у провайдера телефонии — проверьте ключи в Интеграциях.',
+  telnyx_invalid_call_control:
+    'Неверный Connection ID (Call Control App) в CRM или в Telnyx не настроен webhook на ваш деплой. В Mission Control у приложения Call Control должен быть валидный HTTPS webhook URL.',
   provider_connection_missing: 'Не задан Connection / Application ID для исходящих звонков.',
   provider_public_key_missing: 'Не сохранён Public Key для проверки подписи webhook.',
   provider_default_number_missing: 'Не выбран исходящий номер по умолчанию для этого провайдера.',

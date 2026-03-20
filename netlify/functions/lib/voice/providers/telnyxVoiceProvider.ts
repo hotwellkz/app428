@@ -376,6 +376,21 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
         const first = errors?.[0];
         const msg =
           first?.detail || first?.title || JSON.stringify(json).slice(0, 400) || `HTTP ${res.status}`;
+        const msgLower = msg.toLowerCase();
+        const isCallControlIssue =
+          (msgLower.includes('connection_id') || msgLower.includes('connection id')) &&
+          (msgLower.includes('invalid') || msgLower.includes('does not exist') || msgLower.includes('not exist'));
+        const isWebhookUrlIssue =
+          msgLower.includes('webhook') && (msgLower.includes('url') || msgLower.includes('valid'));
+        const isClientSideTelnyx = res.status >= 400 && res.status < 500;
+        const hint =
+          isCallControlIssue || isWebhookUrlIssue
+            ? 'В Telnyx Mission Control откройте Call Control Application: задайте Webhook URL (HTTPS) на ваш CRM (тот же хост, что и деплой Netlify, путь voice-provider-webhook). Скопируйте ID этого приложения в поле «Connection / Application ID» в CRM. ID должен быть от Call Control, не от другого продукта.'
+            : isClientSideTelnyx && res.status !== 401 && res.status !== 403
+              ? 'Проверьте ключ API, Connection ID и публичный URL сайта (VOICE_PUBLIC_SITE_URL / URL в Netlify).'
+              : null;
+        const friendlyCode =
+          isCallControlIssue || isWebhookUrlIssue ? 'telnyx_invalid_call_control' : undefined;
         console.log(
           JSON.stringify({
             tag: 'voice.telnyx.create',
@@ -389,7 +404,14 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
           ok: false,
           error: `Telnyx: ${msg}`,
           code: 'telnyx_api_error',
-          providerFailureCode: res.status === 401 || res.status === 403 ? 'provider_auth_error' : 'provider_api_error',
+          friendlyCode,
+          hint,
+          providerFailureCode:
+            res.status === 401 || res.status === 403
+              ? 'provider_auth_error'
+              : isCallControlIssue || isWebhookUrlIssue
+                ? 'telnyx_invalid_call_control'
+                : 'provider_api_error',
           providerFailureReason: msg,
           rawProviderMessage: msg,
           providerDebug: { status: res.status, body: json }

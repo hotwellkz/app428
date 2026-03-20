@@ -300,6 +300,12 @@ export async function orchestrateVoiceOutbound(
       },
       seq: null
     });
+    const telnyxUpstreamStatus =
+      adapterResult.providerDebug && typeof adapterResult.providerDebug === 'object'
+        ? (adapterResult.providerDebug as Record<string, unknown>).status
+        : undefined;
+    const telnyxSt = typeof telnyxUpstreamStatus === 'number' ? telnyxUpstreamStatus : null;
+
     const configHttp =
       failCode === 'twilio_config' ||
       failCode === 'twilio_public_url' ||
@@ -313,7 +319,11 @@ export async function orchestrateVoiceOutbound(
             ? 401
             : 400
           : failCode === 'telnyx_api_error'
-            ? 502
+            ? telnyxSt != null && telnyxSt >= 400 && telnyxSt < 500
+              ? telnyxSt === 401 || telnyxSt === 403
+                ? 401
+                : 400
+              : 502
             : 502;
     return {
       ok: false,

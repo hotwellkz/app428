@@ -6,6 +6,9 @@ import { TwilioVoiceProvider } from './providers/twilioVoiceProvider';
 import { TelnyxVoiceProvider } from './providers/telnyxVoiceProvider';
 import type { TwilioVoiceFriendlyCode } from './deriveTwilioVoiceFriendlyError';
 
+/** Коды для UI: Twilio + общие + Telnyx (расширяйте по мере необходимости). */
+export type VoiceCreateFailureFriendlyCode = TwilioVoiceFriendlyCode | string;
+
 /** Унифицированные коды/типы провайдера (расширяйте строками при необходимости). */
 export type VoiceProviderFailureCode = string;
 export type VoiceProviderDebug = Record<string, unknown>;
@@ -52,7 +55,7 @@ export type CreateOutboundVoiceCallResult =
       providerDebug?: VoiceProviderDebug;
       twilioCode?: number | null;
       twilioStatus?: number | null;
-      friendlyCode?: TwilioVoiceFriendlyCode;
+      friendlyCode?: VoiceCreateFailureFriendlyCode;
       hint?: string | null;
       /** Оригинальное сообщение провайдера (для логов / событий, не для секретов). */
       rawProviderMessage?: string;
