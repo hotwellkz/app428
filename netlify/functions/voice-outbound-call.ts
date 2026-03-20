@@ -38,7 +38,15 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       return {
         statusCode: out.httpStatus,
         headers: { ...CORS, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ok: false, code: out.code, error: out.message })
+        body: JSON.stringify({
+          ok: false,
+          code: out.code,
+          error: out.message,
+          callId: out.callId ?? null,
+          friendlyCode: out.friendlyCode ?? null,
+          hint: out.hint ?? null,
+          twilioCode: out.twilioCode ?? null
+        })
       };
     }
 
@@ -54,8 +62,16 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   } catch (e) {
     return {
       statusCode: 500,
-      headers: CORS,
-      body: JSON.stringify({ error: String(e) })
+      headers: { ...CORS, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ok: false,
+        error: 'Внутренняя ошибка сервера',
+        code: 'internal_error',
+        callId: null,
+        friendlyCode: null,
+        hint: null,
+        twilioCode: null
+      })
     };
   }
 };

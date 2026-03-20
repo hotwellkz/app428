@@ -124,6 +124,66 @@ export async function voiceFetch(path: string, init: RequestInit): Promise<Respo
   return fetch(fallback, { ...reqInit, cache: 'no-store' });
 }
 
+/** Тело ошибки POST outbound-call (серверный контракт). */
+export type VoiceOutboundErrorPayload = {
+  ok?: boolean;
+  callId?: unknown;
+  error?: unknown;
+  code?: unknown;
+  friendlyCode?: unknown;
+  hint?: unknown;
+  twilioCode?: unknown;
+};
+
+/** Ошибка запуска звонка с полями для UI (hint, friendlyCode). */
+export class VoiceLaunchError extends Error {
+  readonly launchCode?: string;
+  readonly friendlyCode?: string;
+  readonly hint?: string | null;
+  readonly twilioCode?: number | null;
+  /** Сессия могла быть создана до отказа Twilio */
+  readonly failedCallId?: string | null;
+
+  constructor(
+    message: string,
+    opts?: {
+      launchCode?: string;
+      friendlyCode?: string;
+      hint?: string | null;
+      twilioCode?: number | null;
+      failedCallId?: string | null;
+    }
+  ) {
+    super(message);
+    this.name = 'VoiceLaunchError';
+    this.launchCode = opts?.launchCode;
+    this.friendlyCode = opts?.friendlyCode;
+    this.hint = opts?.hint ?? null;
+    this.twilioCode = opts?.twilioCode ?? null;
+    this.failedCallId = opts?.failedCallId ?? null;
+  }
+
+  static fromPayload(data: VoiceOutboundErrorPayload): VoiceLaunchError {
+    const msg = String(data.error ?? 'Не удалось запустить звонок');
+    const tw = data.twilioCode;
+    const twilioCode =
+      typeof tw === 'number' && Number.isFinite(tw)
+        ? tw
+        : typeof tw === 'string' && /^\d+$/.test(tw.trim())
+          ? parseInt(tw.trim(), 10)
+          : null;
+    const failedCallId =
+      data.callId != null ? String(data.callId).trim() || null : null;
+    return new VoiceLaunchError(msg, {
+      launchCode: data.code != null ? String(data.code) : undefined,
+      friendlyCode: data.friendlyCode != null ? String(data.friendlyCode) : undefined,
+      hint: data.hint != null ? String(data.hint) : null,
+      twilioCode,
+      failedCallId
+    });
+  }
+}
+
 export async function launchVoiceCall(payload: {
   botId: string;
   linkedRunId: string;
@@ -168,15 +228,35 @@ export async function launchVoiceCall(payload: {
     } catch {
       continue;
     }
-    const data = (parsed && typeof parsed === 'object' ? parsed : {}) as { callId?: unknown; error?: unknown };
+    const data = (parsed && typeof parsed === 'object' ? parsed : {}) as VoiceOutboundErrorPayload;
     if (data.error != null) lastMessage = String(data.error);
     const callId = data.callId != null ? String(data.callId).trim() : '';
-    if (res.ok && callId) return { callId };
+    const explicitFail = data.ok === false;
+
     if (!res.ok) {
       if (res.status === 404) continue;
-      throw new Error(lastMessage);
+      throw VoiceLaunchError.fromPayload({
+        ok: false,
+        error: data.error ?? lastMessage,
+        code: data.code,
+        friendlyCode: data.friendlyCode,
+        hint: data.hint,
+        twilioCode: data.twilioCode,
+        callId: data.callId
+      });
     }
+
+    // HTTP 200, но провайдер отклонил вызов — не считаем успехом
+    if (explicitFail) {
+      throw VoiceLaunchError.fromPayload(data);
+    }
+
+    if (callId) {
+      return { callId };
+    }
+
+    throw new VoiceLaunchError(lastMessage || 'Сервер вернул успех без идентификатора звонка');
   }
 
-  throw new Error(lastMessage);
+  throw new VoiceLaunchError(lastMessage);
 }

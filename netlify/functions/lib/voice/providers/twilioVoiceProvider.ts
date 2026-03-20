@@ -14,6 +14,7 @@ import {
   type VoiceProviderRuntimeConfig
 } from '../providerConfig';
 import { getVoiceIntegration } from '../../firebaseAdmin';
+import { mapTwilioVoiceCreateError } from '../deriveTwilioVoiceFriendlyError';
 
 const PROVIDER_ID = 'twilio';
 
@@ -175,8 +176,17 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
         initialNormalizedEvents: []
       };
     } catch (e: unknown) {
-      const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message: unknown }).message) : String(e);
-      return { ok: false, error: msg, code: 'twilio_api_error' };
+      const mapped = mapTwilioVoiceCreateError(e);
+      return {
+        ok: false,
+        error: mapped.userMessageRu,
+        code: 'twilio_api_error',
+        twilioCode: mapped.twilioCode,
+        twilioStatus: mapped.twilioStatus,
+        friendlyCode: mapped.friendlyCode,
+        hint: mapped.hintRu,
+        rawProviderMessage: mapped.rawMessage
+      };
     }
   }
 

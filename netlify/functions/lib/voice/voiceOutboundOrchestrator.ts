@@ -7,7 +7,7 @@ import {
   adminUpdateVoiceCallSession
 } from './voiceFirestoreAdmin';
 import { buildVoiceProviderWebhookUrl, loadVoiceProviderRuntimeConfig } from './providerConfig';
-import { getVoiceProviderAdapter } from './voiceProviderAdapter';
+import { resolveVoiceProviderForCompany } from './voiceProviderAdapter';
 import { ingestNormalizedVoiceEvent } from './voiceWebhookIngest';
 
 export type VoiceOutboundRequestBody = {
@@ -22,7 +22,17 @@ export type VoiceOutboundRequestBody = {
 };
 
 export type VoiceOutboundSuccess = { ok: true; callId: string; providerCallId: string };
-export type VoiceOutboundFailure = { ok: false; code: string; message: string; httpStatus: number };
+export type VoiceOutboundFailure = {
+  ok: false;
+  code: string;
+  message: string;
+  httpStatus: number;
+  /** Сессия уже создана до вызова Twilio — для диагностики в UI */
+  callId?: string;
+  friendlyCode?: string | null;
+  hint?: string | null;
+  twilioCode?: number | null;
+};
 
 /** Простая проверка E.164: + и 8–15 цифр после кода страны. */
 export function normalizeToE164(raw: string): string | null {
@@ -51,8 +61,10 @@ export async function orchestrateVoiceOutbound(
     return {
       ok: false,
       code: 'invalid_to_e164',
-      message: 'toE164 must be E.164 (+country...) 8–15 digits',
-      httpStatus: 400
+      message: 'Неверный номер клиента (To): нужен формат E.164',
+      httpStatus: 400,
+      friendlyCode: 'twilio_invalid_to',
+      hint: 'Укажите номер в формате E.164, например +77001234567.'
     };
   }
 
@@ -88,7 +100,7 @@ export async function orchestrateVoiceOutbound(
   const config = loadVoiceProviderRuntimeConfig();
   let adapter;
   try {
-    adapter = getVoiceProviderAdapter(config);
+    adapter = await resolveVoiceProviderForCompany(companyId, config);
   } catch (e) {
     const msg = String(e);
     return {
@@ -158,9 +170,36 @@ export async function orchestrateVoiceOutbound(
   });
 
   if (!adapterResult.ok) {
+    const friendly = adapterResult.friendlyCode ?? null;
+    const hint = adapterResult.hint ?? null;
+    const failCode = adapterResult.code ?? 'adapter_reject';
+
+    console.log(
+      JSON.stringify({
+        tag: 'voice.outbound',
+        ok: false,
+        companyId,
+        callId,
+        linkedRunId,
+        toE164,
+        fromE164,
+        fromNumberId,
+        adapterCode: failCode,
+        friendlyCode: friendly,
+        twilioCode: adapterResult.twilioCode ?? null,
+        twilioStatus: adapterResult.twilioStatus ?? null
+      })
+    );
+
     await adminUpdateVoiceCallSession(companyId, callId, {
       status: 'failed',
-      endReason: adapterResult.error,
+      endReason: friendly ?? failCode,
+      providerCreateFailed: true,
+      providerCreateFriendlyCode: friendly,
+      providerCreateTwilioCode: adapterResult.twilioCode ?? null,
+      providerCreateTwilioStatus: adapterResult.twilioStatus ?? null,
+      providerCreateUserMessage: adapterResult.error,
+      providerCreateRawMessage: adapterResult.rawProviderMessage ?? null,
       endedAt: FieldValue.serverTimestamp(),
       postCallStatus: 'pending'
     });
@@ -171,19 +210,48 @@ export async function orchestrateVoiceOutbound(
       fromStatus: 'queued',
       toStatus: 'failed',
       at: FieldValue.serverTimestamp(),
-      payload: { error: adapterResult.error, code: adapterResult.code ?? null },
+      payload: {
+        error: adapterResult.error,
+        code: failCode,
+        friendlyCode: friendly,
+        twilioCode: adapterResult.twilioCode ?? null,
+        twilioStatus: adapterResult.twilioStatus ?? null,
+        hint,
+        rawMessage: adapterResult.rawProviderMessage ?? null
+      },
       seq: null
     });
-    const code = adapterResult.code ?? 'adapter_reject';
     const configHttp =
-      code === 'twilio_config' || code === 'twilio_public_url' ? 400 : code === 'twilio_api_error' ? 502 : 502;
+      failCode === 'twilio_config' || failCode === 'twilio_public_url'
+        ? 400
+        : failCode === 'twilio_api_error'
+          ? 502
+          : 502;
     return {
       ok: false,
-      code,
+      code: failCode,
       message: adapterResult.error,
-      httpStatus: configHttp
+      httpStatus: configHttp,
+      callId,
+      friendlyCode: friendly,
+      hint,
+      twilioCode: adapterResult.twilioCode ?? null
     };
   }
+
+  console.log(
+    JSON.stringify({
+      tag: 'voice.outbound',
+      ok: true,
+      companyId,
+      callId,
+      linkedRunId,
+      toE164,
+      fromE164,
+      fromNumberId,
+      providerCallId: adapterResult.providerCallId
+    })
+  );
 
   await adminUpdateVoiceCallSession(companyId, callId, {
     providerCallId: adapterResult.providerCallId

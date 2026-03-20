@@ -6,6 +6,7 @@ import type { CrmAiBot } from '../../types/crmAiBot';
 import {
   fetchVoiceIntegrationStatus,
   launchVoiceCall,
+  VoiceLaunchError,
   type VoiceLaunchContext,
   voiceFetch
 } from '../../lib/voice/voiceLauncherApi';
@@ -160,7 +161,12 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
       setLastCallId(out.callId);
       toast.success('Звонок запущен');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Не удалось запустить звонок');
+      if (e instanceof VoiceLaunchError) {
+        const text = e.hint ? `${e.message}\n${e.hint}` : e.message;
+        toast.error(text, { duration: 9000 });
+      } else {
+        toast.error(e instanceof Error ? e.message : 'Не удалось запустить звонок');
+      }
     } finally {
       setLaunching(false);
     }
