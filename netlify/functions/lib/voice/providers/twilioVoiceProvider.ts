@@ -8,6 +8,7 @@ import type {
 } from '../voiceProviderAdapter';
 import {
   assertTwilioOutboundConfig,
+  assertTwilioPublicUrls,
   buildTwilioStatusCallbackValidationUrl,
   buildVoiceTwilioTwimlUrl,
   resolveTwilioWebhookRequestUrl,
@@ -110,14 +111,43 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
 
   async createOutboundCall(input: CreateOutboundVoiceCallInput): Promise<CreateOutboundVoiceCallResult> {
     const companyIntegration = await getVoiceIntegration(input.companyId);
-    const accountSid = companyIntegration?.accountSid?.trim() || this.config.twilioAccountSid || null;
-    const authToken = companyIntegration?.authToken?.trim() || this.config.twilioAuthToken || null;
-    const err = !accountSid || !authToken ? assertTwilioOutboundConfig(this.config) : null;
-    if (err) {
-      return { ok: false, error: err, code: 'twilio_config' };
+    const companyEnabled = companyIntegration?.enabled === true;
+    const companySid = companyIntegration?.accountSid?.trim() ?? '';
+    const companyToken = companyIntegration?.authToken?.trim() ?? '';
+
+    let accountSid: string | null = null;
+    let authToken: string | null = null;
+    let credentialSource: 'company_firestore' | 'server_env';
+
+    if (companyEnabled) {
+      if (!companySid || !companyToken) {
+        return {
+          ok: false,
+          error:
+            'В CRM включена Voice-интеграция, но не заданы Account SID и Auth Token компании. Сохраните их в настройках или отключите интеграцию.',
+          code: 'twilio_company_config_incomplete'
+        };
+      }
+      accountSid = companySid;
+      authToken = companyToken;
+      credentialSource = 'company_firestore';
+    } else {
+      accountSid = this.config.twilioAccountSid?.trim() || null;
+      authToken = this.config.twilioAuthToken?.trim() || null;
+      credentialSource = 'server_env';
+      const envErr = assertTwilioOutboundConfig(this.config);
+      if (envErr) {
+        return { ok: false, error: envErr, code: 'twilio_config' };
+      }
     }
+
     if (!accountSid || !authToken) {
       return { ok: false, error: 'Twilio credentials missing', code: 'twilio_config' };
+    }
+
+    const urlErr = assertTwilioPublicUrls(this.config);
+    if (urlErr) {
+      return { ok: false, error: urlErr, code: 'twilio_public_url' };
     }
 
     const twimlUrl = buildVoiceTwilioTwimlUrl(this.config);
@@ -141,6 +171,21 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
       statusCallback = u.toString();
     }
 
+    const accountSidSuffix = accountSid.length >= 6 ? accountSid.slice(-6) : accountSid;
+    console.log(
+      JSON.stringify({
+        tag: 'voice.twilio.create',
+        phase: 'request',
+        companyId: input.companyId,
+        botId: input.botId,
+        callId: input.callId,
+        credentialSource,
+        accountSidSuffix,
+        fromE164: input.fromE164,
+        toE164: input.toE164
+      })
+    );
+
     try {
       const client = twilio(accountSid, authToken);
       const call = await client.calls.create({
@@ -163,6 +208,19 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
       });
 
       const sid = call.sid;
+      console.log(
+        JSON.stringify({
+          tag: 'voice.twilio.create',
+          phase: 'response',
+          ok: true,
+          companyId: input.companyId,
+          callId: input.callId,
+          credentialSource,
+          accountSidSuffix,
+          providerCallSid: sid,
+          twilioStatus: call.status ?? null
+        })
+      );
       return {
         ok: true,
         providerCallId: sid,
@@ -177,6 +235,20 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
       };
     } catch (e: unknown) {
       const mapped = mapTwilioVoiceCreateError(e);
+      console.log(
+        JSON.stringify({
+          tag: 'voice.twilio.create',
+          phase: 'response',
+          ok: false,
+          companyId: input.companyId,
+          callId: input.callId,
+          credentialSource,
+          accountSidSuffix,
+          twilioCode: mapped.twilioCode,
+          twilioStatus: mapped.twilioStatus,
+          friendlyCode: mapped.friendlyCode
+        })
+      );
       return {
         ok: false,
         error: mapped.userMessageRu,

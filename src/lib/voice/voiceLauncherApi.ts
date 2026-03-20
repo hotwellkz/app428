@@ -28,6 +28,9 @@ export type VoiceIntegrationClientSnapshot = {
   configured?: boolean;
   enabled?: boolean;
   accountSidMasked?: string | null;
+  /** Из Twilio API при последнем сохранении/проверке: Trial, Full и т.д. */
+  twilioAccountType?: string | null;
+  twilioAccountStatus?: string | null;
   connectionStatus?: string;
   connectionError?: string | null;
   lastCheckedAt?: string | null;

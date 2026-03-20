@@ -31,6 +31,9 @@ export interface VoiceIntegrationRow {
   connectionError: string | null;
   lastCheckedAt: Timestamp | null;
   updatedAt: Timestamp;
+  /** Последнее известное значение из Twilio API (Trial / Full и т.д.) */
+  twilioAccountType?: string | null;
+  twilioAccountStatus?: string | null;
 }
 
 function maskRight4(value: string): string {
@@ -57,7 +60,9 @@ export async function getVoiceIntegration(companyId: string): Promise<VoiceInteg
     connectionStatus: (d.connectionStatus as VoiceIntegrationRow['connectionStatus']) ?? 'not_connected',
     connectionError: (d.connectionError as string) ?? null,
     lastCheckedAt: (d.lastCheckedAt as Timestamp) ?? null,
-    updatedAt: (d.updatedAt as Timestamp) ?? Timestamp.now()
+    updatedAt: (d.updatedAt as Timestamp) ?? Timestamp.now(),
+    twilioAccountType: (d.twilioAccountType as string) ?? null,
+    twilioAccountStatus: (d.twilioAccountStatus as string) ?? null
   };
 }
 
@@ -71,6 +76,8 @@ export async function setVoiceIntegration(
     connectionStatus?: VoiceIntegrationRow['connectionStatus'];
     connectionError?: string | null;
     lastCheckedAt?: Timestamp | null;
+    twilioAccountType?: string | null;
+    twilioAccountStatus?: string | null;
   }
 ): Promise<void> {
   const db = getDb();
@@ -96,6 +103,8 @@ export async function setVoiceIntegration(
     payload.authToken = token;
     payload.authTokenMasked = token ? maskRight4(token) : null;
   }
+  if (data.twilioAccountType !== undefined) payload.twilioAccountType = data.twilioAccountType;
+  if (data.twilioAccountStatus !== undefined) payload.twilioAccountStatus = data.twilioAccountStatus;
   if (!snap.exists) {
     payload.createdAt = now;
     payload.enabled = payload.enabled ?? false;

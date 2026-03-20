@@ -222,7 +222,9 @@ export async function orchestrateVoiceOutbound(
       seq: null
     });
     const configHttp =
-      failCode === 'twilio_config' || failCode === 'twilio_public_url'
+      failCode === 'twilio_config' ||
+      failCode === 'twilio_public_url' ||
+      failCode === 'twilio_company_config_incomplete'
         ? 400
         : failCode === 'twilio_api_error'
           ? 502

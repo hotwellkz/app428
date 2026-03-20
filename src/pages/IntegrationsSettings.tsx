@@ -43,6 +43,8 @@ interface VoiceIntegrationState {
   configured: boolean;
   enabled: boolean;
   accountSidMasked: string | null;
+  twilioAccountType: string | null;
+  twilioAccountStatus: string | null;
   connectionStatus: 'connected' | 'not_connected' | 'invalid_config';
   connectionError: string | null;
   voiceReady: boolean;
@@ -113,6 +115,8 @@ export const IntegrationsSettings: React.FC = () => {
     configured: false,
     enabled: false,
     accountSidMasked: null,
+    twilioAccountType: null,
+    twilioAccountStatus: null,
     connectionStatus: 'not_connected',
     connectionError: null,
     voiceReady: false,
@@ -288,6 +292,8 @@ export const IntegrationsSettings: React.FC = () => {
         configured: integrationData.configured === true,
         enabled: integrationData.enabled === true,
         accountSidMasked: (integrationData.accountSidMasked as string) ?? null,
+        twilioAccountType: (integrationData.twilioAccountType as string) ?? null,
+        twilioAccountStatus: (integrationData.twilioAccountStatus as string) ?? null,
         connectionStatus: (integrationData.connectionStatus as VoiceIntegrationState['connectionStatus']) ?? 'not_connected',
         connectionError: (integrationData.connectionError as string) ?? null,
         voiceReady: integrationData.voiceReady === true,
@@ -448,12 +454,24 @@ export const IntegrationsSettings: React.FC = () => {
           testOnly: true
         })
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        accountType?: string;
+        accountSidSuffix?: string;
+        voiceSanityHint?: string | null;
+      };
       if (!res.ok) {
         setVoiceError(data.error ?? 'Проверка не пройдена');
         return;
       }
-      setVoiceSuccess(data.message ?? 'Twilio подключение успешно проверено');
+      const extra =
+        data.accountType != null
+          ? ` Тип аккаунта Twilio: ${data.accountType === 'Full' ? 'Full (оплаченный)' : data.accountType}.`
+          : '';
+      const suffix = data.accountSidSuffix ? ` SID …${data.accountSidSuffix}.` : '';
+      const hint = data.voiceSanityHint ? ` ${data.voiceSanityHint}` : '';
+      setVoiceSuccess((data.message ?? 'Twilio подключение успешно проверено') + extra + suffix + hint);
     } finally {
       setVoiceTesting(false);
     }
@@ -479,12 +497,23 @@ export const IntegrationsSettings: React.FC = () => {
           enabled: voiceForm.enabled
         })
       });
-      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+        accountType?: string;
+        incomingVoiceCapable?: number;
+      };
       if (!res.ok) {
         setVoiceError(data.error ?? 'Ошибка сохранения');
         return;
       }
-      setVoiceSuccess(data.message ?? 'Voice интеграция сохранена');
+      let saveMsg = data.message ?? 'Voice интеграция сохранена';
+      if (data.accountType === 'Full') saveMsg += ' Тип аккаунта Twilio: Full (оплаченный).';
+      else if (data.accountType === 'Trial') saveMsg += ' Тип аккаунта Twilio: Trial.';
+      if (data.incomingVoiceCapable === 0) {
+        saveMsg += ' Внимание: в аккаунте не найдено номеров с Voice — проверьте Twilio Console.';
+      }
+      setVoiceSuccess(saveMsg);
       setVoiceForm((f) => ({ ...f, accountSid: '', authToken: '' }));
       fetchVoice();
     } finally {
@@ -1070,7 +1099,15 @@ export const IntegrationsSettings: React.FC = () => {
                 </span>
               </div>
               {voiceState.accountSidMasked ? (
-                <p className="text-xs text-gray-600">Account SID сохранён ({voiceState.accountSidMasked})</p>
+                <p className="text-xs text-gray-600">
+                  Account SID сохранён ({voiceState.accountSidMasked})
+                  {voiceState.twilioAccountType ? (
+                    <span className="ml-2 text-sky-800 font-medium">
+                      · Twilio: {voiceState.twilioAccountType === 'Full' ? 'Full (оплаченный)' : voiceState.twilioAccountType}
+                      {voiceState.twilioAccountStatus ? `, статус ${voiceState.twilioAccountStatus}` : ''}
+                    </span>
+                  ) : null}
+                </p>
               ) : null}
               <div className="grid sm:grid-cols-2 gap-3">
                 <input

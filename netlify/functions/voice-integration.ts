@@ -64,6 +64,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       configured: !!row,
       enabled: row?.enabled === true,
       accountSidMasked: row?.accountSidMasked ?? null,
+      twilioAccountType: row?.twilioAccountType ?? null,
+      twilioAccountStatus: row?.twilioAccountStatus ?? null,
       connectionStatus: row?.connectionStatus ?? 'not_connected',
       connectionError: row?.connectionError ?? null,
       lastCheckedAt: row?.lastCheckedAt?.toDate?.()?.toISOString?.() ?? null,
@@ -94,11 +96,71 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     return json(400, { error: 'Укажите Account SID и Auth Token' });
   }
 
+  async function probeTwilioAccount(sid: string, token: string) {
+    const client = twilio(sid, token);
+    const account = await client.api.accounts(sid).fetch();
+    const acc = account as { status?: string; type?: string };
+    let incomingVoiceCapable = 0;
+    try {
+      const nums = await client.incomingPhoneNumbers.list({ limit: 8 });
+      incomingVoiceCapable = nums.filter((n) => n.capabilities?.voice === true).length;
+    } catch {
+      /* ignore — sanity only */
+    }
+    return {
+      accountStatus: acc.status != null ? String(acc.status) : null,
+      accountType: acc.type != null ? String(acc.type) : null,
+      incomingVoiceCapable
+    };
+  }
+
   if (accountSid || authToken) {
     try {
       if (!accountSid || !authToken) return json(400, { error: 'Для проверки нужны и Account SID, и Auth Token' });
-      const client = twilio(accountSid, authToken);
-      await client.api.accounts(accountSid).fetch();
+      const probe = await probeTwilioAccount(accountSid, authToken);
+      const accountSidSuffix = accountSid.length >= 6 ? accountSid.slice(-6) : accountSid;
+      const typeLabel =
+        probe.accountType === 'Full'
+          ? 'оплаченный (Full)'
+          : probe.accountType === 'Trial'
+            ? 'trial'
+            : probe.accountType ?? 'неизвестно';
+
+      if (testOnly) {
+        return json(200, {
+          ok: true,
+          message: `Twilio: подключение OK. Тип аккаунта: ${typeLabel}. SID …${accountSidSuffix}`,
+          accountSidMasked: accountSid.length > 4 ? `****${accountSid.slice(-4)}` : '****',
+          accountSidSuffix,
+          accountType: probe.accountType,
+          accountStatus: probe.accountStatus,
+          incomingVoiceCapable: probe.incomingVoiceCapable,
+          voiceSanityOk: probe.incomingVoiceCapable > 0,
+          voiceSanityHint:
+            probe.incomingVoiceCapable === 0
+              ? 'В этом Twilio-аккаунте не найдено входящих номеров с Voice — проверьте Phone Numbers в Console.'
+              : null
+        });
+      }
+
+      await setVoiceIntegration(companyId, {
+        provider: 'twilio',
+        enabled,
+        accountSid,
+        authToken,
+        connectionStatus: 'connected',
+        connectionError: null,
+        lastCheckedAt: Timestamp.now(),
+        twilioAccountType: probe.accountType,
+        twilioAccountStatus: probe.accountStatus
+      });
+      return json(200, {
+        ok: true,
+        message: 'Voice интеграция сохранена',
+        accountType: probe.accountType,
+        accountStatus: probe.accountStatus,
+        incomingVoiceCapable: probe.incomingVoiceCapable
+      });
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Проверка Twilio не пройдена';
       if (testOnly) return json(400, { ok: false, error: message });
@@ -113,17 +175,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   if (testOnly) {
-    return json(200, { ok: true, message: 'Twilio подключение успешно проверено' });
+    return json(400, { ok: false, error: 'Укажите Account SID и Auth Token' });
   }
 
-  await setVoiceIntegration(companyId, {
-    provider: 'twilio',
-    enabled,
-    accountSid,
-    authToken,
-    connectionStatus: 'connected',
-    connectionError: null,
-    lastCheckedAt: Timestamp.now()
-  });
-  return json(200, { ok: true, message: 'Voice интеграция сохранена' });
+  return json(400, { error: 'Укажите Account SID и Auth Token' });
 };

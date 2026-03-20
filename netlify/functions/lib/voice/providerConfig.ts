@@ -126,14 +126,19 @@ export function resolveTwilioSignedRequestUrl(
   }
 }
 
-export function assertTwilioOutboundConfig(config: VoiceProviderRuntimeConfig): string | null {
-  if (!config.twilioAccountSid || !config.twilioAuthToken) {
-    return 'Twilio: задайте TWILIO_ACCOUNT_SID и TWILIO_AUTH_TOKEN';
-  }
+/** Публичные URL для TwiML/statusCallback (нужны и при credentials из Firestore). */
+export function assertTwilioPublicUrls(config: VoiceProviderRuntimeConfig): string | null {
   if (!config.publicSiteUrl && !config.twilioWebhookPublicUrl) {
     return 'Twilio: задайте URL (Netlify) или VOICE_PUBLIC_SITE_URL / TWILIO_WEBHOOK_PUBLIC_URL для callback и TwiML';
   }
   return null;
+}
+
+export function assertTwilioOutboundConfig(config: VoiceProviderRuntimeConfig): string | null {
+  if (!config.twilioAccountSid || !config.twilioAuthToken) {
+    return 'Twilio: задайте TWILIO_ACCOUNT_SID и TWILIO_AUTH_TOKEN';
+  }
+  return assertTwilioPublicUrls(config);
 }
 
 /** @deprecated alias — используйте resolveTwilioSignedRequestUrl(..., 'provider_webhook'). */
