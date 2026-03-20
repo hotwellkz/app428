@@ -15,17 +15,29 @@ export type VoiceLaunchContext = {
   mode?: VoiceLaunchMode;
 };
 
+function fallbackVoicePath(path: string): string | null {
+  if (!path.startsWith('/api/voice/')) return null;
+  const tail = path.replace('/api/voice/', '').trim();
+  if (!tail) return null;
+  return `/.netlify/functions/voice-${tail}`;
+}
+
 export async function voiceFetch(path: string, init: RequestInit): Promise<Response> {
   const token = await getAuthToken();
   if (!token) throw new Error('Нет авторизации');
-  return fetch(path, {
+  const reqInit: RequestInit = {
     ...init,
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
       ...(init.headers ?? {})
     }
-  });
+  };
+  const primary = await fetch(path, reqInit);
+  if (primary.status !== 404) return primary;
+  const fallback = fallbackVoicePath(path);
+  if (!fallback || fallback === path) return primary;
+  return fetch(fallback, reqInit);
 }
 
 export async function launchVoiceCall(payload: {

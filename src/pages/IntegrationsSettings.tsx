@@ -9,8 +9,8 @@ const API_OPENAI_INTEGRATION = '/.netlify/functions/openai-integration';
 const API_KASPI_INTEGRATION = '/.netlify/functions/kaspi-integration';
 const API_KASPI_VERIFY = '/.netlify/functions/kaspi-verify';
 const API_KASPI_SYNC = '/.netlify/functions/kaspi-sync-orders';
-const API_VOICE_INTEGRATION = '/api/voice/integration';
-const API_VOICE_NUMBERS = '/api/voice/numbers';
+const API_VOICE_INTEGRATION = '/.netlify/functions/voice-integration';
+const API_VOICE_NUMBERS = '/.netlify/functions/voice-numbers';
 
 const looksLikeEmail = (s: string) => /@/.test(s.trim());
 
