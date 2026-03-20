@@ -229,9 +229,7 @@ export async function orchestrateVoiceOutbound(
         : failCode === 'twilio_api_error'
           ? friendly === 'twilio_auth_error'
             ? 401
-            : friendly === 'twilio_provider_unknown'
-              ? 502
-              : 400
+            : 400
           : 502;
     return {
       ok: false,
