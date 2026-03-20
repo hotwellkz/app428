@@ -247,15 +247,22 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   if (String(body.provider ?? '').toLowerCase() === 'telnyx') {
-    const apiKey = (body.apiKey ?? '').trim();
-    const publicKey = (body.publicKey ?? '').trim();
+    const existingRow = await getVoiceIntegration(companyId);
+    const apiKeyFromBody = (body.apiKey ?? '').trim();
+    const publicKeyFromBody = (body.publicKey ?? '').trim();
+    /** Пустые поля после «Сохранить» на клиенте — подставляем уже сохранённые в Firestore. */
+    const apiKey = apiKeyFromBody || existingRow?.telnyxApiKey?.trim() || '';
+    const publicKey = publicKeyFromBody || existingRow?.telnyxPublicKey?.trim() || '';
     const testOnly = body.testOnly === true;
     const enabled = body.enabled !== false;
     const connectionId = body.connectionId != null ? String(body.connectionId).trim() || null : undefined;
 
     if (testOnly) {
       if (!apiKey) {
-        return json(400, { ok: false, error: 'Для проверки Telnyx укажите API Key' });
+        return json(400, {
+          ok: false,
+          error: 'Для проверки Telnyx укажите API Key в поле или сначала сохраните ключ в интеграции'
+        });
       }
       const probe = await probeTelnyxApiKey(apiKey);
       if (!probe.ok) {
@@ -293,7 +300,10 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     }
 
     if (!apiKey || !publicKey) {
-      return json(400, { error: 'Укажите API Key и Public Key Telnyx' });
+      return json(400, {
+        error:
+          'Укажите API Key и Public Key Telnyx в полях формы (при первом подключении) или сохраните их один раз — дальше можно менять только Connection ID и переключатель без повторного ввода ключей.'
+      });
     }
 
     const probe = await probeTelnyxApiKey(apiKey);

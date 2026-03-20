@@ -417,6 +417,11 @@ export const IntegrationsSettings: React.FC = () => {
           provider: String(x.provider ?? 'telnyx')
         }))
       );
+      setTelnyxForm((f) => ({
+        ...f,
+        connectionId: telnyxData.connectionId != null ? String(telnyxData.connectionId) : '',
+        enabled: telnyxData.enabled === true
+      }));
     } catch (e) {
       setVoiceError('Не удалось загрузить Voice настройки');
     } finally {
@@ -696,8 +701,8 @@ export const IntegrationsSettings: React.FC = () => {
   };
 
   const handleTelnyxTest = async () => {
-    if (!telnyxForm.apiKey.trim()) {
-      setVoiceError('Укажите API Key Telnyx для проверки');
+    if (!telnyxForm.apiKey.trim() && !telnyxState.apiKeyMasked) {
+      setVoiceError('Укажите API Key Telnyx для проверки или сохраните ключ в интеграции');
       return;
     }
     setVoiceTesting(true);
@@ -729,8 +734,10 @@ export const IntegrationsSettings: React.FC = () => {
   };
 
   const handleTelnyxSave = async () => {
-    if (!telnyxForm.apiKey.trim() || !telnyxForm.publicKey.trim()) {
-      setVoiceError('Укажите API Key и Public Key Telnyx');
+    const hasKeysInForm = !!(telnyxForm.apiKey.trim() && telnyxForm.publicKey.trim());
+    const hasKeysOnServer = !!(telnyxState.apiKeyMasked && telnyxState.publicKeySet);
+    if (!hasKeysInForm && !hasKeysOnServer) {
+      setVoiceError('Укажите API Key и Public Key Telnyx (первое сохранение)');
       return;
     }
     setVoiceSaving(true);
