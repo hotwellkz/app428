@@ -37,12 +37,39 @@ export interface DerivedAiRunWorkflow {
 }
 
 function toMs(v: unknown): number | null {
-  if (!v) return null;
-  if (typeof v === 'object' && v && 'toMillis' in (v as { toMillis?: unknown })) {
-    const fn = (v as { toMillis?: () => number }).toMillis;
-    if (typeof fn === 'function') return fn();
-  }
+  if (v == null) return null;
   if (v instanceof Date) return v.getTime();
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+
+  if (typeof v === 'object' && v !== null) {
+    const o = v as Record<string, unknown>;
+    // Сырой Firestore Timestamp / сериализация: { seconds, nanoseconds }
+    const sec = o.seconds;
+    const nano = o.nanoseconds;
+    if (typeof sec === 'number' && Number.isFinite(sec)) {
+      const n = typeof nano === 'number' && Number.isFinite(nano) ? nano : 0;
+      return sec * 1000 + Math.floor(n / 1e6);
+    }
+    // Экземпляр Timestamp с методом toMillis (может падать при битых данных — ловим)
+    const toMillis = o.toMillis;
+    if (typeof toMillis === 'function') {
+      try {
+        const ms = (toMillis as () => number).call(v);
+        return typeof ms === 'number' && Number.isFinite(ms) ? ms : null;
+      } catch {
+        return null;
+      }
+    }
+    if (typeof o.toDate === 'function') {
+      try {
+        const d = (o.toDate as () => Date).call(v);
+        return d instanceof Date && !Number.isNaN(d.getTime()) ? d.getTime() : null;
+      } catch {
+        return null;
+      }
+    }
+  }
+
   return null;
 }
 
