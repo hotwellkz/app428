@@ -71,7 +71,7 @@ export const VOICE_TWILIO_GATHER_FUNCTION_PATH = '/.netlify/functions/voice-twil
 export function buildVoiceProviderWebhookUrl(config: VoiceProviderRuntimeConfig): string {
   const base = config.publicSiteUrl?.replace(/\/$/, '') ?? '';
   if (!base) return VOICE_WEBHOOK_FUNCTION_PATH;
-  return `${base}/api/voice/provider-webhook`;
+  return `${base}${VOICE_WEBHOOK_FUNCTION_PATH}`;
 }
 
 /**
@@ -87,13 +87,13 @@ export function buildTwilioStatusCallbackValidationUrl(config: VoiceProviderRunt
 export function buildVoiceTwilioTwimlUrl(config: VoiceProviderRuntimeConfig): string {
   const base = config.publicSiteUrl?.replace(/\/$/, '') ?? '';
   if (!base) return VOICE_TWILIO_TWIML_FUNCTION_PATH;
-  return `${base}/api/voice/twilio-twiml`;
+  return `${base}${VOICE_TWILIO_TWIML_FUNCTION_PATH}`;
 }
 
 export function buildVoiceTwilioGatherActionUrl(config: VoiceProviderRuntimeConfig): string {
   const base = config.publicSiteUrl?.replace(/\/$/, '') ?? '';
   if (!base) return VOICE_TWILIO_GATHER_FUNCTION_PATH;
-  return `${base}/api/voice/twilio-gather-action`;
+  return `${base}${VOICE_TWILIO_GATHER_FUNCTION_PATH}`;
 }
 
 export type TwilioSignedEndpointKind = 'provider_webhook' | 'twiml' | 'gather';
