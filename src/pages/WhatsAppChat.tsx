@@ -8,6 +8,7 @@ import { useMobileWhatsAppChat } from '../contexts/MobileWhatsAppChatContext';
 import { useMobileSidebar } from '../contexts/MobileSidebarContext';
 import {
   subscribeConversationsList,
+  type SubscribeConversationsResult,
   subscribeMessages,
   sortConversationItems,
   clearUnreadCount,
@@ -1122,6 +1123,7 @@ const WhatsAppChat: React.FC = () => {
   }, []);
 
   const loadMoreConversationsRef = useRef<(() => Promise<void>) | null>(null);
+  const conversationsSubRef = useRef<SubscribeConversationsResult | null>(null);
   const [conversationsLoadingMore, setConversationsLoadingMore] = useState(false);
   const [conversationsHasMore, setConversationsHasMore] = useState(true);
 
@@ -1129,6 +1131,7 @@ const WhatsAppChat: React.FC = () => {
     if (!companyId) {
       setConversations([]);
       loadMoreConversationsRef.current = null;
+      conversationsSubRef.current = null;
       return;
     }
     try {
@@ -1152,34 +1155,32 @@ const WhatsAppChat: React.FC = () => {
       }
     };
     const sub = subscribeConversationsList(companyId, setConversationsWithNotification, onError);
+    conversationsSubRef.current = sub;
     loadMoreConversationsRef.current = async () => {
       setConversationsLoadingMore(true);
       try {
-        const { hasMore } = await sub.loadMore();
+        const { hasMore, appended } = await sub.loadMore();
         setConversationsHasMore(hasMore);
+        if (import.meta.env.DEV) {
+          console.debug('[WhatsApp] conversations loadMore', { appended, hasMore, getHasMore: sub.getHasMore() });
+        }
       } finally {
         setConversationsLoadingMore(false);
       }
     };
 
-    /** Фоновая догрузка всех страниц чатов без ручного скролла: счётчики "Ждут"/"Непр." и фильтры строятся по полному списку. */
-    let cancelled = false;
-    const preloadAll = async () => {
-      while (!cancelled && sub.getHasMore()) {
-        const { appended, hasMore } = await sub.loadMore();
-        setConversationsHasMore(hasMore);
-        if (appended === 0) break;
-        await new Promise((r) => setTimeout(r, 80));
-      }
-    };
-    preloadAll();
-
     return () => {
-      cancelled = true;
       sub.unsubscribe();
+      conversationsSubRef.current = null;
       loadMoreConversationsRef.current = null;
     };
   }, [companyId, setConversationsWithNotification]);
+
+  /** Синхронизация hasMore с внутренним состоянием подписки после merge/обновлений списка. */
+  useEffect(() => {
+    if (!companyId || !conversationsSubRef.current) return;
+    setConversationsHasMore(conversationsSubRef.current.getHasMore());
+  }, [companyId, conversations.length]);
 
   useEffect(() => {
     if (!chatIdFromUrl) return;
@@ -3442,6 +3443,7 @@ const WhatsAppChat: React.FC = () => {
             loadingMore={searchActive ? false : conversationsLoadingMore}
             hasMore={searchActive ? false : conversationsHasMore}
             onLoadMore={searchActive ? undefined : () => loadMoreConversationsRef.current?.()}
+            showPaginationHints={!searchActive}
             onConversationContextMenu={(id, x, y, source) => {
               if (import.meta.env.DEV) {
                 console.log('[WhatsApp] conversation context menu open', { conversationId: id, x, y, source });

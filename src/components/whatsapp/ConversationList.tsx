@@ -1,4 +1,4 @@
-import React, { useRef, useCallback, memo } from 'react';
+import React, { useRef, useCallback, memo, useEffect } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { formatLastMessageTime } from './whatsappUtils';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
@@ -28,7 +28,9 @@ interface ConversationListProps {
   onSelect: (id: string) => void;
   loadingMore?: boolean;
   hasMore?: boolean;
-  onLoadMore?: () => void;
+  onLoadMore?: () => void | Promise<void>;
+  /** Подсказки пагинации («Загрузить ещё», «Все чаты загружены») — выключать при поиске по API. */
+  showPaginationHints?: boolean;
   onConversationContextMenu?: (id: string, x: number, y: number, source: 'desktop' | 'mobile') => void;
 }
 
@@ -251,6 +253,8 @@ function SkeletonRow() {
   );
 }
 
+const LOAD_MORE_COOLDOWN_MS = 600;
+
 const ConversationList: React.FC<ConversationListProps> = ({
   items,
   selectedId,
@@ -258,9 +262,11 @@ const ConversationList: React.FC<ConversationListProps> = ({
   loadingMore = false,
   hasMore = false,
   onLoadMore,
+  showPaginationHints = true,
   onConversationContextMenu
 }) => {
   const parentRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const loadMoreRequestedRef = useRef(false);
 
@@ -271,25 +277,62 @@ const ConversationList: React.FC<ConversationListProps> = ({
     overscan: 8
   });
 
+  const triggerLoadMore = useCallback(
+    (reason: 'scroll' | 'intersection' | 'button') => {
+      if (!hasMore || loadingMore || !onLoadMore) return;
+      if (loadMoreRequestedRef.current) return;
+      loadMoreRequestedRef.current = true;
+      if (import.meta.env.DEV) {
+        const root = parentRef.current;
+        const st = root ? root.scrollTop : 0;
+        const sh = root ? root.scrollHeight : 0;
+        const ch = root ? root.clientHeight : 0;
+        console.debug('[ConversationList] load more', {
+          reason,
+          itemsCount: items.length,
+          hasMore,
+          loadingMore,
+          scrollBottomPx: root ? sh - st - ch : null
+        });
+      }
+      void Promise.resolve(onLoadMore());
+      window.setTimeout(() => {
+        loadMoreRequestedRef.current = false;
+      }, LOAD_MORE_COOLDOWN_MS);
+    },
+    [hasMore, loadingMore, onLoadMore, items.length]
+  );
+
   const onScroll = useCallback(() => {
     const el = parentRef.current;
     if (!el || !hasMore || loadingMore || !onLoadMore) return;
     const { scrollTop, clientHeight, scrollHeight } = el;
     if (scrollHeight - scrollTop - clientHeight < LOAD_MORE_PX) {
-      if (!loadMoreRequestedRef.current) {
-        loadMoreRequestedRef.current = true;
-        onLoadMore();
-        window.setTimeout(() => {
-          loadMoreRequestedRef.current = false;
-        }, 600);
-      }
+      triggerLoadMore('scroll');
     }
-  }, [hasMore, loadingMore, onLoadMore]);
+  }, [hasMore, loadingMore, onLoadMore, triggerLoadMore]);
+
+  useEffect(() => {
+    const root = parentRef.current;
+    const sentinel = sentinelRef.current;
+    if (!root || !sentinel || !hasMore || !onLoadMore || items.length === 0) return;
+
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          triggerLoadMore('intersection');
+        }
+      },
+      { root, rootMargin: '120px', threshold: 0 }
+    );
+    obs.observe(sentinel);
+    return () => obs.disconnect();
+  }, [hasMore, onLoadMore, items.length, triggerLoadMore]);
 
   return (
     <div
       ref={parentRef}
-      className="chats-list-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden"
+      className="chats-list-scroll flex-1 min-h-0 overflow-y-auto overflow-x-hidden flex flex-col"
       onScroll={onScroll}
     >
       {items.length === 0 && !loadingMore && (
@@ -331,11 +374,30 @@ const ConversationList: React.FC<ConversationListProps> = ({
           })}
         </div>
       )}
+      {items.length > 0 && showPaginationHints && hasMore && onLoadMore && (
+        <div ref={sentinelRef} className="h-px w-full shrink-0" aria-hidden />
+      )}
       {loadingMore && (
         <div className="border-t border-gray-100">
           {Array.from({ length: 5 }).map((_, i) => (
             <SkeletonRow key={`sk-${i}`} />
           ))}
+        </div>
+      )}
+      {showPaginationHints && hasMore && onLoadMore && !loadingMore && items.length > 0 && (
+        <div className="flex-none border-t border-gray-100 bg-gray-50/90 px-3 py-2">
+          <button
+            type="button"
+            onClick={() => triggerLoadMore('button')}
+            className="w-full rounded-lg border border-gray-200 bg-white py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Загрузить ещё
+          </button>
+        </div>
+      )}
+      {showPaginationHints && !hasMore && !loadingMore && items.length > 0 && (
+        <div className="flex-none border-t border-gray-100 px-3 py-2 text-center text-xs text-gray-400">
+          Все чаты загружены
         </div>
       )}
     </div>

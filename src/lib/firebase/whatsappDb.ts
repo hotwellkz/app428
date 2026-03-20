@@ -715,6 +715,8 @@ export function subscribeConversationsList(
   let extraItemsById = new Map<string, ConversationListItem>();
   let loadingMore = false;
   let hasMorePages = true;
+  /** Первый onSnapshot ещё не пришёл — нельзя вызывать startAfter без курсора. */
+  let firstSnapshotReady = false;
 
   async function loadClients(clientIds: string[]) {
     const missing = clientIds.filter((id) => !clientsById.has(id));
@@ -765,11 +767,13 @@ export function subscribeConversationsList(
     unsubFirst = onSnapshot(
       q,
       async (convSnapshot) => {
+        firstSnapshotReady = true;
         firstPageSnapDocs = convSnapshot.docs;
         firstPageConversations = convSnapshot.docs.map((d) =>
           docToConversation(d.id, d.data() as Record<string, unknown>)
         );
-        hasMorePages = convSnapshot.docs.length >= CONVERSATIONS_PAGE_SIZE;
+        const pageLimit = useFallback ? CONVERSATIONS_FALLBACK_PAGE_SIZE : CONVERSATIONS_PAGE_SIZE;
+        hasMorePages = convSnapshot.docs.length >= pageLimit;
         const ids = [...new Set(firstPageConversations.map((c) => c.clientId))];
         await loadClients(ids);
         mergeAndEmit();
@@ -795,7 +799,17 @@ export function subscribeConversationsList(
       loadMoreCursors.length > 0
         ? loadMoreCursors[loadMoreCursors.length - 1]
         : firstPageSnapDocs[firstPageSnapDocs.length - 1];
-    if (!lastCursor) return { appended: 0, hasMore: false };
+    /**
+     * Гонка: loadMore вызвали до первого onSnapshot — курсора ещё нет.
+     * Раньше возвращали hasMore: false → UI считал, что страниц больше нет, и скролл не догружал.
+     */
+    if (!lastCursor) {
+      if (!firstSnapshotReady) {
+        return { appended: 0, hasMore: true };
+      }
+      hasMorePages = false;
+      return { appended: 0, hasMore: false };
+    }
     loadingMore = true;
     try {
       const q = useFallback
