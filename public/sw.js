@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hotwell-cache-v6'; // v6: passthrough /.netlify/functions
+const CACHE_NAME = 'hotwell-cache-v7'; // v7: не перехватываем API — без ложного 503 от SW
 const SETTINGS_CACHE_NAME = 'hotwell-settings-v1';
 
 const CACHED_URLS = [
@@ -137,9 +137,10 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // API через Netlify Functions — не кэшировать, всегда сеть
-  if (url.pathname.startsWith('/.netlify/functions')) {
-    event.respondWith(fetch(event.request).catch(() => createErrorResponse(503)));
+  // Netlify Functions и /api/* (редиректы на функции) — НЕ перехватываем.
+  // Иначе при сбое fetch() в SW Chrome показывает «503 (Service Worker Error)», хотя
+  // прямой запрос от страницы мог бы пройти. Без respondWith() сработает обычная сеть.
+  if (url.pathname.startsWith('/.netlify/functions') || url.pathname.startsWith('/api/')) {
     return;
   }
 
