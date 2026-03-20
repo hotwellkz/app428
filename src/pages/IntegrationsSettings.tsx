@@ -712,7 +712,8 @@ export const IntegrationsSettings: React.FC = () => {
         body: JSON.stringify({
           provider: 'telnyx',
           apiKey: telnyxForm.apiKey.trim(),
-          testOnly: true
+          testOnly: true,
+          connectionId: telnyxForm.connectionId.trim() || null
         })
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
@@ -1637,7 +1638,7 @@ export const IntegrationsSettings: React.FC = () => {
                 type="text"
                 value={telnyxForm.connectionId}
                 onChange={(e) => setTelnyxForm((f) => ({ ...f, connectionId: e.target.value }))}
-                placeholder="Connection / Call Control Application ID (для исходящих звонков)"
+                placeholder="Только ID из Mission Control → Call Control Applications (цифры). Не API Key."
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
               <label className="flex items-center gap-2 text-sm">

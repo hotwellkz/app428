@@ -12,7 +12,11 @@ import {
   type VoiceIntegrationRow
 } from './lib/firebaseAdmin';
 import { Timestamp } from 'firebase-admin/firestore';
-import { probeTelnyxApiKey } from './lib/voice/providers/telnyxVoiceProvider';
+import {
+  probeTelnyxApiKey,
+  fetchTelnyxCallControlApplication,
+  validateTelnyxCallControlWebhookForCrm
+} from './lib/voice/providers/telnyxVoiceProvider';
 import { voiceFriendlyMessageRu } from './lib/voice/voiceProviderFriendlyCodes';
 import { buildVoiceProviderWebhookUrl, loadVoiceProviderRuntimeConfig } from './lib/voice/providerConfig';
 
@@ -29,6 +33,19 @@ function json(status: number, body: Record<string, unknown>): HandlerResponse {
     headers: { 'Content-Type': 'application/json', ...CORS },
     body: JSON.stringify(body)
   };
+}
+
+async function validateTelnyxCallControlId(
+  apiKey: string,
+  connectionIdRaw: string | null | undefined
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const cid = connectionIdRaw != null ? String(connectionIdRaw).trim() : '';
+  if (!cid) return { ok: true };
+  const app = await fetchTelnyxCallControlApplication(apiKey, cid);
+  if (!app.ok) return { ok: false, error: app.error };
+  const wh = validateTelnyxCallControlWebhookForCrm(app.webhookEventUrl);
+  if (!wh.ok) return { ok: false, error: wh.error };
+  return { ok: true };
 }
 
 async function getDefaultNumberStatus(
@@ -249,6 +266,15 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         });
         return json(400, { ok: false, error: probe.error });
       }
+      const ccCheck = await validateTelnyxCallControlId(apiKey, connectionId);
+      if (!ccCheck.ok) {
+        await mergeVoiceIntegrationTelnyx(companyId, {
+          telnyxConnectionStatus: 'invalid_config',
+          telnyxConnectionError: ccCheck.error,
+          telnyxLastCheckedAt: Timestamp.now()
+        });
+        return json(400, { ok: false, error: ccCheck.error });
+      }
       await mergeVoiceIntegrationTelnyx(companyId, {
         telnyxConnectionStatus: 'connected',
         telnyxConnectionError: null,
@@ -259,7 +285,10 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       });
       return json(200, {
         ok: true,
-        message: 'Telnyx: подключение по API Key проверено успешно'
+        message:
+          connectionId
+            ? 'Telnyx: API Key и Call Control Application (webhook) проверены успешно'
+            : 'Telnyx: подключение по API Key проверено успешно (добавьте Connection ID для проверки приложения)'
       });
     }
 
@@ -278,6 +307,19 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         ...(connectionId !== undefined ? { telnyxConnectionId: connectionId } : {})
       });
       return json(400, { ok: false, error: probe.error });
+    }
+
+    const ccCheck = await validateTelnyxCallControlId(apiKey, connectionId);
+    if (!ccCheck.ok) {
+      await mergeVoiceIntegrationTelnyx(companyId, {
+        telnyxEnabled: false,
+        telnyxPublicKey: publicKey,
+        telnyxConnectionStatus: 'invalid_config',
+        telnyxConnectionError: ccCheck.error,
+        telnyxLastCheckedAt: Timestamp.now(),
+        ...(connectionId !== undefined ? { telnyxConnectionId: connectionId } : {})
+      });
+      return json(400, { ok: false, error: ccCheck.error });
     }
 
     await mergeVoiceIntegrationTelnyx(companyId, {

@@ -2,6 +2,7 @@ import type { VoiceNormalizedWebhookEvent } from '../../../../../src/types/voice
 import { getVoiceIntegration } from '../../firebaseAdmin';
 import {
   buildVoiceProviderWebhookUrl,
+  loadVoiceProviderRuntimeConfig,
   type VoiceProviderRuntimeConfig
 } from '../providerConfig';
 import { verifyTelnyxWebhookSignature } from '../telnyxWebhookVerify';
@@ -37,6 +38,124 @@ function headerCi(headers: Record<string, string | undefined>, name: string): st
     if (k.toLowerCase() === low) return v;
   }
   return undefined;
+}
+
+/** GET /v2/call_control_applications/{id} — проверка ID перед исходящим звонком. */
+export type TelnyxCallControlAppProbe =
+  | {
+      ok: true;
+      id: string;
+      applicationName: string | null;
+      webhookEventUrl: string | null;
+      active: boolean;
+    }
+  | { ok: false; error: string; httpStatus?: number };
+
+export async function fetchTelnyxCallControlApplication(
+  apiKey: string,
+  applicationId: string
+): Promise<TelnyxCallControlAppProbe> {
+  const k = apiKey.trim();
+  const id = applicationId.trim();
+  if (!k) return { ok: false, error: 'Пустой API Key' };
+  if (!id) return { ok: false, error: 'Пустой Connection / Application ID' };
+  if (id.startsWith('KEY')) {
+    return {
+      ok: false,
+      error:
+        'В поле Connection / Application ID похоже вставлен API Key (начинается с KEY…). Нужен только числовой ID приложения Call Control из Mission Control (Voice → Call Control Applications → ID).'
+    };
+  }
+  try {
+    const res = await fetch(
+      `https://api.telnyx.com/v2/call_control_applications/${encodeURIComponent(id)}`,
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${k}`, Accept: 'application/json' }
+      }
+    );
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    if (res.status === 404) {
+      return {
+        ok: false,
+        error:
+          'Call Control Application с таким ID не найден (404). В Mission Control: Voice → Call Control Applications — скопируйте ID приложения. Не используйте ID номера телефона или TeXML Connection из другого раздела.',
+        httpStatus: 404
+      };
+    }
+    if (!res.ok) {
+      const errors = json.errors as Array<{ detail?: string; title?: string }> | undefined;
+      const msg = errors?.[0]?.detail || errors?.[0]?.title || JSON.stringify(json).slice(0, 280);
+      return { ok: false, error: `Telnyx API ${res.status}: ${msg}`, httpStatus: res.status };
+    }
+    const data = json.data as Record<string, unknown> | undefined;
+    if (!data || typeof data !== 'object') {
+      return { ok: false, error: 'Telnyx: пустой ответ при получении Call Control Application' };
+    }
+    const w1 = data.webhook_event_url;
+    const w2 = (data as Record<string, unknown>).webhook_url;
+    const webhookEventUrl =
+      typeof w1 === 'string' && w1.trim()
+        ? w1.trim()
+        : typeof w2 === 'string' && w2.trim()
+          ? w2.trim()
+          : null;
+    return {
+      ok: true,
+      id: String(data.id ?? id),
+      applicationName:
+        typeof data.application_name === 'string' ? data.application_name.trim() : null,
+      webhookEventUrl,
+      active: data.active === true
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Сеть / Telnyx недоступен' };
+  }
+}
+
+/**
+ * Сверяет webhook_event_url из Telnyx с тем, что CRM использует при POST /v2/calls.
+ * Домен должен совпадать с VOICE_PUBLIC_SITE_URL; путь — содержать voice-provider-webhook.
+ */
+export function validateTelnyxCallControlWebhookForCrm(
+  webhookEventUrl: string | null
+): { ok: true } | { ok: false; error: string } {
+  const cfg = loadVoiceProviderRuntimeConfig();
+  const expected = buildVoiceProviderWebhookUrl(cfg);
+  if (!webhookEventUrl?.trim()) {
+    return {
+      ok: false,
+      error:
+        'В Call Control Application в Mission Control не задан Webhook URL. Откройте приложение → укажите URL из блока CRM «Webhook URL для Call Control» (HTTPS, без параметров ?).'
+    };
+  }
+  const w = webhookEventUrl.trim();
+  if (!/^https:\/\//i.test(w)) {
+    return { ok: false, error: 'Webhook URL в Telnyx должен начинаться с https://' };
+  }
+  if (!expected.startsWith('http')) {
+    return { ok: true };
+  }
+  try {
+    const exp = new URL(expected);
+    const got = new URL(w);
+    if (exp.hostname !== got.hostname) {
+      return {
+        ok: false,
+        error: `В Telnyx Webhook указывает на ${got.hostname}, CRM собирает URL для ${exp.hostname}. Задайте в Netlify переменную URL / VOICE_PUBLIC_SITE_URL=https://${exp.hostname} и тот же хост в Mission Control.`
+      };
+    }
+    if (!got.pathname.includes('voice-provider-webhook')) {
+      return {
+        ok: false,
+        error:
+          'В Telnyx в пути Webhook должен быть endpoint …/voice-provider-webhook (скопируйте полный URL из CRM).'
+      };
+    }
+    return { ok: true };
+  } catch {
+    return { ok: false, error: 'Некорректный Webhook URL в Telnyx' };
+  }
 }
 
 export async function probeTelnyxApiKey(apiKey: string): Promise<{ ok: true } | { ok: false; error: string }> {
