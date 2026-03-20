@@ -1,6 +1,12 @@
 import type { WhatsAppAiBotRunRecord } from '../firebase/whatsappAiBotRuns';
 import type { AiControlAggregatedStatus } from '../../types/aiControl';
 import { humanizeFallbackReason } from './fallbackReasonLabels';
+import { channelBadgeLabel, deriveAiRunChannelFromRun, type AiControlDerivedChannel } from './deriveAiRunChannel';
+import {
+  formatVoiceRunStatusLine,
+  getVoiceCallSnapshotFromRun,
+  getVoicePostCallFromRun
+} from './voiceRunBridge';
 
 export type RunSourceType = 'snapshot' | 'fallback' | 'unknown';
 
@@ -22,6 +28,10 @@ export interface AiRunListPresentation {
   requiresAttention: boolean;
   attentionReasons: string[];
   badges: string[];
+  /** Канал для UI (voice / whatsapp / …) */
+  derivedChannel: AiControlDerivedChannel;
+  /** Voice: компактная операционная строка (статусы звонка / post-call) */
+  voiceOperationalLine: string | null;
 }
 
 function preview(text: string | null | undefined, max = 140): string | null {
@@ -34,6 +44,12 @@ export function deriveAiRunListPresentation(
   run: WhatsAppAiBotRunRecord,
   aggregated: AiControlAggregatedStatus
 ): AiRunListPresentation {
+  const derivedChannel = deriveAiRunChannelFromRun(run);
+  const isVoice = derivedChannel === 'voice';
+  const voiceSnap = getVoiceCallSnapshotFromRun(run);
+  const voicePost = getVoicePostCallFromRun(run);
+  const voiceOperationalLine = isVoice ? formatVoiceRunStatusLine(run) : null;
+
   const hasSnapshot = !!(
     run.answerSnapshot ||
     run.summarySnapshot ||
@@ -85,13 +101,39 @@ export function deriveAiRunListPresentation(
   if (runStatus === 'error') attentionReasons.push('Ошибка runtime/API');
   if (runStatus === 'skipped') attentionReasons.push(run.reason ? `Skipped: ${run.reason}` : 'Run пропущен');
   if (source === 'fallback') attentionReasons.push('Использован fallback');
-  if (!hasExtraction) attentionReasons.push('Extraction не получен');
+  if (!hasExtraction && !(isVoice && voicePost?.lightweight)) {
+    attentionReasons.push('Extraction не получен');
+  }
   if (crmLabel === 'CRM error') attentionReasons.push('Ошибка при записи в CRM');
-  if (run.extractionApplyStatus === 'skipped') attentionReasons.push('CRM apply пропущен');
+  if (run.extractionApplyStatus === 'skipped' && !(isVoice && voicePost?.lightweight)) {
+    attentionReasons.push('CRM apply пропущен');
+  }
   if (hasDealRec && !hasDealCreate) attentionReasons.push('Сделка рекомендована, но не создана');
   if (hasTaskRec && !hasTaskCreate) attentionReasons.push('Задача рекомендована, но не создана');
   if (runStatus === 'duplicate') attentionReasons.push('Обнаружен duplicate');
   if (reason.includes('пауз') || reason.includes('paused')) attentionReasons.push('Бот на паузе');
+
+  if (isVoice) {
+    if (voiceSnap?.postCallStatus === 'failed') attentionReasons.push('Голос: post-call pipeline завершился с ошибкой');
+    if (voicePost?.extractionError) attentionReasons.push(`Голос: extraction — ${voicePost.extractionError}`);
+    if (voicePost?.summaryError) attentionReasons.push(`Голос: summary — ${voicePost.summaryError}`);
+    if (voicePost?.dealCreateError) attentionReasons.push(`Голос: сделка — ${voicePost.dealCreateError}`);
+    if (voicePost?.taskApplyError) attentionReasons.push(`Голос: задача — ${voicePost.taskApplyError}`);
+    if (voiceSnap?.followUpStatus === 'error' || (voicePost?.followUpError && voiceSnap?.followUpStatus !== 'skipped')) {
+      attentionReasons.push(`Голос: follow-up WhatsApp — ${voiceSnap?.followUpError || voicePost?.followUpError || 'ошибка'}`);
+    }
+    if (
+      voiceSnap?.callStatus === 'completed' &&
+      voiceSnap.outcome === 'unknown' &&
+      !(run.summarySnapshot || run.extractedSummary || voicePost?.summary)?.toString().trim()
+    ) {
+      attentionReasons.push('Голос: завершён, outcome unknown и нет сводки');
+    }
+    if (isVoice && !run.extras?.voiceCallSessionId && !voiceSnap) {
+      attentionReasons.push('Голос: нет привязки к voiceCallSession в extras');
+    }
+  }
+
   const requiresAttention = attentionReasons.length > 0;
 
   const summaryParts: string[] = [];
@@ -119,8 +161,11 @@ export function deriveAiRunListPresentation(
     hasSnapshot,
     requiresAttention,
     attentionReasons,
-    badges: []
+    badges: [],
+    derivedChannel,
+    voiceOperationalLine
   };
+  if (isVoice && voiceOperationalLine) summaryParts.unshift(voiceOperationalLine);
   if (runStatus === 'duplicate') summaryParts.unshift(`Duplicate: ${run.reason || 'уже применено'}`);
   if (runStatus === 'error') summaryParts.unshift(`Error: ${run.reason || 'runtime'}`);
   if ((run.createUsedFallbacks?.length ?? 0) > 0) {
@@ -130,6 +175,7 @@ export function deriveAiRunListPresentation(
 
   const runtimeMode = (run.runtimeMode || run.mode || '').toLowerCase();
   const badges: string[] = [];
+  if (isVoice) badges.push(channelBadgeLabel(derivedChannel));
   if (runStatus === 'error') badges.push('Ошибка');
   if ((run.createUsedFallbacks?.length ?? 0) > 0 || source === 'fallback') badges.push('Fallback');
   if (hasExtraction) badges.push('Extraction');
@@ -160,6 +206,8 @@ export function deriveAiRunListPresentation(
     hasSnapshot,
     requiresAttention,
     attentionReasons,
-    badges
+    badges,
+    derivedChannel,
+    voiceOperationalLine
   };
 }

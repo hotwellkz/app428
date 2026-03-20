@@ -137,6 +137,33 @@ function assertCompany(session: VoiceCallSession, companyId: string): void {
   }
 }
 
+/** Реплики звонка для AI-control / деталей run (read-only). */
+export async function getVoiceCallTurnsOrdered(
+  companyId: string,
+  callId: string,
+  max = 60
+): Promise<Array<{ id: string; speaker: string; text: string; turnIndex: number }>> {
+  const lim = Math.min(Math.max(max, 1), 80);
+  const q = query(
+    voiceCallTurnsCollection(callId),
+    orderBy('turnIndex', 'asc'),
+    limit(lim)
+  );
+  const snap = await getDocs(q);
+  const out: Array<{ id: string; speaker: string; text: string; turnIndex: number }> = [];
+  for (const d of snap.docs) {
+    const x = d.data() as Record<string, unknown>;
+    if (String(x.companyId ?? '') !== companyId) continue;
+    out.push({
+      id: d.id,
+      speaker: String(x.speaker ?? ''),
+      text: String(x.text ?? ''),
+      turnIndex: Number(x.turnIndex ?? 0)
+    });
+  }
+  return out;
+}
+
 export async function getVoiceCallSession(companyId: string, callId: string): Promise<VoiceCallSession | null> {
   const snap = await getDoc(voiceCallSessionRef(callId));
   if (!snap.exists()) return null;

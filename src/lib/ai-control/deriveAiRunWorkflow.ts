@@ -2,6 +2,8 @@ import type { AiRunWorkflowPriority, AiRunWorkflowStatus } from '../../types/aiC
 import type { WhatsAppAiRunWorkflowRecord } from '../firebase/whatsappAiRunWorkflow';
 import type { WhatsAppAiBotRunRecord } from '../firebase/whatsappAiBotRuns';
 import type { AiRunListPresentation } from './deriveAiRunListPresentation';
+import { deriveAiRunChannelFromRun } from './deriveAiRunChannel';
+import { getVoiceCallSnapshotFromRun, getVoicePostCallFromRun } from './voiceRunBridge';
 
 export interface DerivedAiRunWorkflow {
   status: AiRunWorkflowStatus | null;
@@ -96,12 +98,17 @@ function derivePriority(
   hasAssignee: boolean
 ): { priority: AiRunWorkflowPriority; reasons: string[] } {
   const reasons: string[] = [];
+  const isVoice = deriveAiRunChannelFromRun(run) === 'voice';
+  const voiceSnap = isVoice ? getVoiceCallSnapshotFromRun(run) : null;
+  const voicePost = isVoice ? getVoicePostCallFromRun(run) : null;
+
   const critical = [
     presentation.runStatus === 'error',
     run.extractionApplyStatus === 'error',
     run.dealRecommendationStatus === 'recommended' && run.dealCreateStatus !== 'created' && !run.createdDealId,
     run.taskRecommendationStatus === 'recommended' && run.taskCreateStatus !== 'created',
-    presentation.requiresAttention && status === 'new' && !hasAssignee
+    presentation.requiresAttention && status === 'new' && !hasAssignee,
+    isVoice && voiceSnap?.postCallStatus === 'failed'
   ];
   if (critical.some(Boolean)) {
     if (presentation.runStatus === 'error') reasons.push('runtime/API error');
@@ -109,21 +116,25 @@ function derivePriority(
     if (run.dealRecommendationStatus === 'recommended' && run.dealCreateStatus !== 'created' && !run.createdDealId) reasons.push('сделка рекомендована, но не создана');
     if (run.taskRecommendationStatus === 'recommended' && run.taskCreateStatus !== 'created') reasons.push('задача рекомендована, но не создана');
     if (presentation.requiresAttention && status === 'new' && !hasAssignee) reasons.push('новый проблемный кейс без ответственного');
+    if (isVoice && voiceSnap?.postCallStatus === 'failed') reasons.push('Голос: post-call failed');
     return { priority: 'critical', reasons };
   }
 
   const reason = (run.reason ?? '').toLowerCase();
   const high = [
     (run.createUsedFallbacks?.length ?? 0) > 0 || presentation.isFallback,
-    !presentation.badges.includes('Extraction'),
+    !presentation.badges.includes('Extraction') && !(isVoice && voicePost?.lightweight),
     presentation.runStatus === 'duplicate' && !(status === 'resolved' || status === 'ignored'),
-    (presentation.runStatus === 'skipped' || reason.includes('paused') || reason.includes('пауз')) && presentation.requiresAttention
+    (presentation.runStatus === 'skipped' || reason.includes('paused') || reason.includes('пауз')) && presentation.requiresAttention,
+    isVoice && !!(voicePost?.extractionError || voicePost?.summaryError || voiceSnap?.followUpStatus === 'error')
   ];
   if (high.some(Boolean)) {
     if ((run.createUsedFallbacks?.length ?? 0) > 0 || presentation.isFallback) reasons.push('есть fallback');
-    if (!presentation.badges.includes('Extraction')) reasons.push('нет extraction');
+    if (!presentation.badges.includes('Extraction') && !(isVoice && voicePost?.lightweight)) reasons.push('нет extraction');
     if (presentation.runStatus === 'duplicate' && !(status === 'resolved' || status === 'ignored')) reasons.push('duplicate без закрытия');
     if ((presentation.runStatus === 'skipped' || reason.includes('paused') || reason.includes('пауз')) && presentation.requiresAttention) reasons.push('paused/skipped с риском');
+    if (isVoice && (voicePost?.extractionError || voicePost?.summaryError)) reasons.push('Голос: ошибка summary/extraction');
+    if (isVoice && voiceSnap?.followUpStatus === 'error') reasons.push('Голос: ошибка WhatsApp follow-up');
     return { priority: 'high', reasons };
   }
 

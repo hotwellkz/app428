@@ -35,6 +35,18 @@ import { stashChatDraft } from '../lib/ai-control/openChatDraftBridge';
 import { humanizeFallbackReasons } from '../lib/ai-control/fallbackReasonLabels';
 import { deriveAiRunListPresentation } from '../lib/ai-control/deriveAiRunListPresentation';
 import { deriveAiRunWorkflow } from '../lib/ai-control/deriveAiRunWorkflow';
+import { deriveAiRunChannelFromRun } from '../lib/ai-control/deriveAiRunChannel';
+import {
+  getVoiceCallSnapshotFromRun,
+  getVoicePostCallFromRun,
+  getVoiceCallSessionIdFromRun
+} from '../lib/ai-control/voiceRunBridge';
+import {
+  getVoiceCallSession,
+  getVoiceCallSessionByLinkedRunId,
+  getVoiceCallTurnsOrdered
+} from '../lib/firebase/voiceCallSessions';
+import type { VoiceCallSession } from '../types/voice';
 import {
   appendWhatsappAiRunWorkflowEvent,
   subscribeWhatsappAiRunWorkflowByRunId,
@@ -103,6 +115,11 @@ export const AiControlRunDetailsPage: React.FC = () => {
   const [workflow, setWorkflow] = useState<WhatsAppAiRunWorkflowRecord | null>(null);
   const [workflowBusy, setWorkflowBusy] = useState(false);
   const [commentDraft, setCommentDraft] = useState('');
+  const [voiceSession, setVoiceSession] = useState<VoiceCallSession | null>(null);
+  const [voiceTurns, setVoiceTurns] = useState<Array<{ id: string; speaker: string; text: string; turnIndex: number }>>(
+    []
+  );
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const load = useCallback(async () => {
     if (!companyId || !runId || !can) return;
@@ -115,11 +132,15 @@ export const AiControlRunDetailsPage: React.FC = () => {
     setBot(null);
     if (!r) return;
 
+    const isVoiceRun = deriveAiRunChannelFromRun(r) === 'voice';
+
     const [convSnap, botDoc] = await Promise.all([
-      getDoc(doc(db, COLLECTIONS.CONVERSATIONS, r.conversationId)),
+      !isVoiceRun && r.conversationId
+        ? getDoc(doc(db, COLLECTIONS.CONVERSATIONS, r.conversationId))
+        : Promise.resolve(null as Awaited<ReturnType<typeof getDoc>> | null),
       getCrmAiBotById(r.botId)
     ]);
-    if (convSnap.exists()) {
+    if (convSnap?.exists()) {
       const cd = convSnap.data() as Record<string, unknown>;
       if ((cd.companyId as string) === companyId) {
         setConv(cd);
@@ -146,7 +167,7 @@ export const AiControlRunDetailsPage: React.FC = () => {
     }
     setBot(botDoc && botDoc.companyId === companyId ? botDoc : null);
 
-    const convDealId = convSnap.exists() ? (convSnap.data() as { dealId?: string }).dealId : null;
+    const convDealId = convSnap?.exists() ? (convSnap.data() as { dealId?: string }).dealId : null;
     const dealId = r.createdDealId || r.dealId || convDealId;
     if (dealId) {
       const ds = await getDoc(doc(db, CRM_DEALS, dealId));
@@ -171,6 +192,32 @@ export const AiControlRunDetailsPage: React.FC = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (!companyId || !run || deriveAiRunChannelFromRun(run) !== 'voice') {
+      setVoiceSession(null);
+      setVoiceTurns([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const sid = getVoiceCallSessionIdFromRun(run);
+      const session = sid
+        ? await getVoiceCallSession(companyId, sid)
+        : await getVoiceCallSessionByLinkedRunId(companyId, run.id);
+      if (cancelled) return;
+      setVoiceSession(session);
+      if (session?.id) {
+        const turns = await getVoiceCallTurnsOrdered(companyId, session.id, 60);
+        if (!cancelled) setVoiceTurns(turns);
+      } else {
+        setVoiceTurns([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, run]);
 
   useEffect(() => {
     if (!runId) return;
@@ -323,10 +370,13 @@ export const AiControlRunDetailsPage: React.FC = () => {
   const flags = computeRunResultFlags(run);
   const presentation = deriveAiRunListPresentation(run, agg);
   const derivedWorkflow = deriveAiRunWorkflow(run, presentation, workflow);
+  const isVoice = deriveAiRunChannelFromRun(run) === 'voice';
+  const voiceSnap = getVoiceCallSnapshotFromRun(run);
+  const voicePost = getVoicePostCallFromRun(run);
   const dealOpenId = run.createdDealId || run.dealId || dealPreview?.id;
   const clientOpenId = run.clientIdSnapshot || run.appliedClientId || null;
   const runtimeMode = run.runtimeMode || run.mode || 'unknown';
-  const phone = run.phoneSnapshot || client?.phone || '—';
+  const phone = run.phoneSnapshot || client?.phone || voiceSession?.toE164 || '—';
   const runAny = run as unknown as Record<string, unknown>;
   const me = auth.currentUser;
   const meName = me?.displayName || me?.email || 'Пользователь';
@@ -484,6 +534,7 @@ export const AiControlRunDetailsPage: React.FC = () => {
         </dl>
 
         <div className="mt-4 flex flex-wrap gap-2">
+          {!isVoice ? (
           <Link
             to={`/whatsapp?chatId=${encodeURIComponent(run.conversationId)}`}
             className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm hover:bg-indigo-700"
@@ -491,6 +542,9 @@ export const AiControlRunDetailsPage: React.FC = () => {
             <MessageSquare className="w-4 h-4" />
             Открыть чат
           </Link>
+          ) : (
+            <span className="text-xs text-violet-800 bg-violet-100 px-2 py-1 rounded">Это голосовой run — чата WhatsApp не привязано</span>
+          )}
           <button
             type="button"
             disabled={!clientOpenId}
@@ -557,6 +611,7 @@ export const AiControlRunDetailsPage: React.FC = () => {
             <Copy className="w-4 h-4" />
             JSON extraction
           </button>
+          {!isVoice ? (
           <button
             type="button"
             disabled={busy}
@@ -566,6 +621,7 @@ export const AiControlRunDetailsPage: React.FC = () => {
             <Ban className="w-4 h-4" />
             Выключить AI в чате
           </button>
+          ) : null}
           {bot?.status === 'active' ? (
             <button
               type="button"
@@ -589,6 +645,7 @@ export const AiControlRunDetailsPage: React.FC = () => {
           ) : null}
         </div>
 
+        {!isVoice ? (
         <div className="mt-4 pt-3 border-t border-gray-100">
           <p className="text-xs text-gray-500 mb-2">Режим AI в этом чате</p>
           <div className="flex flex-wrap gap-2">
@@ -605,7 +662,140 @@ export const AiControlRunDetailsPage: React.FC = () => {
             ))}
           </div>
         </div>
+        ) : null}
       </div>
+
+      {isVoice ? (
+        <>
+          <section className="rounded-xl border border-violet-200 bg-violet-50/40 p-4 mb-4">
+            <h2 className="font-semibold text-violet-900 mb-2">Голосовой звонок</h2>
+            <p className="text-xs text-violet-800 mb-3">
+              Операционный канал <strong>Voice</strong> (Twilio). Данные из run + привязанной сессии voiceCallSessions.
+            </p>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              <div>
+                <dt className="text-gray-500 text-xs">Канал</dt>
+                <dd>Voice</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Провайдер</dt>
+                <dd>{voiceSession?.provider ?? voiceSnap?.provider ?? '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gray-500 text-xs">providerCallId</dt>
+                <dd className="font-mono text-xs break-all">{voiceSession?.providerCallId ?? voiceSnap?.providerCallId ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Статус звонка</dt>
+                <dd>{voiceSession?.status ?? voiceSnap?.callStatus ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Исход (outcome)</dt>
+                <dd>{voiceSession?.outcome ?? voiceSnap?.outcome ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">С / На</dt>
+                <dd>
+                  {voiceSession?.fromE164 ?? voiceSnap?.fromE164 ?? '—'} → {voiceSession?.toE164 ?? voiceSnap?.toE164 ?? run.phoneSnapshot ?? '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Длительность</dt>
+                <dd>
+                  {voiceSession?.durationSec != null ? `${voiceSession.durationSec} с` : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">voiceCallSessionId</dt>
+                <dd className="font-mono text-xs break-all">{voiceSession?.id ?? getVoiceCallSessionIdFromRun(run) ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">linkedRunId</dt>
+                <dd className="font-mono text-xs break-all">{voiceSession?.linkedRunId ?? run.id}</dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="rounded-xl border bg-white p-4 mb-4">
+            <h2 className="font-semibold text-gray-900 mb-2">Итог разговора (post-call)</h2>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+              <div>
+                <dt className="text-gray-500 text-xs">post-call (сессия)</dt>
+                <dd>{voiceSession?.postCallStatus ?? voiceSnap?.postCallStatus ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Сводка</dt>
+                <dd className="break-words">{summaryText || voicePost?.summary || '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">CRM apply</dt>
+                <dd>{run.extractionApplyStatus ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Follow-up</dt>
+                <dd>
+                  {voiceSnap?.followUpStatus ?? '—'}
+                  {voiceSnap?.followUpError ? ` (${voiceSnap.followUpError})` : ''}
+                </dd>
+              </div>
+              {voicePost?.warnings?.length ? (
+                <div className="sm:col-span-2">
+                  <dt className="text-gray-500 text-xs">Предупреждения pipeline</dt>
+                  <dd>{voicePost.warnings.join(', ')}</dd>
+                </div>
+              ) : null}
+            </dl>
+          </section>
+
+          <section className="rounded-xl border bg-white p-4 mb-4">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between text-left font-semibold text-gray-900 mb-2"
+              onClick={() => setTranscriptOpen((v) => !v)}
+            >
+              Транскрипт ({voiceTurns.length} реплик)
+              <span className="text-xs text-gray-500">{transcriptOpen ? 'Скрыть' : 'Показать'}</span>
+            </button>
+            {transcriptOpen ? (
+              <div className="max-h-80 overflow-auto space-y-1 text-sm border rounded-lg p-2 bg-gray-50">
+                {voiceTurns.length === 0 ? (
+                  <p className="text-gray-500 text-xs">Нет реплик или нет доступа к чтению turns.</p>
+                ) : (
+                  voiceTurns.map((t) => (
+                    <p key={t.id} className="text-xs">
+                      <span className="font-medium text-gray-600">
+                        {t.speaker === 'bot' ? 'Бот' : t.speaker === 'client' ? 'Клиент' : t.speaker}:
+                      </span>{' '}
+                      {t.text}
+                    </p>
+                  ))
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-500">Компактный вид: откройте, чтобы увидеть полный диалог.</p>
+            )}
+          </section>
+
+          <section className="rounded-xl border bg-white p-4 mb-4">
+            <h2 className="font-semibold text-gray-900 mb-2">Связанные сущности (voice)</h2>
+            <div className="text-sm space-y-1">
+              <p>
+                <span className="text-gray-500">Сделка:</span>{' '}
+                {dealOpenId ? (
+                  <Link className="text-indigo-600 hover:underline" to={`/deals?deal=${encodeURIComponent(dealOpenId)}`}>
+                    {dealOpenId}
+                  </Link>
+                ) : (
+                  '—'
+                )}
+              </p>
+              <p>
+                <span className="text-gray-500">Задача (next deal):</span> {run.taskId ?? voiceSession?.linkedTaskId ?? '—'}
+              </p>
+            </div>
+          </section>
+        </>
+      ) : null}
 
       <section className="rounded-xl border bg-white p-4 mb-4">
         <h2 className="font-semibold text-gray-900 mb-2">Итог run</h2>

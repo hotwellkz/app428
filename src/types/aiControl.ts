@@ -32,6 +32,16 @@ export type AiRunWorkflowResolutionType =
   | 'escalated';
 export type AiControlWorkflowFilter = 'all' | 'new' | 'in_progress' | 'escalated' | 'resolved' | 'ignored';
 export type AiRunWorkflowPriority = 'critical' | 'high' | 'normal' | 'low';
+
+/** Фильтры по типичным voice-проблемам (только для channel=voice или при сочетании с выдачей). */
+export type AiControlVoiceIssuePreset =
+  | ''
+  | 'post_call_failed'
+  | 'no_answer_busy'
+  | 'outcome_unknown_empty'
+  | 'follow_up_failed'
+  | 'crm_failed'
+  | 'needs_attention_voice';
 export type AiRunWorkflowEventType =
   | 'created'
   | 'assigned'
@@ -83,6 +93,8 @@ export interface AiControlFiltersState {
   onlyNeedReminderNow: boolean;
   onlyEscalatedAlerts: boolean;
   sortBy: 'newest' | 'problem_first' | 'deal_task_first' | 'overdue_first' | 'critical_first' | 'unassigned_first' | 'oldest_problem_first' | 'workflow_recently_updated';
+  /** Voice: узкий фильтр по сценарию (см. applyFilters в AiControlPage) */
+  voiceIssuePreset: AiControlVoiceIssuePreset;
 }
 
 export const DEFAULT_AI_CONTROL_FILTERS: AiControlFiltersState = {
@@ -117,7 +129,8 @@ export const DEFAULT_AI_CONTROL_FILTERS: AiControlFiltersState = {
   onlyMuted: false,
   onlyNeedReminderNow: false,
   onlyEscalatedAlerts: false,
-  sortBy: 'newest'
+  sortBy: 'newest',
+  voiceIssuePreset: ''
 };
 
 /** Флаги результата run (для фильтров и метрик) */

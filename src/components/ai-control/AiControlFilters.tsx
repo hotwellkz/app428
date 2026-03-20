@@ -1,6 +1,11 @@
 import React from 'react';
 import type { CrmAiBot } from '../../types/crmAiBot';
-import type { AiControlFiltersState, AiControlPeriodPreset, AiControlResultFilter } from '../../types/aiControl';
+import type {
+  AiControlFiltersState,
+  AiControlPeriodPreset,
+  AiControlResultFilter,
+  AiControlVoiceIssuePreset
+} from '../../types/aiControl';
 import { DEFAULT_AI_CONTROL_FILTERS } from '../../types/aiControl';
 import { labelCrmAiBotChannel } from '../../types/crmAiBot';
 
@@ -69,6 +74,22 @@ export const AiControlFilters: React.FC<{
 
   return (
     <div className="space-y-3 p-4 rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex flex-wrap gap-2">
+        <span className="text-[10px] text-gray-400 w-full uppercase tracking-wide">Канал</span>
+        {[
+          { label: 'Только WhatsApp', apply: { channel: 'whatsapp', voiceIssuePreset: '' as AiControlVoiceIssuePreset } },
+          { label: 'Только Voice', apply: { channel: 'voice', voiceIssuePreset: '' as AiControlVoiceIssuePreset } }
+        ].map((chip) => (
+          <button
+            key={chip.label}
+            type="button"
+            className="px-2.5 py-1 rounded-full text-xs border bg-violet-50 text-violet-900 border-violet-200 hover:bg-violet-100"
+            onClick={() => set(chip.apply as Partial<AiControlFiltersState>)}
+          >
+            {chip.label}
+          </button>
+        ))}
+      </div>
       <div className="flex flex-wrap gap-2">
         {[
           { label: 'Все', apply: { presetView: 'all', runtimeMode: '', onlyCrmApply: false, onlyFallback: false, onlyWithDeal: false, onlyWithTask: false } },
@@ -307,8 +328,25 @@ export const AiControlFilters: React.FC<{
           >
             <option value="">Все</option>
             <option value="whatsapp">WhatsApp</option>
+            <option value="voice">Voice (звонок)</option>
             <option value="instagram">Instagram</option>
             <option value="site">Сайт</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-500 mb-1">Voice: сценарий</label>
+          <select
+            className="text-sm border rounded-lg px-2 py-1.5 min-w-[200px]"
+            value={filters.voiceIssuePreset}
+            onChange={(e) => set({ voiceIssuePreset: e.target.value as AiControlVoiceIssuePreset })}
+          >
+            <option value="">Все voice-сценарии</option>
+            <option value="post_call_failed">Post-call failed</option>
+            <option value="no_answer_busy">Нет ответа / занято</option>
+            <option value="outcome_unknown_empty">Completed + outcome unknown + нет сводки</option>
+            <option value="follow_up_failed">Follow-up WhatsApp failed</option>
+            <option value="crm_failed">CRM apply error</option>
+            <option value="needs_attention_voice">Требуют внимания (voice)</option>
           </select>
         </div>
         <div>
@@ -418,6 +456,7 @@ export const AiControlFilters: React.FC<{
 export function channelLabel(ch: string | null | undefined): string {
   if (!ch) return '—';
   if (ch === 'whatsapp') return 'WhatsApp';
+  if (ch === 'voice') return 'Voice';
   if (ch === 'instagram') return 'Instagram';
   return labelCrmAiBotChannel(ch);
 }

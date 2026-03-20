@@ -1,6 +1,8 @@
 import type { Timestamp } from 'firebase/firestore';
 import type { AiControlAggregatedStatus, AiRunResultFlags } from '../../types/aiControl';
 import type { WhatsAppAiBotRunRecord } from '../firebase/whatsappAiBotRuns';
+import { deriveAiRunChannelFromRun } from '../ai-control/deriveAiRunChannel';
+import { getVoiceCallSnapshotFromRun, getVoicePostCallFromRun } from '../ai-control/voiceRunBridge';
 
 export function runCreatedAtMs(run: WhatsAppAiBotRunRecord): number {
   const t = run.createdAt;
@@ -20,12 +22,22 @@ export function computeRunResultFlags(run: WhatsAppAiBotRunRecord): AiRunResultF
   const hasReply = !!(run.generatedReply && String(run.generatedReply).trim());
   const isDraft = mode === 'draft';
   const isAuto = mode === 'auto';
+  const isVoice = deriveAiRunChannelFromRun(run) === 'voice';
+  const vSnap = isVoice ? getVoiceCallSnapshotFromRun(run) : null;
+  const vPost = isVoice ? getVoicePostCallFromRun(run) : null;
+  const voiceWarning =
+    isVoice &&
+    (vSnap?.postCallStatus === 'failed' ||
+      !!vPost?.extractionError ||
+      !!vPost?.summaryError ||
+      vSnap?.followUpStatus === 'error');
   const hasWarning =
     (run.createUsedFallbacks?.length ?? 0) > 0 ||
     (run.dealRoutingWarnings?.length ?? 0) > 0 ||
     run.dealRoutingConfidence === 'low' ||
     run.extractionApplyStatus === 'error' ||
-    !!run.extractionError;
+    !!run.extractionError ||
+    voiceWarning;
   const isDuplicate =
     (typeof run.reason === 'string' && /duplicate|уже создана|дубл/i.test(run.reason)) ||
     run.taskCreateStatus === 'duplicate' ||

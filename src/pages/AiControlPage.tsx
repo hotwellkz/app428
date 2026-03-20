@@ -19,6 +19,7 @@ import {
   DEFAULT_AI_CONTROL_FILTERS,
   type AiControlFiltersState,
   type AiControlPeriodPreset,
+  type AiControlVoiceIssuePreset,
   type AiRunWorkflowResolutionType,
   type AiRunWorkflowStatus
 } from '../types/aiControl';
@@ -32,7 +33,45 @@ import {
 import type { AiControlAggregatedStatus } from '../types/aiControl';
 import { deriveAiRunListPresentation } from '../lib/ai-control/deriveAiRunListPresentation';
 import { deriveAiRunWorkflow } from '../lib/ai-control/deriveAiRunWorkflow';
+import { deriveAiRunChannelFromRun } from '../lib/ai-control/deriveAiRunChannel';
+import {
+  formatVoiceRunStatusLine,
+  getVoiceCallSnapshotFromRun,
+  getVoicePostCallFromRun
+} from '../lib/ai-control/voiceRunBridge';
 import { auth } from '../lib/firebase/auth';
+
+function voiceIssueMatches(
+  run: WhatsAppAiBotRunRecord,
+  preset: AiControlVoiceIssuePreset,
+  agg: AiControlAggregatedStatus
+): boolean {
+  if (!preset) return true;
+  if (deriveAiRunChannelFromRun(run) !== 'voice') return false;
+  const vs = getVoiceCallSnapshotFromRun(run);
+  const vp = getVoicePostCallFromRun(run);
+  const pr = deriveAiRunListPresentation(run, agg);
+  switch (preset) {
+    case 'post_call_failed':
+      return vs?.postCallStatus === 'failed';
+    case 'no_answer_busy':
+      return vs?.callStatus === 'no_answer' || vs?.callStatus === 'busy';
+    case 'outcome_unknown_empty':
+      return (
+        vs?.callStatus === 'completed' &&
+        vs.outcome === 'unknown' &&
+        !(run.summarySnapshot || run.extractedSummary || vp?.summary)?.toString().trim()
+      );
+    case 'follow_up_failed':
+      return vs?.followUpStatus === 'error';
+    case 'crm_failed':
+      return run.extractionApplyStatus === 'error';
+    case 'needs_attention_voice':
+      return pr.requiresAttention;
+    default:
+      return true;
+  }
+}
 
 function periodBounds(
   period: AiControlPeriodPreset,
@@ -101,11 +140,15 @@ function applyFilters(
     if (filters.botId && run.botId !== filters.botId) return false;
 
     if (filters.channel) {
-      const botCh = botsById[run.botId]?.channel;
-      const rCh = run.channel || botCh || '';
-      if (filters.channel === 'whatsapp' && rCh !== 'whatsapp') return false;
-      if (filters.channel === 'instagram' && rCh !== 'instagram') return false;
-      if (filters.channel === 'site' && rCh !== 'site') return false;
+      const derived = deriveAiRunChannelFromRun(run, botsById[run.botId]?.channel);
+      if (filters.channel === 'whatsapp' && derived !== 'whatsapp') return false;
+      if (filters.channel === 'instagram' && derived !== 'instagram') return false;
+      if (filters.channel === 'site' && derived !== 'site') return false;
+      if (filters.channel === 'voice' && derived !== 'voice') return false;
+    }
+
+    if (filters.voiceIssuePreset) {
+      if (!voiceIssueMatches(run, filters.voiceIssuePreset, agg)) return false;
     }
 
     const agg = computeAggregatedStatus(run);
@@ -173,6 +216,10 @@ function applyFilters(
     if (q) {
       const botName = (botsById[run.botId]?.name ?? '').toLowerCase();
       const rAny = run as unknown as Record<string, unknown>;
+      const vs = getVoiceCallSnapshotFromRun(run);
+      const vp = getVoicePostCallFromRun(run);
+      const extrasStr =
+        run.extras && typeof run.extras === 'object' ? JSON.stringify(run.extras).toLowerCase() : '';
       const hay = [
         run.id,
         run.conversationId,
@@ -197,7 +244,14 @@ function applyFilters(
         run.taskCreateReason,
         Array.isArray(run.dealRoutingWarnings) ? run.dealRoutingWarnings.join(' ') : '',
         typeof rAny.clientNameSnapshot === 'string' ? rAny.clientNameSnapshot : '',
-        typeof rAny.clientName === 'string' ? rAny.clientName : ''
+        typeof rAny.clientName === 'string' ? rAny.clientName : '',
+        vs?.providerCallId,
+        vs?.callStatus,
+        vs?.outcome,
+        vs?.postCallStatus,
+        formatVoiceRunStatusLine(run),
+        vp?.summary,
+        extrasStr
       ]
         .filter(Boolean)
         .join(' ')
@@ -308,6 +362,24 @@ function metricsFor(
     snoozed = 0,
     muted = 0,
     failedAttempts = 0;
+  let voiceToday = 0,
+    voiceCompleted = 0,
+    voiceNoAnswerBusy = 0,
+    voicePostFailed = 0,
+    voiceNeedAttention = 0;
+  const startTodayMs = startOfToday.getTime();
+  for (const r of runs) {
+    if (deriveAiRunChannelFromRun(r) === 'voice') {
+      const rms = runCreatedAtMs(r);
+      if (rms >= startTodayMs) voiceToday++;
+      const vs = getVoiceCallSnapshotFromRun(r);
+      if (vs?.callStatus === 'completed') voiceCompleted++;
+      if (vs?.callStatus === 'no_answer' || vs?.callStatus === 'busy') voiceNoAnswerBusy++;
+      if (vs?.postCallStatus === 'failed') voicePostFailed++;
+      const pr = deriveAiRunListPresentation(r, agg[r.id] ?? 'skipped');
+      if (pr.requiresAttention) voiceNeedAttention++;
+    }
+  }
   for (const r of runs) {
     const p = deriveAiRunListPresentation(r, agg[r.id] ?? 'skipped');
     const wf = deriveAiRunWorkflow(r, p, workflowByRunId[r.id] ?? null);
@@ -341,7 +413,12 @@ function metricsFor(
     overdueNoReaction,
     snoozed,
     muted,
-    failedAttempts
+    failedAttempts,
+    voiceToday,
+    voiceCompleted,
+    voiceNoAnswerBusy,
+    voicePostFailed,
+    voiceNeedAttention
   };
 }
 
@@ -494,11 +571,11 @@ export const AiControlPage: React.FC = () => {
 
   return (
     <div className="min-h-full bg-gray-50/80 p-4 sm:p-6 max-w-7xl mx-auto">
-      <PageMetadata title="AI-контроль — журнал автоворонок" description="Срабатывания AI в WhatsApp" />
+      <PageMetadata title="AI-контроль — журнал автоворонок" description="Срабатывания AI: WhatsApp, голос и др." />
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">AI-контроль</h1>
         <p className="text-sm text-gray-600 mt-1">
-          Журнал срабатываний AI в чатах: ответы, извлечение данных, CRM, сделки и задачи.
+          Журнал срабатываний AI: чаты, голосовые звонки (Twilio), извлечение, CRM, сделки и задачи.
         </p>
       </div>
 
@@ -525,6 +602,20 @@ export const AiControlPage: React.FC = () => {
           <div key={c.k} className="rounded-lg border bg-white p-2 text-center shadow-sm">
             <div className="text-lg font-semibold text-gray-900">{c.v}</div>
             <div className="text-[10px] text-gray-500 uppercase tracking-wide">{c.k}</div>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-6 gap-2 mb-4">
+        {[
+          { k: 'Voice сегодня', v: metrics.voiceToday },
+          { k: 'Voice completed', v: metrics.voiceCompleted },
+          { k: 'Voice занят/нет ответа', v: metrics.voiceNoAnswerBusy },
+          { k: 'Voice post-call failed', v: metrics.voicePostFailed },
+          { k: 'Voice внимание', v: metrics.voiceNeedAttention }
+        ].map((c) => (
+          <div key={c.k} className="rounded-lg border border-violet-100 bg-violet-50/60 p-2 text-center shadow-sm">
+            <div className="text-lg font-semibold text-violet-900">{c.v}</div>
+            <div className="text-[10px] text-violet-700 uppercase tracking-wide">{c.k}</div>
           </div>
         ))}
       </div>

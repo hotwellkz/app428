@@ -8,6 +8,19 @@ import type { VoicePostCallResultMetadata } from '../../../../src/types/voice';
 
 const WHATSAPP_AI_BOT_RUNS = 'whatsappAiBotRuns';
 
+/** Денормализация для AI-control (фильтры/список без N+1 к voiceCallSessions). */
+export type VoiceCallSnapshotForRunMerge = {
+  callStatus: string;
+  outcome: string | null;
+  postCallStatus: string | null;
+  providerCallId: string | null;
+  provider: string | null;
+  fromE164: string | null;
+  toE164: string | null;
+  followUpStatus: string | null;
+  followUpError: string | null;
+};
+
 export async function mergeVoicePostCallIntoLinkedRun(params: {
   companyId: string;
   linkedRunId: string;
@@ -26,6 +39,7 @@ export async function mergeVoicePostCallIntoLinkedRun(params: {
   phoneE164: string | null;
   linkedDealId: string | null;
   linkedTaskId: string | null;
+  voiceCallSnapshot?: VoiceCallSnapshotForRunMerge | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const { companyId, linkedRunId } = params;
   if (!linkedRunId.trim()) {
@@ -66,7 +80,8 @@ export async function mergeVoicePostCallIntoLinkedRun(params: {
           ...((row.extras as Record<string, unknown>) ?? {}),
           voiceCallSessionId: params.callId,
           voicePostCall: params.postCall,
-          voiceConversationId: params.conversationIdSynthetic
+          voiceConversationId: params.conversationIdSynthetic,
+          ...(params.voiceCallSnapshot ? { voiceCallSnapshot: params.voiceCallSnapshot } : {})
         },
         updatedAt: FieldValue.serverTimestamp()
       },

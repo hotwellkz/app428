@@ -15,7 +15,7 @@ import { applyVoiceTaskRecommendationToDealAdmin } from '../createAiTaskOnDealAd
 import { findClientByPhone, getDb } from '../firebaseAdmin';
 import { resolveOpenAiKeyForVoice } from './generateVoiceReply';
 import { generateVoicePostCallSummary } from './generateVoicePostCallSummary';
-import { mergeVoicePostCallIntoLinkedRun } from './updateVoiceRunResult';
+import { mergeVoicePostCallIntoLinkedRun, type VoiceCallSnapshotForRunMerge } from './updateVoiceRunResult';
 import { sendVoicePostCallWhatsappFollowUp } from './voicePostCallWhatsApp';
 import { createVoiceDealFromRecommendationSnapshot } from './voicePostCallDealAdmin';
 import { buildVoiceTranscriptFromTurns } from './buildVoiceTranscript';
@@ -377,6 +377,17 @@ export async function runVoicePostCallPipeline(params: {
 
     let linkedRunUpdated = false;
     if (linkedRunId) {
+      const voiceCallSnapshot: VoiceCallSnapshotForRunMerge = {
+        callStatus: String(session.status ?? ''),
+        outcome: session.outcome != null ? String(session.outcome) : null,
+        postCallStatus: 'done',
+        providerCallId: session.providerCallId != null ? String(session.providerCallId) : null,
+        provider: session.provider != null ? String(session.provider) : null,
+        fromE164: session.fromE164 != null ? String(session.fromE164) : null,
+        toE164: toE164 || null,
+        followUpStatus: followUpStatus ?? null,
+        followUpError: followUpError ?? null
+      };
       const merge = await mergeVoicePostCallIntoLinkedRun({
         companyId,
         linkedRunId,
@@ -394,7 +405,8 @@ export async function runVoicePostCallPipeline(params: {
         crmClientId,
         phoneE164: toE164 || null,
         linkedDealId,
-        linkedTaskId
+        linkedTaskId,
+        voiceCallSnapshot
       });
       linkedRunUpdated = merge.ok;
       if (!merge.ok) warnings.push(`linked_run:${merge.error ?? 'merge_failed'}`);

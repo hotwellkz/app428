@@ -7,6 +7,7 @@ import type { WhatsAppAiBotRunRecord } from '../../lib/firebase/whatsappAiBotRun
 import type { AiControlAggregatedStatus } from '../../types/aiControl';
 import { AiRunStatusBadge } from './AiRunStatusBadge';
 import { channelLabel } from './AiControlFilters';
+import { channelBadgeLabel } from '../../lib/ai-control/deriveAiRunChannel';
 import { runCreatedAtMs } from '../../lib/aiControl/aggregateAiRun';
 import { deriveAiRunListPresentation } from '../../lib/ai-control/deriveAiRunListPresentation';
 import { deriveAiRunWorkflow } from '../../lib/ai-control/deriveAiRunWorkflow';
@@ -89,6 +90,7 @@ export const AiRunList: React.FC<{
         const answer = run.answerSnapshot || run.generatedReply || '';
         const summary = run.summarySnapshot || run.extractedSummary || '';
         const extractedJson = run.extractedSnapshotJson || '';
+        const isVoice = p.derivedChannel === 'voice';
         const copy = async (label: string, text: string) => {
           if (!text.trim()) {
             toast.error('Пустое значение');
@@ -103,6 +105,7 @@ export const AiRunList: React.FC<{
         };
         const actions = (
           <>
+            {!isVoice ? (
             <button
               type="button"
               disabled={!answer.trim()}
@@ -116,6 +119,7 @@ export const AiRunList: React.FC<{
             >
               <MessageSquare className="w-4 h-4" />
             </button>
+            ) : null}
             <button
               type="button"
               disabled={!clientId}
@@ -265,19 +269,33 @@ export const AiRunList: React.FC<{
                     }}
                   />
                   <AiRunStatusBadge status={agg} />
+                  <span
+                    className={`text-[10px] px-1.5 py-0.5 rounded font-semibold ${
+                      isVoice ? 'bg-violet-100 text-violet-900' : 'bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    {channelBadgeLabel(p.derivedChannel)}
+                  </span>
                   <span className="text-xs text-gray-500">{fmtTime(run)}</span>
                   <span className="text-xs font-medium text-gray-800 truncate max-w-[200px]" title={botName}>
                     {botName}
                   </span>
                   <span className="text-[10px] text-gray-500 uppercase">
-                    {channelLabel(run.channel)}
+                    {channelLabel(run.channel || (isVoice ? 'voice' : ''))}
                   </span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
                     {run.mode || '—'}
                   </span>
                 </div>
-                <p className="text-sm text-gray-700 truncate" title={run.conversationId}>
-                  Чат: {run.conversationId.slice(0, 12)}…
+                <p className="text-sm text-gray-700 truncate" title={isVoice ? run.phoneSnapshot ?? '' : run.conversationId}>
+                  {isVoice ? (
+                    <>
+                      <span className="text-violet-800 font-medium">Голос</span> · {run.phoneSnapshot || '—'} ·{' '}
+                      {p.voiceOperationalLine || 'voice'}
+                    </>
+                  ) : (
+                    <>Чат: {run.conversationId.slice(0, 12)}…</>
+                  )}
                 </p>
                 <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
                   <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">
