@@ -225,3 +225,41 @@ export async function adminCreateVoiceCallEventIfAbsent(
   });
   return true;
 }
+
+export type AdminVoiceTurnRow = {
+  id: string;
+  turnIndex: number;
+  speaker: string;
+  text: string;
+  rawText?: string | null;
+  confidence?: number | null;
+};
+
+/** Реплики сессии по turnIndex (голосовой loop / транскрипт). */
+export async function adminListVoiceTurnsOrdered(
+  companyId: string,
+  callId: string,
+  max: number
+): Promise<AdminVoiceTurnRow[]> {
+  const db = getDb();
+  await assertSessionCompany(db, companyId, callId);
+  const lim = Math.min(Math.max(max, 1), 80);
+  const snap = await db
+    .collection(VOICE_CALL_SESSIONS_COLLECTION)
+    .doc(callId)
+    .collection(VOICE_CALL_TURNS_SUBCOLLECTION)
+    .orderBy('turnIndex', 'asc')
+    .limit(lim)
+    .get();
+  return snap.docs.map((d) => {
+    const x = d.data();
+    return {
+      id: d.id,
+      turnIndex: Number(x.turnIndex ?? 0),
+      speaker: String(x.speaker ?? ''),
+      text: String(x.text ?? ''),
+      rawText: x.rawText != null ? String(x.rawText) : null,
+      confidence: typeof x.confidence === 'number' ? x.confidence : null
+    };
+  });
+}

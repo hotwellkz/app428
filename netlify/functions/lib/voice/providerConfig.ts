@@ -22,6 +22,10 @@ export interface VoiceProviderRuntimeConfig {
    * Если не задан — собирается из publicSiteUrl + путь API.
    */
   twilioWebhookPublicUrl: string | null;
+  /** Опционально: канонический URL TwiML entry (подпись X-Twilio-Signature). */
+  twilioTwimlPublicUrl: string | null;
+  /** Опционально: канонический URL Gather action. */
+  twilioGatherPublicUrl: string | null;
   /** Локальная разработка: "1" — не проверять подпись Twilio (не для prod). */
   twilioSkipSignatureValidation: boolean;
 }
@@ -52,6 +56,8 @@ export function loadVoiceProviderRuntimeConfig(): VoiceProviderRuntimeConfig {
     twilioAccountSid: trimEnv('TWILIO_ACCOUNT_SID'),
     twilioAuthToken: trimEnv('TWILIO_AUTH_TOKEN'),
     twilioWebhookPublicUrl: trimEnv('TWILIO_WEBHOOK_PUBLIC_URL'),
+    twilioTwimlPublicUrl: trimEnv('TWILIO_TWIML_PUBLIC_URL'),
+    twilioGatherPublicUrl: trimEnv('TWILIO_GATHER_PUBLIC_URL'),
     twilioSkipSignatureValidation: truthyEnv('TWILIO_SKIP_SIGNATURE_VALIDATION')
   };
 }
@@ -59,6 +65,7 @@ export function loadVoiceProviderRuntimeConfig(): VoiceProviderRuntimeConfig {
 /** Относительный путь к Netlify function (без домена). */
 export const VOICE_WEBHOOK_FUNCTION_PATH = '/.netlify/functions/voice-provider-webhook';
 export const VOICE_TWILIO_TWIML_FUNCTION_PATH = '/.netlify/functions/voice-twilio-twiml';
+export const VOICE_TWILIO_GATHER_FUNCTION_PATH = '/.netlify/functions/voice-twilio-gather-action';
 
 /** Публичный URL через редирект /api/voice/* (см. netlify.toml). */
 export function buildVoiceProviderWebhookUrl(config: VoiceProviderRuntimeConfig): string {
@@ -83,25 +90,27 @@ export function buildVoiceTwilioTwimlUrl(config: VoiceProviderRuntimeConfig): st
   return `${base}/api/voice/twilio-twiml`;
 }
 
-export function assertTwilioOutboundConfig(config: VoiceProviderRuntimeConfig): string | null {
-  if (!config.twilioAccountSid || !config.twilioAuthToken) {
-    return 'Twilio: задайте TWILIO_ACCOUNT_SID и TWILIO_AUTH_TOKEN';
-  }
-  if (!config.publicSiteUrl && !config.twilioWebhookPublicUrl) {
-    return 'Twilio: задайте URL (Netlify) или VOICE_PUBLIC_SITE_URL / TWILIO_WEBHOOK_PUBLIC_URL для callback и TwiML';
-  }
-  return null;
+export function buildVoiceTwilioGatherActionUrl(config: VoiceProviderRuntimeConfig): string {
+  const base = config.publicSiteUrl?.replace(/\/$/, '') ?? '';
+  if (!base) return VOICE_TWILIO_GATHER_FUNCTION_PATH;
+  return `${base}/api/voice/twilio-gather-action`;
 }
 
-/**
- * URL для Twilio validateRequest: совпадает с тем, куда Twilio шлёт POST.
- * Если задан TWILIO_WEBHOOK_PUBLIC_URL — подменяем origin/path, query берём из фактического rawUrl.
- */
-export function resolveTwilioWebhookRequestUrl(
+export type TwilioSignedEndpointKind = 'provider_webhook' | 'twiml' | 'gather';
+
+/** Канонический URL для validateRequest по типу endpoint (override из env). */
+export function resolveTwilioSignedRequestUrl(
   rawUrl: string,
-  config: VoiceProviderRuntimeConfig
+  config: VoiceProviderRuntimeConfig,
+  kind: TwilioSignedEndpointKind
 ): string {
-  const canonical = config.twilioWebhookPublicUrl?.trim().replace(/\/$/, '');
+  const overrideRaw =
+    kind === 'provider_webhook'
+      ? config.twilioWebhookPublicUrl
+      : kind === 'twiml'
+        ? config.twilioTwimlPublicUrl
+        : config.twilioGatherPublicUrl;
+  const canonical = overrideRaw?.trim().replace(/\/$/, '');
   if (!canonical) {
     return rawUrl;
   }
@@ -115,4 +124,22 @@ export function resolveTwilioWebhookRequestUrl(
   } catch {
     return rawUrl;
   }
+}
+
+export function assertTwilioOutboundConfig(config: VoiceProviderRuntimeConfig): string | null {
+  if (!config.twilioAccountSid || !config.twilioAuthToken) {
+    return 'Twilio: задайте TWILIO_ACCOUNT_SID и TWILIO_AUTH_TOKEN';
+  }
+  if (!config.publicSiteUrl && !config.twilioWebhookPublicUrl) {
+    return 'Twilio: задайте URL (Netlify) или VOICE_PUBLIC_SITE_URL / TWILIO_WEBHOOK_PUBLIC_URL для callback и TwiML';
+  }
+  return null;
+}
+
+/** @deprecated alias — используйте resolveTwilioSignedRequestUrl(..., 'provider_webhook'). */
+export function resolveTwilioWebhookRequestUrl(
+  rawUrl: string,
+  config: VoiceProviderRuntimeConfig
+): string {
+  return resolveTwilioSignedRequestUrl(rawUrl, config, 'provider_webhook');
 }

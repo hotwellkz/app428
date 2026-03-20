@@ -28,6 +28,15 @@ export type VoicePostCallStatus = 'pending' | 'processing' | 'done' | 'failed';
 
 export type VoiceSpeaker = 'bot' | 'client' | 'system';
 
+/** Подполе metadata у voiceCallSessions для голосового loop (Twilio Say/Gather). */
+export interface VoiceSessionVoiceLoopMetadata {
+  conversationState?: 'active' | 'completed';
+  twimlBootstrapped?: boolean;
+  emptyGatherStreak?: number;
+  endReason?: string | null;
+  lastTurnAtMs?: number;
+}
+
 /** P0: строковый идентификатор провайдера (например "twilio_v1"); без импорта SDK провайдера. */
 export type VoiceProviderId = string;
 

@@ -164,6 +164,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/voice/twilio-gather-action"
+  to = "/.netlify/functions/voice-twilio-gather-action"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
