@@ -51,6 +51,8 @@ export interface VoiceIntegrationRow {
   telnyxConnectionStatus?: VoiceTelnyxConnectionStatus;
   telnyxConnectionError?: string | null;
   telnyxLastCheckedAt?: Timestamp | null;
+  /** Последняя успешная синхронизация номеров Telnyx из API. */
+  telnyxLastSyncedAt?: Timestamp | null;
 }
 
 function maskRight4(value: string): string {
@@ -93,7 +95,8 @@ export async function getVoiceIntegration(companyId: string): Promise<VoiceInteg
     telnyxConnectionId: (d.telnyxConnectionId as string)?.trim() || null,
     telnyxConnectionStatus: (d.telnyxConnectionStatus as VoiceTelnyxConnectionStatus) ?? 'not_connected',
     telnyxConnectionError: (d.telnyxConnectionError as string) ?? null,
-    telnyxLastCheckedAt: (d.telnyxLastCheckedAt as Timestamp) ?? null
+    telnyxLastCheckedAt: (d.telnyxLastCheckedAt as Timestamp) ?? null,
+    telnyxLastSyncedAt: (d.telnyxLastSyncedAt as Timestamp) ?? null
   };
 }
 
@@ -167,6 +170,7 @@ export async function mergeVoiceIntegrationTelnyx(
     telnyxConnectionStatus?: VoiceTelnyxConnectionStatus;
     telnyxConnectionError?: string | null;
     telnyxLastCheckedAt?: Timestamp | null;
+    telnyxLastSyncedAt?: Timestamp | null;
     outboundVoiceProvider?: VoiceOutboundProviderPreference;
   }
 ): Promise<void> {
@@ -179,6 +183,7 @@ export async function mergeVoiceIntegrationTelnyx(
   if (data.telnyxConnectionStatus !== undefined) payload.telnyxConnectionStatus = data.telnyxConnectionStatus;
   if (data.telnyxConnectionError !== undefined) payload.telnyxConnectionError = data.telnyxConnectionError;
   if (data.telnyxLastCheckedAt !== undefined) payload.telnyxLastCheckedAt = data.telnyxLastCheckedAt;
+  if (data.telnyxLastSyncedAt !== undefined) payload.telnyxLastSyncedAt = data.telnyxLastSyncedAt;
   if (data.telnyxConnectionId !== undefined) payload.telnyxConnectionId = data.telnyxConnectionId;
   if (data.outboundVoiceProvider !== undefined) payload.outboundVoiceProvider = data.outboundVoiceProvider;
   if (data.telnyxApiKey !== undefined) {

@@ -4,6 +4,7 @@ import { listVoiceNumbersByCompany } from '../../lib/firebase/voiceNumbers';
 import { subscribeVoiceCallSession } from '../../lib/firebase/voiceCallSessions';
 import { subscribeCrmAiBots } from '../../lib/firebase/crmAiBots';
 import type { CrmAiBot } from '../../types/crmAiBot';
+import type { VoiceNumber } from '../../types/voice';
 import {
   fetchVoiceIntegrationStatus,
   launchVoiceCall,
@@ -19,7 +20,8 @@ type VoiceLauncherReadyReasonCode =
   | 'no_default_outbound'
   | 'no_bot'
   | 'no_phone'
-  | 'not_ready_unknown';
+  | 'not_ready_unknown'
+  | 'outbound_not_ready';
 
 type Props = {
   open: boolean;
@@ -34,9 +36,23 @@ function normalizeE164(raw: string): string | null {
   return s;
 }
 
+type LauncherIntegration = {
+  outbound: 'twilio' | 'telnyx';
+  configured: boolean;
+  enabled: boolean;
+  connectionStatus: string;
+  connectionError: string | null;
+  hasDefaultOutbound: boolean;
+  voiceReady: boolean;
+  readinessMessages: string[];
+  blockingReason: string | null;
+};
+
 export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, context, title }) => {
   const [bots, setBots] = useState<CrmAiBot[]>([]);
-  const [numbers, setNumbers] = useState<Array<{ id: string; e164: string; label: string | null; isDefault: boolean }>>([]);
+  const [numbers, setNumbers] = useState<
+    Array<{ id: string; e164: string; label: string | null; isDefault: boolean; provider: string }>
+  >([]);
   const [selectedBotId, setSelectedBotId] = useState(context.botId ?? '');
   const [phone, setPhone] = useState(context.phone ?? '');
   const [fromNumberId, setFromNumberId] = useState(context.fromNumberId ?? '');
@@ -48,14 +64,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
   const progressAnnouncedRef = useRef(false);
   const connectedAnnouncedRef = useRef(false);
   const terminalAnnouncedRef = useRef(false);
-  const [integration, setIntegration] = useState<{
-    configured: boolean;
-    enabled: boolean;
-    connectionStatus: string;
-    connectionError: string | null;
-    hasDefaultOutbound: boolean;
-    voiceReady: boolean;
-  } | null>(null);
+  const [integration, setIntegration] = useState<LauncherIntegration | null>(null);
 
   useEffect(() => {
     if (!open || !context.companyId) return;
@@ -77,18 +86,60 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
           return;
         }
         const integ = integResult.data;
-        setIntegration({
-          configured: integ.configured === true,
-          enabled: integ.enabled === true,
-          connectionStatus: String(integ.connectionStatus ?? 'not_connected'),
-          connectionError: integ.connectionError != null ? String(integ.connectionError) : null,
-          hasDefaultOutbound: integ.hasDefaultOutbound === true,
-          voiceReady: integ.voiceReady === true
-        });
-        setNumbers(
-          nums.map((n) => ({ id: n.id, e164: n.e164, label: n.label ?? null, isDefault: n.isDefault === true }))
+        const outbound: 'twilio' | 'telnyx' = integ.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
+        const telnyx = integ.telnyx;
+        const useTelnyx = outbound === 'telnyx';
+
+        const activeReady =
+          integ.activeOutboundVoiceReady === true
+            ? true
+            : useTelnyx
+              ? telnyx?.voiceReady === true
+              : integ.voiceReady === true;
+
+        const nextIntegration: LauncherIntegration = useTelnyx
+          ? {
+              outbound,
+              configured: telnyx?.configured === true,
+              enabled: telnyx?.enabled === true,
+              connectionStatus: String(telnyx?.connectionStatus ?? 'not_connected'),
+              connectionError: telnyx?.connectionError != null ? String(telnyx.connectionError) : null,
+              hasDefaultOutbound: telnyx?.hasDefaultOutbound === true,
+              voiceReady: activeReady,
+              readinessMessages: Array.isArray(telnyx?.readinessMessages) ? telnyx!.readinessMessages! : [],
+              blockingReason: telnyx?.blockingReason != null ? String(telnyx.blockingReason) : null
+            }
+          : {
+              outbound,
+              configured: integ.configured === true,
+              enabled: integ.enabled === true,
+              connectionStatus: String(integ.connectionStatus ?? 'not_connected'),
+              connectionError: integ.connectionError != null ? String(integ.connectionError) : null,
+              hasDefaultOutbound: integ.hasDefaultOutbound === true,
+              voiceReady: activeReady,
+              readinessMessages: [],
+              blockingReason: null
+            };
+
+        setIntegration(nextIntegration);
+
+        const filtered = (nums as VoiceNumber[]).filter(
+          (n) => String(n.provider ?? 'twilio') === outbound
         );
-        const def = nums.find((n) => n.isDefault);
+        setNumbers(
+          filtered.map((n) => ({
+            id: n.id,
+            e164: n.e164,
+            label: n.label ?? null,
+            isDefault: n.isDefault === true,
+            provider: String(n.provider ?? 'twilio')
+          }))
+        );
+        const allowedIds = new Set(filtered.map((n) => n.id));
+        if (context.fromNumberId && !allowedIds.has(context.fromNumberId)) {
+          setFromNumberId('');
+        }
+        const def = filtered.find((n) => n.isDefault);
         if (!context.fromNumberId && def) setFromNumberId(def.id);
       } catch (e) {
         setIntegration(null);
@@ -102,15 +153,16 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
 
   const selectedBot = useMemo(() => bots.find((b) => b.id === selectedBotId) ?? null, [bots, selectedBotId]);
 
-  /** Совпадает с логикой outbound: Twilio подключён + есть caller ID (default или выбранный). */
-  const twilioLineOk = useMemo(() => {
+  /** Линия исходящего: провайдер подключён + есть caller (default или выбранный номер того же провайдера). */
+  const outboundLineOk = useMemo(() => {
     if (!integration) return false;
     const connected = integration.enabled && integration.connectionStatus === 'connected';
     const hasCaller = integration.hasDefaultOutbound || !!fromNumberId.trim();
     return connected && hasCaller;
   }, [integration, fromNumberId]);
 
-  const canCall = !!selectedBotId && !!normalizeE164(phone) && twilioLineOk;
+  const canCall =
+    !!selectedBotId && !!normalizeE164(phone) && outboundLineOk && integration?.voiceReady === true;
 
   const { readyReason, reasonCode } = useMemo(() => {
     if (!integration) {
@@ -119,15 +171,30 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         reasonCode: (loading ? 'loading' : 'fetch_failed') as VoiceLauncherReadyReasonCode
       };
     }
+    if (integration.voiceReady === false) {
+      const first =
+        integration.blockingReason?.trim() ||
+        integration.readinessMessages[0] ||
+        (integration.outbound === 'telnyx'
+          ? 'Интеграция Telnyx не готова к исходящим звонкам.'
+          : 'Интеграция Twilio не готова к исходящим звонкам.');
+      return { readyReason: first, reasonCode: 'outbound_not_ready' as const };
+    }
     const connected = integration.enabled && integration.connectionStatus === 'connected';
     if (connected && !integration.hasDefaultOutbound && !fromNumberId.trim()) {
-      return { readyReason: 'Не выбран номер по умолчанию', reasonCode: 'no_default_outbound' as const };
+      return { readyReason: 'Не выбран номер по умолчанию для этого провайдера', reasonCode: 'no_default_outbound' as const };
     }
     if (!connected) {
       if (integration.connectionStatus === 'invalid_config' && integration.connectionError?.trim()) {
         return { readyReason: integration.connectionError.trim(), reasonCode: 'provider_not_connected' as const };
       }
-      return { readyReason: 'Twilio не подключен', reasonCode: 'provider_not_connected' as const };
+      return {
+        readyReason:
+          integration.outbound === 'telnyx'
+            ? 'Telnyx не подключён или не проверен'
+            : 'Twilio не подключён',
+        reasonCode: 'provider_not_connected' as const
+      };
     }
     if (!selectedBotId) {
       return { readyReason: 'Не выбран бот', reasonCode: 'no_bot' as const };
@@ -139,11 +206,11 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         reasonCode: 'no_phone' as const
       };
     }
-    if (!twilioLineOk) {
+    if (!outboundLineOk) {
       return { readyReason: 'Voice не готов к звонку', reasonCode: 'not_ready_unknown' as const };
     }
     return { readyReason: null as string | null, reasonCode: null as VoiceLauncherReadyReasonCode | null };
-  }, [integration, loading, selectedBotId, phone, fromNumberId, twilioLineOk]);
+  }, [integration, loading, selectedBotId, phone, fromNumberId, outboundLineOk]);
 
   useEffect(() => {
     if (!open || !context.companyId || !lastCallId) return;
@@ -159,6 +226,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         if (!s || s === lastObservedStatusRef.current) return;
         lastObservedStatusRef.current = s;
         const reasonMsg = session?.voiceFailureReasonMessage?.trim();
+        const prov = session?.provider != null ? String(session.provider) : '';
 
         if (s === 'dialing' || s === 'ringing') {
           if (!progressAnnouncedRef.current) {
@@ -182,7 +250,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         }
         if (s === 'failed') {
           const hint = session?.twilioErrorCode ? `код ${session.twilioErrorCode}` : session?.endReason ?? 'failed';
-          toast.error(reasonMsg ?? `Twilio: failed (${hint})`, { duration: 9000 });
+          toast.error(reasonMsg ?? `Звонок не удался (${prov ? `${prov}: ` : ''}${hint})`, { duration: 9000 });
         }
         if (s === 'busy') {
           const sip = session?.twilioSipResponseCode;
@@ -252,6 +320,10 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
     }
   };
 
+  const providerLabel = integration?.outbound === 'telnyx' ? 'Telnyx' : 'Twilio';
+  const fromPreview =
+    fromNumberId.trim() ? numbers.find((n) => n.id === fromNumberId)?.e164 ?? '—' : 'по умолчанию';
+
   return (
     <div className="fixed inset-0 z-[1200] bg-black/45 flex items-center justify-center p-4">
       <div className="w-full max-w-xl rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
@@ -259,7 +331,11 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
           <h3 className="text-lg font-semibold text-gray-900">{title ?? 'Запуск звонка'}</h3>
           <button type="button" onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Закрыть</button>
         </div>
-        <p className="text-xs text-gray-500">Источник: {context.source} · Провайдер: Twilio</p>
+        <p className="text-xs text-gray-500">
+          Источник: {context.source} · Исходящий провайдер: <span className="font-semibold text-gray-800">{providerLabel}</span>
+          {' · '}
+          From: {fromPreview}
+        </p>
         {loading ? <p className="text-sm text-gray-500">Загрузка...</p> : null}
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="text-sm text-gray-700">
@@ -270,10 +346,14 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
             </select>
           </label>
           <label className="text-sm text-gray-700">
-            С какого номера
+            С какого номера ({providerLabel})
             <select className="mt-1 w-full border rounded-lg px-3 py-2" value={fromNumberId} onChange={(e) => setFromNumberId(e.target.value)}>
               <option value="">По умолчанию</option>
-              {numbers.map((n) => <option key={n.id} value={n.id}>{n.label || n.e164}{n.isDefault ? ' (default)' : ''}</option>)}
+              {numbers.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.label || n.e164}{n.isDefault ? ' (default)' : ''}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -295,13 +375,15 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
           </div>
         ) : null}
         <div className="text-[11px] rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2 text-sky-900">
-          Checklist readiness:
+          Checklist ({providerLabel}):
           {` `}
-          {integration?.enabled && integration?.connectionStatus === 'connected' ? 'account connected' : 'account not connected'}
+          {integration?.enabled && integration?.connectionStatus === 'connected' ? 'учётная запись OK' : 'учётная запись не готова'}
           {` · `}
-          {integration?.hasDefaultOutbound || !!fromNumberId.trim() ? 'number configured' : 'number missing'}
+          {integration?.hasDefaultOutbound || !!fromNumberId.trim() ? 'номер caller ID' : 'номер не задан'}
           {` · `}
-          destination country allowed in Twilio Geo Permissions (manual check)
+          {integration?.outbound === 'twilio'
+            ? 'Geo Permissions Twilio — проверьте вручную в консоли'
+            : 'webhook Telnyx — Public Key в CRM, URL в Mission Control'}
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={!canCall || launching} onClick={() => void doCallNow()} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm disabled:opacity-50">

@@ -50,6 +50,94 @@ export async function probeTelnyxApiKey(apiKey: string): Promise<{ ok: true } | 
   }
 }
 
+/** Одна запись из Telnyx API `GET /v2/phone_numbers` для sync в CRM. */
+export type TelnyxSyncedPhoneNumber = {
+  externalNumberId: string;
+  e164: string;
+  label: string | null;
+  active: boolean;
+  countryCode: string | null;
+  readinessStatus: string;
+  capabilities: { voice: boolean };
+};
+
+/**
+ * Загружает все номера телефонии аккаунта Telnyx (официальный API v2, пагинация page[number]/page[size]).
+ * @see https://developers.telnyx.com/api/phone-numbers/list-phone-numbers
+ */
+export async function fetchTelnyxPhoneNumbers(
+  apiKey: string
+): Promise<{ ok: true; numbers: TelnyxSyncedPhoneNumber[] } | { ok: false; error: string }> {
+  const k = apiKey.trim();
+  if (!k) return { ok: false, error: 'Пустой API Key' };
+  const out: TelnyxSyncedPhoneNumber[] = [];
+  let page = 1;
+  const pageSize = 50;
+  try {
+    for (;;) {
+      const url = `https://api.telnyx.com/v2/phone_numbers?page[size]=${pageSize}&page[number]=${page}`;
+      const res = await fetch(url, {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${k}`, Accept: 'application/json' }
+      });
+      if (res.status === 401 || res.status === 403) {
+        return { ok: false, error: 'Telnyx отклонил ключ (401/403)' };
+      }
+      if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        return { ok: false, error: `Telnyx API ${res.status}${t ? `: ${t.slice(0, 200)}` : ''}` };
+      }
+      const json = (await res.json()) as Record<string, unknown>;
+      const data = Array.isArray(json.data) ? json.data : [];
+      const meta = json.meta as Record<string, unknown> | undefined;
+      for (const raw of data) {
+        const row = raw as Record<string, unknown>;
+        const id = String(row.id ?? '').trim();
+        const phone = String(row.phone_number ?? '').trim();
+        if (!id || !phone) continue;
+        const status = String(row.status ?? '').toLowerCase();
+        const active = status === 'active' || status === 'porting' || status === 'pending';
+        const friendly =
+          row.friendly_name != null && String(row.friendly_name).trim()
+            ? String(row.friendly_name).trim()
+            : null;
+        const countryIso =
+          row.country_iso_alpha2 != null && String(row.country_iso_alpha2).trim()
+            ? String(row.country_iso_alpha2).trim().slice(0, 8)
+            : null;
+        const countryFromCode =
+          row.country_code != null && String(row.country_code).trim()
+            ? String(row.country_code).trim().slice(0, 8)
+            : null;
+        const countryCode = countryIso ?? countryFromCode ?? null;
+        const features = row.features as Record<string, unknown> | undefined;
+        const vfeat = features?.voice;
+        const voiceCap =
+          vfeat === false ? false : vfeat === true || typeof vfeat === 'object' || vfeat === undefined;
+        out.push({
+          externalNumberId: id,
+          e164: phone,
+          label: friendly,
+          active,
+          countryCode,
+          readinessStatus: active ? 'ready' : 'inactive',
+          capabilities: { voice: voiceCap }
+        });
+      }
+      const totalPages =
+        typeof meta?.total_pages === 'number' && Number.isFinite(meta.total_pages) ? meta.total_pages : 1;
+      const pageNumber =
+        typeof meta?.page_number === 'number' && Number.isFinite(meta.page_number) ? meta.page_number : page;
+      if (pageNumber >= totalPages || data.length === 0) break;
+      page += 1;
+      if (page > 200) break;
+    }
+    return { ok: true, numbers: out };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Сеть / Telnyx недоступен' };
+  }
+}
+
 function extractDataObject(parsed: Record<string, unknown>): Record<string, unknown> {
   const data = parsed.data;
   if (data && typeof data === 'object') return data as Record<string, unknown>;
@@ -210,7 +298,7 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
         error:
           'Telnyx не включён или не сохранён API Key компании. Настройте интеграцию Telnyx в CRM.',
         code: 'telnyx_company_config_incomplete',
-        providerFailureCode: 'telnyx_company_config_incomplete',
+        providerFailureCode: 'provider_auth_error',
         providerFailureReason: 'telnyx_not_configured'
       };
     }
@@ -222,7 +310,7 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
         error:
           'Для исходящего звонка Telnyx нужен Connection / Application ID (Call Control). Укажите его в настройках Telnyx.',
         code: 'telnyx_connection_id_required',
-        providerFailureCode: 'telnyx_connection_id_required',
+        providerFailureCode: 'provider_connection_missing',
         providerFailureReason: 'missing_connection_id'
       };
     }
@@ -234,7 +322,7 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
         error:
           'Невозможно построить публичный webhook URL для Telnyx (задайте URL сайта / VOICE_PUBLIC_SITE_URL на Netlify).',
         code: 'telnyx_public_url',
-        providerFailureCode: 'telnyx_public_url',
+        providerFailureCode: 'provider_api_error',
         providerFailureReason: 'missing_public_url'
       };
     }
@@ -291,7 +379,7 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
           ok: false,
           error: `Telnyx: ${msg}`,
           code: 'telnyx_api_error',
-          providerFailureCode: `telnyx_http_${res.status}`,
+          providerFailureCode: res.status === 401 || res.status === 403 ? 'provider_auth_error' : 'provider_api_error',
           providerFailureReason: msg,
           rawProviderMessage: msg,
           providerDebug: { status: res.status, body: json }
@@ -304,7 +392,7 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
           ok: false,
           error: 'Telnyx: в ответе нет call_control_id',
           code: 'telnyx_api_error',
-          providerFailureCode: 'telnyx_missing_call_control_id',
+          providerFailureCode: 'provider_api_error',
           providerFailureReason: 'missing_call_control_id',
           providerDebug: { body: json }
         };
@@ -335,7 +423,7 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
         ok: false,
         error: `Telnyx: ${msg}`,
         code: 'telnyx_api_error',
-        providerFailureCode: 'telnyx_network',
+        providerFailureCode: 'provider_api_error',
         providerFailureReason: msg
       };
     }

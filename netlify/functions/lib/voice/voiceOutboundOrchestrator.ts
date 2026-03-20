@@ -1,4 +1,5 @@
 import { FieldValue } from 'firebase-admin/firestore';
+import { getVoiceIntegration } from '../firebaseAdmin';
 import {
   adminAppendVoiceCallEvent,
   adminCreateVoiceCallSession,
@@ -79,16 +80,44 @@ export async function orchestrateVoiceOutbound(
   try {
     adapter = await resolveVoiceProviderForCompany(companyId, config);
   } catch (e) {
-    const msg = String(e);
+    const msg = e instanceof Error ? e.message : String(e);
     return {
       ok: false,
       code: 'voice_provider_unavailable',
       message: msg,
-      httpStatus: 501
+      httpStatus: 400,
+      friendlyCode: 'provider_connection_missing',
+      hint: 'Включите Telnyx (API Key + Public Key) или выберите Twilio как исходящий провайдер в Интеграциях.'
     };
   }
 
   const expectedProvider = adapter.providerId;
+
+  const integrationRow = await getVoiceIntegration(companyId);
+  if (expectedProvider === 'telnyx' && integrationRow) {
+    if (!integrationRow.telnyxConnectionId?.trim()) {
+      return {
+        ok: false,
+        code: 'telnyx_connection_id_required',
+        message:
+          'Для исходящих через Telnyx укажите Connection / Application ID (Call Control) в разделе Интеграций.',
+        httpStatus: 400,
+        friendlyCode: 'provider_connection_missing',
+        hint: 'Это поле нужно для Telnyx POST /v2/calls.'
+      };
+    }
+    if (integrationRow.telnyxConnectionStatus !== 'connected') {
+      return {
+        ok: false,
+        code: 'telnyx_not_ready',
+        message:
+          'Telnyx не готов к звонкам: сначала нажмите «Проверить подключение» или сохраните корректные ключи.',
+        httpStatus: 400,
+        friendlyCode: 'provider_auth_error',
+        hint: integrationRow.telnyxConnectionError ?? undefined
+      };
+    }
+  }
 
   if (fromNumberId) {
     const row = await adminGetVoiceNumberForCompany(companyId, fromNumberId);
@@ -96,8 +125,10 @@ export async function orchestrateVoiceOutbound(
       return {
         ok: false,
         code: 'voice_number_not_found',
-        message: 'fromNumberId not found or wrong company',
-        httpStatus: 400
+        message: 'Указанный номер не найден или не принадлежит компании.',
+        httpStatus: 400,
+        friendlyCode: 'voice_number_not_found',
+        hint: 'Выберите номер из списка Интеграций для текущего провайдера.'
       };
     }
     const numProv = voiceNumberRowProvider(row.data);
@@ -105,8 +136,10 @@ export async function orchestrateVoiceOutbound(
       return {
         ok: false,
         code: 'voice_number_provider_mismatch',
-        message: `Voice number belongs to provider "${numProv}" but outbound adapter is "${expectedProvider}"`,
-        httpStatus: 400
+        message: `Номер относится к «${numProv}», а исходящий канал — «${expectedProvider}». Выберите совместимый номер или смените провайдер в Интеграциях.`,
+        httpStatus: 400,
+        friendlyCode: 'voice_number_provider_mismatch',
+        hint: 'Исходящий номер должен совпадать с выбранным outbound-провайдером.'
       };
     }
     fromE164 = row.e164;
@@ -117,8 +150,12 @@ export async function orchestrateVoiceOutbound(
         ok: false,
         code: 'no_voice_number',
         message:
-          'No default voice number for this provider: add voiceNumbers with isDefault and matching provider, or pass fromNumberId.',
-        httpStatus: 400
+          expectedProvider === 'telnyx'
+            ? 'Нет исходящего номера Telnyx по умолчанию: синхронизируйте номера в Интеграциях и назначьте default.'
+            : 'Нет исходящего номера Twilio по умолчанию: добавьте номер в Интеграциях и назначьте default.',
+        httpStatus: 400,
+        friendlyCode: 'provider_default_number_missing',
+        hint: 'Либо передайте fromNumberId явно при запуске звонка.'
       };
     }
     fromE164 = row.e164;
@@ -216,6 +253,8 @@ export async function orchestrateVoiceOutbound(
       providerCreateRawMessage: adapterResult.rawProviderMessage ?? null,
       providerFailureCode: adapterResult.providerFailureCode ?? failCode,
       providerFailureReason: adapterResult.providerFailureReason ?? adapterResult.error,
+      voiceProviderId: expectedProvider,
+      providerDebug: adapterResult.providerDebug ?? null,
       endedAt: FieldValue.serverTimestamp(),
       postCallStatus: 'pending'
     });
@@ -258,7 +297,7 @@ export async function orchestrateVoiceOutbound(
       message: adapterResult.error,
       httpStatus: configHttp,
       callId,
-      friendlyCode: friendly,
+      friendlyCode: friendly ?? adapterResult.providerFailureCode ?? null,
       hint,
       twilioCode: adapterResult.twilioCode ?? null
     };

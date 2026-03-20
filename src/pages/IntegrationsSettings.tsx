@@ -64,7 +64,11 @@ interface TelnyxVoiceState {
   connectionError: string | null;
   voiceReady: boolean;
   hasDefaultOutbound: boolean;
+  hasAnyNumbers: boolean;
   readinessMessages: string[];
+  blockingReason: string | null;
+  lastCheckedAt: string | null;
+  lastSyncedAt: string | null;
 }
 
 export const IntegrationsSettings: React.FC = () => {
@@ -159,7 +163,11 @@ export const IntegrationsSettings: React.FC = () => {
     connectionError: null,
     voiceReady: false,
     hasDefaultOutbound: false,
-    readinessMessages: []
+    hasAnyNumbers: false,
+    readinessMessages: [],
+    blockingReason: null,
+    lastCheckedAt: null,
+    lastSyncedAt: null
   });
   const [telnyxForm, setTelnyxForm] = useState({
     apiKey: '',
@@ -178,6 +186,10 @@ export const IntegrationsSettings: React.FC = () => {
   const [voiceTesting, setVoiceTesting] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [voiceSuccess, setVoiceSuccess] = useState<string | null>(null);
+  const [telnyxSyncing, setTelnyxSyncing] = useState(false);
+
+  const voiceWebhookUrl =
+    typeof window !== 'undefined' ? `${window.location.origin}/api/voice/provider-webhook` : '';
 
   const fetchIntegration = async () => {
     if (!user) return;
@@ -367,9 +379,13 @@ export const IntegrationsSettings: React.FC = () => {
         connectionError: (telnyxData.connectionError as string) ?? null,
         voiceReady: telnyxData.voiceReady === true,
         hasDefaultOutbound: telnyxData.hasDefaultOutbound === true,
+        hasAnyNumbers: telnyxData.hasAnyNumbers === true,
         readinessMessages: Array.isArray(telnyxData.readinessMessages)
           ? (telnyxData.readinessMessages as string[])
-          : []
+          : [],
+        blockingReason: (telnyxData.blockingReason as string) ?? null,
+        lastCheckedAt: (telnyxData.lastCheckedAt as string) ?? null,
+        lastSyncedAt: (telnyxData.lastSyncedAt as string) ?? null
       });
       setTelnyxNumbers(
         (telnyxNums.items ?? []).map((x) => ({
@@ -660,8 +676,8 @@ export const IntegrationsSettings: React.FC = () => {
   };
 
   const handleTelnyxTest = async () => {
-    if (!telnyxForm.apiKey.trim() || !telnyxForm.publicKey.trim()) {
-      setVoiceError('Укажите API Key и Public Key Telnyx для проверки');
+    if (!telnyxForm.apiKey.trim()) {
+      setVoiceError('Укажите API Key Telnyx для проверки');
       return;
     }
     setVoiceTesting(true);
@@ -676,7 +692,6 @@ export const IntegrationsSettings: React.FC = () => {
         body: JSON.stringify({
           provider: 'telnyx',
           apiKey: telnyxForm.apiKey.trim(),
-          publicKey: telnyxForm.publicKey.trim(),
           testOnly: true
         })
       });
@@ -766,6 +781,43 @@ export const IntegrationsSettings: React.FC = () => {
       body: JSON.stringify({ action: 'set_default', numberId })
     });
     fetchVoice();
+  };
+
+  const handleTelnyxSync = async () => {
+    if (!user) return;
+    setTelnyxSyncing(true);
+    setVoiceError(null);
+    setVoiceSuccess(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch(API_VOICE_NUMBERS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'sync_telnyx' })
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        error?: string;
+        message?: string;
+        empty?: boolean;
+        imported?: number;
+      };
+      if (!res.ok) {
+        setVoiceError(data.error ?? 'Синхронизация Telnyx не удалась');
+        return;
+      }
+      if (data.empty) {
+        setVoiceSuccess(data.message ?? 'В Telnyx нет номеров для импорта');
+      } else {
+        setVoiceSuccess(data.message ?? 'Номера Telnyx синхронизированы');
+      }
+      await fetchVoice();
+    } catch {
+      setVoiceError('Не удалось синхронизировать номера Telnyx');
+    } finally {
+      setTelnyxSyncing(false);
+    }
   };
 
   const handleSaveAI = async () => {
@@ -1317,6 +1369,15 @@ export const IntegrationsSettings: React.FC = () => {
                 </select>
                 {outboundSaving ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : null}
               </div>
+              <p className="text-xs text-gray-500">
+                Исходящие звонки для этой компании будут идти через выбранного провайдера (Twilio или Telnyx).
+              </p>
+              {voiceState.outboundVoiceProvider === 'telnyx' && !telnyxState.voiceReady ? (
+                <div className="text-xs rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2">
+                  <span className="font-medium">Внимание:</span> выбран Telnyx, но он ещё не готов к звонкам.
+                  {telnyxState.blockingReason ? ` ${telnyxState.blockingReason}` : ' Заполните ключи, Connection ID, синхронизируйте номера и назначьте номер по умолчанию.'}
+                </div>
+              ) : null}
               {voiceState.accountSidMasked ? (
                 <p className="text-xs text-gray-600">
                   Account SID сохранён ({voiceState.accountSidMasked})
@@ -1383,7 +1444,9 @@ export const IntegrationsSettings: React.FC = () => {
                       <div>
                         <p className="font-medium text-gray-800 flex flex-wrap items-center gap-2">
                           {n.label || n.e164}
-                          <span className="text-[10px] uppercase font-semibold bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded">Twilio</span>
+                          <span className="text-[10px] uppercase font-semibold bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded">
+                            {String(n.provider ?? 'twilio')}
+                          </span>
                         </p>
                         <p className="text-xs text-gray-500">{n.e164} · {n.isActive ? 'active' : 'inactive'}</p>
                       </div>
@@ -1450,7 +1513,32 @@ export const IntegrationsSettings: React.FC = () => {
                 >
                   Voice: {telnyxState.voiceReady ? 'ready' : 'not ready'}
                 </span>
+                <span
+                  className={`px-2 py-1 rounded-full border ${
+                    telnyxState.publicKeySet
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-amber-50 border-amber-200 text-amber-800'
+                  }`}
+                >
+                  Public key: {telnyxState.publicKeySet ? 'set' : 'missing'}
+                </span>
+                <span
+                  className={`px-2 py-1 rounded-full border ${
+                    telnyxState.hasAnyNumbers
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-amber-50 border-amber-200 text-amber-800'
+                  }`}
+                >
+                  Numbers: {telnyxState.hasAnyNumbers ? 'in CRM' : 'none'}
+                </span>
               </div>
+              {(telnyxState.lastCheckedAt || telnyxState.lastSyncedAt) && (
+                <p className="text-[11px] text-gray-500">
+                  {telnyxState.lastCheckedAt ? <>Проверка API: {new Date(telnyxState.lastCheckedAt).toLocaleString()}</> : null}
+                  {telnyxState.lastCheckedAt && telnyxState.lastSyncedAt ? ' · ' : null}
+                  {telnyxState.lastSyncedAt ? <>Синхронизация: {new Date(telnyxState.lastSyncedAt).toLocaleString()}</> : null}
+                </p>
+              )}
               {telnyxState.readinessMessages.length > 0 && !telnyxState.voiceReady ? (
                 <ul className="text-xs text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 list-disc list-inside space-y-0.5">
                   {telnyxState.readinessMessages.map((m) => (
@@ -1462,6 +1550,26 @@ export const IntegrationsSettings: React.FC = () => {
                 <p className="text-xs text-gray-600">API Key сохранён ({telnyxState.apiKeyMasked})</p>
               ) : null}
               {telnyxState.publicKeySet ? <p className="text-xs text-gray-600">Public Key для webhook сохранён</p> : null}
+              {voiceWebhookUrl ? (
+                <div className="rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 text-xs space-y-2">
+                  <p className="font-medium text-gray-800">Webhook URL (укажите в Telnyx Mission Control)</p>
+                  <code className="block break-all text-[11px] text-violet-900 bg-white/80 rounded px-2 py-1 border border-violet-100">
+                    {voiceWebhookUrl}
+                  </code>
+                  <p className="text-gray-600 leading-relaxed">
+                    Для проверки подписи входящих событий CRM хранит ваш Public Key. Telnyx отправляет заголовки{' '}
+                    <code className="text-[10px]">telnyx-timestamp</code> и{' '}
+                    <code className="text-[10px]">telnyx-signature-ed25519</code>.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-violet-700 hover:underline"
+                    onClick={() => void navigator.clipboard.writeText(voiceWebhookUrl).then(() => setVoiceSuccess('URL скопирован'))}
+                  >
+                    Копировать URL
+                  </button>
+                </div>
+              ) : null}
               <div className="grid sm:grid-cols-2 gap-3">
                 <input
                   type="password"
@@ -1509,6 +1617,16 @@ export const IntegrationsSettings: React.FC = () => {
                   className="px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg"
                 >
                   {voiceSaving ? 'Сохранение…' : 'Сохранить'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleTelnyxSync()}
+                  disabled={telnyxSyncing || voiceSaving || !telnyxState.apiKeyMasked}
+                  title={!telnyxState.apiKeyMasked ? 'Сначала сохраните API Key Telnyx' : undefined}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-800 bg-gray-100 border border-gray-300 rounded-lg disabled:opacity-50"
+                >
+                  {telnyxSyncing ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Синхронизировать номера
                 </button>
               </div>
               <div className="border-t pt-3">

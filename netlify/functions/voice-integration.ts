@@ -8,7 +8,8 @@ import {
   mergeVoiceIntegrationTelnyx,
   setOutboundVoiceProviderPreference,
   verifyIdToken,
-  type VoiceOutboundProviderPreference
+  type VoiceOutboundProviderPreference,
+  type VoiceIntegrationRow
 } from './lib/firebaseAdmin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { probeTelnyxApiKey } from './lib/voice/providers/telnyxVoiceProvider';
@@ -43,6 +44,74 @@ async function getDefaultNumberStatus(
   return { hasDefaultOutbound: false, defaultNumberId: null };
 }
 
+/** Нормализованный snapshot Telnyx для GET и вложения в общий ответ (лаунчер / UI). */
+async function buildTelnyxReadinessSnapshot(
+  companyId: string,
+  row: VoiceIntegrationRow | null
+): Promise<Record<string, unknown>> {
+  const db = getDb();
+  const allNums = await db.collection('voiceNumbers').where('companyId', '==', companyId).get();
+  const hasAnyNumbers = allNums.docs.some(
+    (d) => String(d.data()?.provider ?? 'twilio').trim() === 'telnyx'
+  );
+  const num = await getDefaultNumberStatus(companyId, 'telnyx');
+  const hasKey = !!(row?.telnyxApiKey?.trim());
+  const hasPub = !!(row?.telnyxPublicKey?.trim());
+  const hasConnId = !!(row?.telnyxConnectionId?.trim());
+  const connected = row?.telnyxConnectionStatus === 'connected';
+  const enabled = row?.telnyxEnabled === true;
+  const configured = !!(row && (hasKey || hasPub || hasConnId));
+
+  const readinessMessages: string[] = [];
+  if (!hasKey) readinessMessages.push('Сохраните API Key Telnyx.');
+  if (!hasPub) readinessMessages.push('Сохраните Public Key (Ed25519) для проверки подписи webhook входящих событий.');
+  if (!enabled) readinessMessages.push('Включите интеграцию Telnyx (переключатель «активна»).');
+  if (row?.telnyxConnectionStatus === 'invalid_config') {
+    readinessMessages.push(row?.telnyxConnectionError || 'Проверка API не пройдена — обновите ключи или нажмите «Проверить подключение».');
+  }
+  if (hasKey && hasPub && enabled && row?.telnyxConnectionStatus === 'not_connected') {
+    readinessMessages.push('Нажмите «Проверить подключение» или сохраните интеграцию после ввода ключей.');
+  }
+  if (!hasConnId) {
+    readinessMessages.push('Укажите Connection / Application ID (Call Control) для исходящих звонков.');
+  }
+  if (!hasAnyNumbers) {
+    readinessMessages.push('Нет номеров Telnyx в CRM — нажмите «Синхронизировать номера» или добавьте номер вручную.');
+  }
+  if (!num.hasDefaultOutbound) {
+    readinessMessages.push('Не выбран исходящий номер Telnyx по умолчанию.');
+  }
+
+  const voiceReady =
+    hasKey && hasPub && enabled && connected && hasConnId && num.hasDefaultOutbound;
+
+  const blockingReason: string | null = voiceReady ? null : readinessMessages[0] ?? 'Интеграция Telnyx не готова к исходящим звонкам.';
+
+  const lastSyncedAt = row?.telnyxLastSyncedAt?.toDate?.()?.toISOString?.() ?? null;
+  const lastCheckedAt = row?.telnyxLastCheckedAt?.toDate?.()?.toISOString?.() ?? null;
+
+  return {
+    provider: 'telnyx',
+    providerId: 'telnyx',
+    configured,
+    enabled,
+    connectionStatus: row?.telnyxConnectionStatus ?? 'not_connected',
+    connectionError: row?.telnyxConnectionError ?? null,
+    publicKeySet: hasPub,
+    apiKeyMasked: row?.telnyxApiKeyMasked ?? null,
+    connectionId: row?.telnyxConnectionId ?? null,
+    hasAnyNumbers,
+    hasDefaultOutbound: num.hasDefaultOutbound,
+    defaultNumberId: num.defaultNumberId,
+    voiceReady,
+    readinessMessages,
+    blockingReason,
+    lastCheckedAt,
+    lastSyncedAt,
+    outboundVoiceProvider: row?.outboundVoiceProvider ?? 'twilio'
+  };
+}
+
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS, body: '' };
   if (event.httpMethod !== 'GET' && event.httpMethod !== 'POST') return json(405, { error: 'Method Not Allowed' });
@@ -65,48 +134,19 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
   if (event.httpMethod === 'GET' && providerQ === 'telnyx') {
     const row = await getVoiceIntegration(companyId);
-    const num = await getDefaultNumberStatus(companyId, 'telnyx');
-    const hasKey = !!(row?.telnyxApiKey?.trim());
-    const hasPub = !!(row?.telnyxPublicKey?.trim());
-    const connected = row?.telnyxConnectionStatus === 'connected';
-    const enabled = row?.telnyxEnabled === true;
-    const readinessMessages: string[] = [];
-    if (!hasKey) readinessMessages.push('Нет API Key');
-    if (!hasPub) readinessMessages.push('Нет Public Key для webhook');
-    if (!enabled) readinessMessages.push('Интеграция Telnyx отключена');
-    if (row?.telnyxConnectionStatus === 'invalid_config') {
-      readinessMessages.push(row?.telnyxConnectionError || 'Проверка подключения не пройдена');
-    }
-    if (hasKey && hasPub && enabled && row?.telnyxConnectionStatus === 'not_connected') {
-      readinessMessages.push('Сохраните интеграцию или нажмите «Проверить подключение»');
-    }
-    if (!num.hasDefaultOutbound) readinessMessages.push('Не выбран default outbound номер Telnyx');
-    const voiceReady = hasKey && hasPub && enabled && connected && num.hasDefaultOutbound;
-
-    return json(200, {
-      provider: 'telnyx',
-      providerId: 'telnyx',
-      configured: !!(row && (hasKey || hasPub)),
-      enabled,
-      apiKeyMasked: row?.telnyxApiKeyMasked ?? null,
-      publicKeySet: hasPub,
-      connectionId: row?.telnyxConnectionId ?? null,
-      connectionStatus: row?.telnyxConnectionStatus ?? 'not_connected',
-      connectionError: row?.telnyxConnectionError ?? null,
-      lastCheckedAt: row?.telnyxLastCheckedAt?.toDate?.()?.toISOString?.() ?? null,
-      hasDefaultOutbound: num.hasDefaultOutbound,
-      defaultNumberId: num.defaultNumberId,
-      voiceReady,
-      readinessMessages,
-      outboundVoiceProvider: row?.outboundVoiceProvider ?? 'twilio'
-    });
+    const snapshot = await buildTelnyxReadinessSnapshot(companyId, row);
+    return json(200, snapshot);
   }
 
   if (event.httpMethod === 'GET') {
     const row = await getVoiceIntegration(companyId);
     const num = await getDefaultNumberStatus(companyId, 'twilio');
+    const telnyxSnap = await buildTelnyxReadinessSnapshot(companyId, row);
+    const outbound: VoiceOutboundProviderPreference = row?.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
     const connected = !!(row?.enabled && row.accountSid && row.authToken);
-    const ready = connected && num.hasDefaultOutbound;
+    const twilioReady = connected && num.hasDefaultOutbound;
+    const activeOutboundVoiceReady =
+      outbound === 'telnyx' ? telnyxSnap.voiceReady === true : twilioReady;
     return json(200, {
       provider: 'twilio',
       providerId: 'twilio',
@@ -120,8 +160,12 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       lastCheckedAt: row?.lastCheckedAt?.toDate?.()?.toISOString?.() ?? null,
       hasDefaultOutbound: num.hasDefaultOutbound,
       defaultNumberId: num.defaultNumberId,
-      voiceReady: ready,
-      outboundVoiceProvider: row?.outboundVoiceProvider ?? 'twilio'
+      /** Готовность исходящих только для Twilio (обратная совместимость UI). */
+      voiceReady: twilioReady,
+      outboundVoiceProvider: outbound,
+      telnyx: telnyxSnap,
+      /** Активный outbound-провайдер: можно ли запускать исходящий звонок сейчас. */
+      activeOutboundVoiceReady: activeOutboundVoiceReady
     });
   }
 
@@ -161,8 +205,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const connectionId = body.connectionId != null ? String(body.connectionId).trim() || null : undefined;
 
     if (testOnly) {
-      if (!apiKey || !publicKey) {
-        return json(400, { ok: false, error: 'Для проверки Telnyx укажите API Key и Public Key' });
+      if (!apiKey) {
+        return json(400, { ok: false, error: 'Для проверки Telnyx укажите API Key' });
       }
       const probe = await probeTelnyxApiKey(apiKey);
       if (!probe.ok) {
@@ -192,7 +236,6 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     if (!probe.ok) {
       await mergeVoiceIntegrationTelnyx(companyId, {
         telnyxEnabled: false,
-        telnyxApiKey,
         telnyxPublicKey: publicKey,
         telnyxConnectionStatus: 'invalid_config',
         telnyxConnectionError: probe.error,

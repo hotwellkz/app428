@@ -22,6 +22,25 @@ function fallbackVoicePath(path: string): string | null {
   return `/.netlify/functions/voice-${tail}`;
 }
 
+/** Снэпшот Telnyx из GET voice-integration (вложенный или ?provider=telnyx). */
+export type TelnyxVoiceIntegrationSnapshot = {
+  provider?: string;
+  configured?: boolean;
+  enabled?: boolean;
+  connectionStatus?: string;
+  connectionError?: string | null;
+  publicKeySet?: boolean;
+  apiKeyMasked?: string | null;
+  connectionId?: string | null;
+  hasAnyNumbers?: boolean;
+  hasDefaultOutbound?: boolean;
+  voiceReady?: boolean;
+  readinessMessages?: string[];
+  blockingReason?: string | null;
+  lastCheckedAt?: string | null;
+  lastSyncedAt?: string | null;
+};
+
 /** Ответ GET voice-integration (серверный контракт). */
 export type VoiceIntegrationClientSnapshot = {
   provider?: string;
@@ -36,13 +55,21 @@ export type VoiceIntegrationClientSnapshot = {
   lastCheckedAt?: string | null;
   hasDefaultOutbound?: boolean;
   defaultNumberId?: string | null;
+  /** Готовность только Twilio (для карточки Twilio в Интеграциях). */
   voiceReady?: boolean;
+  outboundVoiceProvider?: 'twilio' | 'telnyx';
+  /** Вложенный снэпшот Telnyx (GET без ?provider). */
+  telnyx?: TelnyxVoiceIntegrationSnapshot;
+  /** Готовность исходящих для выбранного outbound-провайдера. */
+  activeOutboundVoiceReady?: boolean;
   error?: string;
 };
 
 function looksLikeVoiceIntegrationPayload(data: unknown): data is VoiceIntegrationClientSnapshot {
   if (data == null || typeof data !== 'object') return false;
   const o = data as Record<string, unknown>;
+  if ('activeOutboundVoiceReady' in o) return true;
+  if ('telnyx' in o && o.telnyx != null && typeof o.telnyx === 'object') return true;
   return 'connectionStatus' in o || 'voiceReady' in o || ('configured' in o && 'enabled' in o);
 }
 
