@@ -133,11 +133,50 @@ export async function launchVoiceCall(payload: {
   fromNumberId?: string | null;
   metadata?: Record<string, unknown>;
 }): Promise<{ callId: string }> {
-  const res = await voiceFetch('/api/voice/outbound-call', {
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
-  const data = (await res.json().catch(() => ({}))) as { callId?: string; error?: string };
-  if (!res.ok || !data.callId) throw new Error(data.error ?? 'Не удалось запустить звонок');
-  return { callId: data.callId };
+  const token = await getAuthToken();
+  if (!token) throw new Error('Нет авторизации');
+  const body = JSON.stringify(payload);
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    Authorization: `Bearer ${token}`
+  };
+
+  async function postOnce(url: string): Promise<Response> {
+    let res = await fetch(url, { method: 'POST', body, headers, cache: 'no-store' });
+    if (res.status === 404 && url.startsWith('/api/voice/')) {
+      const fb = fallbackVoicePath(url);
+      if (fb) res = await fetch(fb, { method: 'POST', body, headers, cache: 'no-store' });
+    }
+    return res;
+  }
+
+  /** Как integration: сначала прямой Netlify function (обходит отсутствие редиректа /api на части хостингов). */
+  const urls = ['/.netlify/functions/voice-outbound-call', '/api/voice/outbound-call'];
+  let lastMessage = 'Не удалось запустить звонок';
+
+  for (const url of urls) {
+    let res: Response;
+    try {
+      res = await postOnce(url);
+    } catch {
+      continue;
+    }
+    let parsed: unknown;
+    try {
+      parsed = await parseJsonBody(res);
+    } catch {
+      continue;
+    }
+    const data = (parsed && typeof parsed === 'object' ? parsed : {}) as { callId?: unknown; error?: unknown };
+    if (data.error != null) lastMessage = String(data.error);
+    const callId = data.callId != null ? String(data.callId).trim() : '';
+    if (res.ok && callId) return { callId };
+    if (!res.ok) {
+      if (res.status === 404) continue;
+      throw new Error(lastMessage);
+    }
+  }
+
+  throw new Error(lastMessage);
 }
