@@ -13,6 +13,7 @@ import {
   resolveTwilioWebhookRequestUrl,
   type VoiceProviderRuntimeConfig
 } from '../providerConfig';
+import { getVoiceIntegration } from '../../firebaseAdmin';
 
 const PROVIDER_ID = 'twilio';
 
@@ -107,13 +108,16 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
   }
 
   async createOutboundCall(input: CreateOutboundVoiceCallInput): Promise<CreateOutboundVoiceCallResult> {
-    const err = assertTwilioOutboundConfig(this.config);
+    const companyIntegration = await getVoiceIntegration(input.companyId);
+    const accountSid = companyIntegration?.accountSid?.trim() || this.config.twilioAccountSid || null;
+    const authToken = companyIntegration?.authToken?.trim() || this.config.twilioAuthToken || null;
+    const err = !accountSid || !authToken ? assertTwilioOutboundConfig(this.config) : null;
     if (err) {
       return { ok: false, error: err, code: 'twilio_config' };
     }
-
-    const accountSid = this.config.twilioAccountSid!;
-    const authToken = this.config.twilioAuthToken!;
+    if (!accountSid || !authToken) {
+      return { ok: false, error: 'Twilio credentials missing', code: 'twilio_config' };
+    }
 
     const twimlUrl = buildVoiceTwilioTwimlUrl(this.config);
     let statusCallback = buildTwilioStatusCallbackValidationUrl(this.config);

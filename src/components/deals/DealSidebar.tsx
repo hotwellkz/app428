@@ -23,6 +23,7 @@ import {
   addDealActivity
 } from '../../lib/firebase/deals';
 import { db } from '../../lib/firebase/config';
+import { UniversalVoiceCallLauncher } from '../voice/UniversalVoiceCallLauncher';
 
 function formatDealDate(v: Deal['createdAt']): string {
   if (!v) return '—';
@@ -152,6 +153,7 @@ export const DealSidebar: React.FC<DealSidebarProps> = ({
     tags: (deal.tags ?? []).join(', ')
   });
   const [moveOpen, setMoveOpen] = useState(false);
+  const [voiceLauncherOpen, setVoiceLauncherOpen] = useState(false);
 
   useEffect(() => {
     setForm({
@@ -353,13 +355,14 @@ export const DealSidebar: React.FC<DealSidebarProps> = ({
             </Link>
           )}
           {phoneHref && (
-            <a
-              href={phoneHref}
+            <button
+              type="button"
+              onClick={() => setVoiceLauncherOpen(true)}
               className="flex items-center justify-center gap-1 py-2 rounded-lg bg-slate-800 text-white text-xs font-semibold"
             >
               <Phone className="w-3.5 h-3.5" />
               Звонок
-            </a>
+            </button>
           )}
           <button
             type="button"
@@ -643,6 +646,20 @@ export const DealSidebar: React.FC<DealSidebarProps> = ({
           )}
         </div>
       </aside>
+      {voiceLauncherOpen ? (
+        <UniversalVoiceCallLauncher
+          open={voiceLauncherOpen}
+          onClose={() => setVoiceLauncherOpen(false)}
+          title="Звонок из сделки"
+          context={{
+            source: 'deal',
+            companyId,
+            phone: deal.clientPhoneSnapshot ?? null,
+            clientId: deal.clientId ?? null,
+            dealId: deal.id
+          }}
+        />
+      ) : null}
     </>
   );
 };

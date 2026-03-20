@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getAuthToken } from '../lib/firebase/auth';
-import { Plug, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Loader2, Sparkles, ShoppingBag } from 'lucide-react';
+import { Plug, CheckCircle, AlertCircle, ChevronDown, ChevronUp, Loader2, Sparkles, ShoppingBag, Phone } from 'lucide-react';
 
 const API_INTEGRATION = '/.netlify/functions/wazzup-integration';
 const API_VERIFY = '/.netlify/functions/wazzup-verify';
@@ -9,6 +9,8 @@ const API_OPENAI_INTEGRATION = '/.netlify/functions/openai-integration';
 const API_KASPI_INTEGRATION = '/.netlify/functions/kaspi-integration';
 const API_KASPI_VERIFY = '/.netlify/functions/kaspi-verify';
 const API_KASPI_SYNC = '/.netlify/functions/kaspi-sync-orders';
+const API_VOICE_INTEGRATION = '/api/voice/integration';
+const API_VOICE_NUMBERS = '/api/voice/numbers';
 
 const looksLikeEmail = (s: string) => /@/.test(s.trim());
 
@@ -35,6 +37,16 @@ interface IntegrationState {
   connectionStatus: string | null;
   connectionError: string | null;
   lastCheckedAt: string | null;
+}
+
+interface VoiceIntegrationState {
+  configured: boolean;
+  enabled: boolean;
+  accountSidMasked: string | null;
+  connectionStatus: 'connected' | 'not_connected' | 'invalid_config';
+  connectionError: string | null;
+  voiceReady: boolean;
+  hasDefaultOutbound: boolean;
 }
 
 export const IntegrationsSettings: React.FC = () => {
@@ -97,6 +109,30 @@ export const IntegrationsSettings: React.FC = () => {
   const [kaspiSyncing, setKaspiSyncing] = useState(false);
   const [kaspiError, setKaspiError] = useState<string | null>(null);
   const [kaspiSuccess, setKaspiSuccess] = useState<string | null>(null);
+  const [voiceState, setVoiceState] = useState<VoiceIntegrationState>({
+    configured: false,
+    enabled: false,
+    accountSidMasked: null,
+    connectionStatus: 'not_connected',
+    connectionError: null,
+    voiceReady: false,
+    hasDefaultOutbound: false
+  });
+  const [voiceForm, setVoiceForm] = useState({
+    accountSid: '',
+    authToken: '',
+    enabled: true,
+    numberE164: '',
+    numberLabel: ''
+  });
+  const [voiceNumbers, setVoiceNumbers] = useState<
+    Array<{ id: string; e164: string; label: string | null; isDefault: boolean; isActive: boolean }>
+  >([]);
+  const [voiceLoading, setVoiceLoading] = useState(true);
+  const [voiceSaving, setVoiceSaving] = useState(false);
+  const [voiceTesting, setVoiceTesting] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceSuccess, setVoiceSuccess] = useState<string | null>(null);
 
   const fetchIntegration = async () => {
     if (!user) return;
@@ -235,6 +271,48 @@ export const IntegrationsSettings: React.FC = () => {
     fetchKaspi();
   }, [user?.uid]);
 
+  const fetchVoice = async () => {
+    if (!user) return;
+    setVoiceLoading(true);
+    setVoiceError(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const [integrationRes, numbersRes] = await Promise.all([
+        fetch(API_VOICE_INTEGRATION, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+        fetch(API_VOICE_NUMBERS, { method: 'GET', headers: { Authorization: `Bearer ${token}` } })
+      ]);
+      const integrationData = (await integrationRes.json().catch(() => ({}))) as Record<string, unknown>;
+      const numbersData = (await numbersRes.json().catch(() => ({}))) as { items?: Array<Record<string, unknown>> };
+      setVoiceState({
+        configured: integrationData.configured === true,
+        enabled: integrationData.enabled === true,
+        accountSidMasked: (integrationData.accountSidMasked as string) ?? null,
+        connectionStatus: (integrationData.connectionStatus as VoiceIntegrationState['connectionStatus']) ?? 'not_connected',
+        connectionError: (integrationData.connectionError as string) ?? null,
+        voiceReady: integrationData.voiceReady === true,
+        hasDefaultOutbound: integrationData.hasDefaultOutbound === true
+      });
+      setVoiceNumbers(
+        (numbersData.items ?? []).map((x) => ({
+          id: String(x.id ?? ''),
+          e164: String(x.e164 ?? ''),
+          label: (x.label as string) ?? null,
+          isDefault: x.isDefault === true,
+          isActive: x.isActive !== false
+        }))
+      );
+    } catch (e) {
+      setVoiceError('Не удалось загрузить Voice настройки');
+    } finally {
+      setVoiceLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVoice();
+  }, [user?.uid]);
+
   const handleKaspiVerify = async () => {
     const apiKey = kaspiForm.apiKey.trim();
     if (!user) return;
@@ -348,6 +426,111 @@ export const IntegrationsSettings: React.FC = () => {
     } finally {
       setKaspiSyncing(false);
     }
+  };
+
+  const handleVoiceTest = async () => {
+    if (!voiceForm.accountSid.trim() || !voiceForm.authToken.trim()) {
+      setVoiceError('Укажите Account SID и Auth Token для проверки');
+      return;
+    }
+    setVoiceTesting(true);
+    setVoiceError(null);
+    setVoiceSuccess(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch(API_VOICE_INTEGRATION, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          accountSid: voiceForm.accountSid.trim(),
+          authToken: voiceForm.authToken.trim(),
+          testOnly: true
+        })
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        setVoiceError(data.error ?? 'Проверка не пройдена');
+        return;
+      }
+      setVoiceSuccess(data.message ?? 'Twilio подключение успешно проверено');
+    } finally {
+      setVoiceTesting(false);
+    }
+  };
+
+  const handleVoiceSave = async () => {
+    if (!voiceForm.accountSid.trim() || !voiceForm.authToken.trim()) {
+      setVoiceError('Укажите Account SID и Auth Token');
+      return;
+    }
+    setVoiceSaving(true);
+    setVoiceError(null);
+    setVoiceSuccess(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch(API_VOICE_INTEGRATION, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          accountSid: voiceForm.accountSid.trim(),
+          authToken: voiceForm.authToken.trim(),
+          enabled: voiceForm.enabled
+        })
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        setVoiceError(data.error ?? 'Ошибка сохранения');
+        return;
+      }
+      setVoiceSuccess(data.message ?? 'Voice интеграция сохранена');
+      setVoiceForm((f) => ({ ...f, accountSid: '', authToken: '' }));
+      fetchVoice();
+    } finally {
+      setVoiceSaving(false);
+    }
+  };
+
+  const handleVoiceNumberAdd = async () => {
+    if (!voiceForm.numberE164.trim()) return setVoiceError('Укажите номер в формате +7...');
+    setVoiceSaving(true);
+    setVoiceError(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch(API_VOICE_NUMBERS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: 'upsert',
+          e164: voiceForm.numberE164.trim(),
+          label: voiceForm.numberLabel.trim() || null,
+          provider: 'twilio'
+        })
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setVoiceError(data.error ?? 'Не удалось добавить номер');
+        return;
+      }
+      setVoiceSuccess('Номер сохранён');
+      setVoiceForm((f) => ({ ...f, numberE164: '', numberLabel: '' }));
+      fetchVoice();
+    } finally {
+      setVoiceSaving(false);
+    }
+  };
+
+  const handleVoiceSetDefault = async (numberId: string) => {
+    const token = await getAuthToken();
+    if (!token) return;
+    await fetch(API_VOICE_NUMBERS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'set_default', numberId })
+    });
+    fetchVoice();
   };
 
   const handleSaveAI = async () => {
@@ -852,6 +1035,116 @@ export const IntegrationsSettings: React.FC = () => {
                   Синхронизировать сейчас
                 </button>
               </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+          <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+            <Phone className="w-4 h-4 text-sky-600" />
+            Voice / Telephony (Twilio)
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Интеграция и номера изолированы по компании. Общий billing платформы не используется.
+          </p>
+        </div>
+        <div className="p-4 space-y-4">
+          {voiceLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Загрузка…
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span className={`px-2 py-1 rounded-full border ${voiceState.connectionStatus === 'connected' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                  Provider: {voiceState.connectionStatus === 'connected' ? 'connected' : voiceState.connectionStatus}
+                </span>
+                <span className={`px-2 py-1 rounded-full border ${voiceState.hasDefaultOutbound ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                  Default outbound: {voiceState.hasDefaultOutbound ? 'selected' : 'missing'}
+                </span>
+                <span className={`px-2 py-1 rounded-full border ${voiceState.voiceReady ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                  Voice: {voiceState.voiceReady ? 'ready' : 'not ready'}
+                </span>
+              </div>
+              {voiceState.accountSidMasked ? (
+                <p className="text-xs text-gray-600">Account SID сохранён ({voiceState.accountSidMasked})</p>
+              ) : null}
+              <div className="grid sm:grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  value={voiceForm.accountSid}
+                  onChange={(e) => setVoiceForm((f) => ({ ...f, accountSid: e.target.value }))}
+                  placeholder="Twilio Account SID"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <input
+                  type="password"
+                  value={voiceForm.authToken}
+                  onChange={(e) => setVoiceForm((f) => ({ ...f, authToken: e.target.value }))}
+                  placeholder="Twilio Auth Token"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={voiceForm.enabled} onChange={(e) => setVoiceForm((f) => ({ ...f, enabled: e.target.checked }))} />
+                Интеграция активна
+              </label>
+              <div className="flex gap-2">
+                <button type="button" onClick={handleVoiceTest} disabled={voiceTesting} className="px-4 py-2 text-sm font-medium text-sky-700 bg-sky-50 border border-sky-200 rounded-lg">
+                  {voiceTesting ? 'Проверка…' : 'Проверить подключение'}
+                </button>
+                <button type="button" onClick={handleVoiceSave} disabled={voiceSaving} className="px-4 py-2 text-sm font-medium text-white bg-sky-600 rounded-lg">
+                  {voiceSaving ? 'Сохранение…' : 'Сохранить'}
+                </button>
+              </div>
+              <div className="border-t pt-3">
+                <p className="text-xs font-semibold text-gray-700 mb-2">Voice numbers</p>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={voiceForm.numberE164}
+                    onChange={(e) => setVoiceForm((f) => ({ ...f, numberE164: e.target.value }))}
+                    placeholder="+7701..."
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={voiceForm.numberLabel}
+                    onChange={(e) => setVoiceForm((f) => ({ ...f, numberLabel: e.target.value }))}
+                    placeholder="Label (Sales line)"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <button type="button" onClick={handleVoiceNumberAdd} className="mt-2 px-4 py-2 text-sm font-medium border rounded-lg">
+                  Добавить номер
+                </button>
+                <div className="mt-2 space-y-2">
+                  {voiceNumbers.map((n) => (
+                    <div key={n.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                      <div>
+                        <p className="font-medium text-gray-800">{n.label || n.e164}</p>
+                        <p className="text-xs text-gray-500">{n.e164} · {n.isActive ? 'active' : 'inactive'}</p>
+                      </div>
+                      {n.isDefault ? (
+                        <span className="text-xs text-emerald-700">default</span>
+                      ) : (
+                        <button type="button" onClick={() => void handleVoiceSetDefault(n.id)} className="text-xs text-sky-700">
+                          Сделать default
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
+                ElevenLabs: coming soon (placeholder).
+              </div>
+              {voiceError ? <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{voiceError}</div> : null}
+              {voiceSuccess ? <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{voiceSuccess}</div> : null}
+              {voiceState.connectionError ? <div className="text-xs text-amber-800">{voiceState.connectionError}</div> : null}
             </>
           )}
         </div>

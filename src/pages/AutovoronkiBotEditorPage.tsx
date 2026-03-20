@@ -13,6 +13,7 @@ import { PageMetadata } from '../components/PageMetadata';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { AutovoronkiBotConfigurator } from '../components/autovoronki/AutovoronkiBotConfigurator';
 import { AutovoronkiBotTestingPanel } from '../components/autovoronki/AutovoronkiBotTestingPanel';
+import { UniversalVoiceCallLauncher } from '../components/voice/UniversalVoiceCallLauncher';
 import type { CrmAiBotStatus } from '../types/crmAiBot';
 import {
   CRM_AI_BOT_CHANNEL_OPTIONS,
@@ -52,6 +53,7 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
   const [channel, setChannel] = useState(CRM_AI_BOT_CHANNEL_OPTIONS[0].value);
   const [status, setStatus] = useState<CrmAiBotStatus>('draft');
   const [config, setConfig] = useState<CrmAiBotConfig>(() => defaultCrmAiBotConfig());
+  const [voiceTestOpen, setVoiceTestOpen] = useState(false);
 
   useEffect(() => {
     if (!companyId || !canUse || isCreate || !effectiveBotId) {
@@ -226,6 +228,15 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
               </div>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 shrink-0 w-full sm:w-auto">
+              {!isCreate && (
+                <button
+                  type="button"
+                  onClick={() => setVoiceTestOpen(true)}
+                  className="rounded-xl border border-violet-300 bg-violet-50 px-4 py-2.5 text-sm font-medium text-violet-800 hover:bg-violet-100 transition-colors"
+                >
+                  Тестовый звонок
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => navigate('/autovoronki')}
@@ -398,6 +409,19 @@ export const AutovoronkiBotEditorPage: React.FC = () => {
           </div>
         </form>
       </div>
+      {!isCreate && effectiveBotId ? (
+        <UniversalVoiceCallLauncher
+          open={voiceTestOpen}
+          onClose={() => setVoiceTestOpen(false)}
+          title="Тестовый звонок"
+          context={{
+            source: 'bot_test',
+            companyId,
+            botId: effectiveBotId,
+            mode: 'test'
+          }}
+        />
+      ) : null}
     </div>
   );
 };

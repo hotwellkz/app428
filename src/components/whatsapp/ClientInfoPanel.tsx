@@ -26,6 +26,7 @@ import type { Deal } from '../../types/deals';
 import toast from 'react-hot-toast';
 import { Sparkles, MoreVertical, X, ExternalLink, GitBranch, Bot, ListChecks } from 'lucide-react';
 import { ChatSalesAnalysisBlock, type SalesAnalysisResult } from './ChatSalesAnalysisBlock';
+import { UniversalVoiceCallLauncher } from '../voice/UniversalVoiceCallLauncher';
 import {
   transcribeVoiceBatch,
   getVoiceMessagesToTranscribe,
@@ -397,6 +398,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
   const [editManagerName, setEditManagerName] = useState('');
   const [editManagerColor, setEditManagerColor] = useState('#3B82F6');
   const [deletingManager, setDeletingManager] = useState<{ manager: ChatManagerRecord; dealCount: number } | null>(null);
+  const [voiceLauncherOpen, setVoiceLauncherOpen] = useState(false);
   const [deleteManagerLoading, setDeleteManagerLoading] = useState(false);
   const [citySaving, setCitySaving] = useState(false);
   const [citySaveFeedback, setCitySaveFeedback] = useState<'idle' | 'success' | 'error'>('idle');
@@ -1180,6 +1182,14 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
           <p className="mt-1 text-base font-medium text-gray-900">
             {client ? (client.name || client.phone) : 'Новый клиент'}
           </p>
+          <button
+            type="button"
+            onClick={() => setVoiceLauncherOpen(true)}
+            disabled={!phone}
+            className="mt-2 w-full py-2 text-xs font-medium text-slate-800 border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50"
+          >
+            Позвонить
+          </button>
 
           {conversationId && (
             <div className="mt-4 p-3 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100">
@@ -3319,6 +3329,21 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
           </div>
         </div>
       )}
+      {voiceLauncherOpen && companyId ? (
+        <UniversalVoiceCallLauncher
+          open={voiceLauncherOpen}
+          onClose={() => setVoiceLauncherOpen(false)}
+          title="Звонок из чата"
+          context={{
+            source: 'chat',
+            companyId,
+            phone: phone ?? null,
+            clientId: client?.id ?? null,
+            conversationId: conversationId ?? null,
+            dealId: pipelineDeal?.id ?? conversationDealId ?? null
+          }}
+        />
+      ) : null}
     </aside>
   );
 };

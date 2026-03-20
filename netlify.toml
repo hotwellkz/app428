@@ -166,6 +166,18 @@
   force = true
 
 [[redirects]]
+  from = "/api/voice/integration"
+  to = "/.netlify/functions/voice-integration"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/voice/numbers"
+  to = "/.netlify/functions/voice-numbers"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/voice/provider-webhook"
   to = "/.netlify/functions/voice-provider-webhook"
   status = 200

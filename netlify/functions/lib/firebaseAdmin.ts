@@ -14,9 +14,103 @@ const COLLECTIONS = {
   USERS: 'users',
   WAZZUP_INTEGRATIONS: 'wazzupIntegrations',
   OPENAI_INTEGRATIONS: 'openaiIntegrations',
+  VOICE_INTEGRATIONS: 'voiceIntegrations',
   KASPI_INTEGRATIONS: 'kaspiIntegrations',
   KASPI_SYNC: 'kaspiSync'
 } as const;
+
+export interface VoiceIntegrationRow {
+  companyId: string;
+  provider: 'twilio';
+  enabled: boolean;
+  accountSid: string;
+  accountSidMasked: string | null;
+  authToken: string;
+  authTokenMasked: string | null;
+  connectionStatus: 'connected' | 'not_connected' | 'invalid_config';
+  connectionError: string | null;
+  lastCheckedAt: Timestamp | null;
+  updatedAt: Timestamp;
+}
+
+function maskRight4(value: string): string {
+  if (!value || value.length <= 4) return '****';
+  return '****' + value.slice(-4);
+}
+
+export async function getVoiceIntegration(companyId: string): Promise<VoiceIntegrationRow | null> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.VOICE_INTEGRATIONS).doc(companyId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const d = snap.data()!;
+  const accountSid = ((d.accountSid as string) ?? '').trim();
+  const authToken = ((d.authToken as string) ?? '').trim();
+  return {
+    companyId,
+    provider: 'twilio',
+    enabled: d.enabled === true,
+    accountSid,
+    accountSidMasked: (d.accountSidMasked as string) ?? (accountSid ? maskRight4(accountSid) : null),
+    authToken,
+    authTokenMasked: (d.authTokenMasked as string) ?? (authToken ? maskRight4(authToken) : null),
+    connectionStatus: (d.connectionStatus as VoiceIntegrationRow['connectionStatus']) ?? 'not_connected',
+    connectionError: (d.connectionError as string) ?? null,
+    lastCheckedAt: (d.lastCheckedAt as Timestamp) ?? null,
+    updatedAt: (d.updatedAt as Timestamp) ?? Timestamp.now()
+  };
+}
+
+export async function setVoiceIntegration(
+  companyId: string,
+  data: {
+    provider?: 'twilio';
+    enabled?: boolean;
+    accountSid?: string;
+    authToken?: string;
+    connectionStatus?: VoiceIntegrationRow['connectionStatus'];
+    connectionError?: string | null;
+    lastCheckedAt?: Timestamp | null;
+  }
+): Promise<void> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.VOICE_INTEGRATIONS).doc(companyId);
+  const snap = await ref.get();
+  const now = Timestamp.now();
+  const payload: Record<string, unknown> = {
+    companyId,
+    provider: data.provider ?? 'twilio',
+    updatedAt: now
+  };
+  if (data.enabled !== undefined) payload.enabled = data.enabled;
+  if (data.connectionStatus !== undefined) payload.connectionStatus = data.connectionStatus;
+  if (data.connectionError !== undefined) payload.connectionError = data.connectionError;
+  if (data.lastCheckedAt !== undefined) payload.lastCheckedAt = data.lastCheckedAt;
+  if (data.accountSid !== undefined) {
+    const sid = data.accountSid.trim();
+    payload.accountSid = sid;
+    payload.accountSidMasked = sid ? maskRight4(sid) : null;
+  }
+  if (data.authToken !== undefined) {
+    const token = data.authToken.trim();
+    payload.authToken = token;
+    payload.authTokenMasked = token ? maskRight4(token) : null;
+  }
+  if (!snap.exists) {
+    payload.createdAt = now;
+    payload.enabled = payload.enabled ?? false;
+    payload.connectionStatus = payload.connectionStatus ?? 'not_connected';
+    payload.connectionError = payload.connectionError ?? null;
+    payload.lastCheckedAt = payload.lastCheckedAt ?? null;
+    payload.accountSid = payload.accountSid ?? '';
+    payload.accountSidMasked = payload.accountSidMasked ?? null;
+    payload.authToken = payload.authToken ?? '';
+    payload.authTokenMasked = payload.authTokenMasked ?? null;
+    await ref.set(payload);
+    return;
+  }
+  await ref.update(payload);
+}
 
 /** Режим синхронизации заказов Kaspi */
 export type KaspiSyncMode = 'manual' | 'four_times_daily' | 'every_4h' | 'every_2h';
