@@ -224,6 +224,10 @@ export async function launchVoiceCall(payload: {
   clientId?: string | null;
   contactId?: string | null;
   fromNumberId?: string | null;
+  /** Явный исходящий провайдер (multi-provider). */
+  outboundVoiceProvider?: 'twilio' | 'telnyx' | null;
+  /** Алиас для outboundVoiceProvider */
+  providerId?: 'twilio' | 'telnyx' | null;
   metadata?: Record<string, unknown>;
 }): Promise<{ callId: string }> {
   const token = await getAuthToken();

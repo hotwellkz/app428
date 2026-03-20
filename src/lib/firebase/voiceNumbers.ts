@@ -38,6 +38,7 @@ export function docToVoiceNumber(id: string, data: Record<string, unknown>): Voi
     providerSid: str(data.providerSid),
     label: str(data.label),
     isDefault: data.isDefault === true,
+    isActive: data.isActive !== false,
     capabilities: cap ? { voice: cap.voice === true } : undefined,
     createdAt: (data.createdAt as Timestamp | Date | null) ?? null,
     updatedAt: (data.updatedAt as Timestamp | Date | null) ?? null

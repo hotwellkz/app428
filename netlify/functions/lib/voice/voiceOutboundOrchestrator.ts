@@ -22,6 +22,10 @@ export type VoiceOutboundRequestBody = {
   clientId?: string | null;
   crmClientId?: string | null;
   fromNumberId?: string | null;
+  /** Явный исходящий провайдер (multi-provider UI). */
+  outboundVoiceProvider?: 'twilio' | 'telnyx' | null;
+  /** Алиас для outboundVoiceProvider */
+  providerId?: 'twilio' | 'telnyx' | string | null;
   metadata?: Record<string, unknown>;
 };
 
@@ -76,9 +80,13 @@ export async function orchestrateVoiceOutbound(
   let fromNumberId: string | null = body.fromNumberId?.trim() || null;
 
   const config = loadVoiceProviderRuntimeConfig();
+  const rawProv = body.outboundVoiceProvider ?? body.providerId;
+  const requestedProvider: 'twilio' | 'telnyx' | null =
+    rawProv === 'telnyx' || rawProv === 'twilio' ? rawProv : null;
+
   let adapter;
   try {
-    adapter = await resolveVoiceProviderForCompany(companyId, config);
+    adapter = await resolveVoiceProviderForCompany(companyId, config, { requestedProvider });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return {
@@ -164,6 +172,22 @@ export async function orchestrateVoiceOutbound(
 
   const webhookUrl = buildVoiceProviderWebhookUrl(config);
 
+  const baseMeta =
+    body.metadata && typeof body.metadata === 'object' ? (body.metadata as Record<string, unknown>) : {};
+  const prevSel =
+    baseMeta.voiceLaunchSelection && typeof baseMeta.voiceLaunchSelection === 'object'
+      ? (baseMeta.voiceLaunchSelection as Record<string, unknown>)
+      : {};
+  const mergedMeta: Record<string, unknown> = {
+    ...baseMeta,
+    voiceLaunchSelection: {
+      ...prevSel,
+      selectedProviderId: expectedProvider,
+      selectedFromNumberId: fromNumberId,
+      selectedFromE164: fromE164
+    }
+  };
+
   const callId = await adminCreateVoiceCallSession({
     companyId,
     botId,
@@ -181,13 +205,13 @@ export async function orchestrateVoiceOutbound(
     crmClientId: body.crmClientId ?? null,
     conversationId: null,
     postCallStatus: 'pending',
-    metadata: body.metadata ?? {},
+    metadata: mergedMeta,
     startedAt: FieldValue.serverTimestamp()
   });
 
   const lineageIn =
-    body.metadata?.voiceLineage && typeof body.metadata.voiceLineage === 'object'
-      ? (body.metadata.voiceLineage as Record<string, unknown>)
+    mergedMeta.voiceLineage && typeof mergedMeta.voiceLineage === 'object'
+      ? (mergedMeta.voiceLineage as Record<string, unknown>)
       : {};
   const rootCallId = lineageIn.rootCallId != null ? String(lineageIn.rootCallId) : callId;
   const parentCallId = lineageIn.parentCallId != null ? String(lineageIn.parentCallId) : null;
@@ -216,7 +240,7 @@ export async function orchestrateVoiceOutbound(
     fromE164,
     fromNumberId,
     webhookUrl,
-    metadata: body.metadata,
+    metadata: mergedMeta,
     config
   });
 

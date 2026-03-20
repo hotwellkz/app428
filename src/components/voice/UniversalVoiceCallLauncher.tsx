@@ -10,7 +10,8 @@ import {
   launchVoiceCall,
   VoiceLaunchError,
   type VoiceLaunchContext,
-  voiceFetch
+  voiceFetch,
+  type VoiceIntegrationClientSnapshot
 } from '../../lib/voice/voiceLauncherApi';
 
 type VoiceLauncherReadyReasonCode =
@@ -21,7 +22,15 @@ type VoiceLauncherReadyReasonCode =
   | 'no_bot'
   | 'no_phone'
   | 'not_ready_unknown'
-  | 'outbound_not_ready';
+  | 'outbound_not_ready'
+  | 'no_numbers_for_provider';
+
+type VoiceProviderId = 'twilio' | 'telnyx';
+
+const PROVIDER_LABEL: Record<VoiceProviderId, string> = {
+  twilio: 'Twilio',
+  telnyx: 'Telnyx'
+};
 
 type Props = {
   open: boolean;
@@ -36,26 +45,57 @@ function normalizeE164(raw: string): string | null {
   return s;
 }
 
-type LauncherIntegration = {
-  outbound: 'twilio' | 'telnyx';
-  configured: boolean;
-  enabled: boolean;
-  connectionStatus: string;
-  connectionError: string | null;
-  hasDefaultOutbound: boolean;
-  voiceReady: boolean;
-  readinessMessages: string[];
-  blockingReason: string | null;
-};
+function getReadyProviders(integ: VoiceIntegrationClientSnapshot): VoiceProviderId[] {
+  const out: VoiceProviderId[] = [];
+  if (integ.voiceReady === true) out.push('twilio');
+  if (integ.telnyx?.voiceReady === true) out.push('telnyx');
+  return out;
+}
+
+function pickInitialProvider(ready: VoiceProviderId[], outboundPref: 'twilio' | 'telnyx' | undefined): VoiceProviderId {
+  if (ready.length === 0) return outboundPref === 'telnyx' ? 'telnyx' : 'twilio';
+  if (ready.includes(outboundPref === 'telnyx' ? 'telnyx' : 'twilio')) {
+    return outboundPref === 'telnyx' ? 'telnyx' : 'twilio';
+  }
+  return ready[0];
+}
+
+function filterNumbersForProvider(nums: VoiceNumber[], provider: VoiceProviderId): VoiceNumber[] {
+  return nums
+    .filter((n) => String(n.provider ?? 'twilio') === provider)
+    .filter((n) => n.isActive !== false)
+    .sort((a, b) => {
+      if (a.isDefault && !b.isDefault) return -1;
+      if (!a.isDefault && b.isDefault) return 1;
+      return (a.e164 || '').localeCompare(b.e164 || '');
+    });
+}
+
+/** Пустая строка = «по умолчанию» (backend подставит default), иначе id номера. */
+function pickFromNumberId(filtered: VoiceNumber[], contextFromId?: string | null): string {
+  if (contextFromId && filtered.some((n) => n.id === contextFromId)) return contextFromId;
+  const def = filtered.find((n) => n.isDefault);
+  if (def) return '';
+  const first = filtered[0];
+  return first ? first.id : '';
+}
+
+function providerConnected(provider: VoiceProviderId, integ: VoiceIntegrationClientSnapshot): boolean {
+  if (provider === 'telnyx') {
+    const t = integ.telnyx;
+    return !!(t?.enabled && t.connectionStatus === 'connected');
+  }
+  return !!(integ.enabled && integ.connectionStatus === 'connected');
+}
 
 export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, context, title }) => {
   const [bots, setBots] = useState<CrmAiBot[]>([]);
-  const [numbers, setNumbers] = useState<
-    Array<{ id: string; e164: string; label: string | null; isDefault: boolean; provider: string }>
-  >([]);
+  const [numbersAll, setNumbersAll] = useState<VoiceNumber[]>([]);
+  const [integ, setInteg] = useState<VoiceIntegrationClientSnapshot | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<VoiceProviderId>('twilio');
   const [selectedBotId, setSelectedBotId] = useState(context.botId ?? '');
   const [phone, setPhone] = useState(context.phone ?? '');
-  const [fromNumberId, setFromNumberId] = useState(context.fromNumberId ?? '');
+  const [fromNumberId, setFromNumberId] = useState('');
   const [callbackAt, setCallbackAt] = useState('');
   const [loading, setLoading] = useState(false);
   const [launching, setLaunching] = useState(false);
@@ -64,14 +104,32 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
   const progressAnnouncedRef = useRef(false);
   const connectedAnnouncedRef = useRef(false);
   const terminalAnnouncedRef = useRef(false);
-  const [integration, setIntegration] = useState<LauncherIntegration | null>(null);
+  /** Только при ручном переключении провайдера — пересобрать «с какого номера». */
+  const userChangedProviderRef = useRef(false);
+
+  const readyProviders = useMemo(() => (integ ? getReadyProviders(integ) : []), [integ]);
+
+  const filteredNumbers = useMemo(
+    () => filterNumbersForProvider(numbersAll, selectedProvider),
+    [numbersAll, selectedProvider]
+  );
+
+  const hasDefaultInList = useMemo(() => filteredNumbers.some((n) => n.isDefault), [filteredNumbers]);
+
+  const callerLineOk = useMemo(() => {
+    if (!hasDefaultInList && !fromNumberId.trim()) return false;
+    if (hasDefaultInList && !fromNumberId.trim()) return true;
+    if (fromNumberId.trim()) return true;
+    return false;
+  }, [hasDefaultInList, fromNumberId]);
 
   useEffect(() => {
     if (!open || !context.companyId) return;
     setPhone(context.phone ?? '');
     setSelectedBotId(context.botId ?? '');
-    setFromNumberId(context.fromNumberId ?? '');
-    setIntegration(null);
+    setInteg(null);
+    setNumbersAll([]);
+    userChangedProviderRef.current = false;
     const unsub = subscribeCrmAiBots(context.companyId, setBots);
     void (async () => {
       setLoading(true);
@@ -81,120 +139,119 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
           fetchVoiceIntegrationStatus()
         ]);
         if (!integResult.ok || !integResult.data) {
-          setIntegration(null);
+          setInteg(null);
           toast.error('Не удалось загрузить статус Voice (проверьте сеть и деплой API)');
           return;
         }
-        const integ = integResult.data;
-        const outbound: 'twilio' | 'telnyx' = integ.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
-        const telnyx = integ.telnyx;
-        const useTelnyx = outbound === 'telnyx';
+        const data = integResult.data;
+        setInteg(data);
+        setNumbersAll(nums);
 
-        const activeReady =
-          integ.activeOutboundVoiceReady === true
-            ? true
-            : useTelnyx
-              ? telnyx?.voiceReady === true
-              : integ.voiceReady === true;
+        const ready = getReadyProviders(data);
+        const outboundPref = data.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
+        const initial = pickInitialProvider(ready, outboundPref);
 
-        const nextIntegration: LauncherIntegration = useTelnyx
-          ? {
-              outbound,
-              configured: telnyx?.configured === true,
-              enabled: telnyx?.enabled === true,
-              connectionStatus: String(telnyx?.connectionStatus ?? 'not_connected'),
-              connectionError: telnyx?.connectionError != null ? String(telnyx.connectionError) : null,
-              hasDefaultOutbound: telnyx?.hasDefaultOutbound === true,
-              voiceReady: activeReady,
-              readinessMessages: Array.isArray(telnyx?.readinessMessages) ? telnyx!.readinessMessages! : [],
-              blockingReason: telnyx?.blockingReason != null ? String(telnyx.blockingReason) : null
-            }
-          : {
-              outbound,
-              configured: integ.configured === true,
-              enabled: integ.enabled === true,
-              connectionStatus: String(integ.connectionStatus ?? 'not_connected'),
-              connectionError: integ.connectionError != null ? String(integ.connectionError) : null,
-              hasDefaultOutbound: integ.hasDefaultOutbound === true,
-              voiceReady: activeReady,
-              readinessMessages: [],
-              blockingReason: null
-            };
-
-        setIntegration(nextIntegration);
-
-        const filtered = (nums as VoiceNumber[]).filter(
-          (n) => String(n.provider ?? 'twilio') === outbound
-        );
-        setNumbers(
-          filtered.map((n) => ({
-            id: n.id,
-            e164: n.e164,
-            label: n.label ?? null,
-            isDefault: n.isDefault === true,
-            provider: String(n.provider ?? 'twilio')
-          }))
-        );
-        const allowedIds = new Set(filtered.map((n) => n.id));
-        if (context.fromNumberId && !allowedIds.has(context.fromNumberId)) {
-          setFromNumberId('');
+        let ctxFrom = context.fromNumberId ?? null;
+        if (ctxFrom) {
+          const row = nums.find((n) => n.id === ctxFrom);
+          const p = row ? (String(row.provider ?? 'twilio') as VoiceProviderId) : null;
+          if (p && p !== initial) ctxFrom = null;
         }
-        const def = filtered.find((n) => n.isDefault);
-        if (!context.fromNumberId && def) setFromNumberId(def.id);
+
+        setSelectedProvider(initial);
+        const filtered = filterNumbersForProvider(nums, initial);
+        setFromNumberId(pickFromNumberId(filtered, ctxFrom));
       } catch (e) {
-        setIntegration(null);
+        setInteg(null);
         toast.error(e instanceof Error ? e.message : 'Не удалось загрузить voice настройки');
       } finally {
         setLoading(false);
       }
     })();
     return () => unsub();
-  }, [open, context.companyId]);
+  }, [open, context.companyId, context.fromNumberId]);
+
+  useEffect(() => {
+    if (!open || !integ) return;
+    if (!userChangedProviderRef.current) return;
+    userChangedProviderRef.current = false;
+    const filtered = filterNumbersForProvider(numbersAll, selectedProvider);
+    setFromNumberId(pickFromNumberId(filtered, null));
+  }, [selectedProvider, open, integ, numbersAll]);
 
   const selectedBot = useMemo(() => bots.find((b) => b.id === selectedBotId) ?? null, [bots, selectedBotId]);
 
-  /** Линия исходящего: провайдер подключён + есть caller (default или выбранный номер того же провайдера). */
-  const outboundLineOk = useMemo(() => {
-    if (!integration) return false;
-    const connected = integration.enabled && integration.connectionStatus === 'connected';
-    const hasCaller = integration.hasDefaultOutbound || !!fromNumberId.trim();
-    return connected && hasCaller;
-  }, [integration, fromNumberId]);
-
   const canCall =
-    !!selectedBotId && !!normalizeE164(phone) && outboundLineOk && integration?.voiceReady === true;
+    !!integ &&
+    readyProviders.includes(selectedProvider) &&
+    !!selectedBotId &&
+    !!normalizeE164(phone) &&
+    callerLineOk &&
+    providerConnected(selectedProvider, integ) &&
+    filteredNumbers.length > 0;
 
   const { readyReason, reasonCode } = useMemo(() => {
-    if (!integration) {
+    if (!integ) {
       return {
         readyReason: loading ? 'Проверяем интеграцию...' : 'Не удалось загрузить статус Voice',
         reasonCode: (loading ? 'loading' : 'fetch_failed') as VoiceLauncherReadyReasonCode
       };
     }
-    if (integration.voiceReady === false) {
+    if (readyProviders.length === 0) {
+      return {
+        readyReason: 'Ни один voice-провайдер не готов к исходящим звонкам — проверьте раздел Интеграции.',
+        reasonCode: 'outbound_not_ready' as const
+      };
+    }
+    if (!readyProviders.includes(selectedProvider)) {
+      return {
+        readyReason: `Выбранный провайдер (${PROVIDER_LABEL[selectedProvider]}) не готов к исходящим звонкам.`,
+        reasonCode: 'outbound_not_ready' as const
+      };
+    }
+    const snap =
+      selectedProvider === 'telnyx'
+        ? {
+            voiceReady: integ.telnyx?.voiceReady === true,
+            blockingReason: integ.telnyx?.blockingReason,
+            readinessMessages: integ.telnyx?.readinessMessages ?? []
+          }
+        : {
+            voiceReady: integ.voiceReady === true,
+            blockingReason: null as string | null,
+            readinessMessages: [] as string[]
+          };
+
+    if (snap.voiceReady === false) {
       const first =
-        integration.blockingReason?.trim() ||
-        integration.readinessMessages[0] ||
-        (integration.outbound === 'telnyx'
+        snap.blockingReason?.trim() ||
+        snap.readinessMessages[0] ||
+        (selectedProvider === 'telnyx'
           ? 'Интеграция Telnyx не готова к исходящим звонкам.'
           : 'Интеграция Twilio не готова к исходящим звонкам.');
       return { readyReason: first, reasonCode: 'outbound_not_ready' as const };
     }
-    const connected = integration.enabled && integration.connectionStatus === 'connected';
-    if (connected && !integration.hasDefaultOutbound && !fromNumberId.trim()) {
-      return { readyReason: 'Не выбран номер по умолчанию для этого провайдера', reasonCode: 'no_default_outbound' as const };
-    }
-    if (!connected) {
-      if (integration.connectionStatus === 'invalid_config' && integration.connectionError?.trim()) {
-        return { readyReason: integration.connectionError.trim(), reasonCode: 'provider_not_connected' as const };
+    if (!providerConnected(selectedProvider, integ)) {
+      if (selectedProvider === 'twilio' && integ.connectionStatus === 'invalid_config' && integ.connectionError?.trim()) {
+        return { readyReason: integ.connectionError.trim(), reasonCode: 'provider_not_connected' as const };
+      }
+      if (selectedProvider === 'telnyx' && integ.telnyx?.connectionStatus === 'invalid_config' && integ.telnyx?.connectionError?.trim()) {
+        return { readyReason: String(integ.telnyx.connectionError).trim(), reasonCode: 'provider_not_connected' as const };
       }
       return {
         readyReason:
-          integration.outbound === 'telnyx'
-            ? 'Telnyx не подключён или не проверен'
-            : 'Twilio не подключён',
+          selectedProvider === 'telnyx' ? 'Telnyx не подключён или не проверен' : 'Twilio не подключён',
         reasonCode: 'provider_not_connected' as const
       };
+    }
+    if (filteredNumbers.length === 0) {
+      return {
+        readyReason: 'У выбранного провайдера нет доступных исходящих номеров',
+        reasonCode: 'no_numbers_for_provider' as const
+      };
+    }
+    if (!hasDefaultInList && !fromNumberId.trim()) {
+      return { readyReason: 'Не выбран исходящий номер для этого провайдера', reasonCode: 'no_default_outbound' as const };
     }
     if (!selectedBotId) {
       return { readyReason: 'Не выбран бот', reasonCode: 'no_bot' as const };
@@ -206,11 +263,22 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         reasonCode: 'no_phone' as const
       };
     }
-    if (!outboundLineOk) {
-      return { readyReason: 'Voice не готов к звонку', reasonCode: 'not_ready_unknown' as const };
+    if (!callerLineOk) {
+      return { readyReason: 'Укажите номер для caller ID или выберите default в Интеграциях', reasonCode: 'not_ready_unknown' as const };
     }
     return { readyReason: null as string | null, reasonCode: null as VoiceLauncherReadyReasonCode | null };
-  }, [integration, loading, selectedBotId, phone, fromNumberId, outboundLineOk]);
+  }, [
+    integ,
+    loading,
+    readyProviders,
+    selectedProvider,
+    selectedBotId,
+    phone,
+    fromNumberId,
+    callerLineOk,
+    filteredNumbers.length,
+    hasDefaultInList
+  ]);
 
   useEffect(() => {
     if (!open || !context.companyId || !lastCallId) return;
@@ -282,6 +350,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         linkedRunId: `voice_manual_${Date.now().toString(36)}`,
         toE164: normalizeE164(phone)!,
         clientId: context.clientId ?? null,
+        outboundVoiceProvider: selectedProvider,
         fromNumberId: fromNumberId || null,
         metadata: {
           launchSource: context.source,
@@ -290,7 +359,10 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         }
       });
       setLastCallId(out.callId);
-      toast('Запрос на звонок отправлен провайдеру', { duration: 5000 });
+      toast.success(
+        selectedProvider === 'telnyx' ? 'Звонок запущен через Telnyx' : 'Звонок запущен через Twilio',
+        { duration: 5000 }
+      );
     } catch (e) {
       if (e instanceof VoiceLaunchError) {
         const text = e.hint ? `${e.message}\n${e.hint}` : e.message;
@@ -310,56 +382,194 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
     try {
       const d = new Date(callbackAt);
       if (!Number.isFinite(d.getTime())) return toast.error('Некорректное время callback');
-      await voiceFetch('/api/voice/operational', {
+      const res = await voiceFetch('/api/voice/operational', {
         method: 'POST',
-        body: JSON.stringify({ action: 'schedule_callback', runId, callbackAt: d.toISOString() })
+        body: JSON.stringify({
+          action: 'schedule_callback',
+          runId,
+          callbackAt: d.toISOString(),
+          outboundVoiceProvider: selectedProvider,
+          fromNumberId: fromNumberId.trim() || null
+        })
       });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        throw new Error(typeof data.error === 'string' ? data.error : `Ошибка ${res.status}`);
+      }
       toast.success('Callback назначен');
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Не удалось назначить callback');
     }
   };
 
-  const providerLabel = integration?.outbound === 'telnyx' ? 'Telnyx' : 'Twilio';
-  const fromPreview =
-    fromNumberId.trim() ? numbers.find((n) => n.id === fromNumberId)?.e164 ?? '—' : 'по умолчанию';
+  const fromPreview = fromNumberId.trim()
+    ? filteredNumbers.find((n) => n.id === fromNumberId)?.e164 ?? '—'
+    : hasDefaultInList
+      ? 'по умолчанию'
+      : '—';
+
+  const showProviderPicker = readyProviders.length >= 2;
+
+  const checklistNeutral =
+    integ &&
+    readyProviders.includes(selectedProvider) &&
+    providerConnected(selectedProvider, integ) &&
+    filteredNumbers.length > 0 &&
+    (hasDefaultInList || !!fromNumberId.trim());
+
+  const checklistBlock = (() => {
+    if (!integ) return null;
+    if (selectedProvider === 'twilio') {
+      const accOk = integ.enabled && integ.connectionStatus === 'connected';
+      const numOk = hasDefaultInList || !!fromNumberId.trim();
+      if (checklistNeutral && accOk && numOk) {
+        return (
+          <div className="text-[11px] rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-emerald-900">
+            Twilio: учётная запись OK, caller ID / номер OK. Проверьте Geo Permissions в консоли Twilio для направления
+            звонка.
+          </div>
+        );
+      }
+      return (
+        <div className="text-[11px] rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2 text-sky-900">
+          <span className="font-medium">Twilio</span>
+          {` · `}
+          {accOk ? 'учётная запись OK' : 'учётная запись не готова'}
+          {` · `}
+          {numOk ? 'номер для исходящих' : 'номер не задан'}
+          {` · Geo Permissions Twilio — проверьте вручную в консоли`}
+        </div>
+      );
+    }
+    const tx = integ.telnyx;
+    const accOk = tx?.enabled && tx.connectionStatus === 'connected';
+    const numOk = hasDefaultInList || !!fromNumberId.trim();
+    const webhookOk = tx?.webhookSignatureOk !== false;
+    if (checklistNeutral && accOk && numOk && webhookOk) {
+      return (
+        <div className="text-[11px] rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-emerald-900">
+          Telnyx: API key и public key заданы, webhook в порядке, номер для исходящих выбран.
+        </div>
+      );
+    }
+    return (
+      <div className="text-[11px] rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2 text-sky-900">
+        <span className="font-medium">Telnyx</span>
+        {` · `}
+        {accOk ? 'подключение OK' : 'подключение не готово'}
+        {` · `}
+        {tx?.publicKeySet ? 'public key задан' : 'нужен public key'}
+        {` · `}
+        {webhookOk ? 'webhook OK' : 'проверьте подпись webhook'}
+        {` · `}
+        {numOk ? 'номер для исходящих' : 'номер не задан / нет в CRM'}
+      </div>
+    );
+  })();
 
   return (
     <div className="fixed inset-0 z-[1200] bg-black/45 flex items-center justify-center p-4">
       <div className="w-full max-w-xl rounded-2xl border border-gray-200 bg-white p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-900">{title ?? 'Запуск звонка'}</h3>
-          <button type="button" onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">Закрыть</button>
+          <button type="button" onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">
+            Закрыть
+          </button>
         </div>
         <p className="text-xs text-gray-500">
-          Источник: {context.source} · Исходящий провайдер: <span className="font-semibold text-gray-800">{providerLabel}</span>
+          Источник: {context.source}
           {' · '}
           From: {fromPreview}
         </p>
+
         {loading ? <p className="text-sm text-gray-500">Загрузка...</p> : null}
+
+        {!loading && integ ? (
+          <div className="space-y-2">
+            {showProviderPicker ? (
+              <div>
+                <p className="text-xs text-gray-600 mb-1.5">Исходящий провайдер</p>
+                <div className="inline-flex rounded-lg border border-gray-200 p-0.5 gap-0.5 bg-gray-50">
+                  {readyProviders.map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => {
+                        userChangedProviderRef.current = true;
+                        setSelectedProvider(p);
+                      }}
+                      className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                        selectedProvider === p
+                          ? 'bg-gray-900 text-white shadow-sm'
+                          : 'bg-white text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      {PROVIDER_LABEL[p]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : readyProviders.length === 1 ? (
+              <p className="text-xs text-gray-700">
+                Исходящий провайдер:{' '}
+                <span className="font-semibold text-gray-900">{PROVIDER_LABEL[readyProviders[0]]}</span>
+              </p>
+            ) : (
+              <p className="text-xs text-amber-800">Нет провайдеров, готовых к исходящим звонкам</p>
+            )}
+          </div>
+        ) : null}
+
         <div className="grid sm:grid-cols-2 gap-3">
           <label className="text-sm text-gray-700">
             Бот
-            <select className="mt-1 w-full border rounded-lg px-3 py-2" value={selectedBotId} onChange={(e) => setSelectedBotId(e.target.value)}>
+            <select
+              className="mt-1 w-full border rounded-lg px-3 py-2"
+              value={selectedBotId}
+              onChange={(e) => setSelectedBotId(e.target.value)}
+            >
               <option value="">Выберите бота</option>
-              {bots.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </label>
-          <label className="text-sm text-gray-700">
-            С какого номера ({providerLabel})
-            <select className="mt-1 w-full border rounded-lg px-3 py-2" value={fromNumberId} onChange={(e) => setFromNumberId(e.target.value)}>
-              <option value="">По умолчанию</option>
-              {numbers.map((n) => (
-                <option key={n.id} value={n.id}>
-                  {n.label || n.e164}{n.isDefault ? ' (default)' : ''}
+              {bots.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
                 </option>
               ))}
             </select>
           </label>
+          <div className="text-sm text-gray-700">
+            <div className="flex items-center justify-between gap-2">
+              <span>С какого номера</span>
+              <span className="text-[10px] uppercase tracking-wide font-semibold text-gray-500 border border-gray-200 rounded px-1.5 py-0.5">
+                {PROVIDER_LABEL[selectedProvider]}
+              </span>
+            </div>
+            <select
+              className="mt-1 w-full border rounded-lg px-3 py-2"
+              value={fromNumberId}
+              onChange={(e) => setFromNumberId(e.target.value)}
+              disabled={filteredNumbers.length === 0}
+            >
+              {hasDefaultInList ? <option value="">По умолчанию</option> : null}
+              {filteredNumbers.map((n) => (
+                <option key={n.id} value={n.id}>
+                  {n.label || n.e164}
+                  {n.isDefault ? ' (default)' : ''}
+                </option>
+              ))}
+            </select>
+            {filteredNumbers.length === 0 ? (
+              <p className="mt-1 text-xs text-amber-700">У выбранного провайдера нет доступных исходящих номеров</p>
+            ) : null}
+          </div>
         </div>
         <label className="text-sm text-gray-700 block">
           Кому звонок
-          <input className="mt-1 w-full border rounded-lg px-3 py-2" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7701..." />
+          <input
+            className="mt-1 w-full border rounded-lg px-3 py-2"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+7701..."
+          />
         </label>
         {selectedBot ? <p className="text-xs text-gray-500">Бот: {selectedBot.name}</p> : null}
         {readyReason ? (
@@ -374,26 +584,33 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
             ) : null}
           </div>
         ) : null}
-        <div className="text-[11px] rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2 text-sky-900">
-          Checklist ({providerLabel}):
-          {` `}
-          {integration?.enabled && integration?.connectionStatus === 'connected' ? 'учётная запись OK' : 'учётная запись не готова'}
-          {` · `}
-          {integration?.hasDefaultOutbound || !!fromNumberId.trim() ? 'номер caller ID' : 'номер не задан'}
-          {` · `}
-          {integration?.outbound === 'twilio'
-            ? 'Geo Permissions Twilio — проверьте вручную в консоли'
-            : 'webhook Telnyx — Public Key в CRM, URL в Mission Control'}
-        </div>
+        {checklistBlock}
         <div className="flex flex-wrap gap-2">
-          <button type="button" disabled={!canCall || launching} onClick={() => void doCallNow()} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm disabled:opacity-50">
+          <button
+            type="button"
+            disabled={!canCall || launching}
+            onClick={() => void doCallNow()}
+            className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm disabled:opacity-50"
+          >
             {launching ? 'Запуск...' : 'Позвонить сейчас'}
           </button>
-          <input type="datetime-local" className="border rounded-lg px-2 py-2 text-sm" value={callbackAt} onChange={(e) => setCallbackAt(e.target.value)} />
+          <input
+            type="datetime-local"
+            className="border rounded-lg px-2 py-2 text-sm"
+            value={callbackAt}
+            onChange={(e) => setCallbackAt(e.target.value)}
+          />
           <button type="button" onClick={() => void doScheduleCallback()} className="px-4 py-2 rounded-lg border text-sm">
             Назначить callback
           </button>
-          {lastCallId ? <a className="px-4 py-2 rounded-lg border text-sm" href={`/ai-control?search=${encodeURIComponent(lastCallId)}`}>Открыть voice case</a> : null}
+          {lastCallId ? (
+            <a
+              className="px-4 py-2 rounded-lg border text-sm"
+              href={`/ai-control?search=${encodeURIComponent(lastCallId)}`}
+            >
+              Открыть voice case
+            </a>
+          ) : null}
         </div>
       </div>
     </div>

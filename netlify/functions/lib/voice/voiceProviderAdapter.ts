@@ -90,16 +90,21 @@ export function getVoiceProviderAdapter(config: VoiceProviderRuntimeConfig): Voi
   return new MockVoiceProvider();
 }
 
+export type VoiceOutboundProviderChoice = 'twilio' | 'telnyx';
+
 /**
  * Исходящий звонок: если у компании в Firestore включена Twilio-интеграция с ключами — всегда реальный Twilio,
  * даже при VOICE_PROVIDER=mock на сервере (иначе UI показывал бы «успех» без дозвона).
+ *
+ * @param opts.requestedProvider — явный выбор из UI (multi-provider). Если не задан — предпочтение компании в Firestore.
  */
 export async function resolveVoiceProviderForCompany(
   companyId: string,
-  config: VoiceProviderRuntimeConfig
+  config: VoiceProviderRuntimeConfig,
+  opts?: { requestedProvider?: VoiceOutboundProviderChoice | null }
 ): Promise<VoiceProviderAdapter> {
   const row = await getVoiceIntegration(companyId);
-  const pref = row?.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
+  const pref: VoiceOutboundProviderChoice = row?.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
 
   const useCompanyTwilio =
     row?.enabled === true && !!(row.accountSid?.trim() && row.authToken?.trim());
@@ -107,17 +112,27 @@ export async function resolveVoiceProviderForCompany(
     row?.telnyxEnabled === true &&
     !!(row.telnyxApiKey?.trim() && row.telnyxPublicKey?.trim());
 
-  if (pref === 'telnyx') {
+  const req = opts?.requestedProvider;
+  const target: VoiceOutboundProviderChoice =
+    req === 'twilio' || req === 'telnyx' ? req : pref;
+
+  if (target === 'telnyx') {
     if (useCompanyTelnyx) {
       return new TelnyxVoiceProvider(config);
     }
-    throw new Error(
-      'Выбран исходящий провайдер Telnyx, но интеграция не готова: включите Telnyx, сохраните API Key и Public Key в разделе Интеграции.'
-    );
+    const msg =
+      req === 'telnyx'
+        ? 'Telnyx не настроен или выключен: сохраните API Key и Public Key в разделе Интеграции.'
+        : 'Выбран исходящий провайдер Telnyx, но интеграция не готова: включите Telnyx, сохраните API Key и Public Key в разделе Интеграции.';
+    throw new Error(msg);
   }
 
   if (useCompanyTwilio) {
     return new TwilioVoiceProvider(config);
+  }
+
+  if (req === 'twilio') {
+    throw new Error('Twilio не настроен: сохраните Account SID и Auth Token в разделе Интеграции.');
   }
 
   if (config.mode === 'twilio') {

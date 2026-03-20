@@ -290,6 +290,8 @@ export interface VoiceNumber {
   providerSid?: string | null;
   label?: string | null;
   isDefault?: boolean;
+  /** false = отключён в CRM; по умолчанию считаем активным */
+  isActive?: boolean;
   capabilities?: VoiceNumberCapabilities;
   createdAt?: Timestamp | Date | null;
   updatedAt?: Timestamp | Date | null;

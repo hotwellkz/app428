@@ -32,6 +32,9 @@ type Body = {
   runId?: string;
   force?: boolean;
   callbackAt?: string;
+  /** Предпочтение провайдера для будущего callback (multi-provider UI). */
+  outboundVoiceProvider?: 'twilio' | 'telnyx';
+  fromNumberId?: string | null;
   callbackNote?: string | null;
   reviewNote?: string | null;
   reviewDisposition?:
@@ -147,6 +150,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       const rootCallId = lineage.rootCallId != null ? String(lineage.rootCallId) : sessionId || runId;
       const parentCallId = sessionId || null;
 
+      const sessProv =
+        latestSession?.provider === 'telnyx' ? 'telnyx' : latestSession?.provider ? 'twilio' : null;
+
       const out = await orchestrateVoiceOutbound(companyId, {
         botId,
         linkedRunId: runId,
@@ -155,6 +161,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         clientId: run.clientIdSnapshot != null ? String(run.clientIdSnapshot) : null,
         crmClientId: run.clientIdSnapshot != null ? String(run.clientIdSnapshot) : null,
         fromNumberId,
+        ...(sessProv === 'twilio' || sessProv === 'telnyx' ? { outboundVoiceProvider: sessProv } : {}),
         metadata: {
           voiceLineage: {
             rootCallId,
@@ -301,6 +308,22 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       schedMeta.voiceRetry && typeof schedMeta.voiceRetry === 'object'
         ? (schedMeta.voiceRetry as Record<string, unknown>)
         : {};
+    const prevLaunchSel =
+      schedMeta.voiceLaunchSelection && typeof schedMeta.voiceLaunchSelection === 'object'
+        ? (schedMeta.voiceLaunchSelection as Record<string, unknown>)
+        : {};
+    const selProv =
+      body.outboundVoiceProvider === 'telnyx' || body.outboundVoiceProvider === 'twilio'
+        ? body.outboundVoiceProvider
+        : schedSession.provider === 'telnyx'
+          ? 'telnyx'
+          : schedSession.provider
+            ? 'twilio'
+            : null;
+    const selFrom =
+      body.fromNumberId != null && String(body.fromNumberId).trim()
+        ? String(body.fromNumberId).trim()
+        : schedSession.fromNumberId ?? null;
 
     await adminUpdateVoiceCallSession(companyId, sessionId, {
       voiceRetryStatus: 'scheduled',
@@ -309,6 +332,11 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       voiceRetryMaxAutoDispatches: 1,
       metadata: {
         ...schedMeta,
+        voiceLaunchSelection: {
+          ...prevLaunchSel,
+          ...(selProv ? { selectedProviderId: selProv } : {}),
+          ...(selFrom ? { selectedFromNumberId: selFrom } : {})
+        },
         voiceRetry: {
           ...schedPrevVr,
           callbackRequested: true,
