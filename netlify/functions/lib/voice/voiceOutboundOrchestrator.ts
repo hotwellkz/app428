@@ -3,6 +3,7 @@ import {
   adminAppendVoiceCallEvent,
   adminCreateVoiceCallSession,
   adminGetDefaultVoiceNumberForCompany,
+  adminGetVoiceCallSession,
   adminGetVoiceNumberForCompany,
   adminUpdateVoiceCallSession
 } from './voiceFirestoreAdmin';
@@ -257,8 +258,24 @@ export async function orchestrateVoiceOutbound(
     })
   );
 
+  const sessAfterCreate = await adminGetVoiceCallSession(companyId, callId);
+  const prevMeta = ((sessAfterCreate?.metadata as Record<string, unknown>) ?? {}) as Record<string, unknown>;
+  const prevDebug = (prevMeta.voiceProviderDebug as Record<string, unknown> | undefined) ?? {};
   await adminUpdateVoiceCallSession(companyId, callId, {
-    providerCallId: adapterResult.providerCallId
+    providerCallId: adapterResult.providerCallId,
+    metadata: {
+      ...prevMeta,
+      voiceProviderDebug: {
+        ...prevDebug,
+        outboundCreateAt: new Date().toISOString(),
+        createProvider: adapter.providerId,
+        createProviderCallId: adapterResult.providerCallId,
+        createFrom: fromE164,
+        createTo: toE164,
+        createTwilioStatus: adapterResult.raw?.status ?? null,
+        createResponse: adapterResult.raw ?? null
+      }
+    }
   });
 
   await ingestNormalizedVoiceEvent({

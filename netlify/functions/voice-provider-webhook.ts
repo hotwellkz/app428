@@ -117,6 +117,20 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
     const { results, unknownOrUnmatched } = await ingestNormalizedVoiceEvents(events);
 
+    if (isTwilioWebhook) {
+      console.log(
+        JSON.stringify({
+          tag: 'voice.webhook.response',
+          provider: 'twilio',
+          statusCode: 204,
+          received: events.length,
+          processed: results.length,
+          unknownOrUnmatched
+        })
+      );
+      return twilioAck();
+    }
+
     const response = {
       statusCode: 200,
       headers: jsonHeaders,
@@ -130,7 +144,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     console.log(
       JSON.stringify({
         tag: 'voice.webhook.response',
-        provider: isTwilioWebhook ? 'twilio' : adapter.providerId,
+        provider: adapter.providerId,
         statusCode: response.statusCode,
         received: events.length,
         processed: results.length

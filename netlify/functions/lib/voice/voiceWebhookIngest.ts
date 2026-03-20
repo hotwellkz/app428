@@ -12,7 +12,8 @@ import {
   VOICE_CALL_SESSIONS_COLLECTION
 } from './voiceFirestoreAdmin';
 import { getDb } from '../firebaseAdmin';
-import { mergeVoiceLifecycleIntoLinkedRun } from './updateVoiceRunResult';
+import { mergeVoiceLifecycleIntoLinkedRun, type VoiceCallSnapshotForRunMerge } from './updateVoiceRunResult';
+import { deriveVoiceFailureReason } from './deriveVoiceFailureReason';
 
 function digest(s: string): string {
   return createHash('sha256').update(s).digest('hex').slice(0, 32);
@@ -146,65 +147,120 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
   const twilioWarningCode = n(meta.twilioWarningCode);
   const twilioErrorMessage = s(meta.twilioErrorMessage, 280);
   const twilioWarningMessage = s(meta.twilioWarningMessage, 280);
+  const answeredByMeta = s(meta.answeredBy, 64);
   const fromE164 = s(meta.from, 64);
   const toE164 = s(meta.to, 64);
   const providerReason = classifyProviderReason(twilioFinalStatus, twilioSipResponseCode, twilioErrorMessage);
   const twilioConsoleSearchText = `Call SID: ${ev.providerCallId}`;
   const providerMetaRaw = (meta.raw as Record<string, unknown> | undefined) ?? null;
 
+  const prevMeta = ((sessionRow.metadata as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
+  const prevDebug = (prevMeta.voiceProviderDebug as Record<string, unknown> | undefined) ?? {};
+  const voiceProviderDebug: Record<string, unknown> = {
+    ...prevDebug,
+    lastStatus: twilioFinalStatus,
+    lastSipCode: twilioSipResponseCode,
+    lastErrorCode: twilioErrorCode,
+    lastErrorMessage: twilioErrorMessage,
+    lastCallbackAt: new Date().toISOString(),
+    ...(answeredByMeta ? { lastAnsweredBy: answeredByMeta } : {}),
+    ...(s(meta.direction, 32) ? { lastDirection: s(meta.direction, 32) } : {})
+  };
+
+  const mergedMetadata: Record<string, unknown> = {
+    ...prevMeta,
+    voiceProviderDebug,
+    ...(providerMetaRaw ? { twilioLastCallbackRaw: providerMetaRaw } : {})
+  };
+
+  const durationTail = (ev.durationSec ?? 0) > 0 || (n(meta.callDuration) ?? 0) > 0;
+  const failure = deriveVoiceFailureReason({
+    crmStatus: applied.toStatus,
+    twilioCallStatus: twilioFinalStatus,
+    sipResponseCode: twilioSipResponseCode,
+    twilioErrorCode,
+    twilioErrorMessage,
+    twilioWarningCode,
+    twilioWarningMessage,
+    toE164: toE164 ?? s(sessionRow.toE164, 64)
+  });
+
+  const sessionUpdate: Record<string, unknown> = {
+    twilioFinalStatus,
+    twilioSipResponseCode,
+    twilioErrorCode,
+    twilioWarningCode,
+    twilioErrorMessage,
+    twilioWarningMessage,
+    twilioProviderReason: providerReason,
+    twilioConsoleSearchText,
+    metadata: mergedMetadata,
+    ...(fromE164 ? { fromE164 } : {}),
+    ...(toE164 ? { toE164 } : {}),
+    ...(shouldQueuePostCall ? { postCallStatus: 'pending' } : {})
+  };
+
   if (applied.sessionChanged && Object.keys(fsPatch).length > 0) {
-    await adminUpdateVoiceCallSession(companyId, callId, {
-      ...fsPatch,
+    Object.assign(sessionUpdate, fsPatch);
+  }
+
+  if (terminalStatuses.has(applied.toStatus)) {
+    if (applied.toStatus === 'completed' && durationTail) {
+      sessionUpdate.voiceFailureReasonCode = null;
+      sessionUpdate.voiceFailureReasonMessage = null;
+    } else if (failure) {
+      sessionUpdate.voiceFailureReasonCode = failure.code;
+      sessionUpdate.voiceFailureReasonMessage = failure.messageRu;
+    } else if (applied.toStatus === 'completed') {
+      sessionUpdate.voiceFailureReasonCode = null;
+      sessionUpdate.voiceFailureReasonMessage = null;
+    } else if (applied.toStatus === 'canceled') {
+      sessionUpdate.voiceFailureReasonCode = 'unknown_provider_failure';
+      sessionUpdate.voiceFailureReasonMessage = 'Звонок отменён.';
+    } else if (applied.toStatus === 'failed' || applied.toStatus === 'busy' || applied.toStatus === 'no_answer') {
+      if (!failure) {
+        sessionUpdate.voiceFailureReasonCode = 'unknown_provider_failure';
+        sessionUpdate.voiceFailureReasonMessage = `Исход звонка: ${applied.toStatus}`;
+      }
+    }
+  }
+
+  await adminUpdateVoiceCallSession(companyId, callId, sessionUpdate);
+
+  const linkedRunId = s(sessionRow.linkedRunId, 160);
+  if (linkedRunId) {
+    const voiceCallSnapshot: VoiceCallSnapshotForRunMerge = {
+      callStatus: applied.toStatus,
+      outcome: s(sessionRow.outcome, 80),
+      postCallStatus: s(sessionRow.postCallStatus, 80),
+      providerCallId: s(ev.providerCallId, 80),
+      provider: s(sessionRow.provider, 80),
+      fromE164: fromE164 ?? s(sessionRow.fromE164, 64),
+      toE164: toE164 ?? s(sessionRow.toE164, 64),
+      followUpStatus: s(sessionRow.followUpStatus, 80),
+      followUpError: s(sessionRow.followUpError, 200),
       twilioFinalStatus,
       twilioSipResponseCode,
       twilioErrorCode,
-      twilioWarningCode,
       twilioErrorMessage,
+      twilioWarningCode,
       twilioWarningMessage,
-      twilioProviderReason: providerReason,
-      twilioConsoleSearchText,
-      ...(fromE164 ? { fromE164 } : {}),
-      ...(toE164 ? { toE164 } : {}),
-      ...(providerMetaRaw
-        ? {
-            metadata: {
-              ...(((sessionRow.metadata as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>),
-              twilioLastCallbackRaw: providerMetaRaw
-            }
-          }
-        : {}),
-      ...(shouldQueuePostCall ? { postCallStatus: 'pending' } : {}),
-      updatedAt: FieldValue.serverTimestamp()
-    });
-    const linkedRunId = s(sessionRow.linkedRunId, 160);
-    if (linkedRunId) {
-      await mergeVoiceLifecycleIntoLinkedRun({
-        companyId,
-        linkedRunId,
-        voiceCallSnapshot: {
-          callStatus: applied.toStatus,
-          outcome: s(sessionRow.outcome, 80),
-          postCallStatus: s(sessionRow.postCallStatus, 80),
-          providerCallId: s(ev.providerCallId, 80),
-          provider: s(sessionRow.provider, 80),
-          fromE164: fromE164 ?? s(sessionRow.fromE164, 64),
-          toE164: toE164 ?? s(sessionRow.toE164, 64),
-          followUpStatus: s(sessionRow.followUpStatus, 80),
-          followUpError: s(sessionRow.followUpError, 200),
-          twilioFinalStatus,
-          twilioSipResponseCode,
-          twilioErrorCode,
-          twilioErrorMessage,
-          twilioWarningCode,
-          twilioWarningMessage,
-          twilioProviderReason: providerReason
-        }
-      });
+      twilioProviderReason: providerReason
+    };
+    if ('voiceFailureReasonCode' in sessionUpdate) {
+      voiceCallSnapshot.voiceFailureReasonCode = sessionUpdate.voiceFailureReasonCode as string | null;
     }
-    return { ok: true, callId, deduped: false, sessionUpdated: true };
+    if ('voiceFailureReasonMessage' in sessionUpdate) {
+      voiceCallSnapshot.voiceFailureReasonMessage = sessionUpdate.voiceFailureReasonMessage as string | null;
+    }
+    await mergeVoiceLifecycleIntoLinkedRun({
+      companyId,
+      linkedRunId,
+      voiceCallSnapshot
+    });
   }
 
-  return { ok: true, callId, deduped: false, sessionUpdated: false };
+  return { ok: true, callId, deduped: false, sessionUpdated: applied.sessionChanged };
 }
 
 /** Для событий без providerCallId в теле (ошибка парсинга) — только логирование через optional collection — пропускаем. */

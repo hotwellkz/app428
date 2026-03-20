@@ -133,6 +133,8 @@ export function docToVoiceCallSession(id: string, data: Record<string, unknown>)
     twilioWarningMessage: str(data.twilioWarningMessage),
     twilioProviderReason: str(data.twilioProviderReason),
     twilioConsoleSearchText: str(data.twilioConsoleSearchText),
+    voiceFailureReasonCode: str(data.voiceFailureReasonCode),
+    voiceFailureReasonMessage: str(data.voiceFailureReasonMessage),
     metadata: (data.metadata as Record<string, unknown> | undefined) ?? undefined,
     createdAt: (data.createdAt as Timestamp | Date | null) ?? null,
     updatedAt: (data.updatedAt as Timestamp | Date | null) ?? null

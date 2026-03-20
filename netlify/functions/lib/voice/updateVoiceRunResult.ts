@@ -26,6 +26,8 @@ export type VoiceCallSnapshotForRunMerge = {
   twilioWarningCode?: number | null;
   twilioWarningMessage?: string | null;
   twilioProviderReason?: string | null;
+  voiceFailureReasonCode?: string | null;
+  voiceFailureReasonMessage?: string | null;
 };
 
 export async function mergeVoicePostCallIntoLinkedRun(params: {

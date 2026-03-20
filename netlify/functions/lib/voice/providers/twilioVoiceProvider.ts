@@ -16,6 +16,7 @@ import {
 } from '../providerConfig';
 import { getVoiceIntegration } from '../../firebaseAdmin';
 import { mapTwilioVoiceCreateError } from '../deriveTwilioVoiceFriendlyError';
+import { normalizeTwilioVoiceStatusCallbackEvents } from '../twilioVoiceStatusCallback';
 
 const PROVIDER_ID = 'twilio';
 
@@ -175,12 +176,7 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
       }
     }
     statusCallback = u.toString();
-    const statusCallbackEvents: Array<'initiated' | 'ringing' | 'answered' | 'completed'> = [
-      'initiated',
-      'ringing',
-      'answered',
-      'completed'
-    ];
+    const statusCallbackEvents = normalizeTwilioVoiceStatusCallbackEvents();
 
     const accountSidSuffix = accountSid.length >= 6 ? accountSid.slice(-6) : accountSid;
     console.log(
@@ -331,6 +327,7 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
       twilioWarningCode,
       twilioErrorMessage: safe(params.ErrorMessage),
       twilioWarningMessage: safe(params.WarningMessage),
+      answeredBy: safe(params.AnsweredBy, 64),
       from: safe(params.From, 64),
       to: safe(params.To, 64),
       direction: safe(params.Direction, 32),
@@ -348,7 +345,8 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
         SipResponseCode: safe(params.SipResponseCode, 16),
         Direction: safe(params.Direction, 32),
         From: safe(params.From, 64),
-        To: safe(params.To, 64)
+        To: safe(params.To, 64),
+        AnsweredBy: safe(params.AnsweredBy, 64)
       }
     };
 

@@ -45,6 +45,9 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
   const [launching, setLaunching] = useState(false);
   const [lastCallId, setLastCallId] = useState<string | null>(null);
   const lastObservedStatusRef = useRef<string | null>(null);
+  const progressAnnouncedRef = useRef(false);
+  const connectedAnnouncedRef = useRef(false);
+  const terminalAnnouncedRef = useRef(false);
   const [integration, setIntegration] = useState<{
     configured: boolean;
     enabled: boolean;
@@ -145,6 +148,9 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
   useEffect(() => {
     if (!open || !context.companyId || !lastCallId) return;
     lastObservedStatusRef.current = null;
+    progressAnnouncedRef.current = false;
+    connectedAnnouncedRef.current = false;
+    terminalAnnouncedRef.current = false;
     return subscribeVoiceCallSession(
       context.companyId,
       lastCallId,
@@ -152,19 +158,43 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         const s = session?.status ?? null;
         if (!s || s === lastObservedStatusRef.current) return;
         lastObservedStatusRef.current = s;
-        if (s === 'ringing') toast('Звонок: идёт вызов (ringing)');
-        if (s === 'in_progress') toast.success('Звонок соединён');
-        if (s === 'completed') toast.success('Звонок завершён');
+        const reasonMsg = session?.voiceFailureReasonMessage?.trim();
+
+        if (s === 'dialing' || s === 'ringing') {
+          if (!progressAnnouncedRef.current) {
+            progressAnnouncedRef.current = true;
+            toast('Провайдер принял звонок. Идёт вызов…');
+          }
+        }
+        if (s === 'in_progress') {
+          connectedAnnouncedRef.current = true;
+          toast.success('Соединено: разговор идёт');
+        }
+        if (s === 'completed') {
+          if (terminalAnnouncedRef.current) return;
+          terminalAnnouncedRef.current = true;
+          const dur = session?.durationSec ?? 0;
+          if (connectedAnnouncedRef.current || dur > 0) {
+            toast.success('Звонок завершён');
+          } else {
+            toast('Звонок завершён без подтверждённого соединения на стороне клиента', { duration: 9000 });
+          }
+        }
         if (s === 'failed') {
           const hint = session?.twilioErrorCode ? `код ${session.twilioErrorCode}` : session?.endReason ?? 'failed';
-          toast.error(`Twilio: failed, проверьте Geo Permissions/номер (${hint})`, { duration: 9000 });
+          toast.error(reasonMsg ?? `Twilio: failed (${hint})`, { duration: 9000 });
         }
         if (s === 'busy') {
-          const sip = session?.twilioSipResponseCode ? ` (SIP ${session.twilioSipResponseCode})` : '';
-          toast.error(`Twilio: сеть назначения вернула busy${sip}`);
+          const sip = session?.twilioSipResponseCode;
+          const sipPart = sip != null ? ` (SIP ${sip})` : '';
+          toast.error(reasonMsg ?? `Клиент занят или сеть назначения отклонила вызов${sipPart}`, {
+            duration: 9000
+          });
         }
-        if (s === 'no_answer') toast.error('Twilio: no-answer / клиент не ответил');
-        if (s === 'canceled') toast.error('Звонок отменён');
+        if (s === 'no_answer') {
+          toast.error(reasonMsg ?? 'Нет ответа (no-answer)', { duration: 9000 });
+        }
+        if (s === 'canceled') toast.error(reasonMsg ?? 'Звонок отменён');
       },
       (e) => {
         const msg = e instanceof Error ? e.message : String(e);
@@ -192,7 +222,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         }
       });
       setLastCallId(out.callId);
-      toast.success('Звонок запущен');
+      toast('Звонок отправлен провайдеру. Ожидаем статус дозвона…', { duration: 5000 });
     } catch (e) {
       if (e instanceof VoiceLaunchError) {
         const text = e.hint ? `${e.message}\n${e.hint}` : e.message;

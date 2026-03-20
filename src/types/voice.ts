@@ -226,6 +226,9 @@ export interface VoiceCallSession {
   twilioWarningMessage?: string | null;
   twilioProviderReason?: string | null;
   twilioConsoleSearchText?: string | null;
+  /** Классификация исхода (deriveVoiceFailureReason) для честного UI. */
+  voiceFailureReasonCode?: string | null;
+  voiceFailureReasonMessage?: string | null;
   metadata?: Record<string, unknown>;
   createdAt?: Timestamp | Date | null;
   updatedAt?: Timestamp | Date | null;
