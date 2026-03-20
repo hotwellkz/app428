@@ -1645,7 +1645,7 @@ export const IntegrationsSettings: React.FC = () => {
                 type="text"
                 value={telnyxForm.connectionId}
                 onChange={(e) => setTelnyxForm((f) => ({ ...f, connectionId: e.target.value }))}
-                placeholder="Только ID из Mission Control → Call Control Applications (цифры). Не API Key."
+                placeholder="ID Call Control (столбец ID) или целиком URL страницы приложения. Тот же аккаунт Telnyx, что и API Key."
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
               />
               <label className="flex items-center gap-2 text-sm">

@@ -15,7 +15,8 @@ import { Timestamp } from 'firebase-admin/firestore';
 import {
   probeTelnyxApiKey,
   fetchTelnyxCallControlApplication,
-  validateTelnyxCallControlWebhookForCrm
+  validateTelnyxCallControlWebhookForCrm,
+  normalizeTelnyxCallControlApplicationId
 } from './lib/voice/providers/telnyxVoiceProvider';
 import { voiceFriendlyMessageRu } from './lib/voice/voiceProviderFriendlyCodes';
 import { buildVoiceProviderWebhookUrl, loadVoiceProviderRuntimeConfig } from './lib/voice/providerConfig';
@@ -39,7 +40,10 @@ async function validateTelnyxCallControlId(
   apiKey: string,
   connectionIdRaw: string | null | undefined
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const cid = connectionIdRaw != null ? String(connectionIdRaw).trim() : '';
+  if (connectionIdRaw == null) return { ok: true };
+  const raw = String(connectionIdRaw).trim();
+  if (!raw) return { ok: true };
+  const cid = normalizeTelnyxCallControlApplicationId(raw);
   if (!cid) return { ok: true };
   const app = await fetchTelnyxCallControlApplication(apiKey, cid);
   if (!app.ok) return { ok: false, error: app.error };
@@ -255,7 +259,12 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const publicKey = publicKeyFromBody || existingRow?.telnyxPublicKey?.trim() || '';
     const testOnly = body.testOnly === true;
     const enabled = body.enabled !== false;
-    const connectionId = body.connectionId != null ? String(body.connectionId).trim() || null : undefined;
+    const connectionId =
+      body.connectionId != null
+        ? String(body.connectionId).trim()
+          ? normalizeTelnyxCallControlApplicationId(String(body.connectionId)) || null
+          : null
+        : undefined;
 
     if (testOnly) {
       if (!apiKey) {

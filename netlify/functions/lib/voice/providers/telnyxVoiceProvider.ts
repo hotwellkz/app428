@@ -40,6 +40,36 @@ function headerCi(headers: Record<string, string | undefined>, name: string): st
   return undefined;
 }
 
+/**
+ * Нормализует ID Call Control Application: trim, убирает zero-width/NBSP,
+ * вытаскивает id из вставленной ссылки Mission Control / API (…/call_control_applications/{id}).
+ */
+export function normalizeTelnyxCallControlApplicationId(raw: string): string {
+  let s = String(raw ?? '')
+    .trim()
+    .replace(/\u200B|\uFEFF/g, '')
+    .replace(/[\u00A0\s]+/g, '');
+  if (!s) return '';
+  try {
+    if (s.includes('://')) {
+      const u = new URL(s);
+      const m = u.pathname.match(/call_control_applications\/([^/?#]+)/i);
+      if (m?.[1]) return decodeURIComponent(m[1].trim());
+    }
+  } catch {
+    /* не URL */
+  }
+  const m2 = s.match(/call_control_applications\/([^/?#]+)/i);
+  if (m2?.[1]) return decodeURIComponent(m2[1].trim());
+  return s;
+}
+
+function looksLikeE164Phone(id: string): boolean {
+  if (!id) return false;
+  if (id.startsWith('+')) return /^\+\d{10,15}$/.test(id);
+  return /^\d{10,15}$/.test(id);
+}
+
 /** GET /v2/call_control_applications/{id} — проверка ID перед исходящим звонком. */
 export type TelnyxCallControlAppProbe =
   | {
@@ -56,7 +86,7 @@ export async function fetchTelnyxCallControlApplication(
   applicationId: string
 ): Promise<TelnyxCallControlAppProbe> {
   const k = apiKey.trim();
-  const id = applicationId.trim();
+  const id = normalizeTelnyxCallControlApplicationId(applicationId);
   if (!k) return { ok: false, error: 'Пустой API Key' };
   if (!id) return { ok: false, error: 'Пустой Connection / Application ID' };
   if (id.startsWith('KEY')) {
@@ -64,6 +94,13 @@ export async function fetchTelnyxCallControlApplication(
       ok: false,
       error:
         'В поле Connection / Application ID похоже вставлен API Key (начинается с KEY…). Нужен только числовой ID приложения Call Control из Mission Control (Voice → Call Control Applications → ID).'
+    };
+  }
+  if (looksLikeE164Phone(id)) {
+    return {
+      ok: false,
+      error:
+        'В поле похоже на номер телефона (E.164), а не на ID Call Control Application. В Mission Control: Voice → Call Control Applications — скопируйте столбец ID (длинное число), не номер.'
     };
   }
   try {
@@ -79,7 +116,7 @@ export async function fetchTelnyxCallControlApplication(
       return {
         ok: false,
         error:
-          'Call Control Application с таким ID не найден (404). В Mission Control: Voice → Call Control Applications — скопируйте ID приложения. Не используйте ID номера телефона или TeXML Connection из другого раздела.',
+          'Call Control Application с таким ID не найден (404). Проверьте: 1) ID скопирован из Voice → Call Control Applications (столбец ID), не из Phone Numbers / TeXML / SIP. 2) Тот же Telnyx-аккаунт, что и API Key в CRM (ключ из другого аккаунта не увидит приложение). 3) Можно вставить целиком URL страницы приложения в Mission Control — сервер извлечёт ID.',
         httpStatus: 404
       };
     }
@@ -433,7 +470,7 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
     }
     const apiKey = row.telnyxApiKey.trim();
     /** Call Control Application ID из Mission Control — в Firestore поле telnyxConnectionId (историческое имя). */
-    const callControlApplicationId = row.telnyxConnectionId?.trim() ?? '';
+    const callControlApplicationId = normalizeTelnyxCallControlApplicationId(row.telnyxConnectionId ?? '');
     if (!callControlApplicationId) {
       return {
         ok: false,
