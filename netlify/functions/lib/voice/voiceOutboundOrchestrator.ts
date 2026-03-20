@@ -162,11 +162,14 @@ export async function orchestrateVoiceOutbound(
       payload: { error: adapterResult.error, code: adapterResult.code ?? null },
       seq: null
     });
+    const code = adapterResult.code ?? 'adapter_reject';
+    const configHttp =
+      code === 'twilio_config' || code === 'twilio_public_url' ? 400 : code === 'twilio_api_error' ? 502 : 502;
     return {
       ok: false,
-      code: adapterResult.code ?? 'adapter_reject',
+      code,
       message: adapterResult.error,
-      httpStatus: 502
+      httpStatus: configHttp
     };
   }
 
@@ -181,7 +184,8 @@ export async function orchestrateVoiceOutbound(
     cause: null,
     providerEventType: 'adapter.createOutboundCall',
     durationSec: null,
-    rawDigest: null
+    rawDigest: `outbound:accept:${callId}`,
+    providerEventId: `outbound:provider.accepted:${adapterResult.providerCallId}`
   });
 
   return { ok: true, callId, providerCallId: adapterResult.providerCallId };

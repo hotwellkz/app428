@@ -5,12 +5,25 @@ export type VoiceProviderMode = 'mock' | 'twilio';
 
 export interface VoiceProviderRuntimeConfig {
   mode: VoiceProviderMode;
-  /** Общий секрет входящего webhook (опционально). */
+  /** Общий секрет входящего webhook (опционально, в основном для mock JSON). */
   webhookSecret: string | null;
-  /** Доп. секрет только для mock/dev тел теле метки в заголовке (опционально). */
+  /** Доп. секрет только для mock/dev — заголовок X-Voice-Mock-Secret. */
   mockWebhookSecret: string | null;
-  /** Публичный базовый URL сайта для callback URL в провайдере (Netlify: URL). */
+  /** Публичный базовый URL сайта (Netlify: URL / VOICE_PUBLIC_SITE_URL). */
   publicSiteUrl: string | null;
+
+  /** Twilio Account SID (VOICE_PROVIDER=twilio). */
+  twilioAccountSid: string | null;
+  /** Twilio Auth Token для REST и validateRequest. */
+  twilioAuthToken: string | null;
+  /**
+   * Полный публичный URL endpoint статус-колбэка, **как в Twilio** (важно для X-Twilio-Signature).
+   * Пример: https://2wix.ru/api/voice/provider-webhook
+   * Если не задан — собирается из publicSiteUrl + путь API.
+   */
+  twilioWebhookPublicUrl: string | null;
+  /** Локальная разработка: "1" — не проверять подпись Twilio (не для prod). */
+  twilioSkipSignatureValidation: boolean;
 }
 
 function trimEnv(key: string): string | null {
@@ -19,9 +32,13 @@ function trimEnv(key: string): string | null {
   return String(v).trim();
 }
 
+function truthyEnv(key: string): boolean {
+  const v = trimEnv(key);
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
 /**
- * Режим по умолчанию — mock, пока нет реальной телефонии.
- * Явно задайте VOICE_PROVIDER=twilio когда появится реализация адаптера.
+ * Режим по умолчанию — mock. Для боевого исходящего: VOICE_PROVIDER=twilio + Twilio env.
  */
 export function loadVoiceProviderRuntimeConfig(): VoiceProviderRuntimeConfig {
   const modeRaw = (trimEnv('VOICE_PROVIDER') ?? 'mock').toLowerCase();
@@ -31,12 +48,71 @@ export function loadVoiceProviderRuntimeConfig(): VoiceProviderRuntimeConfig {
     mode,
     webhookSecret: trimEnv('VOICE_WEBHOOK_SECRET'),
     mockWebhookSecret: trimEnv('VOICE_MOCK_WEBHOOK_SECRET'),
-    publicSiteUrl: trimEnv('URL') ?? trimEnv('DEPLOY_PRIME_URL') ?? trimEnv('VOICE_PUBLIC_SITE_URL')
+    publicSiteUrl: trimEnv('URL') ?? trimEnv('DEPLOY_PRIME_URL') ?? trimEnv('VOICE_PUBLIC_SITE_URL'),
+    twilioAccountSid: trimEnv('TWILIO_ACCOUNT_SID'),
+    twilioAuthToken: trimEnv('TWILIO_AUTH_TOKEN'),
+    twilioWebhookPublicUrl: trimEnv('TWILIO_WEBHOOK_PUBLIC_URL'),
+    twilioSkipSignatureValidation: truthyEnv('TWILIO_SKIP_SIGNATURE_VALIDATION')
   };
 }
 
+/** Относительный путь к Netlify function (без домена). */
+export const VOICE_WEBHOOK_FUNCTION_PATH = '/.netlify/functions/voice-provider-webhook';
+export const VOICE_TWILIO_TWIML_FUNCTION_PATH = '/.netlify/functions/voice-twilio-twiml';
+
+/** Публичный URL через редирект /api/voice/* (см. netlify.toml). */
 export function buildVoiceProviderWebhookUrl(config: VoiceProviderRuntimeConfig): string {
   const base = config.publicSiteUrl?.replace(/\/$/, '') ?? '';
-  if (!base) return '/.netlify/functions/voice-provider-webhook';
-  return `${base}/.netlify/functions/voice-provider-webhook`;
+  if (!base) return VOICE_WEBHOOK_FUNCTION_PATH;
+  return `${base}/api/voice/provider-webhook`;
+}
+
+/**
+ * URL для Twilio validateRequest — должен точно совпадать с тем, что Twilio подписывает.
+ */
+export function buildTwilioStatusCallbackValidationUrl(config: VoiceProviderRuntimeConfig): string {
+  if (config.twilioWebhookPublicUrl?.trim()) {
+    return config.twilioWebhookPublicUrl.trim().replace(/\/$/, '');
+  }
+  return buildVoiceProviderWebhookUrl(config);
+}
+
+export function buildVoiceTwilioTwimlUrl(config: VoiceProviderRuntimeConfig): string {
+  const base = config.publicSiteUrl?.replace(/\/$/, '') ?? '';
+  if (!base) return VOICE_TWILIO_TWIML_FUNCTION_PATH;
+  return `${base}/api/voice/twilio-twiml`;
+}
+
+export function assertTwilioOutboundConfig(config: VoiceProviderRuntimeConfig): string | null {
+  if (!config.twilioAccountSid || !config.twilioAuthToken) {
+    return 'Twilio: задайте TWILIO_ACCOUNT_SID и TWILIO_AUTH_TOKEN';
+  }
+  if (!config.publicSiteUrl && !config.twilioWebhookPublicUrl) {
+    return 'Twilio: задайте URL (Netlify) или VOICE_PUBLIC_SITE_URL / TWILIO_WEBHOOK_PUBLIC_URL для callback и TwiML';
+  }
+  return null;
+}
+
+/**
+ * URL для Twilio validateRequest: совпадает с тем, куда Twilio шлёт POST.
+ * Если задан TWILIO_WEBHOOK_PUBLIC_URL — подменяем origin/path, query берём из фактического rawUrl.
+ */
+export function resolveTwilioWebhookRequestUrl(
+  rawUrl: string,
+  config: VoiceProviderRuntimeConfig
+): string {
+  const canonical = config.twilioWebhookPublicUrl?.trim().replace(/\/$/, '');
+  if (!canonical) {
+    return rawUrl;
+  }
+  try {
+    const base = new URL(canonical.includes('://') ? canonical : `https://${canonical}`);
+    const inc = new URL(rawUrl);
+    if (inc.search) {
+      base.search = inc.search;
+    }
+    return base.toString();
+  } catch {
+    return rawUrl;
+  }
 }

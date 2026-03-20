@@ -18,6 +18,9 @@ function digest(s: string): string {
 }
 
 function dedupeDocId(ev: VoiceNormalizedWebhookEvent): string {
+  if (ev.providerEventId?.trim()) {
+    return digest(`${ev.providerCallId}|${ev.providerEventId.trim()}`);
+  }
   const key = `${ev.type}|${ev.providerCallId}|${ev.occurredAt}|${ev.cause ?? ''}|${ev.durationSec ?? ''}`;
   return digest(key);
 }

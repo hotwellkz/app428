@@ -27,11 +27,13 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
   try {
     const config = loadVoiceProviderRuntimeConfig();
+    const headers = flattenHeaders(event.headers);
 
-    if (config.webhookSecret) {
+    /** Twilio проверяет X-Twilio-Signature в адаптере; общий VOICE_WEBHOOK_SECRET — для mock/прочего. */
+    if (config.mode !== 'twilio' && config.webhookSecret) {
       const h =
-        flattenHeaders(event.headers)['x-voice-webhook-secret'] ??
-        flattenHeaders(event.headers)['X-Voice-Webhook-Secret'] ??
+        headers['x-voice-webhook-secret'] ??
+        headers['X-Voice-Webhook-Secret'] ??
         event.queryStringParameters?.secret;
       if (h !== config.webhookSecret) {
         return { statusCode: 401, headers: jsonHeaders, body: JSON.stringify({ error: 'Webhook unauthorized' }) };
@@ -53,14 +55,18 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     try {
       events = await adapter.handleWebhook({
         rawBody: event.body ?? '',
-        headers: flattenHeaders(event.headers),
+        headers,
         queryParams: (event.queryStringParameters ?? {}) as Record<string, string | undefined>,
+        requestUrl: event.rawUrl,
         config
       });
     } catch (e) {
       const msg = String(e);
       if (msg.includes('mock webhook secret')) {
         return { statusCode: 401, headers: jsonHeaders, body: JSON.stringify({ error: 'Mock webhook secret mismatch' }) };
+      }
+      if (msg.includes('Twilio:') && (msg.includes('подпись') || msg.includes('X-Twilio-Signature'))) {
+        return { statusCode: 403, headers: jsonHeaders, body: JSON.stringify({ error: msg }) };
       }
       throw e;
     }

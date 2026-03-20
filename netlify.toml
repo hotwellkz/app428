@@ -158,6 +158,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/voice/twilio-twiml"
+  to = "/.netlify/functions/voice-twilio-twiml"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

@@ -111,6 +111,7 @@ function normalizeOneMockEvent(
     durationSec: typeof o.durationSec === 'number' ? o.durationSec : null,
     cause: o.cause != null ? String(o.cause) : null,
     rawDigest: o.rawDigest != null ? String(o.rawDigest) : null,
-    providerEventType: o.providerEventType != null ? String(o.providerEventType) : null
+    providerEventType: o.providerEventType != null ? String(o.providerEventType) : null,
+    providerEventId: o.providerEventId != null ? String(o.providerEventId) : null
   };
 }

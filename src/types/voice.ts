@@ -147,4 +147,8 @@ export interface VoiceNormalizedWebhookEvent {
   /** Короткий отпечаток сырого payload для отладки */
   rawDigest?: string | null;
   providerEventType?: string | null;
+  /**
+   * Стабильный id события у провайдера (CallSid+status и т.п.) — для дедупа webhook.
+   */
+  providerEventId?: string | null;
 }

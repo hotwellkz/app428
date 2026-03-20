@@ -1,6 +1,7 @@
 import type { VoiceProviderRuntimeConfig } from './providerConfig';
 import type { VoiceNormalizedWebhookEvent } from '../../../../src/types/voice';
 import { MockVoiceProvider } from './providers/mockVoiceProvider';
+import { TwilioVoiceProvider } from './providers/twilioVoiceProvider';
 
 export type CreateOutboundVoiceCallInput = {
   companyId: string;
@@ -32,6 +33,8 @@ export type VoiceWebhookParseInput = {
   rawBody: string;
   headers: Record<string, string | undefined>;
   queryParams: Record<string, string | undefined>;
+  /** Полный URL запроса (Netlify: rawUrl) — для Twilio validateRequest. */
+  requestUrl: string;
   config: VoiceProviderRuntimeConfig;
 };
 
@@ -45,9 +48,10 @@ export interface VoiceProviderAdapter {
 
 export function getVoiceProviderAdapter(config: VoiceProviderRuntimeConfig): VoiceProviderAdapter {
   if (config.mode === 'twilio') {
-    throw new Error(
-      'VOICE_PROVIDER=twilio: адаптер ещё не реализован на этом этапе. Используйте VOICE_PROVIDER=mock.'
-    );
+    if (!config.twilioAccountSid?.trim() || !config.twilioAuthToken?.trim()) {
+      throw new Error('VOICE_PROVIDER=twilio: задайте TWILIO_ACCOUNT_SID и TWILIO_AUTH_TOKEN');
+    }
+    return new TwilioVoiceProvider(config);
   }
   return new MockVoiceProvider();
 }
