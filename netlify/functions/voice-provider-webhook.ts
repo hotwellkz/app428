@@ -2,6 +2,7 @@ import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions'
 import { loadVoiceProviderRuntimeConfig } from './lib/voice/providerConfig';
 import { getVoiceProviderAdapter } from './lib/voice/voiceProviderAdapter';
 import { ingestNormalizedVoiceEvents } from './lib/voice/voiceWebhookIngest';
+import { TwilioVoiceProvider } from './lib/voice/providers/twilioVoiceProvider';
 
 function flattenHeaders(
   raw: HandlerEvent['headers'] | HandlerEvent['multiValueHeaders']
@@ -40,9 +41,14 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       }
     }
 
+    const isTwilioWebhook = !!(
+      headers['x-twilio-signature'] ||
+      headers['X-Twilio-Signature'] ||
+      (event.body ?? '').includes('CallSid=')
+    );
     let adapter;
     try {
-      adapter = getVoiceProviderAdapter(config);
+      adapter = isTwilioWebhook ? new TwilioVoiceProvider(config) : getVoiceProviderAdapter(config);
     } catch (e) {
       return {
         statusCode: 501,
@@ -73,7 +79,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
     const { results, unknownOrUnmatched } = await ingestNormalizedVoiceEvents(events);
 
-    return {
+    const response = {
       statusCode: 200,
       headers: jsonHeaders,
       body: JSON.stringify({
@@ -83,7 +89,24 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         unknownOrUnmatched
       })
     };
+    console.log(
+      JSON.stringify({
+        tag: 'voice.webhook.response',
+        provider: isTwilioWebhook ? 'twilio' : adapter.providerId,
+        statusCode: response.statusCode,
+        received: events.length,
+        processed: results.length
+      })
+    );
+    return response;
   } catch (e) {
+    console.log(
+      JSON.stringify({
+        tag: 'voice.webhook.response',
+        statusCode: 500,
+        error: String(e)
+      })
+    );
     return {
       statusCode: 500,
       headers: jsonHeaders,

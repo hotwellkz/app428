@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import toast from 'react-hot-toast';
 import { listVoiceNumbersByCompany } from '../../lib/firebase/voiceNumbers';
+import { subscribeVoiceCallSession } from '../../lib/firebase/voiceCallSessions';
 import { subscribeCrmAiBots } from '../../lib/firebase/crmAiBots';
 import type { CrmAiBot } from '../../types/crmAiBot';
 import {
@@ -43,6 +44,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
   const [loading, setLoading] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [lastCallId, setLastCallId] = useState<string | null>(null);
+  const lastObservedStatusRef = useRef<string | null>(null);
   const [integration, setIntegration] = useState<{
     configured: boolean;
     enabled: boolean;
@@ -139,6 +141,31 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
     }
     return { readyReason: null as string | null, reasonCode: null as VoiceLauncherReadyReasonCode | null };
   }, [integration, loading, selectedBotId, phone, fromNumberId, twilioLineOk]);
+
+  useEffect(() => {
+    if (!open || !context.companyId || !lastCallId) return;
+    lastObservedStatusRef.current = null;
+    return subscribeVoiceCallSession(
+      context.companyId,
+      lastCallId,
+      (session) => {
+        const s = session?.status ?? null;
+        if (!s || s === lastObservedStatusRef.current) return;
+        lastObservedStatusRef.current = s;
+        if (s === 'ringing') toast('Звонок: идёт вызов (ringing)');
+        if (s === 'in_progress') toast.success('Звонок соединён');
+        if (s === 'completed') toast.success('Звонок завершён');
+        if (s === 'failed') toast.error(`Звонок отклонён: ${session?.endReason ?? 'failed'}`, { duration: 8000 });
+        if (s === 'busy') toast.error('Клиент занят (busy)');
+        if (s === 'no_answer') toast.error('Клиент не ответил (no-answer)');
+        if (s === 'canceled') toast.error('Звонок отменён');
+      },
+      (e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        toast.error(`Не удалось получить статус звонка: ${msg}`);
+      }
+    );
+  }, [open, context.companyId, lastCallId]);
 
   if (!open) return null;
 

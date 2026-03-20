@@ -162,14 +162,23 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
       };
     }
 
+    const u = new URL(statusCallback);
+    // Ключ для выбора корректного Auth Token при validateRequest (company-scoped).
+    u.searchParams.set('companyId', input.companyId);
+    u.searchParams.set('callId', input.callId);
     const metaStr = metadataToStringRecord(input.metadata);
     if (metaStr && Object.keys(metaStr).length > 0) {
-      const u = new URL(statusCallback);
       for (const [k, v] of Object.entries(metaStr)) {
-        u.searchParams.set(k, v);
+        if (!u.searchParams.has(k)) u.searchParams.set(k, v);
       }
-      statusCallback = u.toString();
     }
+    statusCallback = u.toString();
+    const statusCallbackEvents: Array<'initiated' | 'ringing' | 'answered' | 'completed'> = [
+      'initiated',
+      'ringing',
+      'answered',
+      'completed'
+    ];
 
     const accountSidSuffix = accountSid.length >= 6 ? accountSid.slice(-6) : accountSid;
     console.log(
@@ -182,7 +191,10 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
         credentialSource,
         accountSidSuffix,
         fromE164: input.fromE164,
-        toE164: input.toE164
+        toE164: input.toE164,
+        twimlUrl,
+        statusCallback,
+        statusCallbackEvents
       })
     );
 
@@ -195,16 +207,7 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
         method: 'POST',
         statusCallback,
         statusCallbackMethod: 'POST',
-        statusCallbackEvent: [
-          'initiated',
-          'ringing',
-          'answered',
-          'completed',
-          'busy',
-          'no-answer',
-          'failed',
-          'canceled'
-        ]
+        statusCallbackEvent: statusCallbackEvents
       });
 
       const sid = call.sid;
@@ -263,7 +266,14 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
   }
 
   async handleWebhook(input: VoiceWebhookParseInput): Promise<VoiceNormalizedWebhookEvent[]> {
-    const authToken = this.config.twilioAuthToken;
+    const companyIdFromQuery = String(input.queryParams.companyId ?? '').trim();
+    let authToken = this.config.twilioAuthToken;
+    if (companyIdFromQuery) {
+      const row = await getVoiceIntegration(companyIdFromQuery);
+      if (row?.enabled && row.authToken?.trim()) {
+        authToken = row.authToken.trim();
+      }
+    }
     if (!authToken) {
       throw new Error('Twilio: TWILIO_AUTH_TOKEN не задан');
     }
@@ -271,6 +281,17 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
     const signature =
       input.headers['x-twilio-signature'] ?? input.headers['X-Twilio-Signature'] ?? undefined;
     const params = parseFormBody(input.rawBody);
+    console.log(
+      JSON.stringify({
+        tag: 'voice.twilio.callback',
+        companyId: companyIdFromQuery || null,
+        requestUrl: input.requestUrl,
+        callSid: params.CallSid ?? null,
+        callStatus: params.CallStatus ?? null,
+        callDuration: params.CallDuration ?? null,
+        eventType: params.CallbackSource ?? null
+      })
+    );
 
     const validationUrl = resolveTwilioWebhookRequestUrl(input.requestUrl, this.config);
 
