@@ -70,6 +70,43 @@ function looksLikeE164Phone(id: string): boolean {
   return /^\d{10,15}$/.test(id);
 }
 
+/**
+ * Список Call Control Applications по API Key — для подсказки, если GET по одному ID вернул 404.
+ */
+export async function listTelnyxCallControlApplicationsForHint(apiKey: string): Promise<
+  | { ok: true; applications: Array<{ id: string; application_name: string | null }> }
+  | { ok: false }
+> {
+  const k = apiKey.trim();
+  if (!k) return { ok: false };
+  try {
+    const res = await fetch(
+      'https://api.telnyx.com/v2/call_control_applications?page[size]=50&page[number]=1',
+      {
+        method: 'GET',
+        headers: { Authorization: `Bearer ${k}`, Accept: 'application/json' }
+      }
+    );
+    if (!res.ok) return { ok: false };
+    const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    const data = Array.isArray(json.data) ? json.data : [];
+    const applications = data
+      .map((raw) => {
+        const row = raw as Record<string, unknown>;
+        const id = String(row.id ?? '').trim();
+        const application_name =
+          typeof row.application_name === 'string' && row.application_name.trim()
+            ? row.application_name.trim()
+            : null;
+        return { id, application_name };
+      })
+      .filter((a) => a.id);
+    return { ok: true, applications };
+  } catch {
+    return { ok: false };
+  }
+}
+
 /** GET /v2/call_control_applications/{id} — проверка ID перед исходящим звонком. */
 export type TelnyxCallControlAppProbe =
   | {
@@ -113,10 +150,28 @@ export async function fetchTelnyxCallControlApplication(
     );
     const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     if (res.status === 404) {
+      const base =
+        'Call Control Application с таким ID не найден (404). Проверьте: 1) ID из Voice → Call Control Applications (столбец ID), не из Phone Numbers / TeXML / SIP. 2) Тот же Telnyx-аккаунт, что и API Key в CRM. 3) Можно вставить целиком URL страницы приложения — сервер извлечёт ID.';
+      let extra = '';
+      const listed = await listTelnyxCallControlApplicationsForHint(k);
+      if (listed.ok) {
+        if (listed.applications.length === 0) {
+          extra =
+            ' По этому API Key в аккаунте нет ни одного Call Control Application — создайте приложение в Mission Control (Voice → Call Control Applications) и укажите его ID.';
+        } else {
+          const parts = listed.applications.slice(0, 12).map((a) =>
+            a.application_name ? `${a.id} («${a.application_name}»)` : a.id
+          );
+          const tail =
+            listed.applications.length > 12
+              ? ` … (+${listed.applications.length - 12} ещё)`
+              : '';
+          extra = ` По этому ключу API Telnyx видит приложения: ${parts.join(', ')}${tail}. Вставьте в CRM один из этих ID (возможно, был указан неверный или устаревший).`;
+        }
+      }
       return {
         ok: false,
-        error:
-          'Call Control Application с таким ID не найден (404). Проверьте: 1) ID скопирован из Voice → Call Control Applications (столбец ID), не из Phone Numbers / TeXML / SIP. 2) Тот же Telnyx-аккаунт, что и API Key в CRM (ключ из другого аккаунта не увидит приложение). 3) Можно вставить целиком URL страницы приложения в Mission Control — сервер извлечёт ID.',
+        error: base + (extra ? ` ${extra}` : ''),
         httpStatus: 404
       };
     }
