@@ -18,6 +18,13 @@ function flattenHeaders(
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   const jsonHeaders = { 'Content-Type': 'application/json' };
+  const rawHeaders = flattenHeaders(event.headers);
+  const isTwilioWebhook = !!(
+    rawHeaders['x-twilio-signature'] ||
+    rawHeaders['X-Twilio-Signature'] ||
+    (event.body ?? '').includes('CallSid=')
+  );
+  const twilioAck = (): HandlerResponse => ({ statusCode: 204, headers: { 'Content-Type': 'text/plain' }, body: '' });
 
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: { ...jsonHeaders, 'Access-Control-Allow-Origin': '*' }, body: '' };
@@ -28,7 +35,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
   try {
     const config = loadVoiceProviderRuntimeConfig();
-    const headers = flattenHeaders(event.headers);
+    const headers = rawHeaders;
 
     /** Twilio проверяет X-Twilio-Signature в адаптере; общий VOICE_WEBHOOK_SECRET — для mock/прочего. */
     if (config.mode !== 'twilio' && config.webhookSecret) {
@@ -41,15 +48,22 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       }
     }
 
-    const isTwilioWebhook = !!(
-      headers['x-twilio-signature'] ||
-      headers['X-Twilio-Signature'] ||
-      (event.body ?? '').includes('CallSid=')
-    );
     let adapter;
     try {
       adapter = isTwilioWebhook ? new TwilioVoiceProvider(config) : getVoiceProviderAdapter(config);
     } catch (e) {
+      if (isTwilioWebhook) {
+        console.log(
+          JSON.stringify({
+            tag: 'voice.webhook.response',
+            provider: 'twilio',
+            statusCode: 204,
+            swallowedError: String(e),
+            reason: 'adapter_init_failed'
+          })
+        );
+        return twilioAck();
+      }
       return {
         statusCode: 501,
         headers: jsonHeaders,
@@ -72,7 +86,31 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         return { statusCode: 401, headers: jsonHeaders, body: JSON.stringify({ error: 'Mock webhook secret mismatch' }) };
       }
       if (msg.includes('Twilio:') && (msg.includes('подпись') || msg.includes('X-Twilio-Signature'))) {
+        if (isTwilioWebhook) {
+          console.log(
+            JSON.stringify({
+              tag: 'voice.webhook.response',
+              provider: 'twilio',
+              statusCode: 204,
+              swallowedError: msg,
+              reason: 'signature_validation_failed'
+            })
+          );
+          return twilioAck();
+        }
         return { statusCode: 403, headers: jsonHeaders, body: JSON.stringify({ error: msg }) };
+      }
+      if (isTwilioWebhook) {
+        console.log(
+          JSON.stringify({
+            tag: 'voice.webhook.response',
+            provider: 'twilio',
+            statusCode: 204,
+            swallowedError: msg,
+            reason: 'handle_webhook_failed'
+          })
+        );
+        return twilioAck();
       }
       throw e;
     }
@@ -100,6 +138,18 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     );
     return response;
   } catch (e) {
+    if (isTwilioWebhook) {
+      console.log(
+        JSON.stringify({
+          tag: 'voice.webhook.response',
+          provider: 'twilio',
+          statusCode: 204,
+          swallowedError: String(e),
+          reason: 'outer_catch'
+        })
+      );
+      return twilioAck();
+    }
     console.log(
       JSON.stringify({
         tag: 'voice.webhook.response',
