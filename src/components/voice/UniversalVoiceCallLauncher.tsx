@@ -231,7 +231,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         if (s === 'dialing' || s === 'ringing') {
           if (!progressAnnouncedRef.current) {
             progressAnnouncedRef.current = true;
-            toast('Провайдер принял звонок. Идёт вызов…');
+            toast('Звонок инициирован, устанавливается соединение…');
           }
         }
         if (s === 'in_progress') {

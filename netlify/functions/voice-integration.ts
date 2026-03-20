@@ -13,6 +13,7 @@ import {
 } from './lib/firebaseAdmin';
 import { Timestamp } from 'firebase-admin/firestore';
 import { probeTelnyxApiKey } from './lib/voice/providers/telnyxVoiceProvider';
+import { voiceFriendlyMessageRu } from './lib/voice/voiceProviderFriendlyCodes';
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -82,13 +83,33 @@ async function buildTelnyxReadinessSnapshot(
     readinessMessages.push('Не выбран исходящий номер Telnyx по умолчанию.');
   }
 
-  const voiceReady =
-    hasKey && hasPub && enabled && connected && hasConnId && num.hasDefaultOutbound;
+  const webhookErr = row?.telnyxWebhookLastErrorCode ?? null;
+  const webhookBlocksReady =
+    webhookErr === 'provider_webhook_signature_invalid' ||
+    webhookErr === 'provider_public_key_missing' ||
+    webhookErr === 'provider_webhook_error';
+  if (webhookErr && webhookBlocksReady) {
+    readinessMessages.unshift(voiceFriendlyMessageRu(webhookErr));
+  }
 
-  const blockingReason: string | null = voiceReady ? null : readinessMessages[0] ?? 'Интеграция Telnyx не готова к исходящим звонкам.';
+  const voiceReady =
+    hasKey &&
+    hasPub &&
+    enabled &&
+    connected &&
+    hasConnId &&
+    num.hasDefaultOutbound &&
+    !webhookBlocksReady;
+
+  const blockingReason: string | null = voiceReady
+    ? null
+    : webhookBlocksReady && webhookErr
+      ? voiceFriendlyMessageRu(webhookErr)
+      : readinessMessages[0] ?? 'Интеграция Telnyx не готова к исходящим звонкам.';
 
   const lastSyncedAt = row?.telnyxLastSyncedAt?.toDate?.()?.toISOString?.() ?? null;
   const lastCheckedAt = row?.telnyxLastCheckedAt?.toDate?.()?.toISOString?.() ?? null;
+  const webhookLastErrorAt = row?.telnyxWebhookLastErrorAt?.toDate?.()?.toISOString?.() ?? null;
 
   return {
     provider: 'telnyx',
@@ -108,6 +129,10 @@ async function buildTelnyxReadinessSnapshot(
     blockingReason,
     lastCheckedAt,
     lastSyncedAt,
+    /** Последняя зафиксированная ошибка webhook (код нормализованный). */
+    providerWebhookLastErrorCode: webhookErr,
+    providerWebhookLastErrorAt: webhookLastErrorAt,
+    webhookSignatureOk: !webhookBlocksReady,
     outboundVoiceProvider: row?.outboundVoiceProvider ?? 'twilio'
   };
 }
@@ -220,7 +245,10 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       await mergeVoiceIntegrationTelnyx(companyId, {
         telnyxConnectionStatus: 'connected',
         telnyxConnectionError: null,
-        telnyxLastCheckedAt: Timestamp.now()
+        telnyxLastCheckedAt: Timestamp.now(),
+        telnyxWebhookLastErrorCode: null,
+        telnyxWebhookLastErrorAt: null,
+        telnyxWebhookLastErrorDetail: null
       });
       return json(200, {
         ok: true,
@@ -252,6 +280,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       telnyxConnectionStatus: 'connected',
       telnyxConnectionError: null,
       telnyxLastCheckedAt: Timestamp.now(),
+      telnyxWebhookLastErrorCode: null,
+      telnyxWebhookLastErrorAt: null,
+      telnyxWebhookLastErrorDetail: null,
       ...(connectionId !== undefined ? { telnyxConnectionId: connectionId } : {}),
       ...(body.outboundVoiceProvider === 'twilio' || body.outboundVoiceProvider === 'telnyx'
         ? { outboundVoiceProvider: body.outboundVoiceProvider }

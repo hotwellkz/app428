@@ -16,6 +16,16 @@ import type {
 
 const PROVIDER_ID = 'telnyx';
 
+/** Ошибка проверки Ed25519-подписи входящего webhook Telnyx (обрабатывается в voice-provider-webhook). */
+export class TelnyxWebhookSignatureError extends Error {
+  readonly code = 'provider_webhook_signature_invalid' as const;
+
+  constructor(public readonly verifyReason: string) {
+    super(`Telnyx webhook signature invalid (${verifyReason})`);
+    this.name = 'TelnyxWebhookSignatureError';
+  }
+}
+
 function truthyEnv(key: string): boolean {
   const v = process.env[key];
   return v === '1' || v === 'true' || v === 'yes';
@@ -449,7 +459,7 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
         signatureHeaderB64: headerCi(input.headers, 'telnyx-signature-ed25519')
       });
       if (!v.ok) {
-        throw new Error(`Telnyx: неверная подпись webhook (${v.reason})`);
+        throw new TelnyxWebhookSignatureError(v.reason);
       }
     }
 

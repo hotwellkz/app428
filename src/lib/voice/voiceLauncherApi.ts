@@ -39,6 +39,9 @@ export type TelnyxVoiceIntegrationSnapshot = {
   blockingReason?: string | null;
   lastCheckedAt?: string | null;
   lastSyncedAt?: string | null;
+  providerWebhookLastErrorCode?: string | null;
+  providerWebhookLastErrorAt?: string | null;
+  webhookSignatureOk?: boolean;
 };
 
 /** Ответ GET voice-integration (серверный контракт). */

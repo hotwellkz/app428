@@ -69,6 +69,9 @@ interface TelnyxVoiceState {
   blockingReason: string | null;
   lastCheckedAt: string | null;
   lastSyncedAt: string | null;
+  providerWebhookLastErrorCode: string | null;
+  providerWebhookLastErrorAt: string | null;
+  webhookSignatureOk: boolean;
 }
 
 export const IntegrationsSettings: React.FC = () => {
@@ -167,7 +170,10 @@ export const IntegrationsSettings: React.FC = () => {
     readinessMessages: [],
     blockingReason: null,
     lastCheckedAt: null,
-    lastSyncedAt: null
+    lastSyncedAt: null,
+    providerWebhookLastErrorCode: null,
+    providerWebhookLastErrorAt: null,
+    webhookSignatureOk: true
   });
   const [telnyxForm, setTelnyxForm] = useState({
     apiKey: '',
@@ -385,7 +391,10 @@ export const IntegrationsSettings: React.FC = () => {
           : [],
         blockingReason: (telnyxData.blockingReason as string) ?? null,
         lastCheckedAt: (telnyxData.lastCheckedAt as string) ?? null,
-        lastSyncedAt: (telnyxData.lastSyncedAt as string) ?? null
+        lastSyncedAt: (telnyxData.lastSyncedAt as string) ?? null,
+        providerWebhookLastErrorCode: (telnyxData.providerWebhookLastErrorCode as string) ?? null,
+        providerWebhookLastErrorAt: (telnyxData.providerWebhookLastErrorAt as string) ?? null,
+        webhookSignatureOk: telnyxData.webhookSignatureOk !== false
       });
       setTelnyxNumbers(
         (telnyxNums.items ?? []).map((x) => ({
@@ -1531,6 +1540,15 @@ export const IntegrationsSettings: React.FC = () => {
                 >
                   Numbers: {telnyxState.hasAnyNumbers ? 'in CRM' : 'none'}
                 </span>
+                <span
+                  className={`px-2 py-1 rounded-full border ${
+                    telnyxState.webhookSignatureOk
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                  }`}
+                >
+                  Webhook: {telnyxState.webhookSignatureOk ? 'OK' : 'issue'}
+                </span>
               </div>
               {(telnyxState.lastCheckedAt || telnyxState.lastSyncedAt) && (
                 <p className="text-[11px] text-gray-500">
@@ -1545,6 +1563,15 @@ export const IntegrationsSettings: React.FC = () => {
                     <li key={m}>{m}</li>
                   ))}
                 </ul>
+              ) : null}
+              {telnyxState.providerWebhookLastErrorCode ? (
+                <div className="text-xs rounded-lg border border-rose-100 bg-rose-50/90 px-3 py-2 text-rose-900 space-y-0.5">
+                  <p className="font-medium">Последняя ошибка webhook</p>
+                  <p className="font-mono text-[11px]">{telnyxState.providerWebhookLastErrorCode}</p>
+                  {telnyxState.providerWebhookLastErrorAt ? (
+                    <p className="text-rose-800/90">{new Date(telnyxState.providerWebhookLastErrorAt).toLocaleString()}</p>
+                  ) : null}
+                </div>
               ) : null}
               {telnyxState.apiKeyMasked ? (
                 <p className="text-xs text-gray-600">API Key сохранён ({telnyxState.apiKeyMasked})</p>

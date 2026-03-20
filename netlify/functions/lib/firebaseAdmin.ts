@@ -53,6 +53,11 @@ export interface VoiceIntegrationRow {
   telnyxLastCheckedAt?: Timestamp | null;
   /** Последняя успешная синхронизация номеров Telnyx из API. */
   telnyxLastSyncedAt?: Timestamp | null;
+  /** Последняя ошибка webhook Telnyx (например неверная подпись) — для readiness/diagnostics. */
+  telnyxWebhookLastErrorCode?: string | null;
+  telnyxWebhookLastErrorAt?: Timestamp | null;
+  /** Внутренняя причина (verify reason), не для показа пользователю как есть. */
+  telnyxWebhookLastErrorDetail?: string | null;
 }
 
 function maskRight4(value: string): string {
@@ -96,7 +101,10 @@ export async function getVoiceIntegration(companyId: string): Promise<VoiceInteg
     telnyxConnectionStatus: (d.telnyxConnectionStatus as VoiceTelnyxConnectionStatus) ?? 'not_connected',
     telnyxConnectionError: (d.telnyxConnectionError as string) ?? null,
     telnyxLastCheckedAt: (d.telnyxLastCheckedAt as Timestamp) ?? null,
-    telnyxLastSyncedAt: (d.telnyxLastSyncedAt as Timestamp) ?? null
+    telnyxLastSyncedAt: (d.telnyxLastSyncedAt as Timestamp) ?? null,
+    telnyxWebhookLastErrorCode: (d.telnyxWebhookLastErrorCode as string) ?? null,
+    telnyxWebhookLastErrorAt: (d.telnyxWebhookLastErrorAt as Timestamp) ?? null,
+    telnyxWebhookLastErrorDetail: (d.telnyxWebhookLastErrorDetail as string) ?? null
   };
 }
 
@@ -171,6 +179,9 @@ export async function mergeVoiceIntegrationTelnyx(
     telnyxConnectionError?: string | null;
     telnyxLastCheckedAt?: Timestamp | null;
     telnyxLastSyncedAt?: Timestamp | null;
+    telnyxWebhookLastErrorCode?: string | null;
+    telnyxWebhookLastErrorAt?: Timestamp | null;
+    telnyxWebhookLastErrorDetail?: string | null;
     outboundVoiceProvider?: VoiceOutboundProviderPreference;
   }
 ): Promise<void> {
@@ -184,6 +195,9 @@ export async function mergeVoiceIntegrationTelnyx(
   if (data.telnyxConnectionError !== undefined) payload.telnyxConnectionError = data.telnyxConnectionError;
   if (data.telnyxLastCheckedAt !== undefined) payload.telnyxLastCheckedAt = data.telnyxLastCheckedAt;
   if (data.telnyxLastSyncedAt !== undefined) payload.telnyxLastSyncedAt = data.telnyxLastSyncedAt;
+  if (data.telnyxWebhookLastErrorCode !== undefined) payload.telnyxWebhookLastErrorCode = data.telnyxWebhookLastErrorCode;
+  if (data.telnyxWebhookLastErrorAt !== undefined) payload.telnyxWebhookLastErrorAt = data.telnyxWebhookLastErrorAt;
+  if (data.telnyxWebhookLastErrorDetail !== undefined) payload.telnyxWebhookLastErrorDetail = data.telnyxWebhookLastErrorDetail;
   if (data.telnyxConnectionId !== undefined) payload.telnyxConnectionId = data.telnyxConnectionId;
   if (data.outboundVoiceProvider !== undefined) payload.outboundVoiceProvider = data.outboundVoiceProvider;
   if (data.telnyxApiKey !== undefined) {

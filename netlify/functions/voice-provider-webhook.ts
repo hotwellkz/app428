@@ -1,9 +1,13 @@
 import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
+import { Timestamp } from 'firebase-admin/firestore';
+import { mergeVoiceIntegrationTelnyx } from './lib/firebaseAdmin';
 import { loadVoiceProviderRuntimeConfig } from './lib/voice/providerConfig';
 import { getVoiceProviderAdapter } from './lib/voice/voiceProviderAdapter';
 import { ingestNormalizedVoiceEvents } from './lib/voice/voiceWebhookIngest';
+import { voiceFriendlyMessageRu } from './lib/voice/voiceProviderFriendlyCodes';
+import { adminUpdateVoiceCallSession } from './lib/voice/voiceFirestoreAdmin';
 import { TwilioVoiceProvider } from './lib/voice/providers/twilioVoiceProvider';
-import { TelnyxVoiceProvider } from './lib/voice/providers/telnyxVoiceProvider';
+import { TelnyxVoiceProvider, TelnyxWebhookSignatureError } from './lib/voice/providers/telnyxVoiceProvider';
 
 function flattenHeaders(
   raw: HandlerEvent['headers'] | HandlerEvent['multiValueHeaders']
@@ -106,18 +110,88 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         requestUrl: event.rawUrl,
         config
       });
+      if (isTelnyxWebhook) {
+        const cid = String(event.queryStringParameters?.companyId ?? '').trim();
+        if (cid) {
+          await mergeVoiceIntegrationTelnyx(cid, {
+            telnyxWebhookLastErrorCode: null,
+            telnyxWebhookLastErrorAt: null,
+            telnyxWebhookLastErrorDetail: null
+          });
+        }
+      }
     } catch (e) {
-      const msg = String(e);
-      if (isTelnyxWebhook && msg.includes('Telnyx:')) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (isTelnyxWebhook && e instanceof TelnyxWebhookSignatureError) {
+        const companyId = String(event.queryStringParameters?.companyId ?? '').trim();
+        const callId = String(event.queryStringParameters?.callId ?? '').trim();
+        const verifyReason = e.verifyReason;
+        if (companyId) {
+          await mergeVoiceIntegrationTelnyx(companyId, {
+            telnyxWebhookLastErrorCode: 'provider_webhook_signature_invalid',
+            telnyxWebhookLastErrorAt: Timestamp.now(),
+            telnyxWebhookLastErrorDetail: verifyReason
+          });
+        }
+        if (companyId && callId) {
+          try {
+            await adminUpdateVoiceCallSession(companyId, callId, {
+              providerFailureCode: 'provider_webhook_signature_invalid',
+              providerFailureReason: 'webhook_signature_invalid'
+            });
+          } catch {
+            /* сессия ещё не создана или другой callId */
+          }
+        }
         console.log(
           JSON.stringify({
             tag: 'voice.webhook.response',
             provider: 'telnyx',
             statusCode: 403,
+            code: 'provider_webhook_signature_invalid',
+            verifyReason
+          })
+        );
+        return {
+          statusCode: 403,
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            ok: false,
+            code: 'provider_webhook_signature_invalid',
+            message: voiceFriendlyMessageRu('provider_webhook_signature_invalid'),
+            providerDebug: { verifyReason }
+          })
+        };
+      }
+      if (isTelnyxWebhook && msg.includes('Telnyx:')) {
+        const companyId = String(event.queryStringParameters?.companyId ?? '').trim();
+        const code = msg.includes('Public Key') ? 'provider_public_key_missing' : 'provider_webhook_error';
+        if (companyId) {
+          await mergeVoiceIntegrationTelnyx(companyId, {
+            telnyxWebhookLastErrorCode: code,
+            telnyxWebhookLastErrorAt: Timestamp.now(),
+            telnyxWebhookLastErrorDetail: msg.slice(0, 200)
+          });
+        }
+        console.log(
+          JSON.stringify({
+            tag: 'voice.webhook.response',
+            provider: 'telnyx',
+            statusCode: 403,
+            code,
             error: msg
           })
         );
-        return { statusCode: 403, headers: jsonHeaders, body: JSON.stringify({ error: msg }) };
+        return {
+          statusCode: 403,
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            ok: false,
+            code,
+            message: voiceFriendlyMessageRu(code),
+            providerDebug: { detail: msg.slice(0, 300) }
+          })
+        };
       }
       if (msg.includes('mock webhook secret')) {
         return { statusCode: 401, headers: jsonHeaders, body: JSON.stringify({ error: 'Mock webhook secret mismatch' }) };
