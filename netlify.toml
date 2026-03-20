@@ -146,6 +146,18 @@
   force = true
 
 [[redirects]]
+  from = "/api/voice/outbound-call"
+  to = "/.netlify/functions/voice-outbound-call"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/voice/provider-webhook"
+  to = "/.netlify/functions/voice-provider-webhook"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

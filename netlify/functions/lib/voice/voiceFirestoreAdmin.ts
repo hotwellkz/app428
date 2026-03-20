@@ -152,3 +152,76 @@ export async function adminUpsertVoiceNumber(
     { merge: true }
   );
 }
+
+/** Одна сессия по providerCallId (P0: глобально уникальный id от провайдера). */
+export async function adminFindVoiceSessionByProviderCallId(
+  providerCallId: string
+): Promise<(Record<string, unknown> & { id: string }) | null> {
+  if (!providerCallId.trim()) return null;
+  const db = getDb();
+  const q = await db
+    .collection(VOICE_CALL_SESSIONS_COLLECTION)
+    .where('providerCallId', '==', providerCallId)
+    .limit(1)
+    .get();
+  if (q.empty) return null;
+  const d = q.docs[0];
+  return { id: d.id, ...d.data() };
+}
+
+export async function adminGetDefaultVoiceNumberForCompany(
+  companyId: string
+): Promise<{ id: string; e164: string; data: Record<string, unknown> } | null> {
+  const db = getDb();
+  const q = await db
+    .collection(VOICE_NUMBERS_COLLECTION)
+    .where('companyId', '==', companyId)
+    .where('isDefault', '==', true)
+    .limit(1)
+    .get();
+  if (q.empty) return null;
+  const d = q.docs[0];
+  const e164 = String(d.data()?.e164 ?? '').trim();
+  if (!e164) return null;
+  return { id: d.id, e164, data: d.data() };
+}
+
+export async function adminGetVoiceNumberForCompany(
+  companyId: string,
+  numberId: string
+): Promise<{ id: string; e164: string; data: Record<string, unknown> } | null> {
+  const db = getDb();
+  const snap = await db.collection(VOICE_NUMBERS_COLLECTION).doc(numberId).get();
+  if (!snap.exists) return null;
+  const d = snap.data()!;
+  if (String(d.companyId) !== companyId) return null;
+  const e164 = String(d.e164 ?? '').trim();
+  if (!e164) return null;
+  return { id: snap.id, e164, data: d };
+}
+
+/**
+ * Запись события с фиксированным id документа (идемпотентность webhook).
+ * @returns true если документ создан, false если уже был.
+ */
+export async function adminCreateVoiceCallEventIfAbsent(
+  companyId: string,
+  callId: string,
+  eventDocId: string,
+  eventRow: Record<string, unknown>
+): Promise<boolean> {
+  const db = getDb();
+  await assertSessionCompany(db, companyId, callId);
+  const ref = db
+    .collection(VOICE_CALL_SESSIONS_COLLECTION)
+    .doc(callId)
+    .collection(VOICE_CALL_EVENTS_SUBCOLLECTION)
+    .doc(eventDocId);
+  const snap = await ref.get();
+  if (snap.exists) return false;
+  await ref.set({
+    ...eventRow,
+    createdAt: FieldValue.serverTimestamp()
+  });
+  return true;
+}

@@ -123,3 +123,28 @@ export type VoiceCallSessionCreateInput = Omit<VoiceCallSession, 'id' | 'created
 export type VoiceCallSessionUpdateInput = Partial<
   Omit<VoiceCallSession, 'id' | 'companyId' | 'linkedRunId' | 'createdAt'>
 > & { updatedAt?: VoiceCallSession['updatedAt'] };
+
+/** Нормализованные события lifecycle (server / webhook), не привязаны к payload провайдера. */
+export type VoiceNormalizedEventType =
+  | 'enqueue'
+  | 'provider.accepted'
+  | 'provider.ringing'
+  | 'provider.answered'
+  | 'provider.completed'
+  | 'provider.failed'
+  | 'provider.busy'
+  | 'provider.no_answer'
+  | 'user.cancel'
+  | 'provider.unknown';
+
+export interface VoiceNormalizedWebhookEvent {
+  type: VoiceNormalizedEventType;
+  providerCallId: string;
+  /** ISO 8601 */
+  occurredAt: string;
+  durationSec?: number | null;
+  cause?: string | null;
+  /** Короткий отпечаток сырого payload для отладки */
+  rawDigest?: string | null;
+  providerEventType?: string | null;
+}
