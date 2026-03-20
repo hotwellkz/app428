@@ -117,6 +117,7 @@ function derivePriority(
     run.taskRecommendationStatus === 'recommended' && run.taskCreateStatus !== 'created',
     presentation.requiresAttention && status === 'new' && !hasAssignee,
     isVoice && voiceSnap?.postCallStatus === 'failed',
+    isVoice && voiceSnap?.voiceFailureReasonCode === 'telecom_route_uncertain',
     isVoice && voiceRetry?.retryStatus === 'exhausted',
     isVoice && voiceQa?.status === 'failed',
     isVoice && voiceQa?.status === 'done' && !qaReviewed && (voiceQa.band === 'bad' || voiceQa.needsReview)
@@ -128,6 +129,9 @@ function derivePriority(
     if (run.taskRecommendationStatus === 'recommended' && run.taskCreateStatus !== 'created') reasons.push('задача рекомендована, но не создана');
     if (presentation.requiresAttention && status === 'new' && !hasAssignee) reasons.push('новый проблемный кейс без ответственного');
     if (isVoice && voiceSnap?.postCallStatus === 'failed') reasons.push('Голос: post-call failed');
+    if (isVoice && voiceSnap?.voiceFailureReasonCode === 'telecom_route_uncertain') {
+      reasons.push('Голос: telecom route uncertain');
+    }
     if (isVoice && voiceRetry?.retryStatus === 'exhausted') reasons.push('Голос: retry exhausted');
     if (isVoice && voiceQa?.status === 'failed') reasons.push('Голос: QA pipeline failed');
     if (isVoice && voiceQa?.status === 'done' && !qaReviewed && voiceQa.band === 'bad') {

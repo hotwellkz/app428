@@ -27,7 +27,8 @@ type Body = {
     | 'accept_issue'
     | 'save_review_note'
     | 'set_disposition'
-    | 'set_improvement_markers';
+    | 'set_improvement_markers'
+    | 'mark_need_alt_provider';
   runId?: string;
   force?: boolean;
   callbackAt?: string;
@@ -48,6 +49,7 @@ type Body = {
   needsOpsFix?: boolean;
   needsRetryTuning?: boolean;
   needsHumanFollowup?: boolean;
+  note?: string | null;
 };
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
@@ -241,6 +243,27 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         statusCode: 200,
         headers: { ...CORS, 'Content-Type': 'application/json' },
         body: JSON.stringify({ ok: true, skipped: out.skipped ?? false })
+      };
+    }
+
+    if (action === 'mark_need_alt_provider') {
+      const note = String(body.note ?? '').trim();
+      const prevVoiceOps = (ex.voiceOps as Record<string, unknown> | undefined) ?? {};
+      const nextExtras = {
+        ...ex,
+        voiceOps: {
+          ...prevVoiceOps,
+          needAlternativeProvider: true,
+          note: note || 'Отмечено вручную: нужен другой voice-провайдер',
+          markedAt: new Date().toISOString(),
+          markedByUid: uid
+        }
+      };
+      await runRef.set({ extras: nextExtras, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      return {
+        statusCode: 200,
+        headers: { ...CORS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: true })
       };
     }
 

@@ -60,6 +60,17 @@ function voiceIssueMatches(
       return vs?.postCallStatus === 'failed';
     case 'no_answer_busy':
       return vs?.callStatus === 'no_answer' || vs?.callStatus === 'busy';
+    case 'voice_busy':
+      return vs?.callStatus === 'busy';
+    case 'voice_no_answer':
+      return vs?.callStatus === 'no_answer';
+    case 'voice_failed':
+      return vs?.callStatus === 'failed';
+    case 'voice_telecom_route_uncertain':
+      return (
+        vs?.voiceFailureReasonCode === 'telecom_route_uncertain' ||
+        vs?.voiceFailureReasonMessage?.toLowerCase().includes('маршрут') === true
+      );
     case 'outcome_unknown_empty':
       return (
         vs?.callStatus === 'completed' &&
@@ -426,6 +437,7 @@ function metricsFor(
   let voiceToday = 0,
     voiceCompleted = 0,
     voiceNoAnswerBusy = 0,
+    voiceTelecomRouteUncertain = 0,
     voicePostFailed = 0,
     voiceNeedAttention = 0,
     voiceRetryScheduled = 0,
@@ -449,6 +461,7 @@ function metricsFor(
       const vs = getVoiceCallSnapshotFromRun(r);
       if (vs?.callStatus === 'completed') voiceCompleted++;
       if (vs?.callStatus === 'no_answer' || vs?.callStatus === 'busy') voiceNoAnswerBusy++;
+      if (vs?.voiceFailureReasonCode === 'telecom_route_uncertain') voiceTelecomRouteUncertain++;
       if (vs?.postCallStatus === 'failed') voicePostFailed++;
       const pr = deriveAiRunListPresentation(r, agg[r.id] ?? 'skipped');
       if (pr.requiresAttention) voiceNeedAttention++;
@@ -510,6 +523,7 @@ function metricsFor(
     voiceToday,
     voiceCompleted,
     voiceNoAnswerBusy,
+    voiceTelecomRouteUncertain,
     voicePostFailed,
     voiceNeedAttention,
     voiceRetryScheduled,
@@ -716,6 +730,7 @@ export const AiControlPage: React.FC = () => {
           { k: 'Voice сегодня', v: metrics.voiceToday },
           { k: 'Voice completed', v: metrics.voiceCompleted },
           { k: 'Voice занят/нет ответа', v: metrics.voiceNoAnswerBusy },
+          { k: 'Voice telecom route', v: metrics.voiceTelecomRouteUncertain },
           { k: 'Voice post-call failed', v: metrics.voicePostFailed },
           { k: 'Voice внимание', v: metrics.voiceNeedAttention },
           { k: 'Retry scheduled', v: metrics.voiceRetryScheduled },

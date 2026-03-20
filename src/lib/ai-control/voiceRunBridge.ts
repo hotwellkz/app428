@@ -21,6 +21,12 @@ export type VoiceCallSnapshotForAiRun = {
   twilioWarningCode?: number | null;
   twilioWarningMessage?: string | null;
   twilioProviderReason?: string | null;
+  voiceFailureReasonCode?: string | null;
+  voiceFailureReasonMessage?: string | null;
+  durationSec?: number | null;
+  hadInProgress?: boolean | null;
+  callbackTimeline?: Array<Record<string, unknown>> | null;
+  lifecycle?: Record<string, unknown> | null;
 };
 
 export function getVoicePostCallFromRun(run: WhatsAppAiBotRunRecord): VoicePostCallResultMetadata | null {
@@ -54,7 +60,13 @@ export function getVoiceCallSnapshotFromRun(run: WhatsAppAiBotRunRecord): VoiceC
     twilioErrorMessage: o.twilioErrorMessage != null ? String(o.twilioErrorMessage) : null,
     twilioWarningCode: num(o.twilioWarningCode),
     twilioWarningMessage: o.twilioWarningMessage != null ? String(o.twilioWarningMessage) : null,
-    twilioProviderReason: o.twilioProviderReason != null ? String(o.twilioProviderReason) : null
+    twilioProviderReason: o.twilioProviderReason != null ? String(o.twilioProviderReason) : null,
+    voiceFailureReasonCode: o.voiceFailureReasonCode != null ? String(o.voiceFailureReasonCode) : null,
+    voiceFailureReasonMessage: o.voiceFailureReasonMessage != null ? String(o.voiceFailureReasonMessage) : null,
+    durationSec: num(o.durationSec),
+    hadInProgress: o.hadInProgress === true ? true : o.hadInProgress === false ? false : null,
+    callbackTimeline: Array.isArray(o.callbackTimeline) ? (o.callbackTimeline as Array<Record<string, unknown>>) : null,
+    lifecycle: o.lifecycle && typeof o.lifecycle === 'object' ? (o.lifecycle as Record<string, unknown>) : null
   };
 }
 
@@ -136,6 +148,7 @@ export function formatVoiceRunStatusLine(run: WhatsAppAiBotRunRecord): string {
   if (snap?.outcome) parts.push(`outcome:${snap.outcome}`);
   if (snap?.postCallStatus) parts.push(`post:${snap.postCallStatus}`);
   else if (vp?.lightweight) parts.push('post:light');
+  if (snap?.voiceFailureReasonCode) parts.push(`reason:${snap.voiceFailureReasonCode}`);
   if (snap?.followUpStatus && snap.followUpStatus !== 'skipped') parts.push(`WA:${snap.followUpStatus}`);
   const qa = getVoiceQaFromRun(run);
   if (qa?.status === 'done') {

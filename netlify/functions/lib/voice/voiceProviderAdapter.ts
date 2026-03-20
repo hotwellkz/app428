@@ -5,6 +5,13 @@ import { MockVoiceProvider } from './providers/mockVoiceProvider';
 import { TwilioVoiceProvider } from './providers/twilioVoiceProvider';
 import type { TwilioVoiceFriendlyCode } from './deriveTwilioVoiceFriendlyError';
 
+export type VoiceProviderCapabilities = {
+  providerId: string;
+  supportedCountries: string[];
+  localCallerIdSupported: boolean;
+  readiness: 'ready' | 'limited' | 'experimental';
+};
+
 export type CreateOutboundVoiceCallInput = {
   companyId: string;
   botId: string;
@@ -52,6 +59,7 @@ export interface VoiceProviderAdapter {
   handleWebhook(input: VoiceWebhookParseInput): Promise<VoiceNormalizedWebhookEvent[]>;
   getCall?(providerCallId: string): Promise<Record<string, unknown> | null>;
   hangup?(providerCallId: string): Promise<{ ok: boolean; error?: string }>;
+  getCapabilities?(): VoiceProviderCapabilities;
 }
 
 export function getVoiceProviderAdapter(config: VoiceProviderRuntimeConfig): VoiceProviderAdapter {

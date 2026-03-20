@@ -28,6 +28,10 @@ export type VoiceCallSnapshotForRunMerge = {
   twilioProviderReason?: string | null;
   voiceFailureReasonCode?: string | null;
   voiceFailureReasonMessage?: string | null;
+  durationSec?: number | null;
+  hadInProgress?: boolean | null;
+  callbackTimeline?: Array<Record<string, unknown>> | null;
+  lifecycle?: Record<string, unknown> | null;
 };
 
 export async function mergeVoicePostCallIntoLinkedRun(params: {

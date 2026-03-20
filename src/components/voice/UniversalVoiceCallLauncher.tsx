@@ -222,7 +222,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         }
       });
       setLastCallId(out.callId);
-      toast('Звонок отправлен провайдеру. Ожидаем статус дозвона…', { duration: 5000 });
+      toast('Запрос на звонок отправлен провайдеру', { duration: 5000 });
     } catch (e) {
       if (e instanceof VoiceLaunchError) {
         const text = e.hint ? `${e.message}\n${e.hint}` : e.message;

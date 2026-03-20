@@ -3,6 +3,7 @@ import type { VoiceNormalizedWebhookEvent } from '../../../../../src/types/voice
 import type {
   CreateOutboundVoiceCallInput,
   CreateOutboundVoiceCallResult,
+  VoiceProviderCapabilities,
   VoiceProviderAdapter,
   VoiceWebhookParseInput
 } from '../voiceProviderAdapter';
@@ -110,6 +111,15 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
 
   constructor(config: VoiceProviderRuntimeConfig) {
     this.config = config;
+  }
+
+  getCapabilities(): VoiceProviderCapabilities {
+    return {
+      providerId: this.providerId,
+      supportedCountries: ['KZ', 'RU', 'US', 'DE', 'AE'],
+      localCallerIdSupported: false,
+      readiness: 'limited'
+    };
   }
 
   async createOutboundCall(input: CreateOutboundVoiceCallInput): Promise<CreateOutboundVoiceCallResult> {

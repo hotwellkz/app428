@@ -45,6 +45,8 @@ export function deriveVoiceFailureReason(params: {
   twilioWarningCode: number | null;
   twilioWarningMessage: string | null;
   toE164: string | null;
+  durationSec?: number | null;
+  hadInProgress?: boolean;
 }): VoiceFailureReasonResult | null {
   const {
     crmStatus,
@@ -54,7 +56,9 @@ export function deriveVoiceFailureReason(params: {
     twilioErrorMessage,
     twilioWarningCode,
     twilioWarningMessage,
-    toE164
+    toE164,
+    durationSec,
+    hadInProgress
   } = params;
 
   const err = (twilioErrorMessage ?? '').toLowerCase();
@@ -105,10 +109,14 @@ export function deriveVoiceFailureReason(params: {
   if (
     noTwilioErr &&
     /^\+7\d{10,}$/.test(to) &&
+    (durationSec ?? 0) === 0 &&
+    !hadInProgress &&
     (crmStatus === 'busy' ||
       crmStatus === 'no_answer' ||
+      crmStatus === 'failed' ||
       twilioCallStatus === 'busy' ||
-      twilioCallStatus === 'no-answer')
+      twilioCallStatus === 'no-answer' ||
+      twilioCallStatus === 'failed')
   ) {
     return {
       code: 'telecom_route_uncertain',

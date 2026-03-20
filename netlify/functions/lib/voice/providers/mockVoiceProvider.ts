@@ -3,6 +3,7 @@ import type { VoiceNormalizedWebhookEvent } from '../../../../../src/types/voice
 import type {
   CreateOutboundVoiceCallInput,
   CreateOutboundVoiceCallResult,
+  VoiceProviderCapabilities,
   VoiceProviderAdapter,
   VoiceWebhookParseInput
 } from '../voiceProviderAdapter';
@@ -19,6 +20,15 @@ function digest(s: string): string {
  */
 export class MockVoiceProvider implements VoiceProviderAdapter {
   readonly providerId = PROVIDER_ID;
+
+  getCapabilities(): VoiceProviderCapabilities {
+    return {
+      providerId: this.providerId,
+      supportedCountries: [],
+      localCallerIdSupported: false,
+      readiness: 'experimental'
+    };
+  }
 
   async createOutboundCall(input: CreateOutboundVoiceCallInput): Promise<CreateOutboundVoiceCallResult> {
     const providerCallId = `mock_${input.callId}_${digest(`${input.callId}:${input.toE164}:${Date.now()}`).slice(0, 12)}`;

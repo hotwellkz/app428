@@ -10,6 +10,7 @@ import {
 import { buildVoiceProviderWebhookUrl, loadVoiceProviderRuntimeConfig } from './providerConfig';
 import { resolveVoiceProviderForCompany } from './voiceProviderAdapter';
 import { ingestNormalizedVoiceEvent } from './voiceWebhookIngest';
+import { mergeVoiceLifecycleIntoLinkedRun } from './updateVoiceRunResult';
 
 export type VoiceOutboundRequestBody = {
   botId: string;
@@ -275,6 +276,23 @@ export async function orchestrateVoiceOutbound(
         createTwilioStatus: adapterResult.raw?.status ?? null,
         createResponse: adapterResult.raw ?? null
       }
+    }
+  });
+  await mergeVoiceLifecycleIntoLinkedRun({
+    companyId,
+    linkedRunId,
+    voiceCallSnapshot: {
+      callStatus: 'dialing',
+      outcome: null,
+      postCallStatus: 'pending',
+      providerCallId: adapterResult.providerCallId,
+      provider: adapter.providerId,
+      fromE164,
+      toE164,
+      followUpStatus: null,
+      followUpError: null,
+      durationSec: 0,
+      hadInProgress: false
     }
   });
 

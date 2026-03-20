@@ -13,7 +13,8 @@ import {
   PlayCircle,
   Link2,
   Clock3,
-  Phone
+  Phone,
+  AlertTriangle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageMetadata } from '../components/PageMetadata';
@@ -58,6 +59,7 @@ import {
 } from '../lib/firebase/whatsappAiRunWorkflow';
 import type { AiRunWorkflowResolutionType, AiRunWorkflowStatus } from '../types/aiControl';
 import { auth } from '../lib/firebase/auth';
+import { getVoiceProviderCatalogItem } from '../lib/voice/providerCatalog';
 
 const CRM_CLIENTS = 'clients';
 const CRM_DEALS = 'deals';
@@ -401,6 +403,33 @@ export const AiControlRunDetailsPage: React.FC = () => {
   const runtimeMode = run.runtimeMode || run.mode || 'unknown';
   const phone = run.phoneSnapshot || client?.phone || voiceSession?.toE164 || '—';
   const runAny = run as unknown as Record<string, unknown>;
+  const voiceDebug = (voiceSession?.metadata?.voiceProviderDebug as Record<string, unknown> | undefined) ?? null;
+  const callbackTimeline = Array.isArray(voiceDebug?.callbackTimeline)
+    ? (voiceDebug?.callbackTimeline as Array<Record<string, unknown>>)
+    : Array.isArray(voiceSnap?.callbackTimeline)
+      ? (voiceSnap?.callbackTimeline as Array<Record<string, unknown>>)
+      : [];
+  const voiceFailureReasonCode = voiceSession?.voiceFailureReasonCode ?? voiceSnap?.voiceFailureReasonCode ?? null;
+  const voiceFailureReasonMessage = voiceSession?.voiceFailureReasonMessage ?? voiceSnap?.voiceFailureReasonMessage ?? null;
+  const providerCatalog = getVoiceProviderCatalogItem(voiceSession?.provider ?? voiceSnap?.provider ?? null);
+  const diagnosticPayload = useMemo(() => {
+    if (!isVoice) return null;
+    return {
+      runId: run.id,
+      callId: voiceSession?.id ?? getVoiceCallSessionIdFromRun(run) ?? null,
+      provider: voiceSession?.provider ?? voiceSnap?.provider ?? null,
+      providerCallId: voiceSession?.providerCallId ?? voiceSnap?.providerCallId ?? null,
+      from: voiceSession?.fromE164 ?? voiceSnap?.fromE164 ?? null,
+      to: voiceSession?.toE164 ?? voiceSnap?.toE164 ?? run.phoneSnapshot ?? null,
+      callStatus: voiceSession?.status ?? voiceSnap?.callStatus ?? null,
+      finalProviderStatus: voiceSession?.twilioFinalStatus ?? voiceSnap?.twilioFinalStatus ?? null,
+      durationSec: voiceSession?.durationSec ?? voiceSnap?.durationSec ?? null,
+      hadInProgress: voiceSnap?.hadInProgress ?? (voiceSession?.connectedAt ? true : null),
+      failureReasonCode: voiceFailureReasonCode,
+      failureReasonMessage: voiceFailureReasonMessage,
+      callbackTimeline
+    };
+  }, [isVoice, run, voiceSession, voiceSnap, callbackTimeline, voiceFailureReasonCode, voiceFailureReasonMessage]);
   const me = auth.currentUser;
   const meName = me?.displayName || me?.email || 'Пользователь';
 
@@ -736,12 +765,30 @@ export const AiControlRunDetailsPage: React.FC = () => {
               </div>
               <div>
                 <dt className="text-gray-500 text-xs">Провайдер</dt>
-                <dd>{voiceSession?.provider ?? voiceSnap?.provider ?? '—'}</dd>
+                <dd>
+                  {voiceSession?.provider ?? voiceSnap?.provider ?? '—'} · readiness: {providerCatalog.readiness}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Provider capabilities</dt>
+                <dd>
+                  countries: {providerCatalog.supportedCountries.join(', ') || '—'} · local caller ID:{' '}
+                  {providerCatalog.localCallerIdSupported ? 'yes' : 'no'}
+                </dd>
               </div>
               <div className="sm:col-span-2">
-                <dt className="text-gray-500 text-xs">providerCallId</dt>
+                <dt className="text-gray-500 text-xs">Provider Call SID</dt>
                 <dd className="font-mono text-xs break-all">{voiceSession?.providerCallId ?? voiceSnap?.providerCallId ?? '—'}</dd>
               </div>
+              {voiceFailureReasonCode === 'telecom_route_uncertain' ? (
+                <div className="sm:col-span-2">
+                  <dt className="text-gray-500 text-xs">Telecom</dt>
+                  <dd className="inline-flex items-center gap-1 text-[11px] text-amber-900 bg-amber-100 border border-amber-200 px-2 py-1 rounded">
+                    <AlertTriangle className="w-3 h-3" />
+                    Возможна проблема маршрута/оператора (telecom route uncertain)
+                  </dd>
+                </div>
+              ) : null}
               <div className="sm:col-span-2">
                 <dt className="text-gray-500 text-xs">Twilio diagnostic</dt>
                 <dd className="text-xs break-words">
@@ -781,7 +828,16 @@ export const AiControlRunDetailsPage: React.FC = () => {
               <div>
                 <dt className="text-gray-500 text-xs">Длительность</dt>
                 <dd>
-                  {voiceSession?.durationSec != null ? `${voiceSession.durationSec} с` : '—'}
+                  {(voiceSession?.durationSec ?? voiceSnap?.durationSec) != null
+                    ? `${voiceSession?.durationSec ?? voiceSnap?.durationSec} с`
+                    : '—'}
+                </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gray-500 text-xs">Failure reason</dt>
+                <dd>
+                  <span className="font-mono text-[11px]">{voiceFailureReasonCode ?? '—'}</span>
+                  {voiceFailureReasonMessage ? ` — ${voiceFailureReasonMessage}` : ''}
                 </dd>
               </div>
               <div>
@@ -793,6 +849,43 @@ export const AiControlRunDetailsPage: React.FC = () => {
                 <dd className="font-mono text-xs break-all">{voiceSession?.linkedRunId ?? run.id}</dd>
               </div>
             </dl>
+            <div className="mt-3 pt-3 border-t border-violet-200/80">
+              <p className="text-xs text-violet-900 mb-1">Lifecycle timeline</p>
+              {(() => {
+                const lifecycle =
+                  ((voiceDebug?.lifecycle as Record<string, unknown> | undefined) ??
+                    (voiceSnap?.lifecycle as Record<string, unknown> | undefined) ??
+                    {}) as Record<string, unknown>;
+                return (
+              <div className="space-y-1 text-xs text-violet-900/90">
+                <p>Created: {String(lifecycle.createdAt ?? '—')}</p>
+                <p>Connected: {String(lifecycle.connectedAt ?? '—')}</p>
+                <p>Ended: {String(lifecycle.endedAt ?? '—')}</p>
+                <p>Callbacks: {callbackTimeline.length}</p>
+              </div>
+                );
+              })()}
+              {callbackTimeline.length > 0 ? (
+                <div className="mt-2 max-h-32 overflow-auto rounded border border-violet-200 bg-white/70 p-2 text-[11px]">
+                  {callbackTimeline.map((x, i) => (
+                    <p key={`${String(x.at ?? i)}-${i}`} className="font-mono">
+                      {String(x.at ?? '—')} · {String(x.eventType ?? '—')} · provider:{String(x.providerCallStatus ?? '—')} ·
+                      crm:{String(x.crmStatusAfter ?? '—')}
+                    </p>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border text-sm bg-white"
+                onClick={() => diagnosticPayload && copyText('Диагностика', JSON.stringify(diagnosticPayload))}
+              >
+                <Copy className="w-4 h-4" />
+                Скопировать диагностику
+              </button>
+            </div>
           </section>
 
           <section className="rounded-xl border bg-white p-4 mb-4">
@@ -1111,6 +1204,14 @@ export const AiControlRunDetailsPage: React.FC = () => {
                 }}
               >
                 Назначить callback
+              </button>
+              <button
+                type="button"
+                disabled={voiceOpBusy || !can}
+                className="px-3 py-1.5 rounded-lg border text-sm bg-white text-amber-900 border-amber-300 disabled:opacity-50"
+                onClick={() => void voiceOperationalFetch({ action: 'mark_need_alt_provider', note: 'manual_tag_from_ai_control' })}
+              >
+                Нужен другой провайдер
               </button>
             </div>
           </section>

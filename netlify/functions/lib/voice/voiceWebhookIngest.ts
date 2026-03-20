@@ -85,6 +85,19 @@ function classifyProviderReason(status: string | null, sipCode: number | null, e
   return null;
 }
 
+function asIso(v: unknown): string | null {
+  if (typeof v === 'string' && v.trim()) return v.trim();
+  if (v instanceof Date && !Number.isNaN(v.getTime())) return v.toISOString();
+  if (v && typeof v === 'object' && 'toDate' in (v as { toDate?: unknown })) {
+    const toDate = (v as { toDate?: () => Date }).toDate;
+    if (typeof toDate === 'function') {
+      const d = toDate();
+      if (d instanceof Date && !Number.isNaN(d.getTime())) return d.toISOString();
+    }
+  }
+  return null;
+}
+
 export type IngestOneResult =
   | { ok: true; callId: string; deduped: boolean; sessionUpdated: boolean }
   | { ok: false; reason: string; providerCallId: string };
@@ -156,6 +169,35 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
 
   const prevMeta = ((sessionRow.metadata as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
   const prevDebug = (prevMeta.voiceProviderDebug as Record<string, unknown> | undefined) ?? {};
+  const prevTimeline = Array.isArray(prevDebug.callbackTimeline)
+    ? (prevDebug.callbackTimeline as unknown[])
+    : [];
+  const timelineItem: Record<string, unknown> = {
+    at: new Date().toISOString(),
+    eventType: ev.type,
+    providerCallStatus: twilioFinalStatus,
+    crmStatusAfter: applied.toStatus,
+    sip: twilioSipResponseCode,
+    errCode: twilioErrorCode,
+    warnCode: twilioWarningCode
+  };
+  const callbackTimeline = [...prevTimeline, timelineItem].slice(-20);
+  const hadInProgress =
+    currentStatus === 'in_progress' ||
+    applied.fromStatus === 'in_progress' ||
+    applied.toStatus === 'in_progress' ||
+    prevDebug.hadInProgress === true ||
+    !!asIso(sessionRow.connectedAt);
+  const effectiveDurationSec =
+    ev.durationSec ??
+    n(meta.callDuration) ??
+    n(sessionRow.durationSec) ??
+    (asIso(sessionRow.connectedAt) && asIso(sessionRow.endedAt)
+      ? Math.max(
+          0,
+          Math.floor((Date.parse(asIso(sessionRow.endedAt) ?? '') - Date.parse(asIso(sessionRow.connectedAt) ?? '')) / 1000)
+        )
+      : 0);
   const voiceProviderDebug: Record<string, unknown> = {
     ...prevDebug,
     lastStatus: twilioFinalStatus,
@@ -163,6 +205,14 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
     lastErrorCode: twilioErrorCode,
     lastErrorMessage: twilioErrorMessage,
     lastCallbackAt: new Date().toISOString(),
+    hadInProgress,
+    durationSec: effectiveDurationSec,
+    callbackTimeline,
+    lifecycle: {
+      createdAt: asIso(sessionRow.startedAt),
+      connectedAt: asIso(sessionRow.connectedAt) ?? (applied.toStatus === 'in_progress' ? new Date().toISOString() : null),
+      endedAt: asIso(sessionRow.endedAt) ?? (terminalStatuses.has(applied.toStatus) ? new Date().toISOString() : null)
+    },
     ...(answeredByMeta ? { lastAnsweredBy: answeredByMeta } : {}),
     ...(s(meta.direction, 32) ? { lastDirection: s(meta.direction, 32) } : {})
   };
@@ -182,7 +232,9 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
     twilioErrorMessage,
     twilioWarningCode,
     twilioWarningMessage,
-    toE164: toE164 ?? s(sessionRow.toE164, 64)
+    toE164: toE164 ?? s(sessionRow.toE164, 64),
+    durationSec: effectiveDurationSec,
+    hadInProgress
   });
 
   const sessionUpdate: Record<string, unknown> = {
@@ -245,7 +297,11 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
       twilioErrorMessage,
       twilioWarningCode,
       twilioWarningMessage,
-      twilioProviderReason: providerReason
+      twilioProviderReason: providerReason,
+      durationSec: effectiveDurationSec,
+      hadInProgress: hadInProgress ? true : null,
+      callbackTimeline: callbackTimeline as Array<Record<string, unknown>>,
+      lifecycle: (voiceProviderDebug.lifecycle as Record<string, unknown> | undefined) ?? null
     };
     if ('voiceFailureReasonCode' in sessionUpdate) {
       voiceCallSnapshot.voiceFailureReasonCode = sessionUpdate.voiceFailureReasonCode as string | null;

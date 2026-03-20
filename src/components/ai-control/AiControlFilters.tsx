@@ -343,6 +343,10 @@ export const AiControlFilters: React.FC<{
             <option value="">Все voice-сценарии</option>
             <option value="post_call_failed">Post-call failed</option>
             <option value="no_answer_busy">Нет ответа / занято</option>
+            <option value="voice_busy">Voice: busy</option>
+            <option value="voice_no_answer">Voice: no_answer</option>
+            <option value="voice_failed">Voice: failed</option>
+            <option value="voice_telecom_route_uncertain">Voice: telecom_route_uncertain</option>
             <option value="outcome_unknown_empty">Completed + outcome unknown + нет сводки</option>
             <option value="follow_up_failed">Follow-up WhatsApp failed</option>
             <option value="crm_failed">CRM apply error</option>

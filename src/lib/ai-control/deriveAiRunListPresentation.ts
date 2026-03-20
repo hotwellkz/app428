@@ -150,6 +150,9 @@ export function deriveAiRunListPresentation(
       }
     }
     if (voiceQa?.status === 'failed') attentionReasons.push('Голос QA: pipeline failed');
+    if (voiceSnap?.voiceFailureReasonCode === 'telecom_route_uncertain') {
+      attentionReasons.push('Голос: вероятное ограничение маршрута/оператора (telecom route)');
+    }
     if (!reviewClosed && voiceQa?.needsReview) attentionReasons.push('Голос QA: требуется ручной review');
     if (!reviewClosed && voiceQa?.flags?.includes('missing_next_step')) {
       attentionReasons.push('Голос QA: не зафиксирован next step');
