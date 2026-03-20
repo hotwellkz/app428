@@ -42,6 +42,8 @@ export type TelnyxVoiceIntegrationSnapshot = {
   providerWebhookLastErrorCode?: string | null;
   providerWebhookLastErrorAt?: string | null;
   webhookSignatureOk?: boolean;
+  /** Канонический webhook base URL сервера (совпадает с исходящим Telnyx POST /v2/calls). */
+  outboundWebhookBaseUrl?: string | null;
 };
 
 /** Ответ GET voice-integration (серверный контракт). */

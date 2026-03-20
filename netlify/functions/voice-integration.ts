@@ -14,6 +14,7 @@ import {
 import { Timestamp } from 'firebase-admin/firestore';
 import { probeTelnyxApiKey } from './lib/voice/providers/telnyxVoiceProvider';
 import { voiceFriendlyMessageRu } from './lib/voice/voiceProviderFriendlyCodes';
+import { buildVoiceProviderWebhookUrl, loadVoiceProviderRuntimeConfig } from './lib/voice/providerConfig';
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -111,6 +112,11 @@ async function buildTelnyxReadinessSnapshot(
   const lastCheckedAt = row?.telnyxLastCheckedAt?.toDate?.()?.toISOString?.() ?? null;
   const webhookLastErrorAt = row?.telnyxWebhookLastErrorAt?.toDate?.()?.toISOString?.() ?? null;
 
+  /** Тот же базовый URL, что уходит в Telnyx POST /v2/calls (без ?companyId=&callId=). Его нужно указать в Mission Control → Call Control Application → Webhook. */
+  const cfg = loadVoiceProviderRuntimeConfig();
+  const whBuilt = buildVoiceProviderWebhookUrl(cfg);
+  const outboundWebhookBaseUrl = whBuilt.startsWith('http') ? whBuilt : null;
+
   return {
     provider: 'telnyx',
     providerId: 'telnyx',
@@ -133,7 +139,8 @@ async function buildTelnyxReadinessSnapshot(
     providerWebhookLastErrorCode: webhookErr,
     providerWebhookLastErrorAt: webhookLastErrorAt,
     webhookSignatureOk: !webhookBlocksReady,
-    outboundVoiceProvider: row?.outboundVoiceProvider ?? 'twilio'
+    outboundVoiceProvider: row?.outboundVoiceProvider ?? 'twilio',
+    outboundWebhookBaseUrl
   };
 }
 

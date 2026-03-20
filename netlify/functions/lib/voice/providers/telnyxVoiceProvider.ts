@@ -385,9 +385,9 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
         const isClientSideTelnyx = res.status >= 400 && res.status < 500;
         const hint =
           isCallControlIssue || isWebhookUrlIssue
-            ? 'В Telnyx Mission Control откройте Call Control Application: задайте Webhook URL (HTTPS) на ваш CRM (тот же хост, что и деплой Netlify, путь voice-provider-webhook). Скопируйте ID этого приложения в поле «Connection / Application ID» в CRM. ID должен быть от Call Control, не от другого продукта.'
+            ? 'В Telnyx Mission Control → Call Control Application: Webhook URL должен совпадать с блоком «Webhook URL для Call Control» в CRM (Интеграции) — тот же базовый URL, что использует сервер (обычно …/.netlify/functions/voice-provider-webhook). Затем вставьте ID именно этого приложения в поле Connection / Application ID в CRM.'
             : isClientSideTelnyx && res.status !== 401 && res.status !== 403
-              ? 'Проверьте ключ API, Connection ID и публичный URL сайта (VOICE_PUBLIC_SITE_URL / URL в Netlify).'
+              ? 'Проверьте ключ API, Connection ID и в Netlify переменные URL / VOICE_PUBLIC_SITE_URL (должен быть https://ваш-домен).'
               : null;
         const friendlyCode =
           isCallControlIssue || isWebhookUrlIssue ? 'telnyx_invalid_call_control' : undefined;

@@ -72,6 +72,8 @@ interface TelnyxVoiceState {
   providerWebhookLastErrorCode: string | null;
   providerWebhookLastErrorAt: string | null;
   webhookSignatureOk: boolean;
+  /** Как в POST Telnyx /v2/calls — в Mission Control должен быть тот же базовый URL. */
+  outboundWebhookBaseUrl: string | null;
 }
 
 export const IntegrationsSettings: React.FC = () => {
@@ -173,7 +175,8 @@ export const IntegrationsSettings: React.FC = () => {
     lastSyncedAt: null,
     providerWebhookLastErrorCode: null,
     providerWebhookLastErrorAt: null,
-    webhookSignatureOk: true
+    webhookSignatureOk: true,
+    outboundWebhookBaseUrl: null
   });
   const [telnyxForm, setTelnyxForm] = useState({
     apiKey: '',
@@ -194,8 +197,12 @@ export const IntegrationsSettings: React.FC = () => {
   const [voiceSuccess, setVoiceSuccess] = useState<string | null>(null);
   const [telnyxSyncing, setTelnyxSyncing] = useState(false);
 
-  const voiceWebhookUrl =
-    typeof window !== 'undefined' ? `${window.location.origin}/api/voice/provider-webhook` : '';
+  /** Должен совпадать с серверным buildVoiceProviderWebhookUrl (см. outboundWebhookBaseUrl из API). */
+  const telnyxMissionControlWebhookUrl =
+    telnyxState.outboundWebhookBaseUrl ||
+    (typeof window !== 'undefined'
+      ? `${window.location.origin}/.netlify/functions/voice-provider-webhook`
+      : '');
 
   const fetchIntegration = async () => {
     if (!user) return;
@@ -394,7 +401,11 @@ export const IntegrationsSettings: React.FC = () => {
         lastSyncedAt: (telnyxData.lastSyncedAt as string) ?? null,
         providerWebhookLastErrorCode: (telnyxData.providerWebhookLastErrorCode as string) ?? null,
         providerWebhookLastErrorAt: (telnyxData.providerWebhookLastErrorAt as string) ?? null,
-        webhookSignatureOk: telnyxData.webhookSignatureOk !== false
+        webhookSignatureOk: telnyxData.webhookSignatureOk !== false,
+        outboundWebhookBaseUrl:
+          typeof telnyxData.outboundWebhookBaseUrl === 'string' && telnyxData.outboundWebhookBaseUrl.startsWith('http')
+            ? telnyxData.outboundWebhookBaseUrl
+            : null
       });
       setTelnyxNumbers(
         (telnyxNums.items ?? []).map((x) => ({
@@ -1577,11 +1588,16 @@ export const IntegrationsSettings: React.FC = () => {
                 <p className="text-xs text-gray-600">API Key сохранён ({telnyxState.apiKeyMasked})</p>
               ) : null}
               {telnyxState.publicKeySet ? <p className="text-xs text-gray-600">Public Key для webhook сохранён</p> : null}
-              {voiceWebhookUrl ? (
+              {telnyxMissionControlWebhookUrl ? (
                 <div className="rounded-lg border border-violet-100 bg-violet-50/60 px-3 py-2 text-xs space-y-2">
-                  <p className="font-medium text-gray-800">Webhook URL (укажите в Telnyx Mission Control)</p>
+                  <p className="font-medium text-gray-800">Webhook URL для Call Control (Telnyx Mission Control)</p>
+                  <p className="text-amber-900/95 bg-amber-50 border border-amber-200 rounded px-2 py-1.5 leading-relaxed">
+                    В приложении <strong>Call Control</strong> укажите <strong>ровно этот</strong> URL (HTTPS, без{' '}
+                    <code className="text-[10px]">?companyId=</code>) — такой же базовый адрес сервер подставляет в
+                    исходящий звонок Telnyx. Иначе API возвращает ошибку про connection_id / webhook.
+                  </p>
                   <code className="block break-all text-[11px] text-violet-900 bg-white/80 rounded px-2 py-1 border border-violet-100">
-                    {voiceWebhookUrl}
+                    {telnyxMissionControlWebhookUrl}
                   </code>
                   <p className="text-gray-600 leading-relaxed">
                     Для проверки подписи входящих событий CRM хранит ваш Public Key. Telnyx отправляет заголовки{' '}
@@ -1591,7 +1607,11 @@ export const IntegrationsSettings: React.FC = () => {
                   <button
                     type="button"
                     className="text-xs font-medium text-violet-700 hover:underline"
-                    onClick={() => void navigator.clipboard.writeText(voiceWebhookUrl).then(() => setVoiceSuccess('URL скопирован'))}
+                    onClick={() =>
+                      void navigator.clipboard
+                        .writeText(telnyxMissionControlWebhookUrl)
+                        .then(() => setVoiceSuccess('URL скопирован'))
+                    }
                   >
                     Копировать URL
                   </button>
