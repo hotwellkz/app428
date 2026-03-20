@@ -51,7 +51,8 @@ function mapTwilioCallStatusToEvent(
   callSid: string,
   status: string,
   duration: string | undefined,
-  timestamp: string | undefined
+  timestamp: string | undefined,
+  providerMeta: Record<string, unknown>
 ): VoiceNormalizedWebhookEvent | null {
   /** После REST create оркестратор уже пишет provider.accepted — дубли не нужны. */
   if (status === 'initiated' || status === 'queued' || status === 'initiating') {
@@ -72,7 +73,8 @@ function mapTwilioCallStatusToEvent(
     occurredAt,
     rawDigest: providerEventId,
     providerEventId,
-    providerEventType: `twilio.CallStatus.${status}`
+    providerEventType: `twilio.CallStatus.${status}`,
+    providerMeta
   };
 
   switch (status) {
@@ -281,6 +283,15 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
     const signature =
       input.headers['x-twilio-signature'] ?? input.headers['X-Twilio-Signature'] ?? undefined;
     const params = parseFormBody(input.rawBody);
+    const toInt = (v: string | undefined): number | null => {
+      if (!v || !/^\d+$/.test(v.trim())) return null;
+      return parseInt(v.trim(), 10);
+    };
+    const safe = (v: string | undefined, max = 240): string | null => {
+      const s = String(v ?? '').trim();
+      if (!s) return null;
+      return s.slice(0, max);
+    };
     console.log(
       JSON.stringify({
         tag: 'voice.twilio.callback',
@@ -311,8 +322,38 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
       return [];
     }
 
+    const twilioErrorCode = toInt(params.ErrorCode);
+    const twilioWarningCode = toInt(params.WarningCode);
+    const providerMeta: Record<string, unknown> = {
+      callStatus: status,
+      sipResponseCode: toInt(params.SipResponseCode),
+      twilioErrorCode,
+      twilioWarningCode,
+      twilioErrorMessage: safe(params.ErrorMessage),
+      twilioWarningMessage: safe(params.WarningMessage),
+      from: safe(params.From, 64),
+      to: safe(params.To, 64),
+      direction: safe(params.Direction, 32),
+      callDuration: toInt(params.CallDuration),
+      callbackSource: safe(params.CallbackSource, 64),
+      // raw form (обрезанно, без секретов) для расследований carrier/geo кейсов
+      raw: {
+        CallStatus: safe(params.CallStatus, 64),
+        CallSid: safe(params.CallSid, 64),
+        ParentCallSid: safe(params.ParentCallSid, 64),
+        ErrorCode: safe(params.ErrorCode, 16),
+        ErrorMessage: safe(params.ErrorMessage, 200),
+        WarningCode: safe(params.WarningCode, 16),
+        WarningMessage: safe(params.WarningMessage, 200),
+        SipResponseCode: safe(params.SipResponseCode, 16),
+        Direction: safe(params.Direction, 32),
+        From: safe(params.From, 64),
+        To: safe(params.To, 64)
+      }
+    };
+
     const twilioTs = params.Timestamp;
-    const ev = mapTwilioCallStatusToEvent(callSid, status, params.CallDuration, twilioTs);
+    const ev = mapTwilioCallStatusToEvent(callSid, status, params.CallDuration, twilioTs, providerMeta);
     return ev ? [ev] : [];
   }
 

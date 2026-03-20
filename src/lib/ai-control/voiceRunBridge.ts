@@ -14,6 +14,13 @@ export type VoiceCallSnapshotForAiRun = {
   toE164?: string | null;
   followUpStatus?: string | null;
   followUpError?: string | null;
+  twilioFinalStatus?: string | null;
+  twilioSipResponseCode?: number | null;
+  twilioErrorCode?: number | null;
+  twilioErrorMessage?: string | null;
+  twilioWarningCode?: number | null;
+  twilioWarningMessage?: string | null;
+  twilioProviderReason?: string | null;
 };
 
 export function getVoicePostCallFromRun(run: WhatsAppAiBotRunRecord): VoicePostCallResultMetadata | null {
@@ -26,6 +33,11 @@ export function getVoiceCallSnapshotFromRun(run: WhatsAppAiBotRunRecord): VoiceC
   const raw = run.extras?.voiceCallSnapshot;
   if (!raw || typeof raw !== 'object') return null;
   const o = raw as Record<string, unknown>;
+  const num = (v: unknown): number | null => {
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string' && /^\d+$/.test(v.trim())) return parseInt(v.trim(), 10);
+    return null;
+  };
   return {
     callStatus: typeof o.callStatus === 'string' ? o.callStatus : undefined,
     outcome: o.outcome != null ? String(o.outcome) : null,
@@ -35,7 +47,14 @@ export function getVoiceCallSnapshotFromRun(run: WhatsAppAiBotRunRecord): VoiceC
     fromE164: o.fromE164 != null ? String(o.fromE164) : null,
     toE164: o.toE164 != null ? String(o.toE164) : null,
     followUpStatus: o.followUpStatus != null ? String(o.followUpStatus) : null,
-    followUpError: o.followUpError != null ? String(o.followUpError) : null
+    followUpError: o.followUpError != null ? String(o.followUpError) : null,
+    twilioFinalStatus: o.twilioFinalStatus != null ? String(o.twilioFinalStatus) : null,
+    twilioSipResponseCode: num(o.twilioSipResponseCode),
+    twilioErrorCode: num(o.twilioErrorCode),
+    twilioErrorMessage: o.twilioErrorMessage != null ? String(o.twilioErrorMessage) : null,
+    twilioWarningCode: num(o.twilioWarningCode),
+    twilioWarningMessage: o.twilioWarningMessage != null ? String(o.twilioWarningMessage) : null,
+    twilioProviderReason: o.twilioProviderReason != null ? String(o.twilioProviderReason) : null
   };
 }
 

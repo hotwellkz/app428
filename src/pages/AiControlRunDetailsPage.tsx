@@ -742,6 +742,28 @@ export const AiControlRunDetailsPage: React.FC = () => {
                 <dt className="text-gray-500 text-xs">providerCallId</dt>
                 <dd className="font-mono text-xs break-all">{voiceSession?.providerCallId ?? voiceSnap?.providerCallId ?? '—'}</dd>
               </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gray-500 text-xs">Twilio diagnostic</dt>
+                <dd className="text-xs break-words">
+                  SID: <span className="font-mono">{voiceSession?.providerCallId ?? voiceSnap?.providerCallId ?? '—'}</span>
+                  {' · '}final: {voiceSession?.twilioFinalStatus ?? voiceSnap?.twilioFinalStatus ?? voiceSession?.status ?? '—'}
+                  {' · '}SIP: {voiceSession?.twilioSipResponseCode ?? voiceSnap?.twilioSipResponseCode ?? '—'}
+                  {' · '}reason: {voiceSession?.twilioProviderReason ?? voiceSnap?.twilioProviderReason ?? '—'}
+                  {' · '}errorCode: {voiceSession?.twilioErrorCode ?? voiceSnap?.twilioErrorCode ?? '—'}
+                </dd>
+                {(voiceSession?.providerCallId ?? voiceSnap?.providerCallId) ? (
+                  <a
+                    href={`https://console.twilio.com/us1/monitor/logs/calls/${encodeURIComponent(
+                      voiceSession?.providerCallId ?? voiceSnap?.providerCallId ?? ''
+                    )}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-xs text-sky-700 hover:text-sky-900 mt-1"
+                  >
+                    Open in Twilio Console <ExternalLink className="w-3 h-3" />
+                  </a>
+                ) : null}
+              </div>
               <div>
                 <dt className="text-gray-500 text-xs">Статус звонка</dt>
                 <dd>{voiceSession?.status ?? voiceSnap?.callStatus ?? '—'}</dd>

@@ -217,6 +217,15 @@ export interface VoiceCallSession {
   voiceQaNeedsOpsFix?: boolean | null;
   voiceQaNeedsRetryTuning?: boolean | null;
   voiceQaNeedsHumanFollowup?: boolean | null;
+  /** Техническая диагностика Twilio (последний callback / финал). */
+  twilioFinalStatus?: string | null;
+  twilioSipResponseCode?: number | null;
+  twilioErrorCode?: number | null;
+  twilioErrorMessage?: string | null;
+  twilioWarningCode?: number | null;
+  twilioWarningMessage?: string | null;
+  twilioProviderReason?: string | null;
+  twilioConsoleSearchText?: string | null;
   metadata?: Record<string, unknown>;
   createdAt?: Timestamp | Date | null;
   updatedAt?: Timestamp | Date | null;
@@ -306,4 +315,6 @@ export interface VoiceNormalizedWebhookEvent {
    * Стабильный id события у провайдера (CallSid+status и т.п.) — для дедупа webhook.
    */
   providerEventId?: string | null;
+  /** Нормализованные технические поля провайдера для диагностики в CRM. */
+  providerMeta?: Record<string, unknown> | null;
 }

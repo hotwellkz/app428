@@ -12,6 +12,7 @@ import {
   VOICE_CALL_SESSIONS_COLLECTION
 } from './voiceFirestoreAdmin';
 import { getDb } from '../firebaseAdmin';
+import { mergeVoiceLifecycleIntoLinkedRun } from './updateVoiceRunResult';
 
 function digest(s: string): string {
   return createHash('sha256').update(s).digest('hex').slice(0, 32);
@@ -59,6 +60,30 @@ function patchToFirestoreUpdate(patch: ReturnType<typeof applyNormalizedVoiceEve
   return out;
 }
 
+function n(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && /^\d+$/.test(v.trim())) return parseInt(v.trim(), 10);
+  return null;
+}
+function s(v: unknown, max = 280): string | null {
+  if (v == null) return null;
+  const out = String(v).trim();
+  if (!out) return null;
+  return out.slice(0, max);
+}
+
+function classifyProviderReason(status: string | null, sipCode: number | null, errMsg: string | null): string | null {
+  if (status === 'busy') return 'busy';
+  if (status === 'no-answer') return 'no_answer';
+  if (status === 'failed') {
+    const m = (errMsg ?? '').toLowerCase();
+    if (m.includes('geo') || m.includes('permission') || m.includes('country')) return 'possible_geo_restriction';
+    if ((sipCode ?? 0) >= 500) return 'possible_carrier_rejection';
+    return 'failed';
+  }
+  return null;
+}
+
 export type IngestOneResult =
   | { ok: true; callId: string; deduped: boolean; sessionUpdated: boolean }
   | { ok: false; reason: string; providerCallId: string };
@@ -96,7 +121,8 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
       durationSec: ev.durationSec ?? null,
       cause: ev.cause ?? null,
       rawDigest: ev.rawDigest ?? null,
-      dedupeKey: docId
+      dedupeKey: docId,
+      providerMeta: ev.providerMeta ?? null
     },
     seq: null
   };
@@ -113,12 +139,68 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
     terminalStatuses.has(String(applied.patch.status)) &&
     !['processing', 'done'].includes(postCallTerminal);
 
+  const meta = (ev.providerMeta ?? {}) as Record<string, unknown>;
+  const twilioFinalStatus = s(meta.callStatus, 64);
+  const twilioSipResponseCode = n(meta.sipResponseCode);
+  const twilioErrorCode = n(meta.twilioErrorCode);
+  const twilioWarningCode = n(meta.twilioWarningCode);
+  const twilioErrorMessage = s(meta.twilioErrorMessage, 280);
+  const twilioWarningMessage = s(meta.twilioWarningMessage, 280);
+  const fromE164 = s(meta.from, 64);
+  const toE164 = s(meta.to, 64);
+  const providerReason = classifyProviderReason(twilioFinalStatus, twilioSipResponseCode, twilioErrorMessage);
+  const twilioConsoleSearchText = `Call SID: ${ev.providerCallId}`;
+  const providerMetaRaw = (meta.raw as Record<string, unknown> | undefined) ?? null;
+
   if (applied.sessionChanged && Object.keys(fsPatch).length > 0) {
     await adminUpdateVoiceCallSession(companyId, callId, {
       ...fsPatch,
+      twilioFinalStatus,
+      twilioSipResponseCode,
+      twilioErrorCode,
+      twilioWarningCode,
+      twilioErrorMessage,
+      twilioWarningMessage,
+      twilioProviderReason: providerReason,
+      twilioConsoleSearchText,
+      ...(fromE164 ? { fromE164 } : {}),
+      ...(toE164 ? { toE164 } : {}),
+      ...(providerMetaRaw
+        ? {
+            metadata: {
+              ...(((sessionRow.metadata as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>),
+              twilioLastCallbackRaw: providerMetaRaw
+            }
+          }
+        : {}),
       ...(shouldQueuePostCall ? { postCallStatus: 'pending' } : {}),
       updatedAt: FieldValue.serverTimestamp()
     });
+    const linkedRunId = s(sessionRow.linkedRunId, 160);
+    if (linkedRunId) {
+      await mergeVoiceLifecycleIntoLinkedRun({
+        companyId,
+        linkedRunId,
+        voiceCallSnapshot: {
+          callStatus: applied.toStatus,
+          outcome: s(sessionRow.outcome, 80),
+          postCallStatus: s(sessionRow.postCallStatus, 80),
+          providerCallId: s(ev.providerCallId, 80),
+          provider: s(sessionRow.provider, 80),
+          fromE164: fromE164 ?? s(sessionRow.fromE164, 64),
+          toE164: toE164 ?? s(sessionRow.toE164, 64),
+          followUpStatus: s(sessionRow.followUpStatus, 80),
+          followUpError: s(sessionRow.followUpError, 200),
+          twilioFinalStatus,
+          twilioSipResponseCode,
+          twilioErrorCode,
+          twilioErrorMessage,
+          twilioWarningCode,
+          twilioWarningMessage,
+          twilioProviderReason: providerReason
+        }
+      });
+    }
     return { ok: true, callId, deduped: false, sessionUpdated: true };
   }
 

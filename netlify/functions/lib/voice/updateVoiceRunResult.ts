@@ -19,6 +19,13 @@ export type VoiceCallSnapshotForRunMerge = {
   toE164: string | null;
   followUpStatus: string | null;
   followUpError: string | null;
+  twilioFinalStatus?: string | null;
+  twilioSipResponseCode?: number | null;
+  twilioErrorCode?: number | null;
+  twilioErrorMessage?: string | null;
+  twilioWarningCode?: number | null;
+  twilioWarningMessage?: string | null;
+  twilioProviderReason?: string | null;
 };
 
 export async function mergeVoicePostCallIntoLinkedRun(params: {
@@ -164,6 +171,43 @@ export async function mergeVoiceQaStateIntoLinkedRun(params: {
     return { ok: true };
   } catch (e) {
     console.error('[mergeVoiceQaStateIntoLinkedRun]', e);
+    return { ok: false, error: e instanceof Error ? e.message : 'merge_failed' };
+  }
+}
+
+/** Быстрое обновление lifecycle-диагностики в linked run по webhook-событию. */
+export async function mergeVoiceLifecycleIntoLinkedRun(params: {
+  companyId: string;
+  linkedRunId: string;
+  voiceCallSnapshot: VoiceCallSnapshotForRunMerge;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { companyId, linkedRunId, voiceCallSnapshot } = params;
+  if (!linkedRunId.trim()) return { ok: false, error: 'missing_linked_run' };
+  const db = getDb();
+  const ref = db.collection(WHATSAPP_AI_BOT_RUNS).doc(linkedRunId);
+  try {
+    const snap = await ref.get();
+    if (!snap.exists) return { ok: false, error: 'run_not_found' };
+    const row = snap.data() ?? {};
+    if (String(row.companyId ?? '') !== companyId) {
+      return { ok: false, error: 'run_company_mismatch' };
+    }
+    const prevExtras = (row.extras as Record<string, unknown>) ?? {};
+    const prev = (prevExtras.voiceCallSnapshot as Record<string, unknown>) ?? {};
+    await ref.set(
+      {
+        channel: row.channel ?? 'voice',
+        extras: {
+          ...prevExtras,
+          voiceCallSnapshot: { ...prev, ...voiceCallSnapshot }
+        },
+        updatedAt: FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+    return { ok: true };
+  } catch (e) {
+    console.error('[mergeVoiceLifecycleIntoLinkedRun]', e);
     return { ok: false, error: e instanceof Error ? e.message : 'merge_failed' };
   }
 }

@@ -155,9 +155,15 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         if (s === 'ringing') toast('Звонок: идёт вызов (ringing)');
         if (s === 'in_progress') toast.success('Звонок соединён');
         if (s === 'completed') toast.success('Звонок завершён');
-        if (s === 'failed') toast.error(`Звонок отклонён: ${session?.endReason ?? 'failed'}`, { duration: 8000 });
-        if (s === 'busy') toast.error('Клиент занят (busy)');
-        if (s === 'no_answer') toast.error('Клиент не ответил (no-answer)');
+        if (s === 'failed') {
+          const hint = session?.twilioErrorCode ? `код ${session.twilioErrorCode}` : session?.endReason ?? 'failed';
+          toast.error(`Twilio: failed, проверьте Geo Permissions/номер (${hint})`, { duration: 9000 });
+        }
+        if (s === 'busy') {
+          const sip = session?.twilioSipResponseCode ? ` (SIP ${session.twilioSipResponseCode})` : '';
+          toast.error(`Twilio: сеть назначения вернула busy${sip}`);
+        }
+        if (s === 'no_answer') toast.error('Twilio: no-answer / клиент не ответил');
         if (s === 'canceled') toast.error('Звонок отменён');
       },
       (e) => {
@@ -258,6 +264,15 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
             ) : null}
           </div>
         ) : null}
+        <div className="text-[11px] rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2 text-sky-900">
+          Checklist readiness:
+          {` `}
+          {integration?.enabled && integration?.connectionStatus === 'connected' ? 'account connected' : 'account not connected'}
+          {` · `}
+          {integration?.hasDefaultOutbound || !!fromNumberId.trim() ? 'number configured' : 'number missing'}
+          {` · `}
+          destination country allowed in Twilio Geo Permissions (manual check)
+        </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" disabled={!canCall || launching} onClick={() => void doCallNow()} className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm disabled:opacity-50">
             {launching ? 'Запуск...' : 'Позвонить сейчас'}
