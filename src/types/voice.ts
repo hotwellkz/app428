@@ -146,8 +146,16 @@ export interface VoiceQaResultMetadata extends VoiceQaSnapshot {
   analyzedAt?: Timestamp | Date | null;
 }
 
-/** P0: строковый идентификатор провайдера (например "twilio_v1"); без импорта SDK провайдера. */
-export type VoiceProviderId = string;
+/** Известные voice-провайдеры исходящей телефонии (расширяйте при добавлении адаптеров). */
+export type VoiceKnownProviderId = 'twilio' | 'telnyx';
+
+/** P0: идентификатор провайдера в сессии / UI (известные + legacy-строки). */
+export type VoiceProviderId = VoiceKnownProviderId | string;
+
+export type ProviderEventId = string;
+export type ProviderFailureCode = string;
+export type ProviderFailureReason = string;
+export type ProviderDebug = Record<string, unknown>;
 
 export interface VoiceCallSession {
   id: string;
@@ -229,6 +237,11 @@ export interface VoiceCallSession {
   /** Классификация исхода (deriveVoiceFailureReason) для честного UI. */
   voiceFailureReasonCode?: string | null;
   voiceFailureReasonMessage?: string | null;
+  /** Унифицированные поля провайдера (дублируют/дополняют voiceFailure* при multi-provider). */
+  providerFailureCode?: ProviderFailureCode | string | null;
+  providerFailureReason?: ProviderFailureReason | string | null;
+  /** Идемпотентные id событий провайдера (дедуп webhook), накапливаются arrayUnion на сервере. */
+  providerEventIds?: ProviderEventId[];
   metadata?: Record<string, unknown>;
   createdAt?: Timestamp | Date | null;
   updatedAt?: Timestamp | Date | null;

@@ -19,6 +19,10 @@ const COLLECTIONS = {
   KASPI_SYNC: 'kaspiSync'
 } as const;
 
+export type VoiceOutboundProviderPreference = 'twilio' | 'telnyx';
+
+export type VoiceTelnyxConnectionStatus = 'connected' | 'not_connected' | 'invalid_config';
+
 export interface VoiceIntegrationRow {
   companyId: string;
   provider: 'twilio';
@@ -34,6 +38,19 @@ export interface VoiceIntegrationRow {
   /** Последнее известное значение из Twilio API (Trial / Full и т.д.) */
   twilioAccountType?: string | null;
   twilioAccountStatus?: string | null;
+  /** Какой провайдер используется для исходящих звонков (по умолчанию twilio). */
+  outboundVoiceProvider?: VoiceOutboundProviderPreference;
+  /** Telnyx: второй voice-провайдер в том же company-документе (merge, не затирает Twilio). */
+  telnyxEnabled?: boolean;
+  telnyxApiKey?: string;
+  telnyxApiKeyMasked?: string | null;
+  /** Публичный ключ Ed25519 (base64, 32 bytes) для проверки webhook. */
+  telnyxPublicKey?: string;
+  /** Опционально: Call Control Application / connection id для POST /v2/calls */
+  telnyxConnectionId?: string | null;
+  telnyxConnectionStatus?: VoiceTelnyxConnectionStatus;
+  telnyxConnectionError?: string | null;
+  telnyxLastCheckedAt?: Timestamp | null;
 }
 
 function maskRight4(value: string): string {
@@ -49,6 +66,10 @@ export async function getVoiceIntegration(companyId: string): Promise<VoiceInteg
   const d = snap.data()!;
   const accountSid = ((d.accountSid as string) ?? '').trim();
   const authToken = ((d.authToken as string) ?? '').trim();
+  const telnyxApiKey = ((d.telnyxApiKey as string) ?? '').trim();
+  const outboundRaw = (d.outboundVoiceProvider as string) ?? 'twilio';
+  const outboundVoiceProvider: VoiceOutboundProviderPreference =
+    outboundRaw === 'telnyx' ? 'telnyx' : 'twilio';
   return {
     companyId,
     provider: 'twilio',
@@ -62,7 +83,17 @@ export async function getVoiceIntegration(companyId: string): Promise<VoiceInteg
     lastCheckedAt: (d.lastCheckedAt as Timestamp) ?? null,
     updatedAt: (d.updatedAt as Timestamp) ?? Timestamp.now(),
     twilioAccountType: (d.twilioAccountType as string) ?? null,
-    twilioAccountStatus: (d.twilioAccountStatus as string) ?? null
+    twilioAccountStatus: (d.twilioAccountStatus as string) ?? null,
+    outboundVoiceProvider,
+    telnyxEnabled: d.telnyxEnabled === true,
+    telnyxApiKey,
+    telnyxApiKeyMasked:
+      (d.telnyxApiKeyMasked as string) ?? (telnyxApiKey ? maskRight4(telnyxApiKey) : null),
+    telnyxPublicKey: ((d.telnyxPublicKey as string) ?? '').trim(),
+    telnyxConnectionId: (d.telnyxConnectionId as string)?.trim() || null,
+    telnyxConnectionStatus: (d.telnyxConnectionStatus as VoiceTelnyxConnectionStatus) ?? 'not_connected',
+    telnyxConnectionError: (d.telnyxConnectionError as string) ?? null,
+    telnyxLastCheckedAt: (d.telnyxLastCheckedAt as Timestamp) ?? null
   };
 }
 
@@ -78,6 +109,7 @@ export async function setVoiceIntegration(
     lastCheckedAt?: Timestamp | null;
     twilioAccountType?: string | null;
     twilioAccountStatus?: string | null;
+    outboundVoiceProvider?: VoiceOutboundProviderPreference;
   }
 ): Promise<void> {
   const db = getDb();
@@ -89,6 +121,7 @@ export async function setVoiceIntegration(
     provider: data.provider ?? 'twilio',
     updatedAt: now
   };
+  if (data.outboundVoiceProvider !== undefined) payload.outboundVoiceProvider = data.outboundVoiceProvider;
   if (data.enabled !== undefined) payload.enabled = data.enabled;
   if (data.connectionStatus !== undefined) payload.connectionStatus = data.connectionStatus;
   if (data.connectionError !== undefined) payload.connectionError = data.connectionError;
@@ -119,6 +152,65 @@ export async function setVoiceIntegration(
     return;
   }
   await ref.update(payload);
+}
+
+/**
+ * Частичное обновление Telnyx-полей и/или предпочтения исходящего провайдера (merge).
+ */
+export async function mergeVoiceIntegrationTelnyx(
+  companyId: string,
+  data: {
+    telnyxEnabled?: boolean;
+    telnyxApiKey?: string;
+    telnyxPublicKey?: string;
+    telnyxConnectionId?: string | null;
+    telnyxConnectionStatus?: VoiceTelnyxConnectionStatus;
+    telnyxConnectionError?: string | null;
+    telnyxLastCheckedAt?: Timestamp | null;
+    outboundVoiceProvider?: VoiceOutboundProviderPreference;
+  }
+): Promise<void> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.VOICE_INTEGRATIONS).doc(companyId);
+  const snap = await ref.get();
+  const now = Timestamp.now();
+  const payload: Record<string, unknown> = { companyId, updatedAt: now };
+  if (data.telnyxEnabled !== undefined) payload.telnyxEnabled = data.telnyxEnabled;
+  if (data.telnyxConnectionStatus !== undefined) payload.telnyxConnectionStatus = data.telnyxConnectionStatus;
+  if (data.telnyxConnectionError !== undefined) payload.telnyxConnectionError = data.telnyxConnectionError;
+  if (data.telnyxLastCheckedAt !== undefined) payload.telnyxLastCheckedAt = data.telnyxLastCheckedAt;
+  if (data.telnyxConnectionId !== undefined) payload.telnyxConnectionId = data.telnyxConnectionId;
+  if (data.outboundVoiceProvider !== undefined) payload.outboundVoiceProvider = data.outboundVoiceProvider;
+  if (data.telnyxApiKey !== undefined) {
+    const k = data.telnyxApiKey.trim();
+    payload.telnyxApiKey = k;
+    payload.telnyxApiKeyMasked = k ? maskRight4(k) : null;
+  }
+  if (data.telnyxPublicKey !== undefined) {
+    payload.telnyxPublicKey = data.telnyxPublicKey.trim();
+  }
+  if (!snap.exists) {
+    payload.provider = 'twilio';
+    payload.enabled = false;
+    payload.connectionStatus = 'not_connected';
+    payload.connectionError = null;
+    payload.lastCheckedAt = null;
+    payload.accountSid = '';
+    payload.accountSidMasked = null;
+    payload.authToken = '';
+    payload.authTokenMasked = null;
+    payload.createdAt = now;
+    await ref.set(payload);
+    return;
+  }
+  await ref.update(payload);
+}
+
+export async function setOutboundVoiceProviderPreference(
+  companyId: string,
+  pref: VoiceOutboundProviderPreference
+): Promise<void> {
+  await mergeVoiceIntegrationTelnyx(companyId, { outboundVoiceProvider: pref });
 }
 
 /** Режим синхронизации заказов Kaspi */

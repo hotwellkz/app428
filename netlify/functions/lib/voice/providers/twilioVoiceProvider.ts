@@ -5,6 +5,7 @@ import type {
   CreateOutboundVoiceCallResult,
   VoiceProviderCapabilities,
   VoiceProviderAdapter,
+  VoiceProviderValidateConfigResult,
   VoiceWebhookParseInput
 } from '../voiceProviderAdapter';
 import {
@@ -111,6 +112,13 @@ export class TwilioVoiceProvider implements VoiceProviderAdapter {
 
   constructor(config: VoiceProviderRuntimeConfig) {
     this.config = config;
+  }
+
+  async validateConfig(): Promise<VoiceProviderValidateConfigResult> {
+    return {
+      ok: true,
+      details: { note: 'Проверка Twilio выполняется через voice-integration (probeTwilioAccount).' }
+    };
   }
 
   getCapabilities(): VoiceProviderCapabilities {

@@ -46,8 +46,29 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       }
       const db = getDb();
       const integration = await getVoiceIntegration(companyId);
-      if (!integration || integration.connectionStatus !== 'connected' || integration.enabled !== true) {
-        return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Twilio не подключен для компании' }) };
+      const outbound = integration?.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
+      const twilioOk =
+        integration &&
+        integration.enabled === true &&
+        integration.connectionStatus === 'connected' &&
+        !!(integration.accountSid?.trim() && integration.authToken?.trim());
+      const telnyxOk =
+        integration &&
+        integration.telnyxEnabled === true &&
+        integration.telnyxConnectionStatus === 'connected' &&
+        !!(integration.telnyxApiKey?.trim() && integration.telnyxPublicKey?.trim());
+      const voiceOk = outbound === 'telnyx' ? telnyxOk : twilioOk;
+      if (!voiceOk) {
+        return {
+          statusCode: 400,
+          headers: CORS,
+          body: JSON.stringify({
+            error:
+              outbound === 'telnyx'
+                ? 'Telnyx не подключён для компании (проверьте API Key, Public Key и статус в Интеграциях)'
+                : 'Twilio не подключен для компании'
+          })
+        };
       }
       const botSnap = await db.collection('crmAiBots').doc(body.botId.trim()).get();
       if (!botSnap.exists || String(botSnap.data()?.companyId ?? '') !== companyId) {
@@ -60,6 +81,16 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       const numberSnap = await db.collection('voiceNumbers').doc(body.fromNumberId.trim()).get();
       if (!numberSnap.exists || String(numberSnap.data()?.companyId ?? '') !== companyId) {
         return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'Outbound номер не найден в компании' }) };
+      }
+      const numProv = String(numberSnap.data()?.provider ?? 'twilio').trim() || 'twilio';
+      if (numProv !== outbound) {
+        return {
+          statusCode: 400,
+          headers: CORS,
+          body: JSON.stringify({
+            error: `Номер относится к провайдеру ${numProv}, а в настройках выбран исходящий провайдер ${outbound}`
+          })
+        };
       }
       const phones = (body.phones ?? []).map((x) => String(x).trim()).filter(Boolean);
       if (!phones.length) return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'phones required' }) };

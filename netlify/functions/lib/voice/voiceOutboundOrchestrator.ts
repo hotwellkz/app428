@@ -5,7 +5,8 @@ import {
   adminGetDefaultVoiceNumberForCompany,
   adminGetVoiceCallSession,
   adminGetVoiceNumberForCompany,
-  adminUpdateVoiceCallSession
+  adminUpdateVoiceCallSession,
+  voiceNumberRowProvider
 } from './voiceFirestoreAdmin';
 import { buildVoiceProviderWebhookUrl, loadVoiceProviderRuntimeConfig } from './providerConfig';
 import { resolveVoiceProviderForCompany } from './voiceProviderAdapter';
@@ -73,32 +74,6 @@ export async function orchestrateVoiceOutbound(
   let fromE164: string;
   let fromNumberId: string | null = body.fromNumberId?.trim() || null;
 
-  if (fromNumberId) {
-    const row = await adminGetVoiceNumberForCompany(companyId, fromNumberId);
-    if (!row) {
-      return {
-        ok: false,
-        code: 'voice_number_not_found',
-        message: 'fromNumberId not found or wrong company',
-        httpStatus: 400
-      };
-    }
-    fromE164 = row.e164;
-  } else {
-    const row = await adminGetDefaultVoiceNumberForCompany(companyId);
-    if (!row) {
-      return {
-        ok: false,
-        code: 'no_voice_number',
-        message:
-          'No default voice number: add voiceNumbers with isDefault, or pass fromNumberId (Firestore Admin / seed).',
-        httpStatus: 400
-      };
-    }
-    fromE164 = row.e164;
-    fromNumberId = row.id;
-  }
-
   const config = loadVoiceProviderRuntimeConfig();
   let adapter;
   try {
@@ -111,6 +86,43 @@ export async function orchestrateVoiceOutbound(
       message: msg,
       httpStatus: 501
     };
+  }
+
+  const expectedProvider = adapter.providerId;
+
+  if (fromNumberId) {
+    const row = await adminGetVoiceNumberForCompany(companyId, fromNumberId);
+    if (!row) {
+      return {
+        ok: false,
+        code: 'voice_number_not_found',
+        message: 'fromNumberId not found or wrong company',
+        httpStatus: 400
+      };
+    }
+    const numProv = voiceNumberRowProvider(row.data);
+    if (numProv !== expectedProvider) {
+      return {
+        ok: false,
+        code: 'voice_number_provider_mismatch',
+        message: `Voice number belongs to provider "${numProv}" but outbound adapter is "${expectedProvider}"`,
+        httpStatus: 400
+      };
+    }
+    fromE164 = row.e164;
+  } else {
+    const row = await adminGetDefaultVoiceNumberForCompany(companyId, expectedProvider);
+    if (!row) {
+      return {
+        ok: false,
+        code: 'no_voice_number',
+        message:
+          'No default voice number for this provider: add voiceNumbers with isDefault and matching provider, or pass fromNumberId.',
+        httpStatus: 400
+      };
+    }
+    fromE164 = row.e164;
+    fromNumberId = row.id;
   }
 
   const webhookUrl = buildVoiceProviderWebhookUrl(config);
@@ -202,6 +214,8 @@ export async function orchestrateVoiceOutbound(
       providerCreateTwilioStatus: adapterResult.twilioStatus ?? null,
       providerCreateUserMessage: adapterResult.error,
       providerCreateRawMessage: adapterResult.rawProviderMessage ?? null,
+      providerFailureCode: adapterResult.providerFailureCode ?? failCode,
+      providerFailureReason: adapterResult.providerFailureReason ?? adapterResult.error,
       endedAt: FieldValue.serverTimestamp(),
       postCallStatus: 'pending'
     });
@@ -226,13 +240,18 @@ export async function orchestrateVoiceOutbound(
     const configHttp =
       failCode === 'twilio_config' ||
       failCode === 'twilio_public_url' ||
-      failCode === 'twilio_company_config_incomplete'
+      failCode === 'twilio_company_config_incomplete' ||
+      failCode === 'telnyx_company_config_incomplete' ||
+      failCode === 'telnyx_connection_id_required' ||
+      failCode === 'telnyx_public_url'
         ? 400
         : failCode === 'twilio_api_error'
           ? friendly === 'twilio_auth_error'
             ? 401
             : 400
-          : 502;
+          : failCode === 'telnyx_api_error'
+            ? 502
+            : 502;
     return {
       ok: false,
       code: failCode,
@@ -262,12 +281,14 @@ export async function orchestrateVoiceOutbound(
   const sessAfterCreate = await adminGetVoiceCallSession(companyId, callId);
   const prevMeta = ((sessAfterCreate?.metadata as Record<string, unknown>) ?? {}) as Record<string, unknown>;
   const prevDebug = (prevMeta.voiceProviderDebug as Record<string, unknown> | undefined) ?? {};
+  const createDbg = adapterResult.providerDebug ?? {};
   await adminUpdateVoiceCallSession(companyId, callId, {
     providerCallId: adapterResult.providerCallId,
     metadata: {
       ...prevMeta,
       voiceProviderDebug: {
         ...prevDebug,
+        ...createDbg,
         outboundCreateAt: new Date().toISOString(),
         createProvider: adapter.providerId,
         createProviderCallId: adapterResult.providerCallId,

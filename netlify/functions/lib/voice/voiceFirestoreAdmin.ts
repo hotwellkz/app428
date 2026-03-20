@@ -169,21 +169,31 @@ export async function adminFindVoiceSessionByProviderCallId(
   return { id: d.id, ...d.data() };
 }
 
+/** Legacy документы без поля provider считаем twilio. */
+export function voiceNumberRowProvider(data: Record<string, unknown> | undefined): string {
+  const p = String(data?.provider ?? 'twilio').trim();
+  return p || 'twilio';
+}
+
 export async function adminGetDefaultVoiceNumberForCompany(
-  companyId: string
+  companyId: string,
+  providerId: string = 'twilio'
 ): Promise<{ id: string; e164: string; data: Record<string, unknown> } | null> {
   const db = getDb();
   const q = await db
     .collection(VOICE_NUMBERS_COLLECTION)
     .where('companyId', '==', companyId)
     .where('isDefault', '==', true)
-    .limit(1)
     .get();
   if (q.empty) return null;
-  const d = q.docs[0];
-  const e164 = String(d.data()?.e164 ?? '').trim();
-  if (!e164) return null;
-  return { id: d.id, e164, data: d.data() };
+  for (const doc of q.docs) {
+    const row = doc.data();
+    if (voiceNumberRowProvider(row) !== providerId) continue;
+    const e164 = String(row?.e164 ?? '').trim();
+    if (!e164) continue;
+    return { id: doc.id, e164, data: row };
+  }
+  return null;
 }
 
 export async function adminGetVoiceNumberForCompany(

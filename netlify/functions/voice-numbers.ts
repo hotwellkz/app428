@@ -44,19 +44,26 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   const col = db.collection('voiceNumbers');
 
   if (event.httpMethod === 'GET') {
+    const providerFilter = String(event.queryStringParameters?.provider ?? '').trim().toLowerCase();
     const snap = await col.where('companyId', '==', companyId).get();
-    const items = snap.docs.map((d) => {
+    let items = snap.docs.map((d) => {
       const x = d.data();
       return {
         id: d.id,
         e164: String(x.e164 ?? ''),
         label: (x.label as string) ?? null,
         provider: (x.provider as string) ?? 'twilio',
+        externalNumberId: (x.externalNumberId as string) ?? null,
+        countryCode: (x.countryCode as string) ?? null,
         isDefault: x.isDefault === true,
         isActive: x.isActive !== false,
-        readinessStatus: (x.readinessStatus as string) ?? 'ready'
+        readinessStatus: (x.readinessStatus as string) ?? 'ready',
+        capabilities: (x.capabilities as Record<string, unknown>) ?? null
       };
     });
+    if (providerFilter === 'twilio' || providerFilter === 'telnyx') {
+      items = items.filter((it) => String(it.provider ?? 'twilio') === providerFilter);
+    }
     return json(200, { items });
   }
 
@@ -67,6 +74,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     label?: string | null;
     provider?: string;
     isActive?: boolean;
+    externalNumberId?: string | null;
+    countryCode?: string | null;
   } = {};
   try {
     body = event.body ? (JSON.parse(event.body) as typeof body) : {};
@@ -81,9 +90,15 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const ref = col.doc(numberId);
     const snap = await ref.get();
     if (!snap.exists || String(snap.data()?.companyId ?? '') !== companyId) return json(404, { error: 'Номер не найден' });
+    const targetProv = String(snap.data()?.provider ?? 'twilio').trim() || 'twilio';
     const batch = db.batch();
     const all = await col.where('companyId', '==', companyId).where('isDefault', '==', true).get();
-    all.docs.forEach((d) => batch.update(d.ref, { isDefault: false, updatedAt: FieldValue.serverTimestamp() }));
+    all.docs.forEach((d) => {
+      const p = String(d.data()?.provider ?? 'twilio').trim() || 'twilio';
+      if (p === targetProv) {
+        batch.update(d.ref, { isDefault: false, updatedAt: FieldValue.serverTimestamp() });
+      }
+    });
     batch.update(ref, { isDefault: true, updatedAt: FieldValue.serverTimestamp() });
     await batch.commit();
     return json(200, { ok: true });
@@ -104,12 +119,17 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   const numberId = String(body.numberId ?? '').trim() || `num_${Date.now().toString(36)}`;
   const ref = col.doc(numberId);
   const exists = await ref.get();
+  const prov = (body.provider ?? 'twilio').trim() || 'twilio';
+  const extId = body.externalNumberId != null ? String(body.externalNumberId).trim() || null : null;
+  const cc = body.countryCode != null ? String(body.countryCode).trim().slice(0, 8) || null : null;
   await ref.set(
     {
       companyId,
       e164,
       label: body.label?.trim() || null,
-      provider: (body.provider ?? 'twilio').trim(),
+      provider: prov,
+      externalNumberId: extId,
+      countryCode: cc,
       isActive: body.isActive !== false,
       readinessStatus: 'ready',
       capabilities: { voice: true },

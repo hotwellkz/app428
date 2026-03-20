@@ -5,6 +5,7 @@ import type {
   CreateOutboundVoiceCallResult,
   VoiceProviderCapabilities,
   VoiceProviderAdapter,
+  VoiceProviderValidateConfigResult,
   VoiceWebhookParseInput
 } from '../voiceProviderAdapter';
 
@@ -20,6 +21,10 @@ function digest(s: string): string {
  */
 export class MockVoiceProvider implements VoiceProviderAdapter {
   readonly providerId = PROVIDER_ID;
+
+  async validateConfig(): Promise<VoiceProviderValidateConfigResult> {
+    return { ok: true };
+  }
 
   getCapabilities(): VoiceProviderCapabilities {
     return {

@@ -260,21 +260,35 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
     if (applied.toStatus === 'completed' && durationTail) {
       sessionUpdate.voiceFailureReasonCode = null;
       sessionUpdate.voiceFailureReasonMessage = null;
+      sessionUpdate.providerFailureCode = null;
+      sessionUpdate.providerFailureReason = null;
     } else if (failure) {
       sessionUpdate.voiceFailureReasonCode = failure.code;
       sessionUpdate.voiceFailureReasonMessage = failure.messageRu;
+      sessionUpdate.providerFailureCode = failure.code;
+      sessionUpdate.providerFailureReason = failure.messageRu;
     } else if (applied.toStatus === 'completed') {
       sessionUpdate.voiceFailureReasonCode = null;
       sessionUpdate.voiceFailureReasonMessage = null;
+      sessionUpdate.providerFailureCode = null;
+      sessionUpdate.providerFailureReason = null;
     } else if (applied.toStatus === 'canceled') {
       sessionUpdate.voiceFailureReasonCode = 'unknown_provider_failure';
       sessionUpdate.voiceFailureReasonMessage = 'Звонок отменён.';
+      sessionUpdate.providerFailureCode = 'canceled';
+      sessionUpdate.providerFailureReason = 'Звонок отменён.';
     } else if (applied.toStatus === 'failed' || applied.toStatus === 'busy' || applied.toStatus === 'no_answer') {
       if (!failure) {
         sessionUpdate.voiceFailureReasonCode = 'unknown_provider_failure';
         sessionUpdate.voiceFailureReasonMessage = `Исход звонка: ${applied.toStatus}`;
+        sessionUpdate.providerFailureCode = 'unknown_provider_failure';
+        sessionUpdate.providerFailureReason = sessionUpdate.voiceFailureReasonMessage as string;
       }
     }
+  }
+
+  if (ev.providerEventId?.trim()) {
+    sessionUpdate.providerEventIds = FieldValue.arrayUnion(ev.providerEventId.trim());
   }
 
   await adminUpdateVoiceCallSession(companyId, callId, sessionUpdate);
@@ -308,6 +322,12 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
     }
     if ('voiceFailureReasonMessage' in sessionUpdate) {
       voiceCallSnapshot.voiceFailureReasonMessage = sessionUpdate.voiceFailureReasonMessage as string | null;
+    }
+    if ('providerFailureCode' in sessionUpdate) {
+      voiceCallSnapshot.providerFailureCode = sessionUpdate.providerFailureCode as string | null;
+    }
+    if ('providerFailureReason' in sessionUpdate) {
+      voiceCallSnapshot.providerFailureReason = sessionUpdate.providerFailureReason as string | null;
     }
     await mergeVoiceLifecycleIntoLinkedRun({
       companyId,

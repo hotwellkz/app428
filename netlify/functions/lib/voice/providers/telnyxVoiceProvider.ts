@@ -1,0 +1,395 @@
+import type { VoiceNormalizedWebhookEvent } from '../../../../../src/types/voice';
+import { getVoiceIntegration } from '../../firebaseAdmin';
+import {
+  buildVoiceProviderWebhookUrl,
+  type VoiceProviderRuntimeConfig
+} from '../providerConfig';
+import { verifyTelnyxWebhookSignature } from '../telnyxWebhookVerify';
+import type {
+  CreateOutboundVoiceCallInput,
+  CreateOutboundVoiceCallResult,
+  VoiceProviderAdapter,
+  VoiceProviderCapabilities,
+  VoiceProviderValidateConfigResult,
+  VoiceWebhookParseInput
+} from '../voiceProviderAdapter';
+
+const PROVIDER_ID = 'telnyx';
+
+function truthyEnv(key: string): boolean {
+  const v = process.env[key];
+  return v === '1' || v === 'true' || v === 'yes';
+}
+
+function headerCi(headers: Record<string, string | undefined>, name: string): string | undefined {
+  const low = name.toLowerCase();
+  for (const [k, v] of Object.entries(headers)) {
+    if (k.toLowerCase() === low) return v;
+  }
+  return undefined;
+}
+
+export async function probeTelnyxApiKey(apiKey: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const k = apiKey.trim();
+  if (!k) return { ok: false, error: 'Пустой API Key' };
+  try {
+    const res = await fetch('https://api.telnyx.com/v2/phone_numbers?page[size]=1', {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${k}`, Accept: 'application/json' }
+    });
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, error: 'Telnyx отклонил ключ (401/403)' };
+    }
+    if (!res.ok) {
+      const t = await res.text().catch(() => '');
+      return { ok: false, error: `Telnyx API ${res.status}${t ? `: ${t.slice(0, 200)}` : ''}` };
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Сеть / Telnyx недоступен' };
+  }
+}
+
+function extractDataObject(parsed: Record<string, unknown>): Record<string, unknown> {
+  const data = parsed.data;
+  if (data && typeof data === 'object') return data as Record<string, unknown>;
+  return parsed;
+}
+
+function mapTelnyxCallEvent(
+  eventType: string,
+  eventId: string,
+  occurredAt: string,
+  payload: Record<string, unknown>
+): VoiceNormalizedWebhookEvent | null {
+  const callControlId = String(payload.call_control_id ?? '').trim();
+  if (!callControlId) return null;
+
+  const from = payload.from != null ? String(payload.from).slice(0, 64) : null;
+  const to = payload.to != null ? String(payload.to).slice(0, 64) : null;
+  const direction = payload.direction != null ? String(payload.direction).slice(0, 32) : null;
+
+  const baseMeta = (callStatus: string, extra: Record<string, unknown>): Record<string, unknown> => ({
+    callStatus,
+    from,
+    to,
+    direction,
+    ...extra
+  });
+
+  const stableEvId = (suffix: string) =>
+    eventId ? `telnyx:${eventId}` : `telnyx:${callControlId}:${suffix}`;
+
+  if (
+    eventType === 'call.initiated' ||
+    eventType === 'call.enqueued' ||
+    eventType === 'call.dequeued'
+  ) {
+    return null;
+  }
+
+  if (eventType === 'call.answered') {
+    return {
+      type: 'provider.answered',
+      providerCallId: callControlId,
+      occurredAt: occurredAt || new Date().toISOString(),
+      cause: null,
+      rawDigest: stableEvId('answered'),
+      providerEventId: stableEvId('answered'),
+      providerEventType: `telnyx.${eventType}`,
+      providerMeta: baseMeta('in-progress', { raw: { state: payload.state } })
+    };
+  }
+
+  if (eventType === 'call.hangup') {
+    const cause = String(payload.hangup_cause ?? 'unspecified').trim();
+    const sipRaw = payload.sip_hangup_cause;
+    let sipResponseCode: number | null = null;
+    if (typeof sipRaw === 'number' && Number.isFinite(sipRaw)) sipResponseCode = sipRaw;
+    else if (typeof sipRaw === 'string' && /^\d{3}$/.test(sipRaw.trim())) sipResponseCode = parseInt(sipRaw.trim(), 10);
+
+    const start = payload.start_time != null ? String(payload.start_time) : null;
+    let durationSec: number | null = null;
+    if (start && occurredAt) {
+      const a = Date.parse(start);
+      const b = Date.parse(occurredAt);
+      if (Number.isFinite(a) && Number.isFinite(b) && b >= a) {
+        durationSec = Math.max(0, Math.floor((b - a) / 1000));
+      }
+    }
+
+    const providerMeta = baseMeta(
+      cause === 'user_busy'
+        ? 'busy'
+        : cause === 'no_answer' || cause === 'timeout'
+          ? 'no-answer'
+          : cause === 'normal_clearing'
+            ? 'completed'
+            : cause === 'originator_cancel' || cause === 'call_rejected'
+              ? 'canceled'
+              : 'failed',
+      {
+        hangupCause: cause,
+        sipResponseCode,
+        sipHangupCause: sipRaw != null ? String(sipRaw).slice(0, 64) : null,
+        raw: { hangup_cause: cause, sip_hangup_cause: sipRaw }
+      }
+    );
+
+    const base = {
+      providerCallId: callControlId,
+      occurredAt: occurredAt || new Date().toISOString(),
+      providerEventId: stableEvId(`hangup:${cause}`),
+      providerEventType: 'telnyx.call.hangup',
+      rawDigest: `telnyx:hangup:${callControlId}:${cause}`,
+      providerMeta
+    };
+
+    if (cause === 'user_busy') {
+      return { ...base, type: 'provider.busy', cause: null };
+    }
+    if (cause === 'no_answer' || cause === 'timeout') {
+      return { ...base, type: 'provider.no_answer', cause: null };
+    }
+    if (cause === 'originator_cancel' || cause === 'call_rejected') {
+      return { ...base, type: 'user.cancel', cause: cause };
+    }
+    if (cause === 'normal_clearing') {
+      return { ...base, type: 'provider.completed', durationSec, cause: null };
+    }
+    return { ...base, type: 'provider.failed', cause: cause || null };
+  }
+
+  if (eventType.startsWith('call.machine.') || eventType.startsWith('call.playback.')) {
+    return null;
+  }
+
+  if (eventType === 'call.bridged') {
+    return null;
+  }
+
+  return {
+    type: 'provider.unknown',
+    providerCallId: callControlId,
+    occurredAt: occurredAt || new Date().toISOString(),
+    cause: eventType,
+    rawDigest: stableEvId('unknown'),
+    providerEventId: stableEvId(`unknown:${eventType}`),
+    providerEventType: `telnyx.${eventType}`,
+    providerMeta: baseMeta(eventType, { raw: { event_type: eventType } })
+  };
+}
+
+export class TelnyxVoiceProvider implements VoiceProviderAdapter {
+  readonly providerId = PROVIDER_ID;
+
+  private readonly config: VoiceProviderRuntimeConfig;
+
+  constructor(config: VoiceProviderRuntimeConfig) {
+    this.config = config;
+  }
+
+  getCapabilities(): VoiceProviderCapabilities {
+    return {
+      providerId: this.providerId,
+      supportedCountries: [],
+      localCallerIdSupported: true,
+      readiness: 'experimental'
+    };
+  }
+
+  async validateConfig(): Promise<VoiceProviderValidateConfigResult> {
+    return { ok: true, details: { note: 'use probeTelnyxApiKey or company integration save flow' } };
+  }
+
+  async createOutboundCall(input: CreateOutboundVoiceCallInput): Promise<CreateOutboundVoiceCallResult> {
+    const row = await getVoiceIntegration(input.companyId);
+    if (!row?.telnyxEnabled || !row.telnyxApiKey?.trim()) {
+      return {
+        ok: false,
+        error:
+          'Telnyx не включён или не сохранён API Key компании. Настройте интеграцию Telnyx в CRM.',
+        code: 'telnyx_company_config_incomplete',
+        providerFailureCode: 'telnyx_company_config_incomplete',
+        providerFailureReason: 'telnyx_not_configured'
+      };
+    }
+    const apiKey = row.telnyxApiKey.trim();
+    const connectionId = row.telnyxConnectionId?.trim() ?? '';
+    if (!connectionId) {
+      return {
+        ok: false,
+        error:
+          'Для исходящего звонка Telnyx нужен Connection / Application ID (Call Control). Укажите его в настройках Telnyx.',
+        code: 'telnyx_connection_id_required',
+        providerFailureCode: 'telnyx_connection_id_required',
+        providerFailureReason: 'missing_connection_id'
+      };
+    }
+
+    const baseUrl = buildVoiceProviderWebhookUrl(this.config);
+    if (!baseUrl.startsWith('http')) {
+      return {
+        ok: false,
+        error:
+          'Невозможно построить публичный webhook URL для Telnyx (задайте URL сайта / VOICE_PUBLIC_SITE_URL на Netlify).',
+        code: 'telnyx_public_url',
+        providerFailureCode: 'telnyx_public_url',
+        providerFailureReason: 'missing_public_url'
+      };
+    }
+
+    const webhookUrl = new URL(baseUrl);
+    webhookUrl.searchParams.set('companyId', input.companyId);
+    webhookUrl.searchParams.set('callId', input.callId);
+
+    const body = {
+      connection_id: connectionId,
+      to: input.toE164,
+      from: input.fromE164,
+      webhook_url: webhookUrl.toString(),
+      webhook_url_method: 'POST'
+    };
+
+    console.log(
+      JSON.stringify({
+        tag: 'voice.telnyx.create',
+        phase: 'request',
+        companyId: input.companyId,
+        callId: input.callId,
+        toE164: input.toE164,
+        fromE164: input.fromE164
+      })
+    );
+
+    try {
+      const res = await fetch('https://api.telnyx.com/v2/calls', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok) {
+        const errors = json.errors as Array<{ code?: string; title?: string; detail?: string }> | undefined;
+        const first = errors?.[0];
+        const msg =
+          first?.detail || first?.title || JSON.stringify(json).slice(0, 400) || `HTTP ${res.status}`;
+        console.log(
+          JSON.stringify({
+            tag: 'voice.telnyx.create',
+            phase: 'response',
+            ok: false,
+            status: res.status,
+            message: msg
+          })
+        );
+        return {
+          ok: false,
+          error: `Telnyx: ${msg}`,
+          code: 'telnyx_api_error',
+          providerFailureCode: `telnyx_http_${res.status}`,
+          providerFailureReason: msg,
+          rawProviderMessage: msg,
+          providerDebug: { status: res.status, body: json }
+        };
+      }
+      const data = json.data as Record<string, unknown> | undefined;
+      const callControlId = String(data?.call_control_id ?? '').trim();
+      if (!callControlId) {
+        return {
+          ok: false,
+          error: 'Telnyx: в ответе нет call_control_id',
+          code: 'telnyx_api_error',
+          providerFailureCode: 'telnyx_missing_call_control_id',
+          providerFailureReason: 'missing_call_control_id',
+          providerDebug: { body: json }
+        };
+      }
+      console.log(
+        JSON.stringify({
+          tag: 'voice.telnyx.create',
+          phase: 'response',
+          ok: true,
+          companyId: input.companyId,
+          callId: input.callId,
+          callControlId
+        })
+      );
+      return {
+        ok: true,
+        providerCallId: callControlId,
+        raw: json as Record<string, unknown>,
+        providerDebug: {
+          telnyxCallControlId: callControlId,
+          connectionId
+        },
+        initialNormalizedEvents: []
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return {
+        ok: false,
+        error: `Telnyx: ${msg}`,
+        code: 'telnyx_api_error',
+        providerFailureCode: 'telnyx_network',
+        providerFailureReason: msg
+      };
+    }
+  }
+
+  async handleWebhook(input: VoiceWebhookParseInput): Promise<VoiceNormalizedWebhookEvent[]> {
+    const companyId = String(input.queryParams.companyId ?? '').trim();
+    if (!companyId) {
+      throw new Error('Telnyx: в URL webhook должен быть query-параметр companyId');
+    }
+    const row = await getVoiceIntegration(companyId);
+    const pub = row?.telnyxPublicKey?.trim() ?? '';
+    if (!pub) {
+      throw new Error('Telnyx: для компании не сохранён Public Key (проверка подписи невозможна)');
+    }
+
+    const skipSig = truthyEnv('TELNYX_SKIP_SIGNATURE_VALIDATION');
+    if (!skipSig) {
+      const v = verifyTelnyxWebhookSignature({
+        publicKeyMaterial: pub,
+        rawBody: input.rawBody,
+        timestampHeader: headerCi(input.headers, 'telnyx-timestamp'),
+        signatureHeaderB64: headerCi(input.headers, 'telnyx-signature-ed25519')
+      });
+      if (!v.ok) {
+        throw new Error(`Telnyx: неверная подпись webhook (${v.reason})`);
+      }
+    }
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(input.rawBody) as Record<string, unknown>;
+    } catch {
+      return [];
+    }
+
+    const data = extractDataObject(parsed);
+    const eventType = String(data.event_type ?? '').trim();
+    if (!eventType.startsWith('call.')) {
+      return [];
+    }
+
+    const eventId = String(data.id ?? '').trim();
+    const occurredAt =
+      String(data.occurred_at ?? '').trim() && Number.isFinite(Date.parse(String(data.occurred_at)))
+        ? new Date(Date.parse(String(data.occurred_at))).toISOString()
+        : new Date().toISOString();
+
+    const payload =
+      (data.payload as Record<string, unknown>) ??
+      (data.record as Record<string, unknown>) ??
+      ({} as Record<string, unknown>);
+
+    const ev = mapTelnyxCallEvent(eventType, eventId, occurredAt, payload);
+    return ev ? [ev] : [];
+  }
+}

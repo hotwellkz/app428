@@ -39,6 +39,8 @@ interface IntegrationState {
   lastCheckedAt: string | null;
 }
 
+type OutboundVoiceProviderPref = 'twilio' | 'telnyx';
+
 interface VoiceIntegrationState {
   configured: boolean;
   enabled: boolean;
@@ -49,6 +51,20 @@ interface VoiceIntegrationState {
   connectionError: string | null;
   voiceReady: boolean;
   hasDefaultOutbound: boolean;
+  outboundVoiceProvider: OutboundVoiceProviderPref;
+}
+
+interface TelnyxVoiceState {
+  configured: boolean;
+  enabled: boolean;
+  apiKeyMasked: string | null;
+  publicKeySet: boolean;
+  connectionId: string | null;
+  connectionStatus: 'connected' | 'not_connected' | 'invalid_config';
+  connectionError: string | null;
+  voiceReady: boolean;
+  hasDefaultOutbound: boolean;
+  readinessMessages: string[];
 }
 
 export const IntegrationsSettings: React.FC = () => {
@@ -120,7 +136,8 @@ export const IntegrationsSettings: React.FC = () => {
     connectionStatus: 'not_connected',
     connectionError: null,
     voiceReady: false,
-    hasDefaultOutbound: false
+    hasDefaultOutbound: false,
+    outboundVoiceProvider: 'twilio'
   });
   const [voiceForm, setVoiceForm] = useState({
     accountSid: '',
@@ -130,8 +147,32 @@ export const IntegrationsSettings: React.FC = () => {
     numberLabel: ''
   });
   const [voiceNumbers, setVoiceNumbers] = useState<
-    Array<{ id: string; e164: string; label: string | null; isDefault: boolean; isActive: boolean }>
+    Array<{ id: string; e164: string; label: string | null; isDefault: boolean; isActive: boolean; provider: string }>
   >([]);
+  const [telnyxState, setTelnyxState] = useState<TelnyxVoiceState>({
+    configured: false,
+    enabled: false,
+    apiKeyMasked: null,
+    publicKeySet: false,
+    connectionId: null,
+    connectionStatus: 'not_connected',
+    connectionError: null,
+    voiceReady: false,
+    hasDefaultOutbound: false,
+    readinessMessages: []
+  });
+  const [telnyxForm, setTelnyxForm] = useState({
+    apiKey: '',
+    publicKey: '',
+    connectionId: '',
+    enabled: true,
+    numberE164: '',
+    numberLabel: ''
+  });
+  const [telnyxNumbers, setTelnyxNumbers] = useState<
+    Array<{ id: string; e164: string; label: string | null; isDefault: boolean; isActive: boolean; provider: string }>
+  >([]);
+  const [outboundSaving, setOutboundSaving] = useState(false);
   const [voiceLoading, setVoiceLoading] = useState(true);
   const [voiceSaving, setVoiceSaving] = useState(false);
   const [voiceTesting, setVoiceTesting] = useState(false);
@@ -282,12 +323,18 @@ export const IntegrationsSettings: React.FC = () => {
     try {
       const token = await getAuthToken();
       if (!token) return;
-      const [integrationRes, numbersRes] = await Promise.all([
+      const [integrationRes, numbersRes, telnyxIntRes, telnyxNumRes] = await Promise.all([
         fetch(API_VOICE_INTEGRATION, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
-        fetch(API_VOICE_NUMBERS, { method: 'GET', headers: { Authorization: `Bearer ${token}` } })
+        fetch(`${API_VOICE_NUMBERS}?provider=twilio`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_VOICE_INTEGRATION}?provider=telnyx`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_VOICE_NUMBERS}?provider=telnyx`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } })
       ]);
       const integrationData = (await integrationRes.json().catch(() => ({}))) as Record<string, unknown>;
       const numbersData = (await numbersRes.json().catch(() => ({}))) as { items?: Array<Record<string, unknown>> };
+      const telnyxData = (await telnyxIntRes.json().catch(() => ({}))) as Record<string, unknown>;
+      const telnyxNums = (await telnyxNumRes.json().catch(() => ({}))) as { items?: Array<Record<string, unknown>> };
+      const outbound =
+        integrationData.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
       setVoiceState({
         configured: integrationData.configured === true,
         enabled: integrationData.enabled === true,
@@ -297,7 +344,8 @@ export const IntegrationsSettings: React.FC = () => {
         connectionStatus: (integrationData.connectionStatus as VoiceIntegrationState['connectionStatus']) ?? 'not_connected',
         connectionError: (integrationData.connectionError as string) ?? null,
         voiceReady: integrationData.voiceReady === true,
-        hasDefaultOutbound: integrationData.hasDefaultOutbound === true
+        hasDefaultOutbound: integrationData.hasDefaultOutbound === true,
+        outboundVoiceProvider: outbound
       });
       setVoiceNumbers(
         (numbersData.items ?? []).map((x) => ({
@@ -305,7 +353,32 @@ export const IntegrationsSettings: React.FC = () => {
           e164: String(x.e164 ?? ''),
           label: (x.label as string) ?? null,
           isDefault: x.isDefault === true,
-          isActive: x.isActive !== false
+          isActive: x.isActive !== false,
+          provider: String(x.provider ?? 'twilio')
+        }))
+      );
+      setTelnyxState({
+        configured: telnyxData.configured === true,
+        enabled: telnyxData.enabled === true,
+        apiKeyMasked: (telnyxData.apiKeyMasked as string) ?? null,
+        publicKeySet: telnyxData.publicKeySet === true,
+        connectionId: (telnyxData.connectionId as string) ?? null,
+        connectionStatus: (telnyxData.connectionStatus as TelnyxVoiceState['connectionStatus']) ?? 'not_connected',
+        connectionError: (telnyxData.connectionError as string) ?? null,
+        voiceReady: telnyxData.voiceReady === true,
+        hasDefaultOutbound: telnyxData.hasDefaultOutbound === true,
+        readinessMessages: Array.isArray(telnyxData.readinessMessages)
+          ? (telnyxData.readinessMessages as string[])
+          : []
+      });
+      setTelnyxNumbers(
+        (telnyxNums.items ?? []).map((x) => ({
+          id: String(x.id ?? ''),
+          e164: String(x.e164 ?? ''),
+          label: (x.label as string) ?? null,
+          isDefault: x.isDefault === true,
+          isActive: x.isActive !== false,
+          provider: String(x.provider ?? 'telnyx')
         }))
       );
     } catch (e) {
@@ -552,6 +625,139 @@ export const IntegrationsSettings: React.FC = () => {
   };
 
   const handleVoiceSetDefault = async (numberId: string) => {
+    const token = await getAuthToken();
+    if (!token) return;
+    await fetch(API_VOICE_NUMBERS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ action: 'set_default', numberId })
+    });
+    fetchVoice();
+  };
+
+  const handleOutboundProviderChange = async (pref: OutboundVoiceProviderPref) => {
+    if (!user) return;
+    setOutboundSaving(true);
+    setVoiceError(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch(API_VOICE_INTEGRATION, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ action: 'set_outbound_provider', outboundVoiceProvider: pref })
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setVoiceError(data.error ?? 'Не удалось сменить провайдер');
+        return;
+      }
+      setVoiceSuccess(`Исходящий провайдер: ${pref === 'telnyx' ? 'Telnyx' : 'Twilio'}`);
+      await fetchVoice();
+    } finally {
+      setOutboundSaving(false);
+    }
+  };
+
+  const handleTelnyxTest = async () => {
+    if (!telnyxForm.apiKey.trim() || !telnyxForm.publicKey.trim()) {
+      setVoiceError('Укажите API Key и Public Key Telnyx для проверки');
+      return;
+    }
+    setVoiceTesting(true);
+    setVoiceError(null);
+    setVoiceSuccess(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch(API_VOICE_INTEGRATION, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          provider: 'telnyx',
+          apiKey: telnyxForm.apiKey.trim(),
+          publicKey: telnyxForm.publicKey.trim(),
+          testOnly: true
+        })
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        setVoiceError(data.error ?? 'Проверка Telnyx не пройдена');
+        return;
+      }
+      setVoiceSuccess(data.message ?? 'Telnyx: подключение проверено');
+      await fetchVoice();
+    } finally {
+      setVoiceTesting(false);
+    }
+  };
+
+  const handleTelnyxSave = async () => {
+    if (!telnyxForm.apiKey.trim() || !telnyxForm.publicKey.trim()) {
+      setVoiceError('Укажите API Key и Public Key Telnyx');
+      return;
+    }
+    setVoiceSaving(true);
+    setVoiceError(null);
+    setVoiceSuccess(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch(API_VOICE_INTEGRATION, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          provider: 'telnyx',
+          apiKey: telnyxForm.apiKey.trim(),
+          publicKey: telnyxForm.publicKey.trim(),
+          enabled: telnyxForm.enabled,
+          connectionId: telnyxForm.connectionId.trim() || null
+        })
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string };
+      if (!res.ok) {
+        setVoiceError(data.error ?? 'Ошибка сохранения Telnyx');
+        return;
+      }
+      setVoiceSuccess(data.message ?? 'Telnyx сохранён');
+      setTelnyxForm((f) => ({ ...f, apiKey: '', publicKey: '' }));
+      await fetchVoice();
+    } finally {
+      setVoiceSaving(false);
+    }
+  };
+
+  const handleTelnyxNumberAdd = async () => {
+    if (!telnyxForm.numberE164.trim()) return setVoiceError('Укажите номер в формате E.164');
+    setVoiceSaving(true);
+    setVoiceError(null);
+    try {
+      const token = await getAuthToken();
+      if (!token) return;
+      const res = await fetch(API_VOICE_NUMBERS, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          action: 'upsert',
+          e164: telnyxForm.numberE164.trim(),
+          label: telnyxForm.numberLabel.trim() || null,
+          provider: 'telnyx'
+        })
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        setVoiceError(data.error ?? 'Не удалось добавить номер Telnyx');
+        return;
+      }
+      setVoiceSuccess('Номер Telnyx сохранён');
+      setTelnyxForm((f) => ({ ...f, numberE164: '', numberLabel: '' }));
+      await fetchVoice();
+    } finally {
+      setVoiceSaving(false);
+    }
+  };
+
+  const handleTelnyxSetDefault = async (numberId: string) => {
     const token = await getAuthToken();
     if (!token) return;
     await fetch(API_VOICE_NUMBERS, {
@@ -1098,6 +1304,19 @@ export const IntegrationsSettings: React.FC = () => {
                   Voice: {voiceState.voiceReady ? 'ready' : 'not ready'}
                 </span>
               </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-sm">
+                <span className="text-gray-700 shrink-0">Исходящий провайдер (outbound):</span>
+                <select
+                  value={voiceState.outboundVoiceProvider}
+                  disabled={outboundSaving || voiceLoading}
+                  onChange={(e) => void handleOutboundProviderChange(e.target.value as OutboundVoiceProviderPref)}
+                  className="w-full sm:w-auto rounded-lg border border-gray-300 px-2 py-1.5 text-sm max-w-xs"
+                >
+                  <option value="twilio">Twilio</option>
+                  <option value="telnyx">Telnyx</option>
+                </select>
+                {outboundSaving ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : null}
+              </div>
               {voiceState.accountSidMasked ? (
                 <p className="text-xs text-gray-600">
                   Account SID сохранён ({voiceState.accountSidMasked})
@@ -1162,7 +1381,10 @@ export const IntegrationsSettings: React.FC = () => {
                   {voiceNumbers.map((n) => (
                     <div key={n.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm">
                       <div>
-                        <p className="font-medium text-gray-800">{n.label || n.e164}</p>
+                        <p className="font-medium text-gray-800 flex flex-wrap items-center gap-2">
+                          {n.label || n.e164}
+                          <span className="text-[10px] uppercase font-semibold bg-sky-100 text-sky-800 px-1.5 py-0.5 rounded">Twilio</span>
+                        </p>
                         <p className="text-xs text-gray-500">{n.e164} · {n.isActive ? 'active' : 'inactive'}</p>
                       </div>
                       {n.isDefault ? (
@@ -1176,12 +1398,172 @@ export const IntegrationsSettings: React.FC = () => {
                   ))}
                 </div>
               </div>
-              <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">
-                ElevenLabs: coming soon (placeholder).
-              </div>
               {voiceError ? <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2">{voiceError}</div> : null}
               {voiceSuccess ? <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">{voiceSuccess}</div> : null}
               {voiceState.connectionError ? <div className="text-xs text-amber-800">{voiceState.connectionError}</div> : null}
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+          <h2 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+            <Phone className="w-4 h-4 text-violet-600" />
+            Voice / Telephony (Telnyx)
+          </h2>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Второй voice-провайдер на уровне компании. Webhook: подпись Ed25519 (Public Key). ElevenLabs / TTS — отдельный будущий слой, не провайдер исходящей телефонии.
+          </p>
+        </div>
+        <div className="p-4 space-y-4">
+          {voiceLoading ? (
+            <div className="flex items-center gap-2 text-sm text-gray-500">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Загрузка…
+            </div>
+          ) : (
+            <>
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span
+                  className={`px-2 py-1 rounded-full border ${
+                    telnyxState.connectionStatus === 'connected'
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-amber-50 border-amber-200 text-amber-800'
+                  }`}
+                >
+                  Provider: {telnyxState.connectionStatus === 'connected' ? 'connected' : telnyxState.connectionStatus}
+                </span>
+                <span
+                  className={`px-2 py-1 rounded-full border ${
+                    telnyxState.hasDefaultOutbound
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-amber-50 border-amber-200 text-amber-800'
+                  }`}
+                >
+                  Default outbound: {telnyxState.hasDefaultOutbound ? 'selected' : 'missing'}
+                </span>
+                <span
+                  className={`px-2 py-1 rounded-full border ${
+                    telnyxState.voiceReady ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-700'
+                  }`}
+                >
+                  Voice: {telnyxState.voiceReady ? 'ready' : 'not ready'}
+                </span>
+              </div>
+              {telnyxState.readinessMessages.length > 0 && !telnyxState.voiceReady ? (
+                <ul className="text-xs text-amber-900 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 list-disc list-inside space-y-0.5">
+                  {telnyxState.readinessMessages.map((m) => (
+                    <li key={m}>{m}</li>
+                  ))}
+                </ul>
+              ) : null}
+              {telnyxState.apiKeyMasked ? (
+                <p className="text-xs text-gray-600">API Key сохранён ({telnyxState.apiKeyMasked})</p>
+              ) : null}
+              {telnyxState.publicKeySet ? <p className="text-xs text-gray-600">Public Key для webhook сохранён</p> : null}
+              <div className="grid sm:grid-cols-2 gap-3">
+                <input
+                  type="password"
+                  value={telnyxForm.apiKey}
+                  onChange={(e) => setTelnyxForm((f) => ({ ...f, apiKey: e.target.value }))}
+                  placeholder="Telnyx API Key (секретный)"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+                <input
+                  type="text"
+                  value={telnyxForm.publicKey}
+                  onChange={(e) => setTelnyxForm((f) => ({ ...f, publicKey: e.target.value }))}
+                  placeholder="Telnyx Public Key (base64, Ed25519)"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-xs"
+                />
+              </div>
+              <input
+                type="text"
+                value={telnyxForm.connectionId}
+                onChange={(e) => setTelnyxForm((f) => ({ ...f, connectionId: e.target.value }))}
+                placeholder="Connection / Call Control Application ID (для исходящих звонков)"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              />
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={telnyxForm.enabled}
+                  onChange={(e) => setTelnyxForm((f) => ({ ...f, enabled: e.target.checked }))}
+                />
+                Интеграция Telnyx активна
+              </label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void handleTelnyxTest()}
+                  disabled={voiceTesting}
+                  className="px-4 py-2 text-sm font-medium text-violet-700 bg-violet-50 border border-violet-200 rounded-lg"
+                >
+                  {voiceTesting ? 'Проверка…' : 'Проверить подключение'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleTelnyxSave()}
+                  disabled={voiceSaving}
+                  className="px-4 py-2 text-sm font-medium text-white bg-violet-600 rounded-lg"
+                >
+                  {voiceSaving ? 'Сохранение…' : 'Сохранить'}
+                </button>
+              </div>
+              <div className="border-t pt-3">
+                <p className="text-xs font-semibold text-gray-700 mb-2">Telnyx voice numbers</p>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  <input
+                    type="text"
+                    value={telnyxForm.numberE164}
+                    onChange={(e) => setTelnyxForm((f) => ({ ...f, numberE164: e.target.value }))}
+                    placeholder="+1..."
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                  <input
+                    type="text"
+                    value={telnyxForm.numberLabel}
+                    onChange={(e) => setTelnyxForm((f) => ({ ...f, numberLabel: e.target.value }))}
+                    placeholder="Label"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleTelnyxNumberAdd()}
+                  className="mt-2 px-4 py-2 text-sm font-medium border rounded-lg"
+                >
+                  Добавить / обновить номер
+                </button>
+                <div className="mt-2 space-y-2">
+                  {telnyxNumbers.map((n) => (
+                    <div key={n.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm">
+                      <div>
+                        <p className="font-medium text-gray-800 flex flex-wrap items-center gap-2">
+                          {n.label || n.e164}
+                          <span className="text-[10px] uppercase font-semibold bg-violet-100 text-violet-800 px-1.5 py-0.5 rounded">Telnyx</span>
+                        </p>
+                        <p className="text-xs text-gray-500">
+                          {n.e164} · {n.isActive ? 'active' : 'inactive'}
+                        </p>
+                      </div>
+                      {n.isDefault ? (
+                        <span className="text-xs text-emerald-700">default</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void handleTelnyxSetDefault(n.id)}
+                          className="text-xs text-violet-700"
+                        >
+                          Сделать default
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {telnyxState.connectionError ? <div className="text-xs text-amber-800">{telnyxState.connectionError}</div> : null}
             </>
           )}
         </div>

@@ -3,6 +3,7 @@ import { loadVoiceProviderRuntimeConfig } from './lib/voice/providerConfig';
 import { getVoiceProviderAdapter } from './lib/voice/voiceProviderAdapter';
 import { ingestNormalizedVoiceEvents } from './lib/voice/voiceWebhookIngest';
 import { TwilioVoiceProvider } from './lib/voice/providers/twilioVoiceProvider';
+import { TelnyxVoiceProvider } from './lib/voice/providers/telnyxVoiceProvider';
 
 function flattenHeaders(
   raw: HandlerEvent['headers'] | HandlerEvent['multiValueHeaders']
@@ -16,13 +17,32 @@ function flattenHeaders(
   return out;
 }
 
+function isTelnyxJsonBody(raw: string | undefined): boolean {
+  if (!raw?.trim()) return false;
+  try {
+    const j = JSON.parse(raw) as { data?: { event_type?: string }; event_type?: string };
+    const et = j?.data?.event_type ?? j?.event_type;
+    return typeof et === 'string' && et.startsWith('call.');
+  } catch {
+    return false;
+  }
+}
+
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   const jsonHeaders = { 'Content-Type': 'application/json' };
   const rawHeaders = flattenHeaders(event.headers);
+  const bodyRaw = event.body ?? '';
   const isTwilioWebhook = !!(
     rawHeaders['x-twilio-signature'] ||
     rawHeaders['X-Twilio-Signature'] ||
-    (event.body ?? '').includes('CallSid=')
+    bodyRaw.includes('CallSid=')
+  );
+  const isTelnyxWebhook = !!(
+    rawHeaders['telnyx-signature-ed25519'] ||
+    rawHeaders['Telnyx-Signature-Ed25519'] ||
+    rawHeaders['telnyx-timestamp'] ||
+    rawHeaders['Telnyx-Timestamp'] ||
+    isTelnyxJsonBody(bodyRaw)
   );
   const twilioAck = (): HandlerResponse => ({ statusCode: 204, headers: { 'Content-Type': 'text/plain' }, body: '' });
 
@@ -37,8 +57,8 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const config = loadVoiceProviderRuntimeConfig();
     const headers = rawHeaders;
 
-    /** Twilio проверяет X-Twilio-Signature в адаптере; общий VOICE_WEBHOOK_SECRET — для mock/прочего. */
-    if (config.mode !== 'twilio' && config.webhookSecret) {
+    /** Twilio проверяет X-Twilio-Signature в адаптере; Telnyx — свою Ed25519; общий VOICE_WEBHOOK_SECRET — для mock JSON. */
+    if (config.mode !== 'twilio' && config.webhookSecret && !isTwilioWebhook && !isTelnyxWebhook) {
       const h =
         headers['x-voice-webhook-secret'] ??
         headers['X-Voice-Webhook-Secret'] ??
@@ -50,7 +70,13 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
     let adapter;
     try {
-      adapter = isTwilioWebhook ? new TwilioVoiceProvider(config) : getVoiceProviderAdapter(config);
+      if (isTwilioWebhook) {
+        adapter = new TwilioVoiceProvider(config);
+      } else if (isTelnyxWebhook) {
+        adapter = new TelnyxVoiceProvider(config);
+      } else {
+        adapter = getVoiceProviderAdapter(config);
+      }
     } catch (e) {
       if (isTwilioWebhook) {
         console.log(
@@ -82,6 +108,17 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       });
     } catch (e) {
       const msg = String(e);
+      if (isTelnyxWebhook && msg.includes('Telnyx:')) {
+        console.log(
+          JSON.stringify({
+            tag: 'voice.webhook.response',
+            provider: 'telnyx',
+            statusCode: 403,
+            error: msg
+          })
+        );
+        return { statusCode: 403, headers: jsonHeaders, body: JSON.stringify({ error: msg }) };
+      }
       if (msg.includes('mock webhook secret')) {
         return { statusCode: 401, headers: jsonHeaders, body: JSON.stringify({ error: 'Mock webhook secret mismatch' }) };
       }
@@ -116,6 +153,29 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     }
 
     const { results, unknownOrUnmatched } = await ingestNormalizedVoiceEvents(events);
+
+    if (isTelnyxWebhook) {
+      console.log(
+        JSON.stringify({
+          tag: 'voice.webhook.response',
+          provider: 'telnyx',
+          statusCode: 200,
+          received: events.length,
+          processed: results.length,
+          unknownOrUnmatched
+        })
+      );
+      return {
+        statusCode: 200,
+        headers: jsonHeaders,
+        body: JSON.stringify({
+          ok: true,
+          received: events.length,
+          processed: results.length,
+          unknownOrUnmatched
+        })
+      };
+    }
 
     if (isTwilioWebhook) {
       console.log(
