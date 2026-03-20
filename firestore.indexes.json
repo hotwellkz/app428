@@ -383,6 +383,14 @@
       ]
     },
     {
+      "collectionGroup": "voiceCallSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "voiceRetryStatus", "order": "ASCENDING" },
+        { "fieldPath": "voiceRetryNextAt", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "voiceNumbers",
       "queryScope": "COLLECTION",
       "fields": [

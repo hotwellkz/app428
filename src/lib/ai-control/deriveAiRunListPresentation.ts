@@ -5,7 +5,8 @@ import { channelBadgeLabel, deriveAiRunChannelFromRun, type AiControlDerivedChan
 import {
   formatVoiceRunStatusLine,
   getVoiceCallSnapshotFromRun,
-  getVoicePostCallFromRun
+  getVoicePostCallFromRun,
+  getVoiceRetryFromRun
 } from './voiceRunBridge';
 
 export type RunSourceType = 'snapshot' | 'fallback' | 'unknown';
@@ -131,6 +132,16 @@ export function deriveAiRunListPresentation(
     }
     if (isVoice && !run.extras?.voiceCallSessionId && !voiceSnap) {
       attentionReasons.push('Голос: нет привязки к voiceCallSession в extras');
+    }
+    const vr = getVoiceRetryFromRun(run);
+    if (vr?.retryStatus === 'exhausted') {
+      attentionReasons.push('Голос: исчерпаны авто-повторы (retry exhausted)');
+    }
+    if (vr?.retryStatus === 'scheduled' && vr.nextRetryAt) {
+      const t = Date.parse(vr.nextRetryAt);
+      if (Number.isFinite(t) && t < Date.now()) {
+        attentionReasons.push('Голос: запланированный retry просрочен (ждёт sweep)');
+      }
     }
   }
 

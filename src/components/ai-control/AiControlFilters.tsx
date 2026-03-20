@@ -347,6 +347,9 @@ export const AiControlFilters: React.FC<{
             <option value="follow_up_failed">Follow-up WhatsApp failed</option>
             <option value="crm_failed">CRM apply error</option>
             <option value="needs_attention_voice">Требуют внимания (voice)</option>
+            <option value="retry_scheduled">Retry: запланирован</option>
+            <option value="retry_exhausted">Retry: лимит исчерпан</option>
+            <option value="callback_due">Callback в ближайшие 2ч</option>
           </select>
         </div>
         <div>

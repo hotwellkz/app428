@@ -45,15 +45,53 @@ export function getVoiceCallSessionIdFromRun(run: WhatsAppAiBotRunRecord): strin
   return null;
 }
 
+export type VoiceRetryForAiRun = {
+  retryStatus?: string | null;
+  retryReason?: string | null;
+  nextRetryAt?: string | null;
+  autoDispatchCount?: number;
+  maxAutoDispatches?: number;
+  manualRedialCount?: number;
+  callbackAt?: string | null;
+  callbackRequested?: boolean;
+  rootCallId?: string | null;
+  parentCallId?: string | null;
+};
+
+export function getVoiceRetryFromRun(run: WhatsAppAiBotRunRecord): VoiceRetryForAiRun | null {
+  const raw = run.extras?.voiceRetry;
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  return {
+    retryStatus: o.retryStatus != null ? String(o.retryStatus) : null,
+    retryReason: o.retryReason != null ? String(o.retryReason) : null,
+    nextRetryAt: o.nextRetryAt != null ? String(o.nextRetryAt) : null,
+    autoDispatchCount: typeof o.autoDispatchCount === 'number' ? o.autoDispatchCount : Number(o.autoDispatchCount ?? 0),
+    maxAutoDispatches:
+      typeof o.maxAutoDispatches === 'number' ? o.maxAutoDispatches : Number(o.maxAutoDispatches ?? 0) || undefined,
+    manualRedialCount:
+      typeof o.manualRedialCount === 'number' ? o.manualRedialCount : Number(o.manualRedialCount ?? 0),
+    callbackAt: o.callbackAt != null ? String(o.callbackAt) : null,
+    callbackRequested: o.callbackRequested === true,
+    rootCallId: o.rootCallId != null ? String(o.rootCallId) : null,
+    parentCallId: o.parentCallId != null ? String(o.parentCallId) : null
+  };
+}
+
 /** Компактная строка статусов звонка для списка. */
 export function formatVoiceRunStatusLine(run: WhatsAppAiBotRunRecord): string {
   const snap = getVoiceCallSnapshotFromRun(run);
   const vp = getVoicePostCallFromRun(run);
+  const vr = getVoiceRetryFromRun(run);
   const parts: string[] = [];
   if (snap?.callStatus) parts.push(snap.callStatus);
   if (snap?.outcome) parts.push(`outcome:${snap.outcome}`);
   if (snap?.postCallStatus) parts.push(`post:${snap.postCallStatus}`);
   else if (vp?.lightweight) parts.push('post:light');
   if (snap?.followUpStatus && snap.followUpStatus !== 'skipped') parts.push(`WA:${snap.followUpStatus}`);
+  if (vr?.retryStatus && vr.retryStatus !== 'none' && vr.retryStatus !== 'completed') {
+    parts.push(`retry:${vr.retryStatus}`);
+    if (vr.nextRetryAt) parts.push(`next:${vr.nextRetryAt.slice(0, 16)}`);
+  }
   return parts.length ? parts.join(' · ') : 'voice';
 }

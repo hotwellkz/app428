@@ -26,6 +26,45 @@ export type VoiceOutcome = 'meeting_booked' | 'callback' | 'no_interest' | 'unkn
 
 export type VoicePostCallStatus = 'pending' | 'processing' | 'done' | 'failed';
 
+/** Авто/ручной retry и callback (оркестрация поверх сессии). */
+export type VoiceRetryReason =
+  | 'no_answer'
+  | 'busy'
+  | 'failed'
+  | 'callback_requested'
+  | 'outcome_unknown'
+  | 'manual';
+
+export type VoiceRetryOrchestrationStatus =
+  | 'none'
+  | 'pending'
+  | 'scheduled'
+  | 'dispatching'
+  | 'dispatched'
+  | 'completed'
+  | 'exhausted'
+  | 'canceled';
+
+/** Состояние retry/callback на сессии + денормализация для sweep-запросов. */
+export interface VoiceRetryState {
+  retryEligible?: boolean;
+  retryReason?: VoiceRetryReason | string | null;
+  retryStatus?: VoiceRetryOrchestrationStatus | string | null;
+  /** Успешные авто-dispatch из sweep (не считая исходящий первый звонок). */
+  autoDispatchCount?: number;
+  maxAutoDispatches?: number;
+  nextRetryAt?: Timestamp | Date | null;
+  lastRetryAt?: Timestamp | Date | null;
+  callbackRequested?: boolean;
+  callbackAt?: Timestamp | Date | null;
+  callbackTimezone?: string | null;
+  callbackNote?: string | null;
+  parentCallId?: string | null;
+  rootCallId?: string | null;
+  /** Идемпотентность / дедуп алертов */
+  lastAlertKeys?: string[];
+}
+
 export type VoiceSpeaker = 'bot' | 'client' | 'system';
 
 /** Подполе metadata у voiceCallSessions для голосового loop (Twilio Say/Gather). */
@@ -105,6 +144,13 @@ export interface VoiceCallSession {
   followUpChannel?: string | null;
   followUpStatus?: string | null;
   followUpError?: string | null;
+  /** Денормализация для scheduled sweep (индекс с voiceRetryNextAt). */
+  voiceRetryStatus?: VoiceRetryOrchestrationStatus | string | null;
+  voiceRetryNextAt?: Timestamp | Date | null;
+  voiceRetryMaxAutoDispatches?: number | null;
+  voiceRetryCallbackAt?: Timestamp | Date | null;
+  voiceRetryCallbackOverdueAlertSent?: boolean | null;
+  voiceRetryLastDispatchedChildId?: string | null;
   metadata?: Record<string, unknown>;
   createdAt?: Timestamp | Date | null;
   updatedAt?: Timestamp | Date | null;

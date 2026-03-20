@@ -14,6 +14,10 @@
 [functions.voice-post-call-sweep]
   schedule = "*/4 * * * *"
 
+# Voice: scheduled auto-retry / callback dispatch
+[functions.voice-retry-sweep]
+  schedule = "*/5 * * * *"
+
 # Webhook Wazzup → Netlify function (должен быть выше правила /*)
 [[redirects]]
   from = "/api/wazzup/webhook"
@@ -152,6 +156,12 @@
 [[redirects]]
   from = "/api/voice/outbound-call"
   to = "/.netlify/functions/voice-outbound-call"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/voice/operational"
+  to = "/.netlify/functions/voice-operational"
   status = 200
   force = true
 

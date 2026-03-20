@@ -264,6 +264,72 @@ export async function adminListVoiceTurnsOrdered(
   });
 }
 
+function voiceRetryNextAtToMillis(v: unknown): number | null {
+  if (v == null) return null;
+  if (v instanceof Timestamp) return v.toMillis();
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === 'object' && v && 'toMillis' in (v as { toMillis?: unknown })) {
+    const fn = (v as { toMillis?: () => number }).toMillis;
+    if (typeof fn === 'function') return fn();
+  }
+  return null;
+}
+
+/** Сессии с назначенным авто-retry, время наступило (scheduled sweep). */
+export async function adminListVoiceSessionsDueRetry(max: number): Promise<Array<{ id: string; companyId: string }>> {
+  const db = getDb();
+  const lim = Math.min(Math.max(max, 1), 40);
+  const now = Timestamp.now();
+  const q = await db
+    .collection(VOICE_CALL_SESSIONS_COLLECTION)
+    .where('voiceRetryStatus', '==', 'scheduled')
+    .where('voiceRetryNextAt', '<=', now)
+    .limit(lim)
+    .get();
+  return q.docs
+    .map((d) => ({
+      id: d.id,
+      companyId: String(d.data()?.companyId ?? '').trim()
+    }))
+    .filter((x) => x.companyId.length > 0);
+}
+
+/**
+ * Идемпотентный claim: scheduled → dispatching, только если nextRetryAt наступил.
+ */
+export async function adminClaimVoiceRetryDispatch(
+  companyId: string,
+  callId: string,
+  nowMs: number
+): Promise<{ claimed: boolean; session: (Record<string, unknown> & { id: string }) | null }> {
+  const db = getDb();
+  const ref = db.collection(VOICE_CALL_SESSIONS_COLLECTION).doc(callId);
+  return db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(ref);
+    if (!snap.exists) {
+      return { claimed: false, session: null };
+    }
+    const d = snap.data()!;
+    if (String(d.companyId ?? '') !== companyId) {
+      return { claimed: false, session: { id: snap.id, ...d } };
+    }
+    const st = String(d.voiceRetryStatus ?? '');
+    if (st !== 'scheduled') {
+      return { claimed: false, session: { id: snap.id, ...d } };
+    }
+    const nextMs = voiceRetryNextAtToMillis(d.voiceRetryNextAt);
+    if (nextMs != null && nextMs > nowMs) {
+      return { claimed: false, session: { id: snap.id, ...d } };
+    }
+    transaction.update(ref, {
+      voiceRetryStatus: 'dispatching',
+      voiceRetryDispatchStartedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+    return { claimed: true, session: { id: snap.id, ...d } };
+  });
+}
+
 /** Сессии с postCallStatus=pending (для scheduled sweep). */
 export async function adminListVoiceSessionsPendingPostCall(
   max: number

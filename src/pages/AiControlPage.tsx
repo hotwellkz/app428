@@ -37,7 +37,8 @@ import { deriveAiRunChannelFromRun } from '../lib/ai-control/deriveAiRunChannel'
 import {
   formatVoiceRunStatusLine,
   getVoiceCallSnapshotFromRun,
-  getVoicePostCallFromRun
+  getVoicePostCallFromRun,
+  getVoiceRetryFromRun
 } from '../lib/ai-control/voiceRunBridge';
 import { auth } from '../lib/firebase/auth';
 
@@ -68,6 +69,21 @@ function voiceIssueMatches(
       return run.extractionApplyStatus === 'error';
     case 'needs_attention_voice':
       return pr.requiresAttention;
+    case 'retry_scheduled': {
+      const vr = getVoiceRetryFromRun(run);
+      return vr?.retryStatus === 'scheduled';
+    }
+    case 'retry_exhausted': {
+      const vr = getVoiceRetryFromRun(run);
+      return vr?.retryStatus === 'exhausted';
+    }
+    case 'callback_due': {
+      const vr = getVoiceRetryFromRun(run);
+      const raw = vr?.callbackAt || vr?.nextRetryAt;
+      if (!raw) return false;
+      const t = Date.parse(String(raw));
+      return Number.isFinite(t) && t <= Date.now() + 2 * 3600_000;
+    }
     default:
       return true;
   }
@@ -147,11 +163,11 @@ function applyFilters(
       if (filters.channel === 'voice' && derived !== 'voice') return false;
     }
 
+    const agg = computeAggregatedStatus(run);
+
     if (filters.voiceIssuePreset) {
       if (!voiceIssueMatches(run, filters.voiceIssuePreset, agg)) return false;
     }
-
-    const agg = computeAggregatedStatus(run);
     if (filters.statusBucket && agg !== filters.statusBucket) return false;
 
     const flags = computeRunResultFlags(run);
@@ -218,6 +234,7 @@ function applyFilters(
       const rAny = run as unknown as Record<string, unknown>;
       const vs = getVoiceCallSnapshotFromRun(run);
       const vp = getVoicePostCallFromRun(run);
+      const vr = getVoiceRetryFromRun(run);
       const extrasStr =
         run.extras && typeof run.extras === 'object' ? JSON.stringify(run.extras).toLowerCase() : '';
       const hay = [
@@ -251,6 +268,10 @@ function applyFilters(
         vs?.postCallStatus,
         formatVoiceRunStatusLine(run),
         vp?.summary,
+        vr?.retryStatus,
+        vr?.retryReason,
+        vr?.nextRetryAt,
+        vr?.callbackAt,
         extrasStr
       ]
         .filter(Boolean)
@@ -366,7 +387,10 @@ function metricsFor(
     voiceCompleted = 0,
     voiceNoAnswerBusy = 0,
     voicePostFailed = 0,
-    voiceNeedAttention = 0;
+    voiceNeedAttention = 0,
+    voiceRetryScheduled = 0,
+    voiceRetryExhausted = 0,
+    voiceCallbackDue = 0;
   const startTodayMs = startOfToday.getTime();
   for (const r of runs) {
     if (deriveAiRunChannelFromRun(r) === 'voice') {
@@ -378,6 +402,14 @@ function metricsFor(
       if (vs?.postCallStatus === 'failed') voicePostFailed++;
       const pr = deriveAiRunListPresentation(r, agg[r.id] ?? 'skipped');
       if (pr.requiresAttention) voiceNeedAttention++;
+      const vr = getVoiceRetryFromRun(r);
+      if (vr?.retryStatus === 'scheduled') voiceRetryScheduled++;
+      if (vr?.retryStatus === 'exhausted') voiceRetryExhausted++;
+      const raw = vr?.callbackAt || vr?.nextRetryAt;
+      if (raw) {
+        const t = Date.parse(String(raw));
+        if (Number.isFinite(t) && t <= Date.now() + 2 * 3600_000) voiceCallbackDue++;
+      }
     }
   }
   for (const r of runs) {
@@ -418,7 +450,10 @@ function metricsFor(
     voiceCompleted,
     voiceNoAnswerBusy,
     voicePostFailed,
-    voiceNeedAttention
+    voiceNeedAttention,
+    voiceRetryScheduled,
+    voiceRetryExhausted,
+    voiceCallbackDue
   };
 }
 
@@ -605,13 +640,16 @@ export const AiControlPage: React.FC = () => {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-6 gap-2 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-2 mb-4">
         {[
           { k: 'Voice сегодня', v: metrics.voiceToday },
           { k: 'Voice completed', v: metrics.voiceCompleted },
           { k: 'Voice занят/нет ответа', v: metrics.voiceNoAnswerBusy },
           { k: 'Voice post-call failed', v: metrics.voicePostFailed },
-          { k: 'Voice внимание', v: metrics.voiceNeedAttention }
+          { k: 'Voice внимание', v: metrics.voiceNeedAttention },
+          { k: 'Retry scheduled', v: metrics.voiceRetryScheduled },
+          { k: 'Retry exhausted', v: metrics.voiceRetryExhausted },
+          { k: 'Callback ≤2ч', v: metrics.voiceCallbackDue }
         ].map((c) => (
           <div key={c.k} className="rounded-lg border border-violet-100 bg-violet-50/60 p-2 text-center shadow-sm">
             <div className="text-lg font-semibold text-violet-900">{c.v}</div>

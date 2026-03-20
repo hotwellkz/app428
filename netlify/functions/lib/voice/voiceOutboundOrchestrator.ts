@@ -122,6 +122,17 @@ export async function orchestrateVoiceOutbound(
     startedAt: FieldValue.serverTimestamp()
   });
 
+  const lineageIn =
+    body.metadata?.voiceLineage && typeof body.metadata.voiceLineage === 'object'
+      ? (body.metadata.voiceLineage as Record<string, unknown>)
+      : {};
+  const rootCallId = lineageIn.rootCallId != null ? String(lineageIn.rootCallId) : callId;
+  const parentCallId = lineageIn.parentCallId != null ? String(lineageIn.parentCallId) : null;
+  await adminUpdateVoiceCallSession(companyId, callId, {
+    'metadata.voiceLineage.rootCallId': rootCallId,
+    'metadata.voiceLineage.parentCallId': parentCallId
+  });
+
   await adminAppendVoiceCallEvent(companyId, callId, {
     type: 'enqueue',
     providerEventType: 'orchestrator.enqueue',

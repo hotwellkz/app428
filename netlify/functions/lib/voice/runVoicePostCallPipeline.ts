@@ -19,6 +19,8 @@ import { mergeVoicePostCallIntoLinkedRun, type VoiceCallSnapshotForRunMerge } fr
 import { sendVoicePostCallWhatsappFollowUp } from './voicePostCallWhatsApp';
 import { createVoiceDealFromRecommendationSnapshot } from './voicePostCallDealAdmin';
 import { buildVoiceTranscriptFromTurns } from './buildVoiceTranscript';
+import { applyVoiceRetryAfterPostCall } from './applyVoiceRetryAfterPostCall';
+import { emitVoiceOperationalAlertIfNew } from './voiceRetryAlerts';
 import {
   adminClaimVoicePostCallProcessing,
   adminGetVoiceCallSession,
@@ -439,6 +441,21 @@ export async function runVoicePostCallPipeline(params: {
       metadata: mergeSessionPostCallMetadata(session, postCall)
     });
 
+    const freshSession =
+      (await adminGetVoiceCallSession(companyId, callId)) ?? { ...session, id: callId };
+    try {
+      await applyVoiceRetryAfterPostCall({
+        companyId,
+        callId,
+        linkedRunId,
+        session: freshSession,
+        extraction: isFull ? extraction : null,
+        summaryText
+      });
+    } catch (re) {
+      console.error('[runVoicePostCallPipeline] applyVoiceRetryAfterPostCall', re);
+    }
+
     return { ok: true };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -448,6 +465,18 @@ export async function runVoicePostCallPipeline(params: {
         postCallCompletedAt: FieldValue.serverTimestamp(),
         postCallError: msg
       });
+      const failSession = await adminGetVoiceCallSession(companyId, callId);
+      const lr = String(failSession?.linkedRunId ?? '').trim();
+      if (lr) {
+        await emitVoiceOperationalAlertIfNew({
+          companyId,
+          linkedRunId: lr,
+          kind: 'post_call_failed',
+          title: 'Voice: post-call pipeline failed',
+          message: `run ${lr.slice(0, 10)}… · call ${callId.slice(0, 8)}… · ${msg.slice(0, 200)}`,
+          dedupKey: `voice:post_call_failed:${callId}`
+        });
+      }
     } catch (ee) {
       console.error('[runVoicePostCallPipeline] failed to write error state', ee);
     }

@@ -12,7 +12,8 @@ import {
   PauseCircle,
   PlayCircle,
   Link2,
-  Clock3
+  Clock3,
+  Phone
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PageMetadata } from '../components/PageMetadata';
@@ -39,7 +40,8 @@ import { deriveAiRunChannelFromRun } from '../lib/ai-control/deriveAiRunChannel'
 import {
   getVoiceCallSnapshotFromRun,
   getVoicePostCallFromRun,
-  getVoiceCallSessionIdFromRun
+  getVoiceCallSessionIdFromRun,
+  getVoiceRetryFromRun
 } from '../lib/ai-control/voiceRunBridge';
 import {
   getVoiceCallSession,
@@ -119,6 +121,8 @@ export const AiControlRunDetailsPage: React.FC = () => {
   const [voiceTurns, setVoiceTurns] = useState<Array<{ id: string; speaker: string; text: string; turnIndex: number }>>(
     []
   );
+  const [voiceOpBusy, setVoiceOpBusy] = useState(false);
+  const [callbackInput, setCallbackInput] = useState('');
   const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -372,6 +376,7 @@ export const AiControlRunDetailsPage: React.FC = () => {
   const derivedWorkflow = deriveAiRunWorkflow(run, presentation, workflow);
   const isVoice = deriveAiRunChannelFromRun(run) === 'voice';
   const voiceSnap = getVoiceCallSnapshotFromRun(run);
+  const voiceRetry = getVoiceRetryFromRun(run);
   const voicePost = getVoicePostCallFromRun(run);
   const dealOpenId = run.createdDealId || run.dealId || dealPreview?.id;
   const clientOpenId = run.clientIdSnapshot || run.appliedClientId || null;
@@ -440,6 +445,36 @@ export const AiControlRunDetailsPage: React.FC = () => {
       toast.error(e instanceof Error ? e.message : 'Не удалось отправить alert');
     } finally {
       setWorkflowBusy(false);
+    }
+  };
+
+  const voiceOperationalFetch = async (body: Record<string, unknown>) => {
+    if (!run?.id) return;
+    setVoiceOpBusy(true);
+    try {
+      const token = await auth.currentUser?.getIdToken();
+      const res = await fetch('/api/voice/operational', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ ...body, runId: run.id })
+      });
+      const text = await res.text();
+      let data: { error?: string; ok?: boolean } = {};
+      try {
+        data = JSON.parse(text) as { error?: string; ok?: boolean };
+      } catch {
+        /* noop */
+      }
+      if (!res.ok) throw new Error(data.error || text || res.statusText);
+      toast.success('Готово');
+      void load();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Ошибка voice operational');
+    } finally {
+      setVoiceOpBusy(false);
     }
   };
 
@@ -792,6 +827,89 @@ export const AiControlRunDetailsPage: React.FC = () => {
               <p>
                 <span className="text-gray-500">Задача (next deal):</span> {run.taskId ?? voiceSession?.linkedTaskId ?? '—'}
               </p>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-amber-200 bg-amber-50/40 p-4 mb-4">
+            <h2 className="font-semibold text-amber-950 mb-2 flex items-center gap-2">
+              <Phone className="w-4 h-4" />
+              Повторы и callback
+            </h2>
+            <p className="text-xs text-amber-900/90 mb-3">
+              Один операционный кейс (linkedRunId), новые попытки — новые voiceCallSessions. Авто-retry выполняет плановый
+              sweep; ниже — ручной перезвон и время callback.
+            </p>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm mb-4">
+              <div>
+                <dt className="text-gray-500 text-xs">Статус retry</dt>
+                <dd>{voiceRetry?.retryStatus ?? voiceSession?.voiceRetryStatus ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Причина</dt>
+                <dd>{voiceRetry?.retryReason ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Авто-dispatch / лимит</dt>
+                <dd>
+                  {voiceRetry?.autoDispatchCount ?? 0}
+                  {voiceRetry?.maxAutoDispatches != null ? ` / ${voiceRetry.maxAutoDispatches}` : ''}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Ручных перезвонов</dt>
+                <dd>{voiceRetry?.manualRedialCount ?? 0}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gray-500 text-xs">След. retry (run)</dt>
+                <dd className="break-all">{voiceRetry?.nextRetryAt ?? '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gray-500 text-xs">Callback (клиент)</dt>
+                <dd className="break-all">{voiceRetry?.callbackAt ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">rootCallId</dt>
+                <dd className="font-mono text-xs break-all">{voiceRetry?.rootCallId ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">parentCallId</dt>
+                <dd className="font-mono text-xs break-all">{voiceRetry?.parentCallId ?? '—'}</dd>
+              </div>
+            </dl>
+            <div className="flex flex-wrap gap-2 items-end">
+              <button
+                type="button"
+                disabled={voiceOpBusy || !can}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg border border-amber-300 bg-white text-sm text-amber-950 disabled:opacity-50"
+                onClick={() => void voiceOperationalFetch({ action: 'redial' })}
+              >
+                <Phone className="w-4 h-4" />
+                Перезвонить
+              </button>
+              <div className="flex flex-col gap-1">
+                <label className="text-[10px] text-gray-500 uppercase">Время callback</label>
+                <input
+                  type="datetime-local"
+                  className="text-sm border rounded-lg px-2 py-1.5 bg-white"
+                  value={callbackInput}
+                  onChange={(e) => setCallbackInput(e.target.value)}
+                />
+              </div>
+              <button
+                type="button"
+                disabled={voiceOpBusy || !can || !callbackInput.trim()}
+                className="px-3 py-1.5 rounded-lg border text-sm bg-white disabled:opacity-50"
+                onClick={() => {
+                  const d = new Date(callbackInput);
+                  if (Number.isNaN(d.getTime())) {
+                    toast.error('Укажите дату и время');
+                    return;
+                  }
+                  void voiceOperationalFetch({ action: 'schedule_callback', callbackAt: d.toISOString() });
+                }}
+              >
+                Назначить callback
+              </button>
             </div>
           </section>
         </>

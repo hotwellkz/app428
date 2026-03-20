@@ -41,7 +41,10 @@ export type AiControlVoiceIssuePreset =
   | 'outcome_unknown_empty'
   | 'follow_up_failed'
   | 'crm_failed'
-  | 'needs_attention_voice';
+  | 'needs_attention_voice'
+  | 'retry_scheduled'
+  | 'retry_exhausted'
+  | 'callback_due';
 export type AiRunWorkflowEventType =
   | 'created'
   | 'assigned'
