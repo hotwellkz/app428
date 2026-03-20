@@ -432,8 +432,9 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
       };
     }
     const apiKey = row.telnyxApiKey.trim();
-    const connectionId = row.telnyxConnectionId?.trim() ?? '';
-    if (!connectionId) {
+    /** Call Control Application ID из Mission Control — в Firestore поле telnyxConnectionId (историческое имя). */
+    const callControlApplicationId = row.telnyxConnectionId?.trim() ?? '';
+    if (!callControlApplicationId) {
       return {
         ok: false,
         error:
@@ -460,8 +461,13 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
     webhookUrl.searchParams.set('companyId', input.companyId);
     webhookUrl.searchParams.set('callId', input.callId);
 
+    /**
+     * Telnyx Dial (POST /v2/calls): в ответах часто фигурирует `application_id` (Call Control Application).
+     * Передаём `application_id` + `connection_id` с одним и тем же ID из CRM — см. документацию Dial (connection_id = ID приложения).
+     */
     const body = {
-      connection_id: connectionId,
+      application_id: callControlApplicationId,
+      connection_id: callControlApplicationId,
       to: input.toE164,
       from: input.fromE164,
       webhook_url: webhookUrl.toString(),
@@ -472,10 +478,10 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
       JSON.stringify({
         tag: 'voice.telnyx.create',
         phase: 'request',
+        url: 'https://api.telnyx.com/v2/calls',
         companyId: input.companyId,
         callId: input.callId,
-        toE164: input.toE164,
-        fromE164: input.fromE164
+        body
       })
     );
 
@@ -497,8 +503,14 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
           first?.detail || first?.title || JSON.stringify(json).slice(0, 400) || `HTTP ${res.status}`;
         const msgLower = msg.toLowerCase();
         const isCallControlIssue =
-          (msgLower.includes('connection_id') || msgLower.includes('connection id')) &&
-          (msgLower.includes('invalid') || msgLower.includes('does not exist') || msgLower.includes('not exist'));
+          (msgLower.includes('connection_id') ||
+            msgLower.includes('connection id') ||
+            msgLower.includes('application_id') ||
+            msgLower.includes('application id')) &&
+          (msgLower.includes('invalid') ||
+            msgLower.includes('does not exist') ||
+            msgLower.includes('not exist') ||
+            msgLower.includes('not found'));
         const isWebhookUrlIssue =
           msgLower.includes('webhook') && (msgLower.includes('url') || msgLower.includes('valid'));
         const isClientSideTelnyx = res.status >= 400 && res.status < 500;
@@ -564,7 +576,7 @@ export class TelnyxVoiceProvider implements VoiceProviderAdapter {
         raw: json as Record<string, unknown>,
         providerDebug: {
           telnyxCallControlId: callControlId,
-          connectionId
+          callControlApplicationId
         },
         initialNormalizedEvents: []
       };
