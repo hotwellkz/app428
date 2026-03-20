@@ -391,6 +391,44 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Voice MVP: сессии звонков (отдельно от WhatsApp). Чтение — только своя компания; запись — только Admin SDK.
+    match /voiceCallSessions/{callId} {
+      allow read: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create, update, delete: if false;
+
+      match /events/{eventId} {
+        allow read: if isAuthenticated() && (
+          (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+          || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+          || isGlobalAdmin()
+        );
+        allow create, update, delete: if false;
+      }
+
+      match /turns/{turnId} {
+        allow read: if isAuthenticated() && (
+          (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+          || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+          || isGlobalAdmin()
+        );
+        allow create, update, delete: if false;
+      }
+    }
+
+    // Voice: привязанные номера (исходящий caller ID). Только чтение своей компании; запись — Admin SDK / onboarding function.
+    match /voiceNumbers/{numberId} {
+      allow read: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create, update, delete: if false;
+    }
+
     // Сделки (воронка продаж): pipelines, pipeline_stages, deals, deal_activity_log
     match /pipelines/{pipelineId} {
       allow read, write: if isAuthenticated();
