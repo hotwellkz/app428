@@ -103,6 +103,7 @@ const QuickRepliesSettings = lazy(withChunkErrorRecovery(() => import('./pages/Q
 const IntegrationsSettings = lazy(withChunkErrorRecovery(() => import('./pages/IntegrationsSettings').then(m => ({ default: m.IntegrationsSettings }))));
 const AutovoronkiListPage = lazyNamed(() => import('./pages/AutovoronkiListPage'), 'AutovoronkiListPage');
 const AutovoronkiBotEditorPage = lazyNamed(() => import('./pages/AutovoronkiBotEditorPage'), 'AutovoronkiBotEditorPage');
+const VoiceCampaignsPage = lazy(withChunkErrorRecovery(() => import('./pages/VoiceCampaignsPage')));
 const AiControlPage = lazyNamed(() => import('./pages/AiControlPage'), 'AiControlPage');
 const AiControlRunDetailsPage = lazyNamed(
   () => import('./pages/AiControlRunDetailsPage'),
@@ -332,6 +333,11 @@ const AppContent: React.FC = () => {
             <Route path="/autovoronki/:botId" element={
               <ApprovalGuard>
                 <AutovoronkiBotEditorPage />
+              </ApprovalGuard>
+            } />
+            <Route path="/voice-campaigns" element={
+              <ApprovalGuard>
+                <VoiceCampaignsPage />
               </ApprovalGuard>
             } />
             <Route path="/ai-control" element={

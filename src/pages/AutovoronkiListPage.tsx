@@ -125,13 +125,21 @@ export const AutovoronkiListPage: React.FC = () => {
               Создавайте AI-ботов для продаж, квалификации и повторного касания клиентов
             </p>
           </div>
-          <Link
-            to="/autovoronki/new"
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-2.5 text-sm font-medium hover:bg-emerald-700 transition-colors shadow-sm shrink-0"
-          >
-            <Plus className="w-5 h-5" />
-            Создать бота
-          </Link>
+          <div className="flex gap-2">
+            <Link
+              to="/voice-campaigns"
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white text-gray-800 px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm shrink-0"
+            >
+              Voice кампании
+            </Link>
+            <Link
+              to="/autovoronki/new"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 text-white px-4 py-2.5 text-sm font-medium hover:bg-emerald-700 transition-colors shadow-sm shrink-0"
+            >
+              <Plus className="w-5 h-5" />
+              Создать бота
+            </Link>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2 mb-6">

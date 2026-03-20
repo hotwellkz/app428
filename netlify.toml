@@ -18,6 +18,9 @@
 [functions.voice-retry-sweep]
   schedule = "*/5 * * * *"
 
+[functions.voice-campaign-sweep]
+  schedule = "*/2 * * * *"
+
 # Webhook Wazzup → Netlify function (должен быть выше правила /*)
 [[redirects]]
   from = "/api/wazzup/webhook"
@@ -162,6 +165,12 @@
 [[redirects]]
   from = "/api/voice/operational"
   to = "/.netlify/functions/voice-operational"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/voice/campaign-operational"
+  to = "/.netlify/functions/voice-campaign-operational"
   status = 200
   force = true
 

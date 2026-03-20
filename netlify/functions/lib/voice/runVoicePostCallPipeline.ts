@@ -28,6 +28,7 @@ import {
   adminListVoiceTurnsOrdered,
   adminUpdateVoiceCallSession
 } from './voiceFirestoreAdmin';
+import { adminResolveCampaignItemByCall } from './voiceCampaignsAdmin';
 import { voiceTurnsToExtractionTranscript } from './voicePostCallToExtractionInput';
 
 const CRM_AI_BOTS = 'crmAiBots';
@@ -444,6 +445,25 @@ export async function runVoicePostCallPipeline(params: {
 
     const freshSession =
       (await adminGetVoiceCallSession(companyId, callId)) ?? { ...session, id: callId };
+    try {
+      const vcMeta =
+        freshSession?.metadata && typeof freshSession.metadata === 'object'
+          ? ((freshSession.metadata as Record<string, unknown>).voiceCampaign as Record<string, unknown> | undefined)
+          : undefined;
+      const campaignId = vcMeta?.campaignId != null ? String(vcMeta.campaignId) : '';
+      const campaignItemId = vcMeta?.campaignItemId != null ? String(vcMeta.campaignItemId) : '';
+      if (campaignId && campaignItemId) {
+        await adminResolveCampaignItemByCall({
+          companyId,
+          campaignId,
+          campaignItemId,
+          callStatus: String(freshSession.status ?? ''),
+          outcome: freshSession.outcome != null ? String(freshSession.outcome) : null
+        });
+      }
+    } catch (ce) {
+      console.error('[runVoicePostCallPipeline] campaign completion sync', ce);
+    }
     try {
       await applyVoiceRetryAfterPostCall({
         companyId,

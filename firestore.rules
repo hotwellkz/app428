@@ -429,6 +429,33 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Voice campaigns (mass calling) — строго по companyId
+    match /voiceCampaigns/{campaignId} {
+      allow read, update, delete: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || isGlobalAdmin()
+      );
+    }
+
+    match /voiceCampaignItems/{itemId} {
+      allow read, update, delete: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == resource.data.companyId)
+        || isGlobalAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        (exists(/databases/$(database)/documents/company_users/$(request.auth.uid)) && get(/databases/$(database)/documents/company_users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.companyId == request.resource.data.companyId)
+        || isGlobalAdmin()
+      );
+    }
+
     // Сделки (воронка продаж): pipelines, pipeline_stages, deals, deal_activity_log
     match /pipelines/{pipelineId} {
       allow read, write: if isAuthenticated();
