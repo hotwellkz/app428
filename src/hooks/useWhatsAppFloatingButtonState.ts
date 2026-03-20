@@ -3,6 +3,7 @@ import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import type { Timestamp } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { useCompanyId } from '../contexts/CompanyContext';
+import { useWhatsAppLocalReadOptional } from '../contexts/WhatsAppLocalReadContext';
 
 type TimeLike = Date | Timestamp | null | undefined;
 
@@ -17,7 +18,10 @@ function toMillis(t: TimeLike): number | null {
 }
 
 export interface WhatsAppFloatingButtonState {
+  /** Чаты с unreadCount > 0 в Firestore, минус открытые в этой сессии (как в списке чатов). */
   unreadChatsCount: number;
+  /** Сырой счётчик по документам (без локального «прочитано»). */
+  unreadChatsCountRaw: number;
   awaitingReplyChatsCount: number;
   hasUnread: boolean;
   hasAwaitingReply: boolean;
@@ -32,8 +36,15 @@ export interface WhatsAppFloatingButtonState {
  */
 export function useWhatsAppFloatingButtonState(enabled: boolean = true): WhatsAppFloatingButtonState {
   const companyId = useCompanyId();
+  const { locallyReadIds } = useWhatsAppLocalReadOptional();
   const [rows, setRows] = useState<
-    Array<{ unreadCount?: number; lastIncomingAt?: TimeLike; lastOutgoingAt?: TimeLike; awaitingReplyDismissedAt?: TimeLike }>
+    Array<{
+      id: string;
+      unreadCount?: number;
+      lastIncomingAt?: TimeLike;
+      lastOutgoingAt?: TimeLike;
+      awaitingReplyDismissedAt?: TimeLike;
+    }>
   >([]);
 
   useEffect(() => {
@@ -52,6 +63,7 @@ export function useWhatsAppFloatingButtonState(enabled: boolean = true): WhatsAp
         const list = snap.docs.map((d) => {
           const data = d.data() as Record<string, unknown>;
           return {
+            id: d.id,
             unreadCount: (data.unreadCount as number | undefined) ?? 0,
             lastIncomingAt: (data.lastIncomingAt as TimeLike) ?? null,
             lastOutgoingAt: (data.lastOutgoingAt as TimeLike) ?? null,
@@ -71,7 +83,13 @@ export function useWhatsAppFloatingButtonState(enabled: boolean = true): WhatsAp
   }, [companyId, enabled]);
 
   return useMemo(() => {
-    const unreadChatsCount = rows.reduce((acc, c) => acc + ((c.unreadCount ?? 0) > 0 ? 1 : 0), 0);
+    const unreadChatsCountRaw = rows.reduce((acc, c) => acc + ((c.unreadCount ?? 0) > 0 ? 1 : 0), 0);
+    const unreadChatsCount = rows.reduce((acc, c) => {
+      const u = c.unreadCount ?? 0;
+      if (u <= 0) return acc;
+      if (locallyReadIds.has(c.id)) return acc;
+      return acc + 1;
+    }, 0);
 
     const awaitingReplyChatsCount = rows.reduce((acc, c) => {
       const unread = c.unreadCount ?? 0;
@@ -88,12 +106,24 @@ export function useWhatsAppFloatingButtonState(enabled: boolean = true): WhatsAp
       return acc + (awaiting ? 1 : 0);
     }, 0);
 
+    if (import.meta.env.DEV) {
+      // eslint-disable-next-line no-console
+      console.debug('[WhatsAppFloatingButtonState]', {
+        rows: rows.length,
+        unreadChatsCountRaw,
+        unreadChatsCount,
+        locallyReadSize: locallyReadIds.size,
+        awaitingReplyChatsCount
+      });
+    }
+
     return {
       unreadChatsCount,
+      unreadChatsCountRaw,
       awaitingReplyChatsCount,
       hasUnread: unreadChatsCount > 0,
       hasAwaitingReply: awaitingReplyChatsCount > 0
     };
-  }, [rows]);
+  }, [rows, locallyReadIds]);
 }
 
