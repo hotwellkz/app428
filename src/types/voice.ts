@@ -29,6 +29,23 @@ export type VoicePostCallStatus = 'pending' | 'processing' | 'done' | 'failed';
 export type VoiceQaStatus = 'pending' | 'processing' | 'done' | 'failed';
 export type VoiceQaBand = 'good' | 'warning' | 'bad';
 export type VoiceQaOutcomeConfidence = 'low' | 'medium' | 'high';
+export type VoiceQaReviewStatus =
+  | 'none'
+  | 'pending_review'
+  | 'reviewed'
+  | 'false_positive'
+  | 'accepted_issue'
+  | 'ignored';
+export type VoiceQaReviewDisposition =
+  | 'false_positive'
+  | 'bot_script_issue'
+  | 'extraction_issue'
+  | 'crm_issue'
+  | 'follow_up_issue'
+  | 'retry_issue'
+  | 'client_issue'
+  | 'provider_issue'
+  | 'unclear';
 
 /** Компактный снэпшот QA (для run extras и списков AI-control). */
 export interface VoiceQaSnapshot {
@@ -43,7 +60,15 @@ export interface VoiceQaSnapshot {
   nextStepCaptured: boolean;
   clientIntentClear: boolean;
   outcomeConfidence: VoiceQaOutcomeConfidence;
+  reviewStatus?: VoiceQaReviewStatus;
+  reviewedBy?: string | null;
   reviewedAt?: Timestamp | Date | null;
+  reviewNote?: string | null;
+  reviewDisposition?: VoiceQaReviewDisposition | null;
+  needsPromptFix?: boolean;
+  needsOpsFix?: boolean;
+  needsRetryTuning?: boolean;
+  needsHumanFollowup?: boolean;
   error?: string | null;
 }
 
@@ -184,6 +209,14 @@ export interface VoiceCallSession {
   voiceQaNeedsReview?: boolean | null;
   voiceQaSummary?: string | null;
   voiceQaOutcomeConfidence?: VoiceQaOutcomeConfidence | null;
+  voiceQaReviewStatus?: VoiceQaReviewStatus | null;
+  voiceQaReviewedBy?: string | null;
+  voiceQaReviewedAt?: Timestamp | Date | null;
+  voiceQaReviewDisposition?: VoiceQaReviewDisposition | null;
+  voiceQaNeedsPromptFix?: boolean | null;
+  voiceQaNeedsOpsFix?: boolean | null;
+  voiceQaNeedsRetryTuning?: boolean | null;
+  voiceQaNeedsHumanFollowup?: boolean | null;
   metadata?: Record<string, unknown>;
   createdAt?: Timestamp | Date | null;
   updatedAt?: Timestamp | Date | null;

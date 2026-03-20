@@ -117,6 +117,10 @@ export function deriveAiRunListPresentation(
   if (reason.includes('пауз') || reason.includes('paused')) attentionReasons.push('Бот на паузе');
 
   if (isVoice) {
+    const reviewClosed =
+      voiceQa?.reviewStatus === 'reviewed' ||
+      voiceQa?.reviewStatus === 'false_positive' ||
+      voiceQa?.reviewStatus === 'ignored';
     if (voiceSnap?.postCallStatus === 'failed') attentionReasons.push('Голос: post-call pipeline завершился с ошибкой');
     if (voicePost?.extractionError) attentionReasons.push(`Голос: extraction — ${voicePost.extractionError}`);
     if (voicePost?.summaryError) attentionReasons.push(`Голос: summary — ${voicePost.summaryError}`);
@@ -146,9 +150,13 @@ export function deriveAiRunListPresentation(
       }
     }
     if (voiceQa?.status === 'failed') attentionReasons.push('Голос QA: pipeline failed');
-    if (voiceQa?.needsReview) attentionReasons.push('Голос QA: требуется ручной review');
-    if (voiceQa?.flags?.includes('missing_next_step')) attentionReasons.push('Голос QA: не зафиксирован next step');
-    if (voiceQa?.flags?.includes('unknown_outcome')) attentionReasons.push('Голос QA: outcome неясен');
+    if (!reviewClosed && voiceQa?.needsReview) attentionReasons.push('Голос QA: требуется ручной review');
+    if (!reviewClosed && voiceQa?.flags?.includes('missing_next_step')) {
+      attentionReasons.push('Голос QA: не зафиксирован next step');
+    }
+    if (!reviewClosed && voiceQa?.flags?.includes('unknown_outcome')) {
+      attentionReasons.push('Голос QA: outcome неясен');
+    }
   }
 
   const requiresAttention = attentionReasons.length > 0;
@@ -201,6 +209,7 @@ export function deriveAiRunListPresentation(
   if (isVoice && voiceQa?.status === 'done') {
     badges.push(`QA ${voiceQa.band ?? '—'}`);
     if (voiceQa.needsReview) badges.push('QA review');
+    if (voiceQa.reviewStatus && voiceQa.reviewStatus !== 'none') badges.push(`review:${voiceQa.reviewStatus}`);
   }
   if (isVoice && voiceQa?.status === 'failed') badges.push('QA failed');
   if (runStatus === 'error') badges.push('Ошибка');

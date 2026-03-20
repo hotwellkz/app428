@@ -357,6 +357,13 @@ export const AiControlFilters: React.FC<{
             <option value="qa_operational_issues">QA: CRM/follow-up/post-call issues</option>
             <option value="qa_repeated_retry_problem">QA: repeated retry problem</option>
             <option value="qa_failed">QA: pipeline failed</option>
+            <option value="qa_review_pending">QA review: pending</option>
+            <option value="qa_reviewed">QA review: reviewed</option>
+            <option value="qa_false_positive">QA review: false positive</option>
+            <option value="qa_accepted_issue">QA review: accepted issue</option>
+            <option value="qa_needs_prompt_fix">QA: needs prompt fix</option>
+            <option value="qa_needs_ops_fix">QA: needs ops fix</option>
+            <option value="qa_needs_human_followup">QA: needs human follow-up</option>
           </select>
         </div>
         <div>

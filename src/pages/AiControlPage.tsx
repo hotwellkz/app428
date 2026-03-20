@@ -54,6 +54,7 @@ function voiceIssueMatches(
   const vp = getVoicePostCallFromRun(run);
   const pr = deriveAiRunListPresentation(run, agg);
   const qa = getVoiceQaFromRun(run);
+  const rs = qa?.reviewStatus ?? 'none';
   switch (preset) {
     case 'post_call_failed':
       return vs?.postCallStatus === 'failed';
@@ -104,6 +105,20 @@ function voiceIssueMatches(
       return qa?.flags?.includes('repeated_retry_case') === true;
     case 'qa_failed':
       return qa?.status === 'failed';
+    case 'qa_review_pending':
+      return rs === 'pending_review';
+    case 'qa_reviewed':
+      return rs === 'reviewed';
+    case 'qa_false_positive':
+      return rs === 'false_positive';
+    case 'qa_accepted_issue':
+      return rs === 'accepted_issue';
+    case 'qa_needs_prompt_fix':
+      return qa?.needsPromptFix === true;
+    case 'qa_needs_ops_fix':
+      return qa?.needsOpsFix === true;
+    case 'qa_needs_human_followup':
+      return qa?.needsHumanFollowup === true;
     default:
       return true;
   }
@@ -420,7 +435,12 @@ function metricsFor(
     voiceQaNeedsReview = 0,
     voiceQaMissingNextStep = 0,
     voiceQaUnclearOutcome = 0,
-    voiceQaFailed = 0;
+    voiceQaFailed = 0,
+    voiceQaReviewPending = 0,
+    voiceQaFalsePositive = 0,
+    voiceQaAcceptedIssue = 0,
+    voiceQaNeedsPromptFix = 0,
+    voiceQaNeedsOpsFix = 0;
   const startTodayMs = startOfToday.getTime();
   for (const r of runs) {
     if (deriveAiRunChannelFromRun(r) === 'voice') {
@@ -446,6 +466,11 @@ function metricsFor(
       if (qa?.flags?.includes('missing_next_step')) voiceQaMissingNextStep++;
       if (qa?.flags?.includes('unknown_outcome')) voiceQaUnclearOutcome++;
       if (qa?.status === 'failed') voiceQaFailed++;
+      if (qa?.reviewStatus === 'pending_review') voiceQaReviewPending++;
+      if (qa?.reviewStatus === 'false_positive') voiceQaFalsePositive++;
+      if (qa?.reviewStatus === 'accepted_issue') voiceQaAcceptedIssue++;
+      if (qa?.needsPromptFix) voiceQaNeedsPromptFix++;
+      if (qa?.needsOpsFix) voiceQaNeedsOpsFix++;
     }
   }
   for (const r of runs) {
@@ -494,7 +519,12 @@ function metricsFor(
     voiceQaNeedsReview,
     voiceQaMissingNextStep,
     voiceQaUnclearOutcome,
-    voiceQaFailed
+    voiceQaFailed,
+    voiceQaReviewPending,
+    voiceQaFalsePositive,
+    voiceQaAcceptedIssue,
+    voiceQaNeedsPromptFix,
+    voiceQaNeedsOpsFix
   };
 }
 
@@ -695,7 +725,12 @@ export const AiControlPage: React.FC = () => {
           { k: 'QA review', v: metrics.voiceQaNeedsReview },
           { k: 'QA no-next-step', v: metrics.voiceQaMissingNextStep },
           { k: 'QA unclear outcome', v: metrics.voiceQaUnclearOutcome },
-          { k: 'QA failed', v: metrics.voiceQaFailed }
+          { k: 'QA failed', v: metrics.voiceQaFailed },
+          { k: 'Review pending', v: metrics.voiceQaReviewPending },
+          { k: 'False positive', v: metrics.voiceQaFalsePositive },
+          { k: 'Accepted issue', v: metrics.voiceQaAcceptedIssue },
+          { k: 'Needs prompt fix', v: metrics.voiceQaNeedsPromptFix },
+          { k: 'Needs ops fix', v: metrics.voiceQaNeedsOpsFix }
         ].map((c) => (
           <div key={c.k} className="rounded-lg border border-violet-100 bg-violet-50/60 p-2 text-center shadow-sm">
             <div className="text-lg font-semibold text-violet-900">{c.v}</div>

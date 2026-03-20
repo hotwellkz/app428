@@ -51,7 +51,14 @@ export type AiControlVoiceIssuePreset =
   | 'qa_unclear_outcome'
   | 'qa_operational_issues'
   | 'qa_repeated_retry_problem'
-  | 'qa_failed';
+  | 'qa_failed'
+  | 'qa_review_pending'
+  | 'qa_reviewed'
+  | 'qa_false_positive'
+  | 'qa_accepted_issue'
+  | 'qa_needs_prompt_fix'
+  | 'qa_needs_ops_fix'
+  | 'qa_needs_human_followup';
 export type AiRunWorkflowEventType =
   | 'created'
   | 'assigned'

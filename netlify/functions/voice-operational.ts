@@ -7,6 +7,7 @@ import { verifyIdToken, getCompanyIdForUser, getDb } from './lib/firebaseAdmin';
 import { orchestrateVoiceOutbound } from './lib/voice/voiceOutboundOrchestrator';
 import { mergeVoiceRetryStateIntoLinkedRun } from './lib/voice/updateVoiceRunResult';
 import { adminGetVoiceCallSession, adminUpdateVoiceCallSession } from './lib/voice/voiceFirestoreAdmin';
+import { updateVoiceQaReview } from './lib/voice/updateVoiceQaReview';
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -18,11 +19,35 @@ const RUNS = 'whatsappAiBotRuns';
 const MANUAL_COOLDOWN_MS = 60_000;
 
 type Body = {
-  action?: 'redial' | 'schedule_callback';
+  action?:
+    | 'redial'
+    | 'schedule_callback'
+    | 'mark_reviewed'
+    | 'mark_false_positive'
+    | 'accept_issue'
+    | 'save_review_note'
+    | 'set_disposition'
+    | 'set_improvement_markers';
   runId?: string;
   force?: boolean;
   callbackAt?: string;
   callbackNote?: string | null;
+  reviewNote?: string | null;
+  reviewDisposition?:
+    | 'false_positive'
+    | 'bot_script_issue'
+    | 'extraction_issue'
+    | 'crm_issue'
+    | 'follow_up_issue'
+    | 'retry_issue'
+    | 'client_issue'
+    | 'provider_issue'
+    | 'unclear'
+    | null;
+  needsPromptFix?: boolean;
+  needsOpsFix?: boolean;
+  needsRetryTuning?: boolean;
+  needsHumanFollowup?: boolean;
 };
 
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
@@ -73,7 +98,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
     const latestSession = sessionId ? await adminGetVoiceCallSession(companyId, sessionId) : null;
 
-    const action = body.action === 'schedule_callback' ? 'schedule_callback' : 'redial';
+    const action = body.action ?? 'redial';
 
     if (action === 'redial') {
       const outcome = voiceSnap.outcome != null ? String(voiceSnap.outcome) : '';
@@ -167,6 +192,55 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         statusCode: 200,
         headers: { ...CORS, 'Content-Type': 'application/json' },
         body: JSON.stringify({ ok: true, callId: out.callId, providerCallId: out.providerCallId })
+      };
+    }
+
+    if (
+      action === 'mark_reviewed' ||
+      action === 'mark_false_positive' ||
+      action === 'accept_issue' ||
+      action === 'save_review_note' ||
+      action === 'set_disposition' ||
+      action === 'set_improvement_markers'
+    ) {
+      if (!sessionId) {
+        return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: 'No voiceCallSessionId on run' }) };
+      }
+      const reviewStatus =
+        action === 'mark_reviewed'
+          ? 'reviewed'
+          : action === 'mark_false_positive'
+            ? 'false_positive'
+            : action === 'accept_issue'
+              ? 'accepted_issue'
+              : undefined;
+
+      const out = await updateVoiceQaReview({
+        companyId,
+        callId: sessionId,
+        reviewerUid: uid,
+        reviewerName: uid,
+        patch: {
+          ...(reviewStatus ? { reviewStatus } : {}),
+          ...(action === 'save_review_note' ? { reviewNote: body.reviewNote ?? null } : {}),
+          ...(action === 'set_disposition' ? { reviewDisposition: body.reviewDisposition ?? null } : {}),
+          ...(action === 'set_improvement_markers'
+            ? {
+                needsPromptFix: body.needsPromptFix === true,
+                needsOpsFix: body.needsOpsFix === true,
+                needsRetryTuning: body.needsRetryTuning === true,
+                needsHumanFollowup: body.needsHumanFollowup === true
+              }
+            : {})
+        }
+      });
+      if (!out.ok) {
+        return { statusCode: 400, headers: CORS, body: JSON.stringify({ error: out.error ?? 'qa_review_update_failed' }) };
+      }
+      return {
+        statusCode: 200,
+        headers: { ...CORS, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ok: true, skipped: out.skipped ?? false })
       };
     }
 

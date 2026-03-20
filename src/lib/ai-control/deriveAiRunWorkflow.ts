@@ -103,6 +103,10 @@ function derivePriority(
   const voicePost = isVoice ? getVoicePostCallFromRun(run) : null;
   const voiceRetry = isVoice ? getVoiceRetryFromRun(run) : null;
   const voiceQa = isVoice ? getVoiceQaFromRun(run) : null;
+  const qaReviewed =
+    voiceQa?.reviewStatus === 'reviewed' ||
+    voiceQa?.reviewStatus === 'false_positive' ||
+    voiceQa?.reviewStatus === 'ignored';
   const retryNextMs = voiceRetry?.nextRetryAt ? Date.parse(String(voiceRetry.nextRetryAt)) : NaN;
   const retryOverdue = Number.isFinite(retryNextMs) && retryNextMs < Date.now();
 
@@ -115,7 +119,7 @@ function derivePriority(
     isVoice && voiceSnap?.postCallStatus === 'failed',
     isVoice && voiceRetry?.retryStatus === 'exhausted',
     isVoice && voiceQa?.status === 'failed',
-    isVoice && voiceQa?.status === 'done' && (voiceQa.band === 'bad' || voiceQa.needsReview)
+    isVoice && voiceQa?.status === 'done' && !qaReviewed && (voiceQa.band === 'bad' || voiceQa.needsReview)
   ];
   if (critical.some(Boolean)) {
     if (presentation.runStatus === 'error') reasons.push('runtime/API error');
@@ -126,8 +130,12 @@ function derivePriority(
     if (isVoice && voiceSnap?.postCallStatus === 'failed') reasons.push('Голос: post-call failed');
     if (isVoice && voiceRetry?.retryStatus === 'exhausted') reasons.push('Голос: retry exhausted');
     if (isVoice && voiceQa?.status === 'failed') reasons.push('Голос: QA pipeline failed');
-    if (isVoice && voiceQa?.status === 'done' && voiceQa.band === 'bad') reasons.push('Голос: QA low quality');
-    if (isVoice && voiceQa?.status === 'done' && voiceQa.needsReview) reasons.push('Голос: QA needs review');
+    if (isVoice && voiceQa?.status === 'done' && !qaReviewed && voiceQa.band === 'bad') {
+      reasons.push('Голос: QA low quality');
+    }
+    if (isVoice && voiceQa?.status === 'done' && !qaReviewed && voiceQa.needsReview) {
+      reasons.push('Голос: QA needs review');
+    }
     return { priority: 'critical', reasons };
   }
 

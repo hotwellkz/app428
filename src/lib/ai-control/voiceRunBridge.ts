@@ -74,7 +74,15 @@ export function getVoiceQaFromRun(run: WhatsAppAiBotRunRecord): VoiceQaSnapshot 
     nextStepCaptured: o.nextStepCaptured === true,
     clientIntentClear: o.clientIntentClear === true,
     outcomeConfidence: (o.outcomeConfidence as VoiceQaSnapshot['outcomeConfidence']) ?? 'low',
-    reviewedAt: null,
+    reviewStatus: (o.reviewStatus as VoiceQaSnapshot['reviewStatus']) ?? 'none',
+    reviewedBy: o.reviewedBy != null ? String(o.reviewedBy) : null,
+    reviewNote: o.reviewNote != null ? String(o.reviewNote) : null,
+    reviewDisposition: (o.reviewDisposition as VoiceQaSnapshot['reviewDisposition']) ?? null,
+    needsPromptFix: o.needsPromptFix === true,
+    needsOpsFix: o.needsOpsFix === true,
+    needsRetryTuning: o.needsRetryTuning === true,
+    needsHumanFollowup: o.needsHumanFollowup === true,
+    reviewedAt: typeof o.reviewedAt === 'string' ? new Date(o.reviewedAt) : null,
     error: typeof o.error === 'string' ? o.error : null
   };
 }
@@ -114,6 +122,7 @@ export function formatVoiceRunStatusLine(run: WhatsAppAiBotRunRecord): string {
   if (qa?.status === 'done') {
     parts.push(`QA:${qa.score ?? '—'}/${qa.band ?? '—'}`);
     if (qa.needsReview) parts.push('review');
+    if (qa.reviewStatus && qa.reviewStatus !== 'none') parts.push(`rv:${qa.reviewStatus}`);
   } else if (qa?.status === 'failed') {
     parts.push('QA:failed');
   }

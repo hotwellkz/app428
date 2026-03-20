@@ -124,6 +124,12 @@ export const AiControlRunDetailsPage: React.FC = () => {
   );
   const [voiceOpBusy, setVoiceOpBusy] = useState(false);
   const [callbackInput, setCallbackInput] = useState('');
+  const [qaReviewNote, setQaReviewNote] = useState('');
+  const [qaDisposition, setQaDisposition] = useState('');
+  const [qaNeedsPromptFix, setQaNeedsPromptFix] = useState(false);
+  const [qaNeedsOpsFix, setQaNeedsOpsFix] = useState(false);
+  const [qaNeedsRetryTuning, setQaNeedsRetryTuning] = useState(false);
+  const [qaNeedsHumanFollowup, setQaNeedsHumanFollowup] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -223,6 +229,16 @@ export const AiControlRunDetailsPage: React.FC = () => {
       cancelled = true;
     };
   }, [companyId, run]);
+
+  useEffect(() => {
+    const qa = run ? getVoiceQaFromRun(run) : null;
+    setQaReviewNote(qa?.reviewNote ?? '');
+    setQaDisposition(qa?.reviewDisposition ?? '');
+    setQaNeedsPromptFix(qa?.needsPromptFix === true);
+    setQaNeedsOpsFix(qa?.needsOpsFix === true);
+    setQaNeedsRetryTuning(qa?.needsRetryTuning === true);
+    setQaNeedsHumanFollowup(qa?.needsHumanFollowup === true);
+  }, [run?.id, run?.updatedAt]);
 
   useEffect(() => {
     if (!runId) return;
@@ -478,6 +494,10 @@ export const AiControlRunDetailsPage: React.FC = () => {
     } finally {
       setVoiceOpBusy(false);
     }
+  };
+
+  const voiceQaReviewAction = async (body: Record<string, unknown>) => {
+    await voiceOperationalFetch(body);
   };
 
   const extRows: { label: string; value: string }[] = extraction
@@ -824,6 +844,122 @@ export const AiControlRunDetailsPage: React.FC = () => {
                 <dd>{voiceQa?.warnings?.length ? voiceQa.warnings.join(', ') : '—'}</dd>
               </div>
             </dl>
+            <div className="mt-3 pt-3 border-t border-gray-100">
+              <p className="text-xs text-gray-500 mb-2">Review workflow</p>
+              <div className="flex flex-wrap gap-2 mb-2">
+                <button
+                  type="button"
+                  disabled={voiceOpBusy || !can}
+                  className="px-3 py-1.5 rounded border text-xs disabled:opacity-50"
+                  onClick={() => void voiceQaReviewAction({ action: 'mark_reviewed' })}
+                >
+                  Reviewed
+                </button>
+                <button
+                  type="button"
+                  disabled={voiceOpBusy || !can}
+                  className="px-3 py-1.5 rounded border text-xs text-amber-800 border-amber-200 bg-amber-50 disabled:opacity-50"
+                  onClick={() => void voiceQaReviewAction({ action: 'accept_issue' })}
+                >
+                  Accept issue
+                </button>
+                <button
+                  type="button"
+                  disabled={voiceOpBusy || !can}
+                  className="px-3 py-1.5 rounded border text-xs text-indigo-800 border-indigo-200 bg-indigo-50 disabled:opacity-50"
+                  onClick={() => void voiceQaReviewAction({ action: 'mark_false_positive' })}
+                >
+                  False positive
+                </button>
+              </div>
+              <div className="flex flex-wrap items-end gap-2 mb-2">
+                <div className="min-w-[220px]">
+                  <label className="block text-[10px] text-gray-500 uppercase mb-1">Disposition</label>
+                  <select
+                    className="w-full text-xs border rounded px-2 py-1.5 bg-white"
+                    value={qaDisposition}
+                    onChange={(e) => setQaDisposition(e.target.value)}
+                  >
+                    <option value="">—</option>
+                    <option value="false_positive">false_positive</option>
+                    <option value="bot_script_issue">bot_script_issue</option>
+                    <option value="extraction_issue">extraction_issue</option>
+                    <option value="crm_issue">crm_issue</option>
+                    <option value="follow_up_issue">follow_up_issue</option>
+                    <option value="retry_issue">retry_issue</option>
+                    <option value="client_issue">client_issue</option>
+                    <option value="provider_issue">provider_issue</option>
+                    <option value="unclear">unclear</option>
+                  </select>
+                </div>
+                <button
+                  type="button"
+                  disabled={voiceOpBusy || !can}
+                  className="px-3 py-1.5 rounded border text-xs disabled:opacity-50"
+                  onClick={() =>
+                    void voiceQaReviewAction({
+                      action: 'set_disposition',
+                      reviewDisposition: qaDisposition || null
+                    })
+                  }
+                >
+                  Save disposition
+                </button>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2 text-xs">
+                <label className="inline-flex items-center gap-1">
+                  <input type="checkbox" checked={qaNeedsPromptFix} onChange={(e) => setQaNeedsPromptFix(e.target.checked)} />
+                  needsPromptFix
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input type="checkbox" checked={qaNeedsOpsFix} onChange={(e) => setQaNeedsOpsFix(e.target.checked)} />
+                  needsOpsFix
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input type="checkbox" checked={qaNeedsRetryTuning} onChange={(e) => setQaNeedsRetryTuning(e.target.checked)} />
+                  needsRetryTuning
+                </label>
+                <label className="inline-flex items-center gap-1">
+                  <input type="checkbox" checked={qaNeedsHumanFollowup} onChange={(e) => setQaNeedsHumanFollowup(e.target.checked)} />
+                  needsHumanFollowup
+                </label>
+              </div>
+              <button
+                type="button"
+                disabled={voiceOpBusy || !can}
+                className="px-3 py-1.5 rounded border text-xs mb-2 disabled:opacity-50"
+                onClick={() =>
+                  void voiceQaReviewAction({
+                    action: 'set_improvement_markers',
+                    needsPromptFix: qaNeedsPromptFix,
+                    needsOpsFix: qaNeedsOpsFix,
+                    needsRetryTuning: qaNeedsRetryTuning,
+                    needsHumanFollowup: qaNeedsHumanFollowup
+                  })
+                }
+              >
+                Save improvement markers
+              </button>
+              <label className="block text-[10px] text-gray-500 uppercase mb-1">Review note</label>
+              <textarea
+                className="w-full rounded border px-2 py-1.5 text-xs min-h-[72px]"
+                value={qaReviewNote}
+                onChange={(e) => setQaReviewNote(e.target.value)}
+              />
+              <button
+                type="button"
+                disabled={voiceOpBusy || !can}
+                className="mt-2 px-3 py-1.5 rounded border text-xs disabled:opacity-50"
+                onClick={() => void voiceQaReviewAction({ action: 'save_review_note', reviewNote: qaReviewNote || null })}
+              >
+                Save note
+              </button>
+              <p className="text-[11px] text-gray-500 mt-2">
+                Review status: {voiceQa?.reviewStatus ?? voiceSession?.voiceQaReviewStatus ?? 'none'} · by:{' '}
+                {voiceQa?.reviewedBy ?? voiceSession?.voiceQaReviewedBy ?? '—'} · at:{' '}
+                {(voiceQa?.reviewedAt as unknown as string) ?? (voiceSession?.voiceQaReviewedAt as unknown as string) ?? '—'}
+              </p>
+            </div>
           </section>
 
           <section className="rounded-xl border bg-white p-4 mb-4">

@@ -11,6 +11,18 @@ function metaOf(session: Record<string, unknown>): Record<string, unknown> {
   return m && typeof m === 'object' ? (m as Record<string, unknown>) : {};
 }
 
+function deriveInitialReviewStatus(
+  prevRaw: Record<string, unknown>,
+  qaNeedsReview: boolean,
+  qaBand: string | null,
+  qaStatus: string
+): string {
+  const prev = String(prevRaw.status ?? 'none');
+  if (['reviewed', 'false_positive', 'accepted_issue', 'ignored'].includes(prev)) return prev;
+  const shouldPending = qaNeedsReview || qaBand === 'bad' || qaStatus === 'failed';
+  return shouldPending ? 'pending_review' : prev || 'none';
+}
+
 export async function runVoiceQaPipeline(params: {
   companyId: string;
   callId: string;
@@ -75,6 +87,11 @@ export async function runVoiceQaPipeline(params: {
       pipelineVersion: 'voice_qa_v1',
       analyzedAt: new Date()
     };
+    const qaReviewRaw = (updMeta.voiceQa &&
+      typeof (updMeta.voiceQa as Record<string, unknown>).review === 'object'
+      ? (updMeta.voiceQa as Record<string, unknown>).review
+      : {}) as Record<string, unknown>;
+    const reviewStatus = deriveInitialReviewStatus(qaReviewRaw, qa.needsReview, qa.band, qa.status);
     await adminUpdateVoiceCallSession(companyId, callId, {
       voiceQaStatus: qa.status,
       voiceQaScore: qa.score,
@@ -82,13 +99,33 @@ export async function runVoiceQaPipeline(params: {
       voiceQaNeedsReview: qa.needsReview,
       voiceQaSummary: qa.summary,
       voiceQaOutcomeConfidence: qa.outcomeConfidence,
+      voiceQaReviewStatus: reviewStatus as
+        | 'none'
+        | 'pending_review'
+        | 'reviewed'
+        | 'false_positive'
+        | 'accepted_issue'
+        | 'ignored',
       metadata: {
         ...updMeta,
-        voiceQa: qaMeta
+        voiceQa: {
+          ...qaMeta,
+          review: {
+            ...(qaReviewRaw ?? {}),
+            status: reviewStatus
+          }
+        }
       },
       updatedAt: FieldValue.serverTimestamp()
     });
-    await mergeVoiceQaStateIntoLinkedRun({ companyId, linkedRunId, voiceQa: qa });
+    await mergeVoiceQaStateIntoLinkedRun({
+      companyId,
+      linkedRunId,
+      voiceQa: {
+        ...qa,
+        reviewStatus
+      }
+    });
 
     if (qa.score != null && (qa.score <= 35 || qa.needsReview)) {
       await emitVoiceOperationalAlertIfNew({
@@ -135,6 +172,7 @@ export async function runVoiceQaPipeline(params: {
         nextStepCaptured: false,
         clientIntentClear: false,
         outcomeConfidence: 'low',
+        reviewStatus: 'pending_review',
         error: msg
       }
     });
