@@ -5,7 +5,6 @@ import { useIsMobile } from '../hooks/useIsMobile';
 import { useAuth } from '../hooks/useAuth';
 import { useCompanyId } from '../contexts/CompanyContext';
 import { useMobileWhatsAppChat } from '../contexts/MobileWhatsAppChatContext';
-import { useWhatsAppLocalRead } from '../contexts/WhatsAppLocalReadContext';
 import { useMobileSidebar } from '../contexts/MobileSidebarContext';
 import {
   subscribeConversationsList,
@@ -384,8 +383,8 @@ const WhatsAppChat: React.FC = () => {
   const crmAiRuntimeProcessingRef = useRef(false);
   const crmAiRuntimeLastProcessedRef = useRef<string | null>(null);
 
-  /** Чаты, открытые в этой сессии: в списке для них всегда показываем unreadCount=0 (защита от stale snapshot). Синхронно с глобальным бейджем меню. */
-  const { locallyReadIds: locallyReadChatIds, markConversationOpened: markChatOpenedLocallyRead } = useWhatsAppLocalRead();
+  /** Чаты, открытые в этой сессии: в списке для них всегда показываем unreadCount=0 (защита от stale snapshot). */
+  const [locallyReadChatIds, setLocallyReadChatIds] = useState<Set<string>>(() => new Set());
   /** Имена CRM-клиентов по нормализованному телефону (для отображения в списке и в шапке чата). */
   const [crmNamesByPhone, setCrmNamesByPhone] = useState<Map<string, string>>(() => new Map());
   /** Города клиентов по нормализованному телефону (для фильтра и отображения). */
@@ -1458,7 +1457,7 @@ const WhatsAppChat: React.FC = () => {
     }
     setIndexBuilding(false);
     if (!incognitoMode) {
-      markChatOpenedLocallyRead(conversationId);
+      setLocallyReadChatIds((prev) => new Set(prev).add(conversationId));
       if (import.meta.env.DEV) {
         console.log('[WhatsApp] markAsRead start:', {
           conversationId,

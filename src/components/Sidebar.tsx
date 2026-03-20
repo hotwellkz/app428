@@ -145,8 +145,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
   const unapprovedCount = useUnapprovedCount();
   const { isMenuVisible } = useMenuVisibility();
   const whatsAppBadge = useWhatsAppFloatingButtonState(true);
-  /** Только непрочитанные (unreadCount), как красный бейдж в списке; «Ждут ответа» — отдельный сценарий (см. фильтр на /whatsapp). */
-  const whatsAppBadgeCount = whatsAppBadge.unreadChatsCount;
+  const whatsAppBadgeCount = whatsAppBadge.unreadChatsCount + whatsAppBadge.awaitingReplyChatsCount;
 
   useEffect(() => {
     const checkAdminStatus = async () => {

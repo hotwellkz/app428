@@ -15,7 +15,6 @@ import { MenuVisibilityProvider } from './contexts/MenuVisibilityContext';
 import { MobileSidebarProvider } from './contexts/MobileSidebarContext';
 import { MobileWhatsAppChatProvider } from './contexts/MobileWhatsAppChatContext';
 import { CompanyProvider } from './contexts/CompanyContext';
-import { WhatsAppLocalReadProvider } from './contexts/WhatsAppLocalReadContext';
 import { ChatProvider } from './context/ChatContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
@@ -374,7 +373,6 @@ const App = () => {
     <HelmetProvider>
       <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <CompanyProvider>
-        <WhatsAppLocalReadProvider>
         <AuthGuard>
           <ChatProvider>
           <CompanyBlockedGuard>
@@ -422,7 +420,6 @@ const App = () => {
           </CompanyBlockedGuard>
           </ChatProvider>
         </AuthGuard>
-        </WhatsAppLocalReadProvider>
         </CompanyProvider>
       </Router>
     </HelmetProvider>
