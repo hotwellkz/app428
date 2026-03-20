@@ -1,36 +1,53 @@
-import { showErrorNotification } from '../utils/notifications';
+import { getAuthToken } from '../lib/firebase/auth';
 
-const TELEGRAM_BOT_TOKEN = '8147365010:AAFfUqOsbFjLAOYHqCJWl7D7xDxotTlMYd4';
-const TELEGRAM_CHAT_ID = '-4632290947'; // Replace with your actual chat ID
+const TELEGRAM_NOTIFY_URL = '/.netlify/functions/telegram-notify';
 
-export const sendTelegramNotification = async (message: string) => {
+/**
+ * Уведомление о транзакции/складе в Telegram. Секреты только на сервере (Netlify Function).
+ * Если TRANSACTIONS_TELEGRAM_CHAT_ID / TELEGRAM_BOT_TOKEN не заданы в env — тихий skip (ok: false, skipped).
+ */
+export const sendTelegramNotification = async (
+  message: string,
+  options?: { parseMode?: 'HTML' }
+): Promise<boolean> => {
   try {
-    if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-      console.warn('Telegram configuration missing');
+    const token = await getAuthToken();
+    if (!token) {
+      console.warn('Telegram notify: no auth token');
       return false;
     }
 
-    const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    const response = await fetch(TELEGRAM_NOTIFY_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
       },
       body: JSON.stringify({
-        chat_id: TELEGRAM_CHAT_ID,
-        text: message,
-        parse_mode: 'HTML',
-        disable_web_page_preview: false
+        message,
+        parseMode: options?.parseMode
       })
     });
 
-    const data = await response.json();
+    const data = (await response.json().catch(() => ({}))) as {
+      ok?: boolean;
+      skipped?: boolean;
+      reason?: string;
+      error?: string | null;
+    };
 
     if (!response.ok) {
-      console.warn('Failed to send Telegram notification:', data.description);
+      console.warn('Telegram notify failed:', data);
       return false;
     }
-
-    return true;
+    if (data.skipped) {
+      return false;
+    }
+    if (data.ok === false && data.error) {
+      console.warn('Telegram notify:', data.error);
+      return false;
+    }
+    return data.ok === true;
   } catch (error) {
     console.error('Error sending Telegram notification:', error);
     return false;
@@ -47,7 +64,6 @@ export const formatTransactionMessage = (
 ): string => {
   const formattedAmount = Math.round(amount).toLocaleString('ru-RU');
 
-  // Если это складская операция (есть номер накладной)
   if (waybillNumber) {
     const emoji = type === 'income' ? '📥' : '📤';
     const waybillLink = `https://t.me/HotWellBot/waybill/${waybillNumber}`;
@@ -62,7 +78,6 @@ ${emoji} <b>Складская операция</b>
     `.trim();
   }
 
-  // Для обычных операций используем формат как на картинке
   return `🔴 Расчет по Чекам HotWell.KZ
 
 От: ${fromUser}

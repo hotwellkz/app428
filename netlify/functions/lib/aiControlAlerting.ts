@@ -1,4 +1,5 @@
 import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore';
+import { sendAiControlTelegram } from './telegramTransport';
 
 type Priority = 'critical' | 'high' | 'normal' | 'low';
 type Status = 'new' | 'in_progress' | 'resolved' | 'ignored' | 'escalated';
@@ -33,30 +34,6 @@ function escalationThresholdMinutes(priority: Priority): number | null {
   if (priority === 'high') return 240;
   if (priority === 'normal') return 1440;
   return null;
-}
-
-async function sendTelegram(text: string): Promise<{ ok: boolean; error?: string }> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const chatId = process.env.AI_CONTROL_TELEGRAM_CHAT_ID;
-  if (!token || !chatId) return { ok: false, error: 'telegram transport not configured' };
-  try {
-    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: chatId,
-        text,
-        disable_web_page_preview: true
-      })
-    });
-    if (!res.ok) {
-      const body = await res.text();
-      return { ok: false, error: body.slice(0, 500) };
-    }
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: String(e) };
-  }
 }
 
 async function createInternalNotification(
@@ -213,7 +190,7 @@ export async function processAiControlAlertsForCompany(
     }
 
     if (shouldSendType === 'new_critical_unassigned' || shouldSendType === 'escalation_required') {
-      const tg = await sendTelegram(`${title}\n${message}`);
+      const tg = await sendAiControlTelegram(`${title}\n${message}`);
       await pushNotificationEvent(db, runId, {
         type: shouldSendType,
         target: process.env.AI_CONTROL_TELEGRAM_CHAT_ID ?? null,

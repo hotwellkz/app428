@@ -140,6 +140,12 @@
   force = true
 
 [[redirects]]
+  from = "/api/telegram-notify"
+  to = "/.netlify/functions/telegram-notify"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

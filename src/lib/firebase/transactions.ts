@@ -380,7 +380,7 @@ export const transferFunds = async ({
             'expense',
             waybillNumber
           );
-          await sendTelegramNotification(message);
+          await sendTelegramNotification(message, { parseMode: 'HTML' });
         } catch (error) {
           console.error('Error sending Telegram notification:', error);
         }

@@ -444,7 +444,8 @@ export const NewIncome: React.FC = () => {
           note || 'Приход на склад',
           'income',
           documentNumber
-        )
+        ),
+        { parseMode: 'HTML' }
       );
       
       await addDoc(collection(db, 'warehouseDocuments'), {
