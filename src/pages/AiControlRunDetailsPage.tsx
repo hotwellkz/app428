@@ -41,6 +41,7 @@ import {
   getVoiceCallSnapshotFromRun,
   getVoicePostCallFromRun,
   getVoiceCallSessionIdFromRun,
+  getVoiceQaFromRun,
   getVoiceRetryFromRun
 } from '../lib/ai-control/voiceRunBridge';
 import {
@@ -376,6 +377,7 @@ export const AiControlRunDetailsPage: React.FC = () => {
   const derivedWorkflow = deriveAiRunWorkflow(run, presentation, workflow);
   const isVoice = deriveAiRunChannelFromRun(run) === 'voice';
   const voiceSnap = getVoiceCallSnapshotFromRun(run);
+  const voiceQa = getVoiceQaFromRun(run);
   const voiceRetry = getVoiceRetryFromRun(run);
   const voicePost = getVoicePostCallFromRun(run);
   const dealOpenId = run.createdDealId || run.dealId || dealPreview?.id;
@@ -779,6 +781,48 @@ export const AiControlRunDetailsPage: React.FC = () => {
                   <dd>{voicePost.warnings.join(', ')}</dd>
                 </div>
               ) : null}
+            </dl>
+          </section>
+
+          <section className="rounded-xl border bg-white p-4 mb-4">
+            <h2 className="font-semibold text-gray-900 mb-2">Quality / QA</h2>
+            <dl className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+              <div>
+                <dt className="text-gray-500 text-xs">QA status</dt>
+                <dd>{voiceQa?.status ?? voiceSession?.voiceQaStatus ?? '—'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">QA score / band</dt>
+                <dd>
+                  {voiceQa?.score ?? voiceSession?.voiceQaScore ?? '—'}
+                  {' / '}
+                  {voiceQa?.band ?? voiceSession?.voiceQaBand ?? '—'}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Needs review</dt>
+                <dd>{voiceQa?.needsReview || voiceSession?.voiceQaNeedsReview ? 'Да' : 'Нет'}</dd>
+              </div>
+              <div>
+                <dt className="text-gray-500 text-xs">Outcome confidence</dt>
+                <dd>{voiceQa?.outcomeConfidence ?? voiceSession?.voiceQaOutcomeConfidence ?? '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gray-500 text-xs">QA summary</dt>
+                <dd className="break-words">{voiceQa?.summary ?? voiceSession?.voiceQaSummary ?? '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gray-500 text-xs">Flags</dt>
+                <dd>{voiceQa?.flags?.length ? voiceQa.flags.join(', ') : '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gray-500 text-xs">Failure reasons</dt>
+                <dd>{voiceQa?.failureReasons?.length ? voiceQa.failureReasons.join(', ') : '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-gray-500 text-xs">Warnings</dt>
+                <dd>{voiceQa?.warnings?.length ? voiceQa.warnings.join(', ') : '—'}</dd>
+              </div>
             </dl>
           </section>
 

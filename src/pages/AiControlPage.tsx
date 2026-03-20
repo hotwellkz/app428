@@ -38,7 +38,8 @@ import {
   formatVoiceRunStatusLine,
   getVoiceCallSnapshotFromRun,
   getVoicePostCallFromRun,
-  getVoiceRetryFromRun
+  getVoiceRetryFromRun,
+  getVoiceQaFromRun
 } from '../lib/ai-control/voiceRunBridge';
 import { auth } from '../lib/firebase/auth';
 
@@ -52,6 +53,7 @@ function voiceIssueMatches(
   const vs = getVoiceCallSnapshotFromRun(run);
   const vp = getVoicePostCallFromRun(run);
   const pr = deriveAiRunListPresentation(run, agg);
+  const qa = getVoiceQaFromRun(run);
   switch (preset) {
     case 'post_call_failed':
       return vs?.postCallStatus === 'failed';
@@ -84,6 +86,24 @@ function voiceIssueMatches(
       const t = Date.parse(String(raw));
       return Number.isFinite(t) && t <= Date.now() + 2 * 3600_000;
     }
+    case 'qa_low_quality':
+      return qa?.status === 'done' && qa.band === 'bad';
+    case 'qa_needs_review':
+      return qa?.needsReview === true;
+    case 'qa_missing_next_step':
+      return qa?.flags?.includes('missing_next_step') === true;
+    case 'qa_unclear_outcome':
+      return qa?.flags?.includes('unknown_outcome') === true;
+    case 'qa_operational_issues':
+      return (
+        qa?.flags?.includes('post_call_failed') === true ||
+        qa?.flags?.includes('crm_apply_failed') === true ||
+        qa?.flags?.includes('follow_up_failed') === true
+      );
+    case 'qa_repeated_retry_problem':
+      return qa?.flags?.includes('repeated_retry_case') === true;
+    case 'qa_failed':
+      return qa?.status === 'failed';
     default:
       return true;
   }
@@ -235,6 +255,7 @@ function applyFilters(
       const vs = getVoiceCallSnapshotFromRun(run);
       const vp = getVoicePostCallFromRun(run);
       const vr = getVoiceRetryFromRun(run);
+      const qa = getVoiceQaFromRun(run);
       const extrasStr =
         run.extras && typeof run.extras === 'object' ? JSON.stringify(run.extras).toLowerCase() : '';
       const hay = [
@@ -272,6 +293,10 @@ function applyFilters(
         vr?.retryReason,
         vr?.nextRetryAt,
         vr?.callbackAt,
+        qa?.score,
+        qa?.band,
+        qa?.summary,
+        qa?.flags?.join(' '),
         extrasStr
       ]
         .filter(Boolean)
@@ -390,7 +415,12 @@ function metricsFor(
     voiceNeedAttention = 0,
     voiceRetryScheduled = 0,
     voiceRetryExhausted = 0,
-    voiceCallbackDue = 0;
+    voiceCallbackDue = 0,
+    voiceQaLowQuality = 0,
+    voiceQaNeedsReview = 0,
+    voiceQaMissingNextStep = 0,
+    voiceQaUnclearOutcome = 0,
+    voiceQaFailed = 0;
   const startTodayMs = startOfToday.getTime();
   for (const r of runs) {
     if (deriveAiRunChannelFromRun(r) === 'voice') {
@@ -410,6 +440,12 @@ function metricsFor(
         const t = Date.parse(String(raw));
         if (Number.isFinite(t) && t <= Date.now() + 2 * 3600_000) voiceCallbackDue++;
       }
+      const qa = getVoiceQaFromRun(r);
+      if (qa?.status === 'done' && qa.band === 'bad') voiceQaLowQuality++;
+      if (qa?.needsReview) voiceQaNeedsReview++;
+      if (qa?.flags?.includes('missing_next_step')) voiceQaMissingNextStep++;
+      if (qa?.flags?.includes('unknown_outcome')) voiceQaUnclearOutcome++;
+      if (qa?.status === 'failed') voiceQaFailed++;
     }
   }
   for (const r of runs) {
@@ -453,7 +489,12 @@ function metricsFor(
     voiceNeedAttention,
     voiceRetryScheduled,
     voiceRetryExhausted,
-    voiceCallbackDue
+    voiceCallbackDue,
+    voiceQaLowQuality,
+    voiceQaNeedsReview,
+    voiceQaMissingNextStep,
+    voiceQaUnclearOutcome,
+    voiceQaFailed
   };
 }
 
@@ -640,7 +681,7 @@ export const AiControlPage: React.FC = () => {
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-2 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-12 gap-2 mb-4">
         {[
           { k: 'Voice сегодня', v: metrics.voiceToday },
           { k: 'Voice completed', v: metrics.voiceCompleted },
@@ -649,7 +690,12 @@ export const AiControlPage: React.FC = () => {
           { k: 'Voice внимание', v: metrics.voiceNeedAttention },
           { k: 'Retry scheduled', v: metrics.voiceRetryScheduled },
           { k: 'Retry exhausted', v: metrics.voiceRetryExhausted },
-          { k: 'Callback ≤2ч', v: metrics.voiceCallbackDue }
+          { k: 'Callback ≤2ч', v: metrics.voiceCallbackDue },
+          { k: 'QA bad', v: metrics.voiceQaLowQuality },
+          { k: 'QA review', v: metrics.voiceQaNeedsReview },
+          { k: 'QA no-next-step', v: metrics.voiceQaMissingNextStep },
+          { k: 'QA unclear outcome', v: metrics.voiceQaUnclearOutcome },
+          { k: 'QA failed', v: metrics.voiceQaFailed }
         ].map((c) => (
           <div key={c.k} className="rounded-lg border border-violet-100 bg-violet-50/60 p-2 text-center shadow-sm">
             <div className="text-lg font-semibold text-violet-900">{c.v}</div>

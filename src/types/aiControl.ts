@@ -44,7 +44,14 @@ export type AiControlVoiceIssuePreset =
   | 'needs_attention_voice'
   | 'retry_scheduled'
   | 'retry_exhausted'
-  | 'callback_due';
+  | 'callback_due'
+  | 'qa_low_quality'
+  | 'qa_needs_review'
+  | 'qa_missing_next_step'
+  | 'qa_unclear_outcome'
+  | 'qa_operational_issues'
+  | 'qa_repeated_retry_problem'
+  | 'qa_failed';
 export type AiRunWorkflowEventType =
   | 'created'
   | 'assigned'

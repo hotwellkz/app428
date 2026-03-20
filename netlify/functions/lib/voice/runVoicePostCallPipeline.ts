@@ -20,6 +20,7 @@ import { sendVoicePostCallWhatsappFollowUp } from './voicePostCallWhatsApp';
 import { createVoiceDealFromRecommendationSnapshot } from './voicePostCallDealAdmin';
 import { buildVoiceTranscriptFromTurns } from './buildVoiceTranscript';
 import { applyVoiceRetryAfterPostCall } from './applyVoiceRetryAfterPostCall';
+import { runVoiceQaPipeline } from './runVoiceQaPipeline';
 import { emitVoiceOperationalAlertIfNew } from './voiceRetryAlerts';
 import {
   adminClaimVoicePostCallProcessing,
@@ -454,6 +455,17 @@ export async function runVoicePostCallPipeline(params: {
       });
     } catch (re) {
       console.error('[runVoicePostCallPipeline] applyVoiceRetryAfterPostCall', re);
+    }
+    try {
+      await runVoiceQaPipeline({
+        companyId,
+        callId,
+        linkedRunId,
+        extraction: isFull ? extraction : null,
+        userTurnCount: transcript.userTurnCount
+      });
+    } catch (qe) {
+      console.error('[runVoicePostCallPipeline] runVoiceQaPipeline', qe);
     }
 
     return { ok: true };

@@ -350,6 +350,13 @@ export const AiControlFilters: React.FC<{
             <option value="retry_scheduled">Retry: запланирован</option>
             <option value="retry_exhausted">Retry: лимит исчерпан</option>
             <option value="callback_due">Callback в ближайшие 2ч</option>
+            <option value="qa_low_quality">QA: низкое качество</option>
+            <option value="qa_needs_review">QA: требует review</option>
+            <option value="qa_missing_next_step">QA: нет next step</option>
+            <option value="qa_unclear_outcome">QA: outcome неясен</option>
+            <option value="qa_operational_issues">QA: CRM/follow-up/post-call issues</option>
+            <option value="qa_repeated_retry_problem">QA: repeated retry problem</option>
+            <option value="qa_failed">QA: pipeline failed</option>
           </select>
         </div>
         <div>

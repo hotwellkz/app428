@@ -3,7 +3,7 @@ import type { WhatsAppAiRunWorkflowRecord } from '../firebase/whatsappAiRunWorkf
 import type { WhatsAppAiBotRunRecord } from '../firebase/whatsappAiBotRuns';
 import type { AiRunListPresentation } from './deriveAiRunListPresentation';
 import { deriveAiRunChannelFromRun } from './deriveAiRunChannel';
-import { getVoiceCallSnapshotFromRun, getVoicePostCallFromRun, getVoiceRetryFromRun } from './voiceRunBridge';
+import { getVoiceCallSnapshotFromRun, getVoicePostCallFromRun, getVoiceQaFromRun, getVoiceRetryFromRun } from './voiceRunBridge';
 
 export interface DerivedAiRunWorkflow {
   status: AiRunWorkflowStatus | null;
@@ -102,6 +102,7 @@ function derivePriority(
   const voiceSnap = isVoice ? getVoiceCallSnapshotFromRun(run) : null;
   const voicePost = isVoice ? getVoicePostCallFromRun(run) : null;
   const voiceRetry = isVoice ? getVoiceRetryFromRun(run) : null;
+  const voiceQa = isVoice ? getVoiceQaFromRun(run) : null;
   const retryNextMs = voiceRetry?.nextRetryAt ? Date.parse(String(voiceRetry.nextRetryAt)) : NaN;
   const retryOverdue = Number.isFinite(retryNextMs) && retryNextMs < Date.now();
 
@@ -112,7 +113,9 @@ function derivePriority(
     run.taskRecommendationStatus === 'recommended' && run.taskCreateStatus !== 'created',
     presentation.requiresAttention && status === 'new' && !hasAssignee,
     isVoice && voiceSnap?.postCallStatus === 'failed',
-    isVoice && voiceRetry?.retryStatus === 'exhausted'
+    isVoice && voiceRetry?.retryStatus === 'exhausted',
+    isVoice && voiceQa?.status === 'failed',
+    isVoice && voiceQa?.status === 'done' && (voiceQa.band === 'bad' || voiceQa.needsReview)
   ];
   if (critical.some(Boolean)) {
     if (presentation.runStatus === 'error') reasons.push('runtime/API error');
@@ -122,6 +125,9 @@ function derivePriority(
     if (presentation.requiresAttention && status === 'new' && !hasAssignee) reasons.push('новый проблемный кейс без ответственного');
     if (isVoice && voiceSnap?.postCallStatus === 'failed') reasons.push('Голос: post-call failed');
     if (isVoice && voiceRetry?.retryStatus === 'exhausted') reasons.push('Голос: retry exhausted');
+    if (isVoice && voiceQa?.status === 'failed') reasons.push('Голос: QA pipeline failed');
+    if (isVoice && voiceQa?.status === 'done' && voiceQa.band === 'bad') reasons.push('Голос: QA low quality');
+    if (isVoice && voiceQa?.status === 'done' && voiceQa.needsReview) reasons.push('Голос: QA needs review');
     return { priority: 'critical', reasons };
   }
 

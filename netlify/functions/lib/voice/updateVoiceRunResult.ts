@@ -130,3 +130,40 @@ export async function mergeVoiceRetryStateIntoLinkedRun(params: {
     return { ok: false, error: e instanceof Error ? e.message : 'merge_failed' };
   }
 }
+
+/** Merge voice QA snapshot в linked run (extras.voiceQa) */
+export async function mergeVoiceQaStateIntoLinkedRun(params: {
+  companyId: string;
+  linkedRunId: string;
+  voiceQa: Record<string, unknown>;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { companyId, linkedRunId, voiceQa } = params;
+  if (!linkedRunId.trim()) return { ok: false, error: 'missing_linked_run' };
+  const db = getDb();
+  const ref = db.collection(WHATSAPP_AI_BOT_RUNS).doc(linkedRunId);
+  try {
+    const snap = await ref.get();
+    if (!snap.exists) return { ok: false, error: 'run_not_found' };
+    const row = snap.data() ?? {};
+    if (String(row.companyId ?? '') !== companyId) {
+      return { ok: false, error: 'run_company_mismatch' };
+    }
+    const prevExtras = (row.extras as Record<string, unknown>) ?? {};
+    const prevQa = (prevExtras.voiceQa as Record<string, unknown>) ?? {};
+    await ref.set(
+      {
+        channel: row.channel ?? 'voice',
+        extras: {
+          ...prevExtras,
+          voiceQa: { ...prevQa, ...voiceQa }
+        },
+        updatedAt: FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+    return { ok: true };
+  } catch (e) {
+    console.error('[mergeVoiceQaStateIntoLinkedRun]', e);
+    return { ok: false, error: e instanceof Error ? e.message : 'merge_failed' };
+  }
+}

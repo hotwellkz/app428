@@ -6,7 +6,8 @@ import {
   formatVoiceRunStatusLine,
   getVoiceCallSnapshotFromRun,
   getVoicePostCallFromRun,
-  getVoiceRetryFromRun
+  getVoiceRetryFromRun,
+  getVoiceQaFromRun
 } from './voiceRunBridge';
 
 export type RunSourceType = 'snapshot' | 'fallback' | 'unknown';
@@ -49,6 +50,7 @@ export function deriveAiRunListPresentation(
   const isVoice = derivedChannel === 'voice';
   const voiceSnap = getVoiceCallSnapshotFromRun(run);
   const voicePost = getVoicePostCallFromRun(run);
+  const voiceQa = getVoiceQaFromRun(run);
   const voiceOperationalLine = isVoice ? formatVoiceRunStatusLine(run) : null;
 
   const hasSnapshot = !!(
@@ -143,6 +145,10 @@ export function deriveAiRunListPresentation(
         attentionReasons.push('Голос: запланированный retry просрочен (ждёт sweep)');
       }
     }
+    if (voiceQa?.status === 'failed') attentionReasons.push('Голос QA: pipeline failed');
+    if (voiceQa?.needsReview) attentionReasons.push('Голос QA: требуется ручной review');
+    if (voiceQa?.flags?.includes('missing_next_step')) attentionReasons.push('Голос QA: не зафиксирован next step');
+    if (voiceQa?.flags?.includes('unknown_outcome')) attentionReasons.push('Голос QA: outcome неясен');
   }
 
   const requiresAttention = attentionReasons.length > 0;
@@ -177,6 +183,11 @@ export function deriveAiRunListPresentation(
     voiceOperationalLine
   };
   if (isVoice && voiceOperationalLine) summaryParts.unshift(voiceOperationalLine);
+  if (isVoice && voiceQa?.status === 'done') {
+    summaryParts.push(`QA ${voiceQa.score ?? '—'}/${voiceQa.band ?? '—'}`);
+  } else if (isVoice && voiceQa?.status === 'failed') {
+    summaryParts.push('QA failed');
+  }
   if (runStatus === 'duplicate') summaryParts.unshift(`Duplicate: ${run.reason || 'уже применено'}`);
   if (runStatus === 'error') summaryParts.unshift(`Error: ${run.reason || 'runtime'}`);
   if ((run.createUsedFallbacks?.length ?? 0) > 0) {
@@ -187,6 +198,11 @@ export function deriveAiRunListPresentation(
   const runtimeMode = (run.runtimeMode || run.mode || '').toLowerCase();
   const badges: string[] = [];
   if (isVoice) badges.push(channelBadgeLabel(derivedChannel));
+  if (isVoice && voiceQa?.status === 'done') {
+    badges.push(`QA ${voiceQa.band ?? '—'}`);
+    if (voiceQa.needsReview) badges.push('QA review');
+  }
+  if (isVoice && voiceQa?.status === 'failed') badges.push('QA failed');
   if (runStatus === 'error') badges.push('Ошибка');
   if ((run.createUsedFallbacks?.length ?? 0) > 0 || source === 'fallback') badges.push('Fallback');
   if (hasExtraction) badges.push('Extraction');

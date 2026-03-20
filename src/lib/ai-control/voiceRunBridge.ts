@@ -2,7 +2,7 @@
  * Чтение voice-bridge полей из whatsappAiBotRuns (extras + корень документа).
  */
 import type { WhatsAppAiBotRunRecord } from '../firebase/whatsappAiBotRuns';
-import type { VoicePostCallResultMetadata } from '../../types/voice';
+import type { VoicePostCallResultMetadata, VoiceQaSnapshot } from '../../types/voice';
 
 export type VoiceCallSnapshotForAiRun = {
   callStatus?: string;
@@ -58,6 +58,27 @@ export type VoiceRetryForAiRun = {
   parentCallId?: string | null;
 };
 
+export function getVoiceQaFromRun(run: WhatsAppAiBotRunRecord): VoiceQaSnapshot | null {
+  const raw = run.extras?.voiceQa;
+  if (!raw || typeof raw !== 'object') return null;
+  const o = raw as Record<string, unknown>;
+  return {
+    status: (o.status as VoiceQaSnapshot['status']) ?? 'pending',
+    score: typeof o.score === 'number' ? o.score : null,
+    band: (o.band as VoiceQaSnapshot['band']) ?? null,
+    needsReview: o.needsReview === true,
+    summary: typeof o.summary === 'string' ? o.summary : null,
+    flags: Array.isArray(o.flags) ? o.flags.map((x) => String(x)) : [],
+    warnings: Array.isArray(o.warnings) ? o.warnings.map((x) => String(x)) : [],
+    failureReasons: Array.isArray(o.failureReasons) ? o.failureReasons.map((x) => String(x)) : [],
+    nextStepCaptured: o.nextStepCaptured === true,
+    clientIntentClear: o.clientIntentClear === true,
+    outcomeConfidence: (o.outcomeConfidence as VoiceQaSnapshot['outcomeConfidence']) ?? 'low',
+    reviewedAt: null,
+    error: typeof o.error === 'string' ? o.error : null
+  };
+}
+
 export function getVoiceRetryFromRun(run: WhatsAppAiBotRunRecord): VoiceRetryForAiRun | null {
   const raw = run.extras?.voiceRetry;
   if (!raw || typeof raw !== 'object') return null;
@@ -89,6 +110,13 @@ export function formatVoiceRunStatusLine(run: WhatsAppAiBotRunRecord): string {
   if (snap?.postCallStatus) parts.push(`post:${snap.postCallStatus}`);
   else if (vp?.lightweight) parts.push('post:light');
   if (snap?.followUpStatus && snap.followUpStatus !== 'skipped') parts.push(`WA:${snap.followUpStatus}`);
+  const qa = getVoiceQaFromRun(run);
+  if (qa?.status === 'done') {
+    parts.push(`QA:${qa.score ?? '—'}/${qa.band ?? '—'}`);
+    if (qa.needsReview) parts.push('review');
+  } else if (qa?.status === 'failed') {
+    parts.push('QA:failed');
+  }
   if (vr?.retryStatus && vr.retryStatus !== 'none' && vr.retryStatus !== 'completed') {
     parts.push(`retry:${vr.retryStatus}`);
     if (vr.nextRetryAt) parts.push(`next:${vr.nextRetryAt.slice(0, 16)}`);

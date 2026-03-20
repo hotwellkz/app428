@@ -26,6 +26,27 @@ export type VoiceOutcome = 'meeting_booked' | 'callback' | 'no_interest' | 'unkn
 
 export type VoicePostCallStatus = 'pending' | 'processing' | 'done' | 'failed';
 
+export type VoiceQaStatus = 'pending' | 'processing' | 'done' | 'failed';
+export type VoiceQaBand = 'good' | 'warning' | 'bad';
+export type VoiceQaOutcomeConfidence = 'low' | 'medium' | 'high';
+
+/** Компактный снэпшот QA (для run extras и списков AI-control). */
+export interface VoiceQaSnapshot {
+  status: VoiceQaStatus;
+  score: number | null;
+  band: VoiceQaBand | null;
+  needsReview: boolean;
+  summary: string | null;
+  flags: string[];
+  warnings: string[];
+  failureReasons: string[];
+  nextStepCaptured: boolean;
+  clientIntentClear: boolean;
+  outcomeConfidence: VoiceQaOutcomeConfidence;
+  reviewedAt?: Timestamp | Date | null;
+  error?: string | null;
+}
+
 /** Авто/ручной retry и callback (оркестрация поверх сессии). */
 export type VoiceRetryReason =
   | 'no_answer'
@@ -94,6 +115,12 @@ export interface VoicePostCallResultMetadata {
   linkedRunUpdated?: boolean;
 }
 
+/** QA результат пост-фактум анализа (в metadata.voiceQa). */
+export interface VoiceQaResultMetadata extends VoiceQaSnapshot {
+  pipelineVersion?: string;
+  analyzedAt?: Timestamp | Date | null;
+}
+
 /** P0: строковый идентификатор провайдера (например "twilio_v1"); без импорта SDK провайдера. */
 export type VoiceProviderId = string;
 
@@ -151,6 +178,12 @@ export interface VoiceCallSession {
   voiceRetryCallbackAt?: Timestamp | Date | null;
   voiceRetryCallbackOverdueAlertSent?: boolean | null;
   voiceRetryLastDispatchedChildId?: string | null;
+  voiceQaStatus?: VoiceQaStatus | null;
+  voiceQaScore?: number | null;
+  voiceQaBand?: VoiceQaBand | null;
+  voiceQaNeedsReview?: boolean | null;
+  voiceQaSummary?: string | null;
+  voiceQaOutcomeConfidence?: VoiceQaOutcomeConfidence | null;
   metadata?: Record<string, unknown>;
   createdAt?: Timestamp | Date | null;
   updatedAt?: Timestamp | Date | null;
