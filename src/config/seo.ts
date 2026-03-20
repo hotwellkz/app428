@@ -15,6 +15,7 @@ export const SEO_PUBLIC_PATHS = [
   '/crm-dlya-malogo-biznesa',
   '/crm-dlya-prodazh',
   '/whatsapp-crm',
+  '/crm-twilio',
   '/vozmozhnosti',
   '/ceny',
   '/faq',

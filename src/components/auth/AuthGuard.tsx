@@ -39,6 +39,7 @@ import {
   ZachemNuzhnaCrmPage,
   CrmIliExcelPage,
   CrmDlyaKaspiPage,
+  CrmTwilioTelefoniyaPage,
 } from '../../pages/landing';
 
 const PUBLIC_PATHS = [
@@ -48,6 +49,7 @@ const PUBLIC_PATHS = [
   '/crm-dlya-malogo-biznesa',
   '/crm-dlya-prodazh',
   '/whatsapp-crm',
+  '/crm-twilio',
   '/vozmozhnosti',
   '/ceny',
   '/faq',
@@ -113,6 +115,7 @@ export const AuthGuard: React.FC<AuthGuardProps> = ({ children }) => {
           <Route path="/crm-dlya-malogo-biznesa" element={<CrmDlyaMalogoBiznesaPage />} />
           <Route path="/crm-dlya-prodazh" element={<CrmDlyaProdazhPage />} />
           <Route path="/whatsapp-crm" element={<WhatsAppCrmPage />} />
+          <Route path="/crm-twilio" element={<CrmTwilioTelefoniyaPage />} />
           <Route path="/vozmozhnosti" element={<VozmozhnostiPage />} />
           <Route path="/ceny" element={<CenyPage />} />
           <Route path="/faq" element={<FaqPage />} />

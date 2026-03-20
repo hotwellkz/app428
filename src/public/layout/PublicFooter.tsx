@@ -36,6 +36,7 @@ const FOOTER_GROUPS = [
       { label: 'Управление заявками', to: '/upravlenie-zayavkami' },
       { label: 'Сделки и воронка', to: '/sdelki-i-voronka' },
       { label: 'WhatsApp CRM', to: '/whatsapp-crm' },
+      { label: 'CRM с телефонией (Twilio)', to: '/crm-twilio' },
       { label: 'WhatsApp для отдела продаж', to: '/whatsapp-dlya-otdela-prodazh' },
       { label: 'WhatsApp и чаты', to: '/whatsapp-i-chaty' },
       { label: 'Быстрые ответы', to: '/bystrye-otvety' },

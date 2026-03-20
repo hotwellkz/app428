@@ -23,6 +23,7 @@ export { KakVybratCrmPage } from './KakVybratCrmPage';
 export { ZachemNuzhnaCrmPage } from './ZachemNuzhnaCrmPage';
 export { CrmIliExcelPage } from './CrmIliExcelPage';
 export { CrmDlyaKaspiPage } from './CrmDlyaKaspiPage';
+export { CrmTwilioTelefoniyaPage } from './CrmTwilioTelefoniyaPage';
 export {
   KlientyPage,
   WhatsAppChatyPage,
