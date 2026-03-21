@@ -25,7 +25,9 @@ import type {
   WhatsAppConversation,
   WhatsAppMessage,
   MessageAttachment,
-  MessageReaction
+  MessageReaction,
+  ChatAttachmentStructuredAnalysis,
+  AttachmentAnalysisStatus
 } from '../../types/whatsappDb';
 import type { WhatsAppAiRuntime, WhatsAppAiRuntimeMode } from '../../types/whatsappAiRuntime';
 import type { AiDealRecommendationSnapshot, AiDealCreatedFromRecommendationSnapshot } from '../../types/aiDealRecommendation';
@@ -217,13 +219,28 @@ function dataToAttachments(arr: unknown): MessageAttachment[] {
     const mimeType = o.mimeType as string | undefined;
     const fileName = o.fileName as string | undefined;
     const type = inferAttachmentType(typeRaw, mimeType, url, fileName);
+    const st = o.analysisStatus as AttachmentAnalysisStatus | undefined;
+    const structuredRaw = o.analysisStructured;
+    let analysisStructured: ChatAttachmentStructuredAnalysis | null | undefined;
+    if (structuredRaw === null) analysisStructured = null;
+    else if (structuredRaw && typeof structuredRaw === 'object') {
+      analysisStructured = structuredRaw as ChatAttachmentStructuredAnalysis;
+    }
     return {
       type,
       url,
       mimeType,
       fileName,
       size: o.size as number | undefined,
-      thumbnailUrl: (o.thumbnailUrl as string | null) ?? undefined
+      thumbnailUrl: (o.thumbnailUrl as string | null) ?? undefined,
+      analysisStatus: st,
+      analysisQueuedAt: o.analysisQueuedAt as MessageAttachment['analysisQueuedAt'],
+      analysisSummaryShort: (o.analysisSummaryShort as string | null | undefined) ?? undefined,
+      analysisSummaryFull: (o.analysisSummaryFull as string | null | undefined) ?? undefined,
+      analysisStructured,
+      analysisProvider: (o.analysisProvider as string | null | undefined) ?? undefined,
+      analysisAt: (o.analysisAt as MessageAttachment['analysisAt']) ?? undefined,
+      analysisError: (o.analysisError as string | null | undefined) ?? undefined
     };
   });
 }

@@ -21,6 +21,10 @@
 [functions.voice-campaign-sweep]
   schedule = "*/2 * * * *"
 
+# Анализ вложений чата (vision/PDF) — OpenAI, скачивание файлов
+[functions.whatsapp-attachment-analyze]
+  timeout = 60
+
 # Webhook Wazzup → Netlify function (должен быть выше правила /*)
 [[redirects]]
   from = "/api/wazzup/webhook"

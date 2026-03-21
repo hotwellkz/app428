@@ -96,6 +96,41 @@ export type MessageChannel = 'whatsapp' | 'instagram';
 /** Статус исходящего сообщения (по контракту Wazzup: sent, delivered, read, error) */
 export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 
+/** Статус серверного анализа вложения (vision / PDF) для AI-бота */
+export type AttachmentAnalysisStatus = 'pending' | 'processing' | 'ready' | 'failed' | 'skipped';
+
+/** Структурированный результат анализа вложения (сохраняется в Firestore как JSON) */
+export interface ChatAttachmentStructuredAnalysis {
+  attachmentKind: 'image' | 'pdf' | 'file';
+  summaryShort?: string;
+  summaryFull?: string;
+  detectedObjects?: string[];
+  appearsToBeHouseProject?: boolean;
+  appearsToContainFloorplan?: boolean;
+  appearsToContainDimensions?: boolean;
+  detectedDimensionsText?: string[];
+  estimatedFloors?: '1' | '2' | 'unknown';
+  estimatedStyle?: 'modern' | 'classic' | 'modular' | 'barnhouse' | 'unknown';
+  userIntentFromAttachment?: Array<
+    | 'wants_similar_house'
+    | 'wants_estimate'
+    | 'wants_review'
+    | 'wants_dimensions_check'
+    | 'wants_feasibility_check'
+  >;
+  warnings?: Array<
+    | 'low_quality_image'
+    | 'unreadable_text'
+    | 'partial_pdf'
+    | 'scanned_pdf'
+    | 'no_dimensions_detected'
+  >;
+  /** Для PDF: сколько текста/страниц учтено в MVP */
+  pdfPagesAnalyzed?: number;
+  pdfTextChars?: number;
+  partialPdf?: boolean;
+}
+
 /** Вложение: медиа или файл */
 export interface MessageAttachment {
   type: 'image' | 'video' | 'audio' | 'file';
@@ -104,6 +139,15 @@ export interface MessageAttachment {
   fileName?: string;
   size?: number;
   thumbnailUrl?: string | null;
+  /** Серверный AI-анализ (не уходит в OpenAI с клиента) */
+  analysisStatus?: AttachmentAnalysisStatus;
+  analysisQueuedAt?: Date | Timestamp;
+  analysisSummaryShort?: string | null;
+  analysisSummaryFull?: string | null;
+  analysisStructured?: ChatAttachmentStructuredAnalysis | null;
+  analysisProvider?: string | null;
+  analysisAt?: Date | Timestamp | null;
+  analysisError?: string | null;
 }
 
 /** Реакция на сообщение (только в CRM) */

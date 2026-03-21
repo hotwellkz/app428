@@ -1,6 +1,7 @@
 import { initializeApp, getApps, cert, type ServiceAccount } from 'firebase-admin/app';
 import { getFirestore, Timestamp, FieldValue, type CollectionReference } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
+import type { MessageAttachment } from '../../src/types/whatsappDb';
 
 const COLLECTIONS = {
   CLIENTS: 'whatsappClients',
@@ -965,13 +966,64 @@ export async function markConversationAsRead(
   await ref.update(update);
 }
 
-export interface MessageAttachmentRow {
-  type: 'image' | 'video' | 'audio' | 'file';
-  url: string;
-  mimeType?: string;
-  fileName?: string;
-  size?: number;
-  thumbnailUrl?: string | null;
+/** Строка вложения в Firestore (совпадает с MessageAttachment на клиенте) */
+export type MessageAttachmentRow = MessageAttachment;
+
+/**
+ * Помечает входящие вложения для автоанализа (vision/PDF) и выставляет analysisQueuedAt.
+ * Аудио/видео не анализируются в MVP.
+ */
+export function enrichAttachmentsForAutoAnalysis(rows: MessageAttachmentRow[]): MessageAttachmentRow[] {
+  const now = Timestamp.now();
+  return rows.map((row) => {
+    if (!attachmentNeedsAutoAnalysis(row)) return row;
+    if (row.analysisStatus === 'ready' || row.analysisStatus === 'failed') return row;
+    return {
+      ...row,
+      analysisStatus: 'pending',
+      analysisQueuedAt: now,
+      analysisProvider: 'openai'
+    };
+  });
+}
+
+function attachmentNeedsAutoAnalysis(row: MessageAttachmentRow): boolean {
+  if (row.type === 'video') return false;
+  if (row.type === 'audio') return false;
+  if (row.type === 'image') return true;
+  if (row.type === 'file') {
+    const mime = (row.mimeType ?? '').toLowerCase();
+    const path = row.url.split('?')[0].toLowerCase();
+    const name = (row.fileName ?? '').toLowerCase();
+    if (mime.includes('pdf') || path.endsWith('.pdf') || name.endsWith('.pdf')) return true;
+    if (mime.startsWith('image/')) return true;
+    return false;
+  }
+  return false;
+}
+
+/** Fire-and-forget: поставить задачу анализа вложений сообщения (Netlify Function). */
+export function fireWhatsappAttachmentAnalysisJob(messageId: string, companyId: string): void {
+  const secret = (process.env.WHATSAPP_ATTACHMENT_ANALYSIS_SECRET ?? '').trim();
+  const site = (process.env.URL ?? process.env.DEPLOY_PRIME_URL ?? '').trim().replace(/\/$/, '');
+  if (!secret || !site) {
+    if (process.env.WAZZUP_WEBHOOK_DEBUG === '1' || process.env.NODE_ENV !== 'production') {
+      // eslint-disable-next-line no-console
+      console.warn('[firebaseAdmin] attachment analysis job skipped: missing URL or WHATSAPP_ATTACHMENT_ANALYSIS_SECRET');
+    }
+    return;
+  }
+  const url = `${site}/.netlify/functions/whatsapp-attachment-analyze`;
+  fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Internal-Secret': secret
+    },
+    body: JSON.stringify({ messageId, companyId })
+  }).catch(() => {
+    /* ignore */
+  });
 }
 
 export interface SaveMessageOptions {

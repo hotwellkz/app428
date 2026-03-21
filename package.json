@@ -70,6 +70,7 @@
     "lucide-react": "^0.344.0",
     "node-fetch": "^3.3.2",
     "opus-media-recorder": "^0.8.0",
+    "pdf-parse": "^1.1.1",
     "pdfjs-dist": "^3.11.174",
     "qrcode": "^1.5.4",
     "qrcode.react": "^4.2.0",
