@@ -225,7 +225,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ onPageChange, currentPage }) =
     { icon: <MessageSquare className="w-5 h-5" />, label: 'Чаты', path: '/whatsapp', sectionId: 'whatsapp', isActive: location.pathname === '/whatsapp', badgeCount: whatsAppBadgeCount > 0 ? whatsAppBadgeCount : undefined },
     { icon: <Shield className="w-5 h-5" />, label: 'AI База знаний', path: '/settings/knowledge', sectionId: 'knowledgeBase', isActive: location.pathname === '/settings/knowledge' },
     { icon: <MessageSquare className="w-5 h-5" />, label: 'Быстрые ответы', path: '/settings/quick-replies', sectionId: 'quickReplies', isActive: location.pathname === '/settings/quick-replies' },
-    { icon: <Plug className="w-5 h-5" />, label: 'Интеграции', path: '/settings/integrations', sectionId: 'integrations', isActive: location.pathname === '/settings/integrations' },
+    { icon: <Plug className="w-5 h-5" />, label: 'Интеграции', path: '/settings/integrations', sectionId: 'integrations', isActive: location.pathname.startsWith('/settings/integrations') },
     { icon: <Bot className="w-5 h-5" />, label: 'Автоворонки', path: '/autovoronki', sectionId: 'autovoronki', isActive: location.pathname === '/autovoronki' || location.pathname.startsWith('/autovoronki/') },
     { icon: <PhoneCall className="w-5 h-5" />, label: 'Voice кампании', path: '/voice-campaigns', sectionId: 'autovoronki', isActive: location.pathname === '/voice-campaigns' || location.pathname.startsWith('/voice-campaigns/') },
     { icon: <Activity className="w-5 h-5" />, label: 'AI-контроль', path: '/ai-control', sectionId: 'autovoronki', isActive: location.pathname === '/ai-control' || location.pathname.startsWith('/ai-control/') },

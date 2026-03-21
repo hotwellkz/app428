@@ -101,6 +101,11 @@ const AnalyticsPage = lazy(withChunkErrorRecovery(() => import('./pages/Analytic
 const KnowledgeBaseSettings = lazy(withChunkErrorRecovery(() => import('./pages/KnowledgeBaseSettings')));
 const QuickRepliesSettings = lazy(withChunkErrorRecovery(() => import('./pages/QuickRepliesSettings')));
 const IntegrationsSettings = lazy(withChunkErrorRecovery(() => import('./pages/IntegrationsSettings').then(m => ({ default: m.IntegrationsSettings }))));
+const IntegrationDetailPage = lazy(
+  withChunkErrorRecovery(() =>
+    import('./pages/integrations/IntegrationDetailPage').then((m) => ({ default: m.IntegrationDetailPage }))
+  )
+);
 const AutovoronkiListPage = lazyNamed(() => import('./pages/AutovoronkiListPage'), 'AutovoronkiListPage');
 const AutovoronkiBotEditorPage = lazyNamed(() => import('./pages/AutovoronkiBotEditorPage'), 'AutovoronkiBotEditorPage');
 const VoiceCampaignsPage = lazy(withChunkErrorRecovery(() => import('./pages/VoiceCampaignsPage')));
@@ -318,6 +323,11 @@ const AppContent: React.FC = () => {
             <Route path="/settings/integrations" element={
               <ApprovalGuard>
                 <IntegrationsSettings />
+              </ApprovalGuard>
+            } />
+            <Route path="/settings/integrations/:integrationId" element={
+              <ApprovalGuard>
+                <IntegrationDetailPage />
               </ApprovalGuard>
             } />
             <Route path="/autovoronki" element={
