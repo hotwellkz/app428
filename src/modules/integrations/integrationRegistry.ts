@@ -42,6 +42,14 @@ export const INTEGRATION_REGISTRY: IntegrationRegistryItem[] = [
     category: 'telephony',
     categoryLabel: CATEGORY_LABELS.telephony,
     Icon: Phone
+  },
+  {
+    id: 'zadarma',
+    title: 'Zadarma',
+    shortDescription: 'Телефония и виртуальная АТС: входящие и исходящие звонки через Zadarma.',
+    category: 'telephony',
+    categoryLabel: CATEGORY_LABELS.telephony,
+    Icon: Phone
   }
 ];
 

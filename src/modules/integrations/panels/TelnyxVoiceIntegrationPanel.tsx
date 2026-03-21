@@ -221,7 +221,13 @@ export const TelnyxVoiceIntegrationPanel: React.FC = () => {
           <IntegrationStatusBadge status={st} label={stLabel} />
           {loadError ? <span className="text-xs text-rose-600">{loadError}</span> : null}
           <Link to="/settings/integrations/twilio" className="text-xs text-violet-600 hover:underline">
-            Исходящий провайдер: {voiceState.outboundVoiceProvider === 'telnyx' ? 'Telnyx' : 'Twilio'} → настроить
+            Исходящий провайдер:{' '}
+            {voiceState.outboundVoiceProvider === 'telnyx'
+              ? 'Telnyx'
+              : voiceState.outboundVoiceProvider === 'zadarma'
+                ? 'Zadarma'
+                : 'Twilio'}{' '}
+            → настроить
           </Link>
         </div>
       }

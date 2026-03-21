@@ -25,6 +25,7 @@ function fallbackVoicePath(path: string): string | null {
 /** Снэпшот Telnyx из GET voice-integration (вложенный или ?provider=telnyx). */
 export type TelnyxVoiceIntegrationSnapshot = {
   provider?: string;
+  /** Есть сохранённые ключи / начата настройка */
   configured?: boolean;
   enabled?: boolean;
   connectionStatus?: string;
@@ -49,6 +50,7 @@ export type TelnyxVoiceIntegrationSnapshot = {
 /** Снэпшот Zadarma из GET voice-integration (вложенный объект zadarma). */
 export type ZadarmaVoiceIntegrationSnapshot = {
   provider?: string;
+  /** Есть key/secret/extension или начата настройка */
   configured?: boolean;
   enabled?: boolean;
   connectionStatus?: string;

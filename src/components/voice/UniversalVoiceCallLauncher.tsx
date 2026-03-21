@@ -54,15 +54,43 @@ function getReadyProviders(integ: VoiceIntegrationClientSnapshot): VoiceProvider
   return out;
 }
 
+/** Провайдеры, по которым в компании уже начата настройка (можно переключать в UI до полной готовности). */
+function getSelectableProviders(integ: VoiceIntegrationClientSnapshot): VoiceProviderId[] {
+  const out: VoiceProviderId[] = [];
+  const twilioConfigured =
+    integ.configured === true ||
+    !!(integ.accountSidMasked && String(integ.accountSidMasked).trim()) ||
+    integ.connectionStatus === 'connected';
+  if (twilioConfigured) out.push('twilio');
+  const t = integ.telnyx;
+  const telnyxConfigured =
+    t &&
+    (t.configured === true ||
+      !!(t.apiKeyMasked && String(t.apiKeyMasked).trim()) ||
+      t.connectionStatus === 'connected');
+  if (telnyxConfigured) out.push('telnyx');
+  const z = integ.zadarma;
+  const zadarmaConfigured =
+    z &&
+    (z.configured === true ||
+      !!(z.keyMasked && String(z.keyMasked).trim()) ||
+      z.connectionStatus === 'connected');
+  if (zadarmaConfigured) out.push('zadarma');
+  return [...new Set(out)];
+}
+
 function pickInitialProvider(
+  selectable: VoiceProviderId[],
   ready: VoiceProviderId[],
   outboundPref: 'twilio' | 'telnyx' | 'zadarma' | undefined
 ): VoiceProviderId {
   const pref: VoiceProviderId =
     outboundPref === 'telnyx' ? 'telnyx' : outboundPref === 'zadarma' ? 'zadarma' : 'twilio';
-  if (ready.length === 0) return pref;
-  if (ready.includes(pref)) return pref;
-  return ready[0];
+  if (selectable.length === 0) return pref;
+  if (selectable.includes(pref)) return pref;
+  const firstReadySelectable = ready.find((r) => selectable.includes(r));
+  if (firstReadySelectable) return firstReadySelectable;
+  return selectable[0];
 }
 
 function filterNumbersForProvider(nums: VoiceNumber[], provider: VoiceProviderId): VoiceNumber[] {
@@ -117,6 +145,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
   const userChangedProviderRef = useRef(false);
 
   const readyProviders = useMemo(() => (integ ? getReadyProviders(integ) : []), [integ]);
+  const selectableProviders = useMemo(() => (integ ? getSelectableProviders(integ) : []), [integ]);
 
   const filteredNumbers = useMemo(
     () => filterNumbersForProvider(numbersAll, selectedProvider),
@@ -157,13 +186,14 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         setNumbersAll(nums);
 
         const ready = getReadyProviders(data);
+        const selectable = getSelectableProviders(data);
         const outboundPref =
           data.outboundVoiceProvider === 'telnyx'
             ? 'telnyx'
             : data.outboundVoiceProvider === 'zadarma'
               ? 'zadarma'
               : 'twilio';
-        const initial = pickInitialProvider(ready, outboundPref);
+        const initial = pickInitialProvider(selectable, ready, outboundPref);
 
         let ctxFrom = context.fromNumberId ?? null;
         if (ctxFrom) {
@@ -211,9 +241,16 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         reasonCode: (loading ? 'loading' : 'fetch_failed') as VoiceLauncherReadyReasonCode
       };
     }
-    if (readyProviders.length === 0) {
+    if (selectableProviders.length === 0) {
       return {
-        readyReason: 'Ни один voice-провайдер не готов к исходящим звонкам — проверьте раздел Интеграции.',
+        readyReason:
+          'Нет настроенных voice-провайдеров — откройте Интеграции и подключите Twilio, Telnyx или Zadarma для этой компании.',
+        reasonCode: 'outbound_not_ready' as const
+      };
+    }
+    if (!selectableProviders.includes(selectedProvider)) {
+      return {
+        readyReason: 'Выбранный провайдер недоступен для этой компании — обновите страницу или настройки.',
         reasonCode: 'outbound_not_ready' as const
       };
     }
@@ -300,6 +337,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
     integ,
     loading,
     readyProviders,
+    selectableProviders,
     selectedProvider,
     selectedBotId,
     phone,
@@ -434,7 +472,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
       ? 'по умолчанию'
       : '—';
 
-  const showProviderPicker = readyProviders.length >= 2;
+  const showProviderPicker = selectableProviders.length >= 2;
 
   const checklistNeutral =
     integ &&
@@ -542,24 +580,31 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
             {showProviderPicker ? (
               <div>
                 <p className="text-xs text-gray-600 mb-1.5">Исходящий провайдер</p>
-                <div className="inline-flex rounded-lg border border-gray-200 p-0.5 gap-0.5 bg-gray-50">
-                  {readyProviders.map((p) => (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => {
-                        userChangedProviderRef.current = true;
-                        setSelectedProvider(p);
-                      }}
-                      className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                        selectedProvider === p
-                          ? 'bg-gray-900 text-white shadow-sm'
-                          : 'bg-white text-gray-700 hover:bg-gray-100'
-                      }`}
-                    >
-                      {PROVIDER_LABEL[p]}
-                    </button>
-                  ))}
+                <div className="inline-flex flex-wrap rounded-lg border border-gray-200 p-0.5 gap-0.5 bg-gray-50">
+                  {selectableProviders.map((p) => {
+                    const isReady = readyProviders.includes(p);
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        title={isReady ? undefined : 'Интеграция ещё не готова к звонкам — см. чеклист ниже'}
+                        onClick={() => {
+                          userChangedProviderRef.current = true;
+                          setSelectedProvider(p);
+                        }}
+                        className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                          selectedProvider === p
+                            ? 'bg-gray-900 text-white shadow-sm'
+                            : isReady
+                              ? 'bg-white text-gray-700 hover:bg-gray-100'
+                              : 'bg-amber-50/90 text-amber-950 border border-amber-200/80 hover:bg-amber-100'
+                        }`}
+                      >
+                        {PROVIDER_LABEL[p]}
+                        {!isReady ? ' · настройка' : ''}
+                      </button>
+                    );
+                  })}
                 </div>
                 {integ.outboundVoiceProvider &&
                 (integ.outboundVoiceProvider === 'twilio' ||
@@ -572,15 +617,34 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
                     </span>
                     . Можно переключить для этого звонка.
                   </p>
+                ) : (
+                  <p className="text-[11px] text-amber-800 mt-1">
+                    В настройках телефонии не задан исходящий провайдер по умолчанию — выберите подходящий вкладкой выше.
+                  </p>
+                )}
+                {selectableProviders.length >= 2 &&
+                integ.outboundVoiceProvider &&
+                !selectableProviders.includes(integ.outboundVoiceProvider as VoiceProviderId) ? (
+                  <p className="text-[11px] text-amber-800 mt-1">
+                    Сохранённый по умолчанию провайдер ({PROVIDER_LABEL[integ.outboundVoiceProvider as VoiceProviderId]}) не
+                    подключён в этой компании — используйте доступные вкладки.
+                  </p>
                 ) : null}
               </div>
-            ) : readyProviders.length === 1 ? (
-              <p className="text-xs text-gray-700">
-                Исходящий провайдер:{' '}
-                <span className="font-semibold text-gray-900">{PROVIDER_LABEL[readyProviders[0]]}</span>
-              </p>
+            ) : selectableProviders.length === 1 ? (
+              <div className="text-xs text-gray-700 space-y-1">
+                <p>
+                  Исходящий провайдер:{' '}
+                  <span className="font-semibold text-gray-900">{PROVIDER_LABEL[selectableProviders[0]]}</span>
+                </p>
+                {!readyProviders.includes(selectableProviders[0]) ? (
+                  <p className="text-amber-800">Интеграция ещё не готова к звонкам — завершите шаги в чеклисте ниже.</p>
+                ) : null}
+              </div>
             ) : (
-              <p className="text-xs text-amber-800">Нет провайдеров, готовых к исходящим звонкам</p>
+              <p className="text-xs text-amber-800">
+                Нет настроенных voice-провайдеров — откройте раздел Интеграции для этой компании.
+              </p>
             )}
           </div>
         ) : null}

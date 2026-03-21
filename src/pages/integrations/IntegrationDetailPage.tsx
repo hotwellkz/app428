@@ -24,13 +24,19 @@ const TelnyxVoiceIntegrationPanel = lazy(() =>
     default: m.TelnyxVoiceIntegrationPanel
   }))
 );
+const ZadarmaVoiceIntegrationPanel = lazy(() =>
+  import('../../modules/integrations/panels/ZadarmaVoiceIntegrationPanel').then((m) => ({
+    default: m.ZadarmaVoiceIntegrationPanel
+  }))
+);
 
 const PANELS: Record<string, React.LazyExoticComponent<React.FC>> = {
   wazzup: WazzupIntegrationPanel,
   openai: OpenAIIntegrationPanel,
   kaspi: KaspiIntegrationPanel,
   twilio: TwilioVoiceIntegrationPanel,
-  telnyx: TelnyxVoiceIntegrationPanel
+  telnyx: TelnyxVoiceIntegrationPanel,
+  zadarma: ZadarmaVoiceIntegrationPanel
 };
 
 const PanelFallback = () => (

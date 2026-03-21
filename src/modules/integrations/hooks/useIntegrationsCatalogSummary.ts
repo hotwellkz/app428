@@ -139,7 +139,9 @@ function twilioCard(
   const configured = voice.configured === true;
   const conn = (voice.connectionStatus as string) || 'not_connected';
   const ready = voice.voiceReady === true;
-  const outbound = voice.outboundVoiceProvider === 'telnyx' ? 'Telnyx' : 'Twilio';
+  const outboundPref = String(voice.outboundVoiceProvider ?? 'twilio');
+  const outbound =
+    outboundPref === 'telnyx' ? 'Telnyx' : outboundPref === 'zadarma' ? 'Zadarma' : 'Twilio';
   const err = typeof voice.connectionError === 'string' ? voice.connectionError : null;
   const last = typeof voice.lastCheckedAt === 'string' ? voice.lastCheckedAt : null;
   if (!configured) {
@@ -219,6 +221,68 @@ function telnyxCard(
   };
 }
 
+function zadarmaCard(
+  zadarma: Record<string, unknown> | null,
+  voiceMain: Record<string, unknown> | null,
+  loadError: boolean
+): Pick<IntegrationCardModel, 'status' | 'statusLabel' | 'summaryLine' | 'lastCheckedAt'> {
+  if (loadError || !voiceMain) {
+    return {
+      status: 'error',
+      statusLabel: 'Ошибка',
+      summaryLine: 'Не удалось загрузить статус Zadarma',
+      lastCheckedAt: null
+    };
+  }
+  if (!zadarma) {
+    return {
+      status: 'not_connected',
+      statusLabel: 'Не подключено',
+      summaryLine: 'Укажите API Key и Secret Zadarma',
+      lastCheckedAt: null
+    };
+  }
+  const outbound = voiceMain.outboundVoiceProvider === 'zadarma';
+  const ready = zadarma.voiceReady === true;
+  const conn = (zadarma.connectionStatus as string) || 'not_connected';
+  const err = typeof zadarma.connectionError === 'string' ? zadarma.connectionError : null;
+  const blocking = typeof zadarma.blockingReason === 'string' ? zadarma.blockingReason : null;
+  const last = typeof zadarma.lastCheckedAt === 'string' ? zadarma.lastCheckedAt : null;
+  const webhookOk = zadarma.webhookSignatureOk !== false;
+  const configured = zadarma.configured === true;
+
+  if (!configured && !zadarma.keyMasked) {
+    return {
+      status: 'not_connected',
+      statusLabel: 'Не подключено',
+      summaryLine: 'Ключи API и extension для callback',
+      lastCheckedAt: last
+    };
+  }
+  if (conn === 'invalid_config' || err) {
+    return {
+      status: 'error',
+      statusLabel: 'Ошибка',
+      summaryLine: (err || blocking || 'Проверьте ключи и webhook в кабинете Zadarma').slice(0, 120),
+      lastCheckedAt: last
+    };
+  }
+  if (!ready) {
+    return {
+      status: 'needs_setup',
+      statusLabel: 'Требует настройки',
+      summaryLine: `${outbound ? 'Выбран исходящий Zadarma · ' : ''}${webhookOk ? 'webhook OK' : 'проверьте webhook и подпись'}`.trim(),
+      lastCheckedAt: last
+    };
+  }
+  return {
+    status: 'connected',
+    statusLabel: outbound ? 'Готово (исходящий)' : 'Готово',
+    summaryLine: `Voice ready · webhook ${webhookOk ? 'OK' : 'внимание'}`,
+    lastCheckedAt: last
+  };
+}
+
 export function useIntegrationsCatalogSummary(userUid: string | undefined) {
   const [loading, setLoading] = useState(true);
   const [cards, setCards] = useState<IntegrationCardModel[]>(() =>
@@ -274,6 +338,10 @@ export function useIntegrationsCatalogSummary(userUid: string | undefined) {
         voiceJson && typeof voiceJson.telnyx === 'object' && voiceJson.telnyx
           ? (voiceJson.telnyx as Record<string, unknown>)
           : null;
+      const zadarmaJson =
+        voiceJson && typeof voiceJson.zadarma === 'object' && voiceJson.zadarma
+          ? (voiceJson.zadarma as Record<string, unknown>)
+          : null;
 
       if (cancelled) return;
 
@@ -282,13 +350,15 @@ export function useIntegrationsCatalogSummary(userUid: string | undefined) {
       const k = kaspiCard(kaspiJson as Record<string, unknown> | null, !kaspiRes.ok);
       const t = twilioCard(voiceJson, !voiceRes.ok);
       const tx = telnyxCard(telnyxJson, voiceJson, !voiceRes.ok);
+      const zd = zadarmaCard(zadarmaJson, voiceJson, !voiceRes.ok);
 
       const byId: Record<string, Pick<IntegrationCardModel, 'status' | 'statusLabel' | 'summaryLine' | 'lastCheckedAt'>> = {
         wazzup: w,
         openai: o,
         kaspi: k,
         twilio: t,
-        telnyx: tx
+        telnyx: tx,
+        zadarma: zd
       };
 
       setCards(
