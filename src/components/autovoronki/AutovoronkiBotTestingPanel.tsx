@@ -54,6 +54,8 @@ interface KnowledgeMetaResponse {
 
 interface TestApiResponse {
   answer?: string;
+  answerParts?: string[];
+  replyMode?: string;
   extracted?: CrmAiBotExtractionResult | null;
   extractionError?: string;
   knowledgeMeta?: KnowledgeMetaResponse;
@@ -192,6 +194,16 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
     }
   };
 
+  const assistantMessagesFromResponse = (data: TestApiResponse): TestChatMessage[] => {
+    const parts =
+      Array.isArray(data.answerParts) && data.answerParts.length > 0
+        ? data.answerParts.map((p) => String(p).trim()).filter(Boolean)
+        : [];
+    const single = typeof data.answer === 'string' ? data.answer.trim() : '';
+    const list = parts.length ? parts : single ? [single] : [];
+    return list.map((content) => ({ id: makeId(), role: 'assistant' as const, content }));
+  };
+
   const handleSend = async () => {
     const text = draft.trim();
     if (!text || generating) return;
@@ -206,7 +218,7 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
     setGenerating(true);
     try {
       const data = await callApi(nextHistory);
-      setMessages([...nextHistory, { id: makeId(), role: 'assistant', content: data.answer! }]);
+      setMessages([...nextHistory, ...assistantMessagesFromResponse(data)]);
       applyApiResult(data);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Не удалось получить ответ бота');
@@ -233,7 +245,7 @@ export const AutovoronkiBotTestingPanel: React.FC<AutovoronkiBotTestingPanelProp
     setGenerating(true);
     try {
       const data = await callApi(base);
-      setMessages([...base, { id: makeId(), role: 'assistant', content: data.answer! }]);
+      setMessages([...base, ...assistantMessagesFromResponse(data)]);
       applyApiResult(data);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Не удалось получить ответ бота');

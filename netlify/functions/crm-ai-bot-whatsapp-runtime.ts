@@ -7,6 +7,12 @@ import {
   type CrmAiBotPromptMeta
 } from '../../src/lib/ai/crmAiBotPrompt';
 import { parseCrmAiBotConfig, type CrmAiBotConfig } from '../../src/types/crmAiBotConfig';
+import {
+  buildCrmAiBotJsonReplyInstruction,
+  crmAiReplyStyleMaxTokens,
+  crmAiReplyStyleTemperature,
+  parseCrmAiBotModelReplyJson
+} from '../../src/lib/ai/crmAiBotReplyGeneration';
 import { buildCrmAiBotKnowledgeContext, type CrmAiBotKnowledgeMeta } from './lib/crmAiBotKnowledgeLoad';
 import { runCrmAiBotExtraction } from './lib/crmAiBotExtractionOpenAi';
 import type { CrmAiBotExtractionResult } from '../../src/types/crmAiBotExtraction';
@@ -256,7 +262,9 @@ ${text}
     }
   }
 
-  const systemContent = `${systemBase}${knowledgeAppend}\n\n${CRM_AI_BOT_WHATSAPP_RUNTIME_APPEND}`;
+  const replyStyle = config.replyStyle;
+  const jsonInstr = buildCrmAiBotJsonReplyInstruction(config);
+  const systemContent = `${systemBase}${knowledgeAppend}\n\n${CRM_AI_BOT_WHATSAPP_RUNTIME_APPEND}\n\n---\n${jsonInstr}`;
 
   try {
     log('OpenAI whatsapp runtime botId=', botId, 'conv=', conversationId, 'msgs=', openaiMessages.length);
@@ -269,8 +277,9 @@ ${text}
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [{ role: 'system', content: systemContent }, ...openaiMessages],
-        temperature: 0.5,
-        max_tokens: 1024
+        response_format: { type: 'json_object' },
+        temperature: crmAiReplyStyleTemperature(replyStyle),
+        max_tokens: crmAiReplyStyleMaxTokens(replyStyle)
       })
     });
 
@@ -288,7 +297,11 @@ ${text}
       choices?: Array<{ message?: { content?: string | null } }>;
       usage?: unknown;
     };
-    const answer = String(data.choices?.[0]?.message?.content ?? '').trim();
+    const rawOut = String(data.choices?.[0]?.message?.content ?? '').trim();
+    const parsed = parseCrmAiBotModelReplyJson(rawOut, replyStyle);
+    const answer = parsed.combinedText.trim() || rawOut.trim();
+    const answerParts = parsed.parts.length ? parsed.parts : answer ? [answer] : [];
+    const replyMode = parsed.replyMode;
 
     let extracted: CrmAiBotExtractionResult | null = null;
     let extractionError: string | undefined;
@@ -465,6 +478,8 @@ ${text}
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         answer,
+        answerParts,
+        replyMode,
         extracted,
         extractionError,
         extractionApply,

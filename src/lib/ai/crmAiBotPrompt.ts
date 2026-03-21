@@ -8,6 +8,7 @@ import {
   CRM_AI_BOT_SUCCESS_CRITERIA_OPTIONS,
   CRM_AI_BOT_TONE_OPTIONS
 } from '../../types/crmAiBotConfig';
+import { buildCrmAiBotReplyStylePromptSection } from './crmAiBotReplyGeneration';
 
 export type CrmAiBotPromptMeta = Pick<CrmAiBot, 'name' | 'description' | 'botType' | 'channel'>;
 
@@ -145,6 +146,19 @@ export function buildCrmAiBotLogicPreview(meta: CrmAiBotPromptMeta, config: CrmA
     `Быстрые ответы в тесте: ${config.knowledge.useQuickReplies ? 'да — релевантные шаблоны в промпт' : 'выключено'}`
   );
   cards.push({ id: 'crm', title: 'CRM и источники', lines: crmLines });
+
+  const rs = config.replyStyle;
+  cards.push({
+    id: 'replyStyle',
+    title: 'Стиль ответов AI',
+    lines: [
+      `Человечность: ${rs.humanizationLevel}`,
+      `Длина ответов: ${rs.replyLengthMode}`,
+      `Разбиение: ${rs.replySplitMode} (макс. ${rs.maxReplyParts} сообщ.)`,
+      `Пауза между частями: ${rs.interReplyDelayMinMs}–${rs.interReplyDelayMaxMs} мс`,
+      `Ожидание серии от клиента: ${rs.clientAggregationMinMs}–${rs.clientAggregationMaxMs} мс`
+    ]
+  });
 
   return cards;
 }
@@ -288,18 +302,24 @@ export function buildCrmAiBotSystemPrompt(meta: CrmAiBotPromptMeta, config: CrmA
   );
 
   parts.push(
-    block(
-      '10. Жёсткие правила модели',
-      [
-        'Не выдумывай цены, сроки и гарантии, если их нет в этом промпте или в сообщениях клиента.',
-        'Не задавай один и тот же вопрос, если ответ уже есть в переписке.',
-        'Не здоровайся заново в каждом сообщении; один раз в начале достаточно.',
-        'Пиши по делу, без «воды».',
-        'Если чего-то не знаешь — честно скажи и предложи передать менеджеру или уточнить.',
-        'Отвечай одним связным сообщением, как в мессенджере.'
-      ].join('\n')
-    )
+    block('10. Стиль ответов (естественность, WhatsApp)', buildCrmAiBotReplyStylePromptSection(config))
   );
+
+  const hardLines = [
+    'Не выдумывай цены, сроки и гарантии, если их нет в этом промпте или в сообщениях клиента.',
+    'Не задавай один и тот же вопрос, если ответ уже есть в переписке.',
+    'Не здоровайся заново в каждом сообщении; один раз в начале достаточно.',
+    'Пиши по делу, без «воды».',
+    'Если чего-то не знаешь — честно скажи и предложи передать менеджеру или уточнить.'
+  ];
+  if (config.replyStyle.replySplitMode === 'single') {
+    hardLines.push('Формат ответа на сервере: одно сообщение клиенту (см. JSON-инструкцию).');
+  } else {
+    hardLines.push(
+      'Формат ответа на сервере: JSON с 1–2 частями; дроби только если это естественно для живого менеджера.'
+    );
+  }
+  parts.push(block('11. Жёсткие правила модели', hardLines.join('\n')));
 
   return parts.join('\n').trim();
 }
@@ -307,13 +327,14 @@ export function buildCrmAiBotSystemPrompt(meta: CrmAiBotPromptMeta, config: CrmA
 /** Доп. абзац для песочницы (добавлять на сервере к system). */
 export const CRM_AI_BOT_SANDBOX_SYSTEM_APPEND = `
 ---
-РЕЖИМ: внутренний тест CRM 2wix (песочница). Ты не отправляешь сообщения во внешние каналы (WhatsApp и т.д.), не меняешь CRM и не вызываешь инструменты. Отвечай только текстом, как бы ответил клиенту в чате.
+РЕЖИМ: внутренний тест CRM 2wix (песочница). Ты не отправляешь сообщения во внешние каналы (WhatsApp и т.д.), не меняешь CRM и не вызываешь инструменты.
+К ответу применяется JSON-формат, описанный в конце system (replyMode + parts) — тексты в parts = то, что увидит менеджер как реплики бота.
 `.trim();
 
 /** Доп. абзац для реального WhatsApp-runtime (ответ уходит клиенту или в черновик менеджеру). */
 export const CRM_AI_BOT_WHATSAPP_RUNTIME_APPEND = `
 ---
-РЕЖИМ: реальный переписка WhatsApp клиента с компанией. Пиши ответ, который можно отправить клиенту как есть: без служебных пометок, без «Как модель…», кратко и по делу. Не выдумывай факты о заказе — опирайся только на историю чата и блоки знаний выше.
+РЕЖИМ: реальная переписка WhatsApp. Тексты для клиента клади только в JSON-поле parts (см. инструкцию формата в конце system). Без служебных пометок, без «Как модель…». Не выдумывай факты о заказе — опирайся на историю чата и блоки знаний выше.
 `.trim();
 
 /** Доп. абзац для голосового звонка (Twilio Say + Gather, без WhatsApp runtime). */

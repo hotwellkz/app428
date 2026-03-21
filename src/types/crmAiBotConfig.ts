@@ -18,6 +18,45 @@ export interface CrmAiBotDialogStep {
   order: number;
 }
 
+export type CrmAiHumanizationLevel = 'low' | 'medium' | 'high';
+export type CrmAiReplyLengthMode = 'short' | 'adaptive' | 'detailed';
+export type CrmAiReplySplitMode = 'single' | 'auto' | 'prefer_multi';
+
+/** «Человечность» и разбиение ответов (WhatsApp / автоворонка) */
+export interface CrmAiBotReplyStyle {
+  humanizationLevel: CrmAiHumanizationLevel;
+  replyLengthMode: CrmAiReplyLengthMode;
+  replySplitMode: CrmAiReplySplitMode;
+  /** 1 или 2 (MVP: максимум 2 части) */
+  maxReplyParts: number;
+  interReplyDelayMinMs: number;
+  interReplyDelayMaxMs: number;
+  /** Окно тишины после последнего входящего перед генерацией ответа */
+  clientAggregationMinMs: number;
+  clientAggregationMaxMs: number;
+  allowShortLeadIn: boolean;
+  varySentenceLength: boolean;
+  avoidTemplateRepetition: boolean;
+  allowSoftConversationalBridges: boolean;
+}
+
+export function defaultCrmAiBotReplyStyle(): CrmAiBotReplyStyle {
+  return {
+    humanizationLevel: 'medium',
+    replyLengthMode: 'adaptive',
+    replySplitMode: 'auto',
+    maxReplyParts: 2,
+    interReplyDelayMinMs: 800,
+    interReplyDelayMaxMs: 2500,
+    clientAggregationMinMs: 2000,
+    clientAggregationMaxMs: 4000,
+    allowShortLeadIn: true,
+    varySentenceLength: true,
+    avoidTemplateRepetition: true,
+    allowSoftConversationalBridges: true
+  };
+}
+
 export interface CrmAiBotConfig {
   persona: {
     botDisplayName: string;
@@ -57,6 +96,8 @@ export interface CrmAiBotConfig {
     saveConversationSummary: boolean;
     saveNextStep: boolean;
   };
+  /** Стиль ответов AI (естественность, длина, разбиение на сообщения) */
+  replyStyle: CrmAiBotReplyStyle;
 }
 
 export const CRM_AI_BOT_TONE_OPTIONS: { value: CrmAiBotPersonaTone; label: string }[] = [
@@ -154,7 +195,8 @@ export function defaultCrmAiBotConfig(): CrmAiBotConfig {
       suggestCreateDeal: false,
       saveConversationSummary: false,
       saveNextStep: false
-    }
+    },
+    replyStyle: defaultCrmAiBotReplyStyle()
   };
 }
 
@@ -211,6 +253,42 @@ export function parseCrmAiBotConfig(raw: unknown): CrmAiBotConfig {
   const rules = (c.rules && typeof c.rules === 'object' ? c.rules : {}) as Record<string, unknown>;
   const knowledge = (c.knowledge && typeof c.knowledge === 'object' ? c.knowledge : {}) as Record<string, unknown>;
   const crm = (c.crmActions && typeof c.crmActions === 'object' ? c.crmActions : {}) as Record<string, unknown>;
+  const rsRaw = c.replyStyle && typeof c.replyStyle === 'object' ? (c.replyStyle as Record<string, unknown>) : {};
+  const rsDef = defaultCrmAiBotReplyStyle();
+  const hl = rsRaw.humanizationLevel;
+  const humanizationLevel: CrmAiHumanizationLevel =
+    hl === 'low' || hl === 'medium' || hl === 'high' ? hl : rsDef.humanizationLevel;
+  const rlm = rsRaw.replyLengthMode;
+  const replyLengthMode: CrmAiReplyLengthMode =
+    rlm === 'short' || rlm === 'adaptive' || rlm === 'detailed' ? rlm : rsDef.replyLengthMode;
+  const rsm = rsRaw.replySplitMode;
+  const replySplitMode: CrmAiReplySplitMode =
+    rsm === 'single' || rsm === 'auto' || rsm === 'prefer_multi' ? rsm : rsDef.replySplitMode;
+  const maxReplyPartsRaw = rsRaw.maxReplyParts;
+  const maxReplyParts =
+    typeof maxReplyPartsRaw === 'number' && maxReplyPartsRaw >= 1 && maxReplyPartsRaw <= 2
+      ? Math.floor(maxReplyPartsRaw)
+      : rsDef.maxReplyParts;
+  const clampDelay = (v: unknown, def: number, min: number, max: number) => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return def;
+    return Math.min(max, Math.max(min, Math.round(v)));
+  };
+  const interReplyDelayMinMs = clampDelay(rsRaw.interReplyDelayMinMs, rsDef.interReplyDelayMinMs, 200, 60_000);
+  let interReplyDelayMaxMs = clampDelay(rsRaw.interReplyDelayMaxMs, rsDef.interReplyDelayMaxMs, 200, 60_000);
+  if (interReplyDelayMaxMs < interReplyDelayMinMs) interReplyDelayMaxMs = interReplyDelayMinMs;
+  let clientAggregationMinMs = clampDelay(
+    rsRaw.clientAggregationMinMs,
+    rsDef.clientAggregationMinMs,
+    500,
+    30_000
+  );
+  let clientAggregationMaxMs = clampDelay(
+    rsRaw.clientAggregationMaxMs,
+    rsDef.clientAggregationMaxMs,
+    500,
+    30_000
+  );
+  if (clientAggregationMaxMs < clientAggregationMinMs) clientAggregationMaxMs = clientAggregationMinMs;
 
   return {
     persona: {
@@ -258,6 +336,21 @@ export function parseCrmAiBotConfig(raw: unknown): CrmAiBotConfig {
       suggestCreateDeal: crm.suggestCreateDeal === true,
       saveConversationSummary: crm.saveConversationSummary === true,
       saveNextStep: crm.saveNextStep === true
+    },
+    replyStyle: {
+      humanizationLevel,
+      replyLengthMode,
+      replySplitMode,
+      maxReplyParts,
+      interReplyDelayMinMs,
+      interReplyDelayMaxMs,
+      clientAggregationMinMs,
+      clientAggregationMaxMs,
+      allowShortLeadIn: rsRaw.allowShortLeadIn === false ? false : rsDef.allowShortLeadIn,
+      varySentenceLength: rsRaw.varySentenceLength === false ? false : rsDef.varySentenceLength,
+      avoidTemplateRepetition: rsRaw.avoidTemplateRepetition === false ? false : rsDef.avoidTemplateRepetition,
+      allowSoftConversationalBridges:
+        rsRaw.allowSoftConversationalBridges === false ? false : rsDef.allowSoftConversationalBridges
     }
   };
 }

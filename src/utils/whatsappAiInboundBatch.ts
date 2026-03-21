@@ -3,6 +3,8 @@
  */
 
 import type { WhatsAppMessage } from '../types/whatsappDb';
+import type { CrmAiBotReplyStyle } from '../types/crmAiBotConfig';
+import { pickCrmClientAggregationDebounceMs } from '../lib/ai/crmAiBotReplyGeneration';
 import { getMessageTextContentForAi, messageHasVoiceOrAudioAttachment } from './whatsappAiMessageContent';
 
 export function getWhatsAppMessageTime(m: WhatsAppMessage): number {
@@ -69,11 +71,22 @@ export function incomingBatchNeedsTranscriptWait(
 }
 
 /**
- * Debounce: 6 с для текста, 10 с если в необработанном хвосте есть voice/audio.
+ * Debounce: 6 с для текста, 10 с если в необработанном хвосте есть voice/audio (legacy AI).
  */
 export function chooseWhatsAppAiDebounceMs(unprocessedIncoming: WhatsAppMessage[]): number {
   const hasVoice = unprocessedIncoming.some((m) => messageHasVoiceOrAudioAttachment(m));
   return hasVoice ? 10_000 : 6_000;
+}
+
+/**
+ * Автоворонка CRM: агрегация серии сообщений клиента (настройка min/max мс) + 10 с при voice.
+ */
+export function chooseCrmWhatsAppAiDebounceMs(
+  unprocessedIncoming: WhatsAppMessage[],
+  replyStyle: CrmAiBotReplyStyle
+): number {
+  if (unprocessedIncoming.some((m) => messageHasVoiceOrAudioAttachment(m))) return 10_000;
+  return pickCrmClientAggregationDebounceMs(replyStyle);
 }
 
 function stripHtml(s: string): string {

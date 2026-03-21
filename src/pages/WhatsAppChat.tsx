@@ -55,6 +55,7 @@ import {
 import {
   buildCrmOpenAiMessagesFromBatch,
   buildLegacyAiPayloadMessages,
+  chooseCrmWhatsAppAiDebounceMs,
   chooseWhatsAppAiDebounceMs,
   getUnprocessedIncomingMessages,
   getWhatsAppMessageTime,
@@ -62,6 +63,7 @@ import {
   isInboundBatchStale,
   mergeLastProcessedInboundWatermarks
 } from '../utils/whatsappAiInboundBatch';
+import { parseCrmAiBotConfig } from '../types/crmAiBotConfig';
 import { db, auth } from '../lib/firebase/config';
 import { getAuthToken } from '../lib/firebase/auth';
 import type { WhatsAppMessage } from '../types/whatsappDb';
@@ -2073,6 +2075,8 @@ const WhatsAppChat: React.FC = () => {
         });
         const data = (await res.json().catch(() => ({}))) as {
           answer?: string;
+          answerParts?: unknown;
+          replyMode?: string;
           error?: string;
           extracted?: Record<string, unknown> | null;
           extractionApply?: RuntimeExtractionApplyApi;
@@ -2110,7 +2114,12 @@ const WhatsAppChat: React.FC = () => {
           return;
         }
         const reply = typeof data.answer === 'string' ? data.answer.trim() : '';
-        if (!reply) {
+        const partsFromApi = Array.isArray(data.answerParts)
+          ? data.answerParts.map((x) => String(x).trim()).filter(Boolean)
+          : [];
+        const sendParts = partsFromApi.length ? partsFromApi : reply ? [reply] : [];
+        const replyCombined = sendParts.length ? sendParts.join('\n\n') : reply;
+        if (!replyCombined.trim()) {
           await finishSkip('Пустой ответ модели');
           return;
         }
@@ -2228,7 +2237,7 @@ const WhatsAppChat: React.FC = () => {
         const runLogSnapshots = {
           channel: selectedItem?.channel ?? 'whatsapp',
           runtimeMode: mode,
-          answerSnapshot: reply,
+          answerSnapshot: replyCombined,
           summarySnapshot: extractedSummary,
           extractedSnapshotJson: extractionJson,
           extractionApplySnapshotJson: toSnapshotJson(data.extractionApply, 12000),
@@ -2237,7 +2246,7 @@ const WhatsAppChat: React.FC = () => {
           resultFlagsSnapshotJson: toSnapshotJson(
             {
               mode,
-              hadReply: !!reply,
+              hadReply: !!replyCombined,
               extractionApplyStatus: data.extractionApply?.extractionApplyStatus ?? null,
               dealRecommendationStatus: data.dealRecommendation?.status ?? null,
               taskRecommendationStatus: data.taskRecommendation?.status ?? null
@@ -2258,7 +2267,7 @@ const WhatsAppChat: React.FC = () => {
               lastRunAt: serverTimestamp(),
               lastStatus: 'success',
               lastReason: null,
-              lastGeneratedReply: reply,
+              lastGeneratedReply: replyCombined,
               lastProcessedIncomingMessageId: messageIdToProcess,
               lastExtractionJson: extractionJson,
               ...applyPatch,
@@ -2278,7 +2287,7 @@ const WhatsAppChat: React.FC = () => {
             finishedAt: new Date(),
             status: 'success',
             reason: null,
-            generatedReply: reply,
+            generatedReply: replyCombined,
             extractedSummary,
             ...runLogSnapshots,
             ...runLogApply,
@@ -2289,19 +2298,62 @@ const WhatsAppChat: React.FC = () => {
           return;
         }
 
-        const sendRes = await fetch(SEND_API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(wazzupSendBody(phone, { text: formatMessageForWhatsApp(reply), companyId }))
-        });
-        if (!sendRes.ok) {
+        const replyStyleCfg = parseCrmAiBotConfig(botMeta.config).replyStyle;
+        const sendWazzupText = (t: string) =>
+          fetch(SEND_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(wazzupSendBody(phone, { text: formatMessageForWhatsApp(t), companyId }))
+          });
+
+        const useMultiPart =
+          sendParts.length >= 2 &&
+          replyStyleCfg.maxReplyParts >= 2 &&
+          replyStyleCfg.replySplitMode !== 'single';
+
+        let sendFailReason: string | null = null;
+        let partialMultiNote: string | null = null;
+
+        if (!useMultiPart) {
+          const sendRes = await sendWazzupText(sendParts[0]);
+          if (!sendRes.ok) sendFailReason = 'Не удалось отправить ответ в чат';
+        } else {
+          const send0 = await sendWazzupText(sendParts[0]);
+          if (!send0.ok) {
+            sendFailReason = 'Не удалось отправить ответ в чат';
+          } else {
+            const dLo = Math.min(replyStyleCfg.interReplyDelayMinMs, replyStyleCfg.interReplyDelayMaxMs);
+            const dHi = Math.max(dLo, replyStyleCfg.interReplyDelayMaxMs);
+            const pauseMs = dLo + Math.floor(Math.random() * (dHi - dLo + 1));
+            await new Promise((r) => setTimeout(r, pauseMs));
+
+            const genStale = crmAiStaleGenerationRef.current !== startGen;
+            const batchStale = isInboundBatchStale(
+              whatsappMessagesForAiRef.current,
+              watermarkAtStart,
+              anchorLastId,
+              anchorCount,
+              getWhatsAppMessageTime
+            );
+            if (genStale || batchStale) {
+              partialMultiNote =
+                'Отправлена только первая часть ответа (новые сообщения клиента или смена контекста).';
+            } else {
+              const send1 = await sendWazzupText(sendParts[1]);
+              if (!send1.ok) sendFailReason = 'Не удалось отправить вторую часть ответа в чат';
+            }
+          }
+        }
+
+        if (sendFailReason) {
           await updateWhatsAppConversationAiRuntime(
             selectedId,
             {
               lastRunAt: serverTimestamp(),
               lastStatus: 'error',
-              lastReason: 'Не удалось отправить ответ в чат',
-              lastGeneratedReply: reply,
+              lastReason: sendFailReason,
+              lastGeneratedReply: replyCombined,
+              lastProcessedIncomingMessageId: messageIdToProcess,
               lastExtractionJson: extractionJson,
               ...applyPatch,
               ...dealRecPatch,
@@ -2319,23 +2371,25 @@ const WhatsAppChat: React.FC = () => {
             finishedAt: new Date(),
             status: 'error',
             reason: 'send_failed',
-            generatedReply: reply,
+            generatedReply: replyCombined,
             extractedSummary,
             ...runLogSnapshots,
             ...runLogApply,
             ...runLogDeal,
             ...runLogTask
           });
-          toast.error('AI: не удалось отправить ответ в WhatsApp');
+          toast.error(`AI: ${sendFailReason}`);
+          crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
           return;
         }
+
         await updateWhatsAppConversationAiRuntime(
           selectedId,
           {
             lastRunAt: serverTimestamp(),
             lastStatus: 'success',
-            lastReason: null,
-            lastGeneratedReply: reply,
+            lastReason: partialMultiNote,
+            lastGeneratedReply: replyCombined,
             lastProcessedIncomingMessageId: messageIdToProcess,
             lastExtractionJson: extractionJson,
             ...applyPatch,
@@ -2354,14 +2408,17 @@ const WhatsAppChat: React.FC = () => {
           startedAt,
           finishedAt: new Date(),
           status: 'success',
-          reason: null,
-          generatedReply: reply,
+          reason: partialMultiNote,
+          generatedReply: replyCombined,
           extractedSummary,
           ...runLogSnapshots,
           ...runLogApply,
           ...runLogDeal,
           ...runLogTask
         });
+        if (partialMultiNote && import.meta.env.DEV) {
+          console.log('[WhatsApp][crm-ai-bot-whatsapp-runtime]', partialMultiNote);
+        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'runtime error';
         await updateWhatsAppConversationAiRuntime(
@@ -2424,7 +2481,7 @@ const WhatsAppChat: React.FC = () => {
     selectedItem
   ]);
 
-  /** CRM AI: debounce + батч входящих (6 с / 10 с при voice). */
+  /** CRM AI: агрегация серии входящих (настройка бота, 2–4 с по умолчанию) / 10 с при voice. */
   useEffect(() => {
     if (
       !selectedId ||
@@ -2461,7 +2518,9 @@ const WhatsAppChat: React.FC = () => {
     if (crmAiDebounceTimerRef.current) {
       clearTimeout(crmAiDebounceTimerRef.current);
     }
-    const delay = chooseWhatsAppAiDebounceMs(unprocessed);
+    const botForDelay = crmAiBots.find((b) => b.id === rt.botId);
+    const replyStyleForDelay = parseCrmAiBotConfig(botForDelay?.config ?? {}).replyStyle;
+    const delay = chooseCrmWhatsAppAiDebounceMs(unprocessed, replyStyleForDelay);
     crmAiDebounceTimerRef.current = setTimeout(() => {
       crmAiDebounceTimerRef.current = null;
       void executeCrmAiFlush();

@@ -9,7 +9,10 @@ import {
   CRM_AI_BOT_TONE_OPTIONS,
   createEmptyDialogStep,
   type CrmAiBotDefaultLanguage,
-  type CrmAiBotPersonaTone
+  type CrmAiBotPersonaTone,
+  type CrmAiHumanizationLevel,
+  type CrmAiReplyLengthMode,
+  type CrmAiReplySplitMode
 } from '../../types/crmAiBotConfig';
 
 const fieldClass =
@@ -83,6 +86,10 @@ export const AutovoronkiBotConfigurator: React.FC<AutovoronkiBotConfiguratorProp
   const patchStep = (index: number, patch: Partial<(typeof config.dialogPlan.steps)[0]>) => {
     const steps = config.dialogPlan.steps.map((s, i) => (i === index ? { ...s, ...patch } : s));
     onChange({ ...config, dialogPlan: { ...config.dialogPlan, steps } });
+  };
+
+  const patchReplyStyle = (patch: Partial<(typeof config)['replyStyle']>) => {
+    onChange({ ...config, replyStyle: { ...config.replyStyle, ...patch } });
   };
 
   return (
@@ -497,6 +504,188 @@ export const AutovoronkiBotConfigurator: React.FC<AutovoronkiBotConfiguratorProp
             className={`${fieldClass} resize-y min-h-[100px]`}
             maxLength={8000}
           />
+        </div>
+      </SectionCard>
+
+      <SectionCard
+        title="H. Стиль ответов AI"
+        subtitle="Естественность речи, длина и разбиение на 1–2 сообщения в WhatsApp (автоворонка)"
+      >
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="cfg-humanization" className={labelClass}>
+              Уровень человечности
+            </label>
+            <select
+              id="cfg-humanization"
+              value={config.replyStyle.humanizationLevel}
+              onChange={(e) =>
+                patchReplyStyle({ humanizationLevel: e.target.value as CrmAiHumanizationLevel })
+              }
+              className={fieldClass}
+            >
+              <option value="low">Ниже — деловее и короче</option>
+              <option value="medium">Средний (по умолчанию)</option>
+              <option value="high">Выше — живее, без фамильярности</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              Влияет на «температуру» модели и формулировки: low — сдержаннее, high — естественнее.
+            </p>
+          </div>
+          <div>
+            <label htmlFor="cfg-reply-length" className={labelClass}>
+              Длина ответов
+            </label>
+            <select
+              id="cfg-reply-length"
+              value={config.replyStyle.replyLengthMode}
+              onChange={(e) =>
+                patchReplyStyle({ replyLengthMode: e.target.value as CrmAiReplyLengthMode })
+              }
+              className={fieldClass}
+            >
+              <option value="short">Короче в среднем</option>
+              <option value="adaptive">По ситуации (рекомендуется)</option>
+              <option value="detailed">Подробнее, без простыней</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="cfg-split-mode" className={labelClass}>
+              Разбиение на сообщения
+            </label>
+            <select
+              id="cfg-split-mode"
+              value={config.replyStyle.replySplitMode}
+              onChange={(e) =>
+                patchReplyStyle({ replySplitMode: e.target.value as CrmAiReplySplitMode })
+              }
+              className={fieldClass}
+            >
+              <option value="single">Всегда одно сообщение</option>
+              <option value="auto">Авто: 1 или 2, если естественно</option>
+              <option value="prefer_multi">Чаще 2 коротких при длинном ответе</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="cfg-max-parts" className={labelClass}>
+              Максимум частей ответа
+            </label>
+            <select
+              id="cfg-max-parts"
+              value={String(config.replyStyle.maxReplyParts)}
+              onChange={(e) => patchReplyStyle({ maxReplyParts: Number(e.target.value) as 1 | 2 })}
+              className={fieldClass}
+            >
+              <option value="1">1</option>
+              <option value="2">2</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">Не более двух подряд в одном ответе бота.</p>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="cfg-delay-min" className={labelClass}>
+              Мин. пауза между частями (мс)
+            </label>
+            <input
+              id="cfg-delay-min"
+              type="number"
+              min={200}
+              max={60000}
+              value={config.replyStyle.interReplyDelayMinMs}
+              onChange={(e) => patchReplyStyle({ interReplyDelayMinMs: Number(e.target.value) || 800 })}
+              className={fieldClass}
+            />
+          </div>
+          <div>
+            <label htmlFor="cfg-delay-max" className={labelClass}>
+              Макс. пауза между частями (мс)
+            </label>
+            <input
+              id="cfg-delay-max"
+              type="number"
+              min={200}
+              max={60000}
+              value={config.replyStyle.interReplyDelayMaxMs}
+              onChange={(e) => patchReplyStyle({ interReplyDelayMaxMs: Number(e.target.value) || 2500 })}
+              className={fieldClass}
+            />
+            <p className="text-xs text-gray-500 mt-1">Случайная задержка между 1-й и 2-й частью в WhatsApp.</p>
+          </div>
+          <div>
+            <label htmlFor="cfg-agg-min" className={labelClass}>
+              Мин. ожидание серии от клиента (мс)
+            </label>
+            <input
+              id="cfg-agg-min"
+              type="number"
+              min={500}
+              max={30000}
+              value={config.replyStyle.clientAggregationMinMs}
+              onChange={(e) =>
+                patchReplyStyle({ clientAggregationMinMs: Number(e.target.value) || 2000 })
+              }
+              className={fieldClass}
+            />
+          </div>
+          <div>
+            <label htmlFor="cfg-agg-max" className={labelClass}>
+              Макс. ожидание серии от клиента (мс)
+            </label>
+            <input
+              id="cfg-agg-max"
+              type="number"
+              min={500}
+              max={30000}
+              value={config.replyStyle.clientAggregationMaxMs}
+              onChange={(e) =>
+                patchReplyStyle({ clientAggregationMaxMs: Number(e.target.value) || 4000 })
+              }
+              className={fieldClass}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              После последнего входящего бот подождёт случайный интервал в этом диапазоне (кроме голосовых —
+              там дольше, пока не будет расшифровки).
+            </p>
+          </div>
+        </div>
+        <div className="grid sm:grid-cols-1 gap-2">
+          <label className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3 text-sm text-gray-800 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.replyStyle.allowShortLeadIn}
+              onChange={(e) => patchReplyStyle({ allowShortLeadIn: e.target.checked })}
+              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Короткие вводные («Да, можем», «Понял вас») — если уместно
+          </label>
+          <label className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3 text-sm text-gray-800 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.replyStyle.varySentenceLength}
+              onChange={(e) => patchReplyStyle({ varySentenceLength: e.target.checked })}
+              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Варьировать длину фраз
+          </label>
+          <label className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3 text-sm text-gray-800 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.replyStyle.avoidTemplateRepetition}
+              onChange={(e) => patchReplyStyle({ avoidTemplateRepetition: e.target.checked })}
+              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Избегать повторов и шаблонных CTA подряд
+          </label>
+          <label className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/60 px-4 py-3 text-sm text-gray-800 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.replyStyle.allowSoftConversationalBridges}
+              onChange={(e) => patchReplyStyle({ allowSoftConversationalBridges: e.target.checked })}
+              className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            Мягкие разговорные связки (без канцелярита)
+          </label>
         </div>
       </SectionCard>
 
