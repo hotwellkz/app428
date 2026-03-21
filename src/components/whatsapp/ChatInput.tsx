@@ -594,7 +594,34 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 onSelect={insertQuickReply}
               />
             )}
-            <div className="chat-composer chat-input flex min-h-0 min-w-0 max-w-full flex-col gap-1.5 md:gap-2 p-1.5 px-2 md:py-2 md:px-3 rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 [overflow-x:clip]">
+            <div className="chat-composer chat-input relative flex min-h-0 min-w-0 max-w-full flex-col gap-1.5 md:gap-2 p-1.5 px-2 md:py-2 md:px-3 rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 [overflow-x:clip]">
+              {/* Mobile: перевод вне нижнего ряда — плавающая mini-кнопка, не влияет на flex action row */}
+              {onTranslateInput && isMobile && (
+                <div
+                  className={`absolute right-2 top-2 z-10 md:hidden motion-reduce:transition-none ${
+                    hasText
+                      ? 'pointer-events-auto scale-100 opacity-100'
+                      : 'pointer-events-none scale-90 opacity-0'
+                  } transition-[opacity,transform] duration-200 ease-out`}
+                  aria-hidden={!hasText}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onTranslateInput()}
+                    disabled={disabled || translateInputLoading || !hasText}
+                    title="Перевести RU↔KZ"
+                    className="flex h-10 w-10 touch-manipulation items-center justify-center rounded-full border border-indigo-200/90 bg-white/95 text-indigo-600 shadow-sm ring-1 ring-black/[0.04] backdrop-blur-sm transition-[background-color,transform,box-shadow] active:scale-95 hover:bg-indigo-50/95 disabled:opacity-40"
+                    aria-label="Перевести"
+                    tabIndex={hasText ? 0 : -1}
+                  >
+                    {translateInputLoading ? (
+                      <Loader2 className="h-5 w-5 shrink-0 animate-spin" aria-hidden />
+                    ) : (
+                      <Languages className="h-5 w-5 shrink-0" aria-hidden />
+                    )}
+                  </button>
+                </div>
+              )}
               <div className="chat-composer__input-row chat-input-text order-1 flex w-full min-w-0 max-w-full flex-col [overflow-x:clip]">
                 <textarea
                   ref={textareaRef}
@@ -605,7 +632,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   placeholder={hasAttachment ? 'Подпись к файлу (необязательно)' : 'Сообщение...'}
                   rows={TEXTAREA_MIN_ROWS}
                   cols={1}
-                  className="message-input chat-textarea box-border w-full min-h-[40px] max-h-[140px] min-w-0 max-w-full resize-none bg-transparent border-0 outline-none rounded-2xl md:min-h-[42px] md:max-h-[160px] md:rounded-lg py-2 px-2.5 md:py-2 md:px-3 leading-[1.4] text-base md:text-sm overflow-y-auto [overflow-wrap:anywhere]"
+                  className={`message-input chat-textarea box-border w-full min-h-[40px] max-h-[140px] min-w-0 max-w-full resize-none bg-transparent border-0 outline-none rounded-2xl md:min-h-[42px] md:max-h-[160px] md:rounded-lg py-2 px-2.5 leading-[1.4] text-base md:px-3 md:text-sm overflow-y-auto [overflow-wrap:anywhere] ${
+                    onTranslateInput && isMobile ? 'max-md:pr-12' : ''
+                  }`}
                 />
               </div>
               {/*
@@ -744,7 +773,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
                       <Camera className="w-5 h-5 md:w-6 md:h-6" />
                     </button>
                   )}
-                  {hasText && onTranslateInput && (
+                  {/* Перевод: на мобиле — плавающая кнопка у composer; в ряду только desktop */}
+                  {hasText && onTranslateInput && !isMobile && (
                     <button
                       type="button"
                       onClick={() => onTranslateInput()}
