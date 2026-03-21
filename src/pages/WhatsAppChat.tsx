@@ -1,7 +1,18 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
-import { MessageSquare, Menu, Search } from 'lucide-react';
+import {
+  MessageSquare,
+  Menu,
+  Search,
+  LayoutGrid,
+  Clock,
+  CircleDot,
+  GitBranch,
+  Users,
+  MapPin,
+  ChevronDown
+} from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useAuth } from '../hooks/useAuth';
 import { useCompanyId } from '../contexts/CompanyContext';
@@ -3619,31 +3630,35 @@ const WhatsAppChat: React.FC = () => {
             {searchActive && searchLoading && (
               <p className="px-3 pb-1.5 text-[11px] text-gray-500">Поиск по базе…</p>
             )}
-            <div className="flex flex-nowrap items-center gap-2.5 px-3 pb-2 text-[11px] md:text-xs overflow-x-auto">
+            {/* Мобильная панель: одна горизонтальная строка + scroll (вариант C: чипы с подписью, селекты — компактные с иконкой) */}
+            <div className="md:hidden flex flex-nowrap items-center gap-2 px-3 pb-2 overflow-x-auto overflow-y-hidden overscroll-x-contain whatsapp-filters-bar-scroll touch-pan-x">
               <button
                 type="button"
                 onClick={() => setActiveFilter('all')}
-                className={`filter-label inline-flex items-center justify-center min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
+                className={`filter-label shrink-0 inline-flex h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
                   activeFilter === 'all'
-                    ? 'bg-green-100 border-green-200 text-green-800 font-medium'
-                    : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
+                    ? 'border-green-300 bg-green-100 text-green-900'
+                    : 'border-gray-200 bg-white text-gray-600 active:bg-gray-50'
                 }`}
+                aria-pressed={activeFilter === 'all'}
               >
+                <LayoutGrid className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
                 Все
               </button>
               <button
                 type="button"
                 onClick={() => setActiveFilter('waiting')}
-                className={`filter-label inline-flex items-center gap-1.5 min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
+                className={`filter-label shrink-0 inline-flex h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
                   activeFilter === 'waiting'
-                    ? 'bg-green-100 border-green-200 text-green-800 font-medium'
-                    : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
+                    ? 'border-green-300 bg-green-100 text-green-900'
+                    : 'border-gray-200 bg-white text-gray-600 active:bg-gray-50'
                 }`}
+                aria-pressed={activeFilter === 'waiting'}
               >
-                <span className="inline-flex h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF9F2F' }} />
+                <Clock className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
                 <span>Ждут</span>
                 {waitingCount > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-gray-200 text-[10px] font-medium text-gray-700 ml-0.5">
+                  <span className="inline-flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-gray-200 px-1 text-[10px] font-semibold text-gray-800">
                     {waitingCount}
                   </span>
                 )}
@@ -3651,73 +3666,233 @@ const WhatsAppChat: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setActiveFilter('unread')}
-                className={`filter-label inline-flex items-center gap-1.5 min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
+                className={`filter-label shrink-0 inline-flex h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
                   activeFilter === 'unread'
-                    ? 'bg-green-100 border-green-200 text-green-800 font-medium'
-                    : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
+                    ? 'border-green-300 bg-green-100 text-green-900'
+                    : 'border-gray-200 bg-white text-gray-600 active:bg-gray-50'
                 }`}
+                aria-pressed={activeFilter === 'unread'}
               >
-                <span className="inline-flex h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: '#FF4D4F' }} />
+                <CircleDot className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden />
                 <span>Непр.</span>
                 {unreadCount > 0 && (
-                  <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-gray-200 text-[10px] font-medium text-gray-700 ml-0.5">
+                  <span className="inline-flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-gray-200 px-1 text-[10px] font-semibold text-gray-800">
                     {unreadCount}
                   </span>
                 )}
               </button>
+              {dealStatuses.length > 0 && (
+                <div
+                  className={`relative shrink-0 ${
+                    dealStatusFilter !== 'all'
+                      ? 'ring-2 ring-green-400/60 ring-offset-1 ring-offset-gray-50/80 rounded-full'
+                      : ''
+                  }`}
+                >
+                  <select
+                    value={dealStatusFilter}
+                    onChange={(e) =>
+                      setDealStatusFilter(e.target.value === 'all' ? 'all' : e.target.value)
+                    }
+                    aria-label="Фильтр по сделке / статусу"
+                    className="relative z-0 h-9 max-w-[7.25rem] min-w-[6.5rem] cursor-pointer appearance-none rounded-full border border-gray-200 bg-white py-0 pl-7 pr-6 text-[10px] font-medium text-gray-800"
+                  >
+                    <option value="all">Все сделки ({dealStatusCounts.all})</option>
+                    <option value="none">Без статуса ({dealStatusCounts.none})</option>
+                    {dealStatuses.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({dealStatusCounts.byId[s.id] ?? 0})
+                      </option>
+                    ))}
+                  </select>
+                  <GitBranch
+                    className="pointer-events-none absolute left-2 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-emerald-600"
+                    aria-hidden
+                  />
+                  <ChevronDown
+                    className="pointer-events-none absolute right-1.5 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
+                    aria-hidden
+                  />
+                </div>
+              )}
+              <div
+                className={`relative shrink-0 ${
+                  managerFilter !== 'all'
+                    ? 'ring-2 ring-green-400/60 ring-offset-1 ring-offset-gray-50/80 rounded-full'
+                    : ''
+                }`}
+              >
+                <select
+                  value={managerFilter}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setManagerFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
+                  }}
+                  aria-label="Фильтр по менеджеру"
+                  className="relative z-0 h-9 max-w-[6.75rem] min-w-[5.75rem] cursor-pointer appearance-none rounded-full border border-gray-200 bg-white py-0 pl-7 pr-6 text-[10px] font-medium text-gray-800"
+                >
+                  <option value="all">Все менеджеры</option>
+                  <option value="none">Без менеджера</option>
+                  {managers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </select>
+                <Users
+                  className="pointer-events-none absolute left-2 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-gray-500"
+                  aria-hidden
+                />
+                <ChevronDown
+                  className="pointer-events-none absolute right-1.5 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
+                  aria-hidden
+                />
+              </div>
+              <div
+                className={`relative shrink-0 ${
+                  cityFilter !== 'all'
+                    ? 'ring-2 ring-green-400/60 ring-offset-1 ring-offset-gray-50/80 rounded-full'
+                    : ''
+                }`}
+              >
+                <select
+                  value={cityFilter}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCityFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
+                  }}
+                  aria-label="Фильтр по городу"
+                  className="relative z-0 h-9 max-w-[6.75rem] min-w-[5.75rem] cursor-pointer appearance-none rounded-full border border-gray-200 bg-white py-0 pl-7 pr-6 text-[10px] font-medium text-gray-800"
+                >
+                  <option value="all">Все города</option>
+                  <option value="none">Без города ({cityCounts.none})</option>
+                  {citiesForFilter.map((city) => (
+                    <option key={city} value={city}>
+                      {city} ({cityCounts.byCity[city] ?? 0})
+                    </option>
+                  ))}
+                </select>
+                <MapPin
+                  className="pointer-events-none absolute left-2 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-gray-500"
+                  aria-hidden
+                />
+                <ChevronDown
+                  className="pointer-events-none absolute right-1.5 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
+                  aria-hidden
+                />
+              </div>
             </div>
-            {dealStatuses.length > 0 && (
+
+            {/* Desktop: прежняя вёрстка (несколько строк) */}
+            <div className="hidden md:block">
+              <div className="flex flex-nowrap items-center gap-2.5 px-3 pb-2 text-xs overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setActiveFilter('all')}
+                  className={`filter-label inline-flex items-center justify-center min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
+                    activeFilter === 'all'
+                      ? 'bg-green-100 border-green-200 text-green-800 font-medium'
+                      : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  Все
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveFilter('waiting')}
+                  className={`filter-label inline-flex items-center gap-1.5 min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
+                    activeFilter === 'waiting'
+                      ? 'bg-green-100 border-green-200 text-green-800 font-medium'
+                      : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <span
+                    className="inline-flex h-2 w-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: '#FF9F2F' }}
+                  />
+                  <span>Ждут</span>
+                  {waitingCount > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-gray-200 text-[10px] font-medium text-gray-700 ml-0.5">
+                      {waitingCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveFilter('unread')}
+                  className={`filter-label inline-flex items-center gap-1.5 min-h-[32px] py-1.5 px-3 rounded-2xl border whitespace-nowrap transition-colors ${
+                    activeFilter === 'unread'
+                      ? 'bg-green-100 border-green-200 text-green-800 font-medium'
+                      : 'bg-transparent border-gray-200 text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <span
+                    className="inline-flex h-2 w-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: '#FF4D4F' }}
+                  />
+                  <span>Непр.</span>
+                  {unreadCount > 0 && (
+                    <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 rounded-full bg-gray-200 text-[10px] font-medium text-gray-700 ml-0.5">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+              </div>
+              {dealStatuses.length > 0 && (
+                <div className="px-3 pb-2">
+                  <select
+                    value={dealStatusFilter}
+                    onChange={(e) =>
+                      setDealStatusFilter(e.target.value === 'all' ? 'all' : e.target.value)
+                    }
+                    className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs"
+                  >
+                    <option value="all">Все сделки ({dealStatusCounts.all})</option>
+                    <option value="none">Без статуса ({dealStatusCounts.none})</option>
+                    {dealStatuses.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} ({dealStatusCounts.byId[s.id] ?? 0})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div className="px-3 pb-2">
                 <select
-                  value={dealStatusFilter}
-                  onChange={(e) =>
-                    setDealStatusFilter(e.target.value === 'all' ? 'all' : e.target.value)
-                  }
-                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
+                  value={managerFilter}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setManagerFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
+                  }}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs"
                 >
-                  <option value="all">Все сделки ({dealStatusCounts.all})</option>
-                  <option value="none">Без статуса ({dealStatusCounts.none})</option>
-                  {dealStatuses.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} ({dealStatusCounts.byId[s.id] ?? 0})
+                  <option value="all">Все менеджеры</option>
+                  <option value="none">Без менеджера</option>
+                  {managers.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
                     </option>
                   ))}
                 </select>
               </div>
-            )}
-            <div className="grid max-[340px]:grid-cols-1 grid-cols-2 gap-2 px-3 pb-2 md:grid-cols-1">
-              <select
-                value={managerFilter}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setManagerFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
-                }}
-                className="min-h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
-              >
-                <option value="all">Все менеджеры</option>
-                <option value="none">Без менеджера</option>
-                {managers.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={cityFilter}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setCityFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
-                }}
-                className="min-h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
-              >
-                <option value="all">Все города</option>
-                <option value="none">Без города ({cityCounts.none})</option>
-                {citiesForFilter.map((city) => (
-                  <option key={city} value={city}>
-                    {city} ({cityCounts.byCity[city] ?? 0})
-                  </option>
-                ))}
-              </select>
+              <div className="px-3 pb-2">
+                <select
+                  value={cityFilter}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setCityFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
+                  }}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs"
+                >
+                  <option value="all">Все города</option>
+                  <option value="none">Без города ({cityCounts.none})</option>
+                  {citiesForFilter.map((city) => (
+                    <option key={city} value={city}>
+                      {city} ({cityCounts.byCity[city] ?? 0})
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
           <ConversationList

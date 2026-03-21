@@ -58,6 +58,16 @@ body.whatsapp-chat-mobile-open {
   display: none;
 }
 
+/* Горизонтальная панель фильтров чатов (моб.) */
+.whatsapp-filters-bar-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.whatsapp-filters-bar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* CRM: карточка сделки на канбане */
 .deal-card {
   contain: content;
