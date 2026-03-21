@@ -182,7 +182,11 @@ export async function updateCompanyUserMenuAccess(
   });
 }
 
-/** Обновить дополнительные права пользователя в компании (merge с существующими). */
+/**
+ * Обновить дополнительные права пользователя в компании (merge с существующими).
+ * Значения `undefined` в переданном объекте означают «сбросить поле» (ключ не попадёт в Firestore).
+ * Firestore не принимает `undefined` в полях — раньше это ломало сохранение при пустой категории.
+ */
 export async function updateCompanyUserPermissions(
   userId: string,
   permissions: CompanyUserPermissions
@@ -190,8 +194,18 @@ export async function updateCompanyUserPermissions(
   const ref = doc(db, COMPANY_USERS, userId);
   const snap = await getDoc(ref);
   const existing = snap.exists() ? (snap.data()?.permissions as CompanyUserPermissions | undefined) : undefined;
+  const merged: Record<string, unknown> = { ...(existing ?? {}) };
+  for (const key of Object.keys(permissions) as (keyof CompanyUserPermissions)[]) {
+    const value = permissions[key];
+    if (value === undefined) {
+      delete merged[key as string];
+    } else {
+      merged[key as string] = value;
+    }
+  }
+  const cleaned = Object.fromEntries(Object.entries(merged).filter(([, v]) => v !== undefined));
   await updateDoc(ref, {
-    permissions: { ...(existing ?? {}), ...permissions },
+    permissions: cleaned,
     updatedAt: serverTimestamp()
   });
 }
