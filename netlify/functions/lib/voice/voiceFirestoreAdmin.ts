@@ -169,6 +169,67 @@ export async function adminFindVoiceSessionByProviderCallId(
   return { id: d.id, ...d.data() };
 }
 
+/** Поиск сессии по первому совпавшему providerCallId (Zadarma: pbx_call_id vs pending id). */
+export async function adminFindVoiceSessionByProviderCallIdCandidates(
+  candidateIds: string[]
+): Promise<(Record<string, unknown> & { id: string }) | null> {
+  const uniq = [...new Set(candidateIds.map((x) => String(x ?? '').trim()).filter(Boolean))];
+  for (const id of uniq) {
+    const row = await adminFindVoiceSessionByProviderCallId(id);
+    if (row?.id) return row;
+  }
+  return null;
+}
+
+function sessionStartedAtMs(row: Record<string, unknown>): number {
+  const s = row.startedAt;
+  if (s && typeof s === 'object' && 'toMillis' in s && typeof (s as { toMillis: () => number }).toMillis === 'function') {
+    return (s as { toMillis: () => number }).toMillis();
+  }
+  if (s instanceof Date) return s.getTime();
+  if (typeof s === 'string') {
+    const t = Date.parse(s);
+    return Number.isFinite(t) ? t : 0;
+  }
+  return 0;
+}
+
+/**
+ * Zadarma: первый webhook приходит с pbx_call_id, а сессия создана с providerCallId zadarma:{companyId}:{callId}.
+ * Ищем недавнюю исходящую сессию по companyId + toE164.
+ */
+export type ZadarmaRecentSessionLookup = {
+  row: (Record<string, unknown> & { id: string }) | null;
+  /** Сколько «открытых» сессий найдено (если больше 1 — неоднозначность). */
+  ambiguousOpenCount: number;
+};
+
+export async function adminFindRecentZadarmaOutboundSession(
+  companyId: string,
+  toE164: string
+): Promise<ZadarmaRecentSessionLookup> {
+  const db = getDb();
+  const to = String(toE164 ?? '').trim();
+  if (!companyId.trim() || !to) return { row: null, ambiguousOpenCount: 0 };
+  const q = await db
+    .collection(VOICE_CALL_SESSIONS_COLLECTION)
+    .where('companyId', '==', companyId)
+    .where('provider', '==', 'zadarma')
+    .where('toE164', '==', to)
+    .limit(25)
+    .get();
+  const open = new Set(['queued', 'dialing', 'ringing', 'in_progress']);
+  const rows = q.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((r) => open.has(String(r.status ?? 'queued')));
+  if (rows.length === 0) return { row: null, ambiguousOpenCount: 0 };
+  rows.sort((a, b) => sessionStartedAtMs(b) - sessionStartedAtMs(a));
+  return {
+    row: rows[0] as Record<string, unknown> & { id: string },
+    ambiguousOpenCount: rows.length
+  };
+}
+
 /** Legacy документы без поля provider считаем twilio. */
 export function voiceNumberRowProvider(data: Record<string, unknown> | undefined): string {
   const p = String(data?.provider ?? 'twilio').trim();

@@ -386,6 +386,15 @@
       "collectionGroup": "voiceCallSessions",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "companyId", "order": "ASCENDING" },
+        { "fieldPath": "provider", "order": "ASCENDING" },
+        { "fieldPath": "toE164", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "voiceCallSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "voiceRetryStatus", "order": "ASCENDING" },
         { "fieldPath": "voiceRetryNextAt", "order": "ASCENDING" }
       ]

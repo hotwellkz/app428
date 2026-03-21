@@ -9,11 +9,13 @@ import { IntegrationStatusBadge } from '../components/IntegrationStatusBadge';
 import type { CatalogIntegrationStatus } from '../types';
 import { getIntegrationById } from '../integrationRegistry';
 import { useVoiceTelephonyData, type OutboundVoiceProviderPref } from '../hooks/useVoiceTelephonyData';
+import { ZadarmaVoiceIntegrationSection } from '../components/ZadarmaVoiceIntegrationSection';
 
 export const TwilioVoiceIntegrationPanel: React.FC = () => {
   const { user } = useAuth();
   const meta = getIntegrationById('twilio');
-  const { voiceState, telnyxState, voiceNumbers, loading, loadError, refetch } = useVoiceTelephonyData(user?.uid);
+  const { voiceState, telnyxState, zadarmaState, voiceNumbers, zadarmaNumbers, loading, loadError, refetch } =
+    useVoiceTelephonyData(user?.uid);
   const [voiceForm, setVoiceForm] = useState({
     accountSid: '',
     authToken: '',
@@ -50,7 +52,9 @@ export const TwilioVoiceIntegrationPanel: React.FC = () => {
         setVoiceError(data.error ?? 'Не удалось сменить провайдер');
         return;
       }
-      setVoiceSuccess(`Исходящий провайдер: ${pref === 'telnyx' ? 'Telnyx' : 'Twilio'}`);
+      setVoiceSuccess(
+        `Исходящий провайдер: ${pref === 'telnyx' ? 'Telnyx' : pref === 'zadarma' ? 'Zadarma' : 'Twilio'}`
+      );
       await refetch();
     } finally {
       setOutboundSaving(false);
@@ -211,7 +215,7 @@ export const TwilioVoiceIntegrationPanel: React.FC = () => {
   return (
     <IntegrationDetailLayout
       title={meta?.title ?? 'Twilio'}
-      description="Интеграция и номера изолированы по компании. Исходящий провайдер можно переключить на Telnyx в блоке ниже."
+      description="Интеграция и номера изолированы по компании. Исходящий провайдер: Twilio, Telnyx или Zadarma."
       meta={
         <div className="flex flex-wrap items-center gap-2">
           <IntegrationStatusBadge status={st} label={stLabel} />
@@ -266,6 +270,7 @@ export const TwilioVoiceIntegrationPanel: React.FC = () => {
               >
                 <option value="twilio">Twilio</option>
                 <option value="telnyx">Telnyx</option>
+                <option value="zadarma">Zadarma</option>
               </select>
               {outboundSaving ? <Loader2 className="w-4 h-4 animate-spin text-gray-400" /> : null}
             </div>
@@ -282,6 +287,14 @@ export const TwilioVoiceIntegrationPanel: React.FC = () => {
                 {telnyxState.blockingReason
                   ? ` ${telnyxState.blockingReason}`
                   : ' Заполните ключи Telnyx, Connection ID, синхронизируйте номера.'}
+              </div>
+            ) : null}
+            {voiceState.outboundVoiceProvider === 'zadarma' && !zadarmaState.voiceReady ? (
+              <div className="text-xs rounded-lg bg-amber-50 border border-amber-200 text-amber-900 px-3 py-2">
+                <span className="font-medium">Внимание:</span> выбрана Zadarma, но интеграция не готова.
+                {zadarmaState.blockingReason
+                  ? ` ${zadarmaState.blockingReason}`
+                  : ' Сохраните Key/Secret, extension, webhook URL и синхронизируйте номера (блок ниже).'}
               </div>
             ) : null}
             {voiceState.accountSidMasked ? (
@@ -408,6 +421,15 @@ export const TwilioVoiceIntegrationPanel: React.FC = () => {
           </>
         )}
       </div>
+      {user?.uid ? (
+        <ZadarmaVoiceIntegrationSection
+          userUid={user.uid}
+          outboundVoiceProvider={voiceState.outboundVoiceProvider}
+          zadarmaState={zadarmaState}
+          zadarmaNumbers={zadarmaNumbers}
+          refetch={refetch}
+        />
+      ) : null}
       {telnyxMissionControlWebhookUrl ? (
         <div className="rounded-xl border border-gray-100 bg-gray-50/80 p-4 text-xs text-gray-600">
           <p className="font-medium text-gray-800 mb-1">Связь с Telnyx webhook</p>

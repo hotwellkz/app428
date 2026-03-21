@@ -3,6 +3,7 @@ import { Sparkles, Copy, RefreshCw, ChevronDown, ChevronUp, Type } from 'lucide-
 import { getAuthToken } from '../../lib/firebase/auth';
 import { useAIConfigured } from '../../hooks/useAIConfigured';
 import type { WhatsAppMessage } from '../../types/whatsappDb';
+import { getMessageTextContentForAi } from '../../utils/whatsappAiMessageContent';
 
 const SALES_ANALYZE_ENDPOINTS = ['/.netlify/functions/ai-analyze-sales', '/api/ai/analyze-sales'] as const;
 const CLIENT_ANALYZE_ENDPOINTS = ['/.netlify/functions/ai-analyze-client', '/api/ai/analyze-client'] as const;
@@ -105,7 +106,7 @@ export function ChatSalesAnalysisBlock({
   const recent = messages
     .map((m) => ({
       ...m,
-      _content: ((m.transcription ?? m.text) ?? '').trim(),
+      _content: getMessageTextContentForAi(m)
     }))
     .filter((m) => m._content.length > 0 && !m.deleted)
     .slice(-50);
@@ -116,7 +117,7 @@ export function ChatSalesAnalysisBlock({
       return messages
         .map((m) => ({
           ...m,
-          _content: ((overrides?.[m.id] ?? m.transcription ?? m.text) ?? '').trim(),
+          _content: getMessageTextContentForAi(m, overrides)
         }))
         .filter((m) => m._content.length > 0 && !m.deleted)
         .slice(-50);

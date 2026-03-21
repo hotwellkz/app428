@@ -147,7 +147,7 @@ export interface VoiceQaResultMetadata extends VoiceQaSnapshot {
 }
 
 /** Известные voice-провайдеры исходящей телефонии (расширяйте при добавлении адаптеров). */
-export type VoiceKnownProviderId = 'twilio' | 'telnyx';
+export type VoiceKnownProviderId = 'twilio' | 'telnyx' | 'zadarma';
 
 /** P0: идентификатор провайдера в сессии / UI (известные + legacy-строки). */
 export type VoiceProviderId = VoiceKnownProviderId | string;

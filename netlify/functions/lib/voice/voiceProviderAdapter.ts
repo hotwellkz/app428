@@ -4,6 +4,7 @@ import { getVoiceIntegration } from '../firebaseAdmin';
 import { MockVoiceProvider } from './providers/mockVoiceProvider';
 import { TwilioVoiceProvider } from './providers/twilioVoiceProvider';
 import { TelnyxVoiceProvider } from './providers/telnyxVoiceProvider';
+import { ZadarmaVoiceProvider } from './providers/zadarmaVoiceProvider';
 import type { TwilioVoiceFriendlyCode } from './deriveTwilioVoiceFriendlyError';
 
 /** Коды для UI: Twilio + общие + Telnyx (расширяйте по мере необходимости). */
@@ -93,7 +94,7 @@ export function getVoiceProviderAdapter(config: VoiceProviderRuntimeConfig): Voi
   return new MockVoiceProvider();
 }
 
-export type VoiceOutboundProviderChoice = 'twilio' | 'telnyx';
+export type VoiceOutboundProviderChoice = 'twilio' | 'telnyx' | 'zadarma';
 
 /**
  * Исходящий звонок: если у компании в Firestore включена Twilio-интеграция с ключами — всегда реальный Twilio,
@@ -107,17 +108,35 @@ export async function resolveVoiceProviderForCompany(
   opts?: { requestedProvider?: VoiceOutboundProviderChoice | null }
 ): Promise<VoiceProviderAdapter> {
   const row = await getVoiceIntegration(companyId);
-  const pref: VoiceOutboundProviderChoice = row?.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
+  const pref: VoiceOutboundProviderChoice =
+    row?.outboundVoiceProvider === 'telnyx'
+      ? 'telnyx'
+      : row?.outboundVoiceProvider === 'zadarma'
+        ? 'zadarma'
+        : 'twilio';
 
   const useCompanyTwilio =
     row?.enabled === true && !!(row.accountSid?.trim() && row.authToken?.trim());
   const useCompanyTelnyx =
     row?.telnyxEnabled === true &&
     !!(row.telnyxApiKey?.trim() && row.telnyxPublicKey?.trim());
+  const useCompanyZadarma =
+    row?.zadarmaEnabled === true && !!(row.zadarmaKey?.trim() && row.zadarmaSecret?.trim());
 
   const req = opts?.requestedProvider;
   const target: VoiceOutboundProviderChoice =
-    req === 'twilio' || req === 'telnyx' ? req : pref;
+    req === 'twilio' || req === 'telnyx' || req === 'zadarma' ? req : pref;
+
+  if (target === 'zadarma') {
+    if (useCompanyZadarma) {
+      return new ZadarmaVoiceProvider(config);
+    }
+    const msg =
+      req === 'zadarma'
+        ? 'Zadarma не настроена или выключена: сохраните Key, Secret и extension в разделе Интеграции.'
+        : 'Выбран исходящий провайдер Zadarma, но интеграция не готова.';
+    throw new Error(msg);
+  }
 
   if (target === 'telnyx') {
     if (useCompanyTelnyx) {

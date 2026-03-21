@@ -25,11 +25,12 @@ type VoiceLauncherReadyReasonCode =
   | 'outbound_not_ready'
   | 'no_numbers_for_provider';
 
-type VoiceProviderId = 'twilio' | 'telnyx';
+type VoiceProviderId = 'twilio' | 'telnyx' | 'zadarma';
 
 const PROVIDER_LABEL: Record<VoiceProviderId, string> = {
   twilio: 'Twilio',
-  telnyx: 'Telnyx'
+  telnyx: 'Telnyx',
+  zadarma: 'Zadarma'
 };
 
 type Props = {
@@ -49,14 +50,18 @@ function getReadyProviders(integ: VoiceIntegrationClientSnapshot): VoiceProvider
   const out: VoiceProviderId[] = [];
   if (integ.voiceReady === true) out.push('twilio');
   if (integ.telnyx?.voiceReady === true) out.push('telnyx');
+  if (integ.zadarma?.voiceReady === true) out.push('zadarma');
   return out;
 }
 
-function pickInitialProvider(ready: VoiceProviderId[], outboundPref: 'twilio' | 'telnyx' | undefined): VoiceProviderId {
-  if (ready.length === 0) return outboundPref === 'telnyx' ? 'telnyx' : 'twilio';
-  if (ready.includes(outboundPref === 'telnyx' ? 'telnyx' : 'twilio')) {
-    return outboundPref === 'telnyx' ? 'telnyx' : 'twilio';
-  }
+function pickInitialProvider(
+  ready: VoiceProviderId[],
+  outboundPref: 'twilio' | 'telnyx' | 'zadarma' | undefined
+): VoiceProviderId {
+  const pref: VoiceProviderId =
+    outboundPref === 'telnyx' ? 'telnyx' : outboundPref === 'zadarma' ? 'zadarma' : 'twilio';
+  if (ready.length === 0) return pref;
+  if (ready.includes(pref)) return pref;
   return ready[0];
 }
 
@@ -84,6 +89,10 @@ function providerConnected(provider: VoiceProviderId, integ: VoiceIntegrationCli
   if (provider === 'telnyx') {
     const t = integ.telnyx;
     return !!(t?.enabled && t.connectionStatus === 'connected');
+  }
+  if (provider === 'zadarma') {
+    const z = integ.zadarma;
+    return !!(z?.enabled && z.connectionStatus === 'connected');
   }
   return !!(integ.enabled && integ.connectionStatus === 'connected');
 }
@@ -148,7 +157,12 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         setNumbersAll(nums);
 
         const ready = getReadyProviders(data);
-        const outboundPref = data.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
+        const outboundPref =
+          data.outboundVoiceProvider === 'telnyx'
+            ? 'telnyx'
+            : data.outboundVoiceProvider === 'zadarma'
+              ? 'zadarma'
+              : 'twilio';
         const initial = pickInitialProvider(ready, outboundPref);
 
         let ctxFrom = context.fromNumberId ?? null;
@@ -216,11 +230,17 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
             blockingReason: integ.telnyx?.blockingReason,
             readinessMessages: integ.telnyx?.readinessMessages ?? []
           }
-        : {
-            voiceReady: integ.voiceReady === true,
-            blockingReason: null as string | null,
-            readinessMessages: [] as string[]
-          };
+        : selectedProvider === 'zadarma'
+          ? {
+              voiceReady: integ.zadarma?.voiceReady === true,
+              blockingReason: integ.zadarma?.blockingReason,
+              readinessMessages: integ.zadarma?.readinessMessages ?? []
+            }
+          : {
+              voiceReady: integ.voiceReady === true,
+              blockingReason: null as string | null,
+              readinessMessages: [] as string[]
+            };
 
     if (snap.voiceReady === false) {
       const first =
@@ -228,7 +248,9 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         snap.readinessMessages[0] ||
         (selectedProvider === 'telnyx'
           ? 'Интеграция Telnyx не готова к исходящим звонкам.'
-          : 'Интеграция Twilio не готова к исходящим звонкам.');
+          : selectedProvider === 'zadarma'
+            ? 'Интеграция Zadarma не готова к исходящим звонкам.'
+            : 'Интеграция Twilio не готова к исходящим звонкам.');
       return { readyReason: first, reasonCode: 'outbound_not_ready' as const };
     }
     if (!providerConnected(selectedProvider, integ)) {
@@ -238,9 +260,16 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
       if (selectedProvider === 'telnyx' && integ.telnyx?.connectionStatus === 'invalid_config' && integ.telnyx?.connectionError?.trim()) {
         return { readyReason: String(integ.telnyx.connectionError).trim(), reasonCode: 'provider_not_connected' as const };
       }
+      if (selectedProvider === 'zadarma' && integ.zadarma?.connectionStatus === 'invalid_config' && integ.zadarma?.connectionError?.trim()) {
+        return { readyReason: String(integ.zadarma.connectionError).trim(), reasonCode: 'provider_not_connected' as const };
+      }
       return {
         readyReason:
-          selectedProvider === 'telnyx' ? 'Telnyx не подключён или не проверен' : 'Twilio не подключён',
+          selectedProvider === 'telnyx'
+            ? 'Telnyx не подключён или не проверен'
+            : selectedProvider === 'zadarma'
+              ? 'Zadarma не подключена или не проверена'
+              : 'Twilio не подключён',
         reasonCode: 'provider_not_connected' as const
       };
     }
@@ -359,10 +388,7 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         }
       });
       setLastCallId(out.callId);
-      toast.success(
-        selectedProvider === 'telnyx' ? 'Звонок запущен через Telnyx' : 'Звонок запущен через Twilio',
-        { duration: 5000 }
-      );
+      toast.success(`Звонок запущен через ${PROVIDER_LABEL[selectedProvider]}`, { duration: 5000 });
     } catch (e) {
       if (e instanceof VoiceLaunchError) {
         const text = e.hint ? `${e.message}\n${e.hint}` : e.message;
@@ -441,26 +467,53 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
         </div>
       );
     }
-    const tx = integ.telnyx;
-    const accOk = tx?.enabled && tx.connectionStatus === 'connected';
+    if (selectedProvider === 'telnyx') {
+      const tx = integ.telnyx;
+      const accOk = tx?.enabled && tx.connectionStatus === 'connected';
+      const numOk = hasDefaultInList || !!fromNumberId.trim();
+      const webhookOk = tx?.webhookSignatureOk !== false;
+      if (checklistNeutral && accOk && numOk && webhookOk) {
+        return (
+          <div className="text-[11px] rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-emerald-900">
+            Telnyx: API key и public key заданы, webhook в порядке, номер для исходящих выбран.
+          </div>
+        );
+      }
+      return (
+        <div className="text-[11px] rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2 text-sky-900">
+          <span className="font-medium">Telnyx</span>
+          {` · `}
+          {accOk ? 'подключение OK' : 'подключение не готово'}
+          {` · `}
+          {tx?.publicKeySet ? 'public key задан' : 'нужен public key'}
+          {` · `}
+          {webhookOk ? 'webhook OK' : 'проверьте подпись webhook'}
+          {` · `}
+          {numOk ? 'номер для исходящих' : 'номер не задан / нет в CRM'}
+        </div>
+      );
+    }
+    const z = integ.zadarma;
+    const accOk = z?.enabled && z.connectionStatus === 'connected';
+    const extOk = !!(z?.callbackExtension && String(z.callbackExtension).trim());
     const numOk = hasDefaultInList || !!fromNumberId.trim();
-    const webhookOk = tx?.webhookSignatureOk !== false;
-    if (checklistNeutral && accOk && numOk && webhookOk) {
+    const webhookOk = z?.webhookSignatureOk !== false;
+    if (checklistNeutral && accOk && extOk && numOk && webhookOk) {
       return (
         <div className="text-[11px] rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-emerald-900">
-          Telnyx: API key и public key заданы, webhook в порядке, номер для исходящих выбран.
+          Zadarma: ключи и внутренний номер (extension) заданы, webhook в порядке, номер для исходящих выбран.
         </div>
       );
     }
     return (
       <div className="text-[11px] rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2 text-sky-900">
-        <span className="font-medium">Telnyx</span>
+        <span className="font-medium">Zadarma</span>
         {` · `}
         {accOk ? 'подключение OK' : 'подключение не готово'}
         {` · `}
-        {tx?.publicKeySet ? 'public key задан' : 'нужен public key'}
+        {extOk ? 'extension для callback OK' : 'укажите extension (внутренний номер) для request/callback'}
         {` · `}
-        {webhookOk ? 'webhook OK' : 'проверьте подпись webhook'}
+        {webhookOk ? 'webhook OK' : 'проверьте URL и подпись webhook в кабинете Zadarma'}
         {` · `}
         {numOk ? 'номер для исходящих' : 'номер не задан / нет в CRM'}
       </div>
@@ -508,6 +561,18 @@ export const UniversalVoiceCallLauncher: React.FC<Props> = ({ open, onClose, con
                     </button>
                   ))}
                 </div>
+                {integ.outboundVoiceProvider &&
+                (integ.outboundVoiceProvider === 'twilio' ||
+                  integ.outboundVoiceProvider === 'telnyx' ||
+                  integ.outboundVoiceProvider === 'zadarma') ? (
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    По умолчанию в Интеграциях выбрано:{' '}
+                    <span className="font-medium text-gray-700">
+                      {PROVIDER_LABEL[integ.outboundVoiceProvider as VoiceProviderId]}
+                    </span>
+                    . Можно переключить для этого звонка.
+                  </p>
+                ) : null}
               </div>
             ) : readyProviders.length === 1 ? (
               <p className="text-xs text-gray-700">

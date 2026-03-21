@@ -18,7 +18,13 @@ export type VoiceProviderFriendlyCode =
   | 'no_answer'
   | 'canceled'
   | 'failed'
-  | 'provider_webhook_error';
+  | 'provider_webhook_error'
+  | 'webhook_signature_invalid'
+  | 'webhook_match_failed'
+  | 'invalid_number'
+  | 'rejected'
+  | 'provider_config_error'
+  | 'unknown_provider_error';
 
 const MESSAGES_RU: Record<string, string> = {
   provider_webhook_signature_invalid:
@@ -37,7 +43,15 @@ const MESSAGES_RU: Record<string, string> = {
   no_answer: 'Нет ответа.',
   canceled: 'Вызов отменён.',
   failed: 'Вызов завершился с ошибкой.',
-  provider_webhook_error: 'Ошибка обработки webhook Telnyx. Проверьте URL, ключи и логи сервера.'
+  provider_webhook_error: 'Ошибка обработки webhook Telnyx. Проверьте URL, ключи и логи сервера.',
+  webhook_signature_invalid:
+    'Подпись webhook Zadarma не прошла проверку. Проверьте Secret Key в CRM и URL уведомлений в кабинете Zadarma.',
+  webhook_match_failed:
+    'Событие Zadarma получено, но сессия звонка в CRM не найдена. Убедитесь, что в URL webhook указан ?companyId=… и звонок запускался из CRM.',
+  invalid_number: 'Некорректный или недопустимый номер телефона для вызова.',
+  rejected: 'Вызов отклонён на стороне сети или абонента.',
+  provider_config_error: 'Ошибка конфигурации или ограничения на стороне провайдера (баланс, маршрут, настройки АТС).',
+  unknown_provider_error: 'Провайдер вернул нестандартный исход звонка — см. логи и кабинет Zadarma.'
 };
 
 export function voiceFriendlyMessageRu(code: string | null | undefined): string {

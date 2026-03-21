@@ -48,6 +48,10 @@ import { showErrorNotification } from '../utils/notifications';
 import toast from 'react-hot-toast';
 import { collection, query, where, onSnapshot, doc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { transcribeVoiceBatch, getVoiceMessagesToTranscribe } from '../utils/transcribeVoiceBatch';
+import {
+  getMessageTextContentForAi,
+  messageHasVoiceOrAudioAttachment
+} from '../utils/whatsappAiMessageContent';
 import { db, auth } from '../lib/firebase/config';
 import { getAuthToken } from '../lib/firebase/auth';
 import type { WhatsAppMessage } from '../types/whatsappDb';
@@ -1739,10 +1743,24 @@ const WhatsAppChat: React.FC = () => {
           const result = await transcribeVoiceBatch(voiceItems, getAuthToken);
           mergedUpdates = result.updates ?? {};
         }
+        if (messageHasVoiceOrAudioAttachment(latest)) {
+          const voiceText = getMessageTextContentForAi(latest, mergedUpdates);
+          if (!voiceText) {
+            if (import.meta.env.DEV) {
+              console.log('[WhatsApp][ai-chat-bot-reply] пропуск: голос без расшифровки, ждём', {
+                messageId: latest.id,
+                transcriptIncludedInAi: false,
+                transcriptChars: 0,
+                skipReason: 'incoming_voice_no_transcript_yet'
+              });
+            }
+            return;
+          }
+        }
         const recent = messages
           .map((m) => ({
             ...m,
-            _content: (mergedUpdates[m.id] ?? m.transcription ?? m.text ?? '').trim()
+            _content: getMessageTextContentForAi(m, mergedUpdates)
           }))
           .filter((m) => m._content.length > 0 && !m.deleted)
           .slice(-20)
@@ -1765,7 +1783,13 @@ const WhatsAppChat: React.FC = () => {
           stage: leadCtx?.stage ?? null
         };
         if (import.meta.env.DEV) {
-          console.log('[WhatsApp] AI bot request clientContext', clientContext, 'lastClientText', payloadMessages.filter((m) => m.role === 'client').pop()?.text?.slice(0, 80));
+          const lastClient = payloadMessages.filter((m) => m.role === 'client').pop();
+          const lastClientLen = lastClient?.text?.length ?? 0;
+          console.log('[WhatsApp] AI bot request clientContext', clientContext, 'lastClientText', lastClient?.text?.slice(0, 80), {
+            lastClientTextChars: lastClientLen,
+            latestIsVoice: messageHasVoiceOrAudioAttachment(latest),
+            latestTranscriptChars: getMessageTextContentForAi(latest, mergedUpdates).length
+          });
         }
         const res = await fetch('/.netlify/functions/ai-chat-bot-reply', {
           method: 'POST',
@@ -1905,10 +1929,24 @@ const WhatsAppChat: React.FC = () => {
           const result = await transcribeVoiceBatch(voiceItems, getAuthToken);
           mergedUpdates = result.updates ?? {};
         }
+        if (messageHasVoiceOrAudioAttachment(latest)) {
+          const voiceText = getMessageTextContentForAi(latest, mergedUpdates);
+          if (!voiceText) {
+            if (import.meta.env.DEV) {
+              console.log('[WhatsApp][crm-ai-bot-whatsapp-runtime] пропуск: голос без расшифровки, ждём', {
+                messageId: latest.id,
+                transcriptIncludedInAi: false,
+                transcriptChars: 0,
+                skipReason: 'incoming_voice_no_transcript_yet'
+              });
+            }
+            return;
+          }
+        }
         const recent = messages
           .map((m) => ({
             ...m,
-            _content: (mergedUpdates[m.id] ?? m.transcription ?? m.text ?? '').trim()
+            _content: getMessageTextContentForAi(m, mergedUpdates)
           }))
           .filter((m) => m._content.length > 0 && !m.deleted)
           .slice(-40)
@@ -1922,6 +1960,14 @@ const WhatsAppChat: React.FC = () => {
         if (openaiMessages.length === 0) {
           await finishSkip('Нет текста для модели');
           return;
+        }
+        if (import.meta.env.DEV && messageHasVoiceOrAudioAttachment(latest)) {
+          const t = getMessageTextContentForAi(latest, mergedUpdates);
+          console.log('[WhatsApp][crm-ai-bot-whatsapp-runtime] voice transcript в контексте', {
+            messageId: latest.id,
+            transcriptIncludedInAi: t.length > 0,
+            transcriptChars: t.length
+          });
         }
 
         const token = await getAuthToken();

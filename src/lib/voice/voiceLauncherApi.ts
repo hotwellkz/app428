@@ -46,6 +46,42 @@ export type TelnyxVoiceIntegrationSnapshot = {
   outboundWebhookBaseUrl?: string | null;
 };
 
+/** Снэпшот Zadarma из GET voice-integration (вложенный объект zadarma). */
+export type ZadarmaVoiceIntegrationSnapshot = {
+  provider?: string;
+  configured?: boolean;
+  enabled?: boolean;
+  connectionStatus?: string;
+  connectionError?: string | null;
+  keyMasked?: string | null;
+  secretMasked?: string | null;
+  callbackExtension?: string | null;
+  predicted?: boolean;
+  hasAnyNumbers?: boolean;
+  hasDefaultOutbound?: boolean;
+  voiceReady?: boolean;
+  readinessMessages?: string[];
+  blockingReason?: string | null;
+  lastCheckedAt?: string | null;
+  lastSyncedAt?: string | null;
+  providerWebhookLastErrorCode?: string | null;
+  providerWebhookLastErrorAt?: string | null;
+  webhookSignatureOk?: boolean;
+  outboundWebhookUrlHint?: string | null;
+  zdEchoNote?: string | null;
+  apiKeySet?: boolean;
+  apiSecretSet?: boolean;
+  extensionSet?: boolean;
+  webhookUrlHintReady?: boolean;
+  defaultOutboundSelected?: boolean;
+  lastWebhookReceivedAt?: string | null;
+  lastWebhookEventType?: string | null;
+  lastWebhookSignatureOk?: boolean | null;
+  lastOutboundAttemptAt?: string | null;
+  lastOutboundOk?: boolean | null;
+  lastOutboundFriendlyCode?: string | null;
+};
+
 /** Ответ GET voice-integration (серверный контракт). */
 export type VoiceIntegrationClientSnapshot = {
   provider?: string;
@@ -62,9 +98,10 @@ export type VoiceIntegrationClientSnapshot = {
   defaultNumberId?: string | null;
   /** Готовность только Twilio (для карточки Twilio в Интеграциях). */
   voiceReady?: boolean;
-  outboundVoiceProvider?: 'twilio' | 'telnyx';
+  outboundVoiceProvider?: 'twilio' | 'telnyx' | 'zadarma';
   /** Вложенный снэпшот Telnyx (GET без ?provider). */
   telnyx?: TelnyxVoiceIntegrationSnapshot;
+  zadarma?: ZadarmaVoiceIntegrationSnapshot;
   /** Готовность исходящих для выбранного outbound-провайдера. */
   activeOutboundVoiceReady?: boolean;
   error?: string;
@@ -75,6 +112,7 @@ function looksLikeVoiceIntegrationPayload(data: unknown): data is VoiceIntegrati
   const o = data as Record<string, unknown>;
   if ('activeOutboundVoiceReady' in o) return true;
   if ('telnyx' in o && o.telnyx != null && typeof o.telnyx === 'object') return true;
+  if ('zadarma' in o && o.zadarma != null && typeof o.zadarma === 'object') return true;
   return 'connectionStatus' in o || 'voiceReady' in o || ('configured' in o && 'enabled' in o);
 }
 
@@ -227,9 +265,9 @@ export async function launchVoiceCall(payload: {
   contactId?: string | null;
   fromNumberId?: string | null;
   /** Явный исходящий провайдер (multi-provider). */
-  outboundVoiceProvider?: 'twilio' | 'telnyx' | null;
+  outboundVoiceProvider?: 'twilio' | 'telnyx' | 'zadarma' | null;
   /** Алиас для outboundVoiceProvider */
-  providerId?: 'twilio' | 'telnyx' | null;
+  providerId?: 'twilio' | 'telnyx' | 'zadarma' | null;
   metadata?: Record<string, unknown>;
 }): Promise<{ callId: string }> {
   const token = await getAuthToken();

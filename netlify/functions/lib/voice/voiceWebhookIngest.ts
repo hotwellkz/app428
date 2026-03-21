@@ -7,10 +7,13 @@ import type { VoiceCallStatus, VoiceNormalizedWebhookEvent } from '../../../../s
 import { applyNormalizedVoiceEvent } from './applyVoiceCallEvent';
 import {
   adminCreateVoiceCallEventIfAbsent,
+  adminFindRecentZadarmaOutboundSession,
   adminFindVoiceSessionByProviderCallId,
+  adminFindVoiceSessionByProviderCallIdCandidates,
   adminUpdateVoiceCallSession,
   VOICE_CALL_SESSIONS_COLLECTION
 } from './voiceFirestoreAdmin';
+import { voiceFriendlyMessageRu } from './voiceProviderFriendlyCodes';
 import { getDb } from '../firebaseAdmin';
 import { mergeVoiceLifecycleIntoLinkedRun, type VoiceCallSnapshotForRunMerge } from './updateVoiceRunResult';
 import { deriveVoiceFailureReason } from './deriveVoiceFailureReason';
@@ -102,8 +105,86 @@ export type IngestOneResult =
   | { ok: true; callId: string; deduped: boolean; sessionUpdated: boolean }
   | { ok: false; reason: string; providerCallId: string };
 
+async function resolveVoiceSessionRowForIngest(ev: VoiceNormalizedWebhookEvent): Promise<{
+  row: (Record<string, unknown> & { id: string }) | null;
+  matchMethod: 'providerCallId' | 'zadarma_id_candidate' | 'zadarma_fallback_toE164' | 'none';
+}> {
+  let sessionRow = await adminFindVoiceSessionByProviderCallId(ev.providerCallId);
+  if (sessionRow?.id) return { row: sessionRow, matchMethod: 'providerCallId' };
+
+  const meta = (ev.providerMeta ?? {}) as Record<string, unknown>;
+  const isLikelyZadarma =
+    meta.provider === 'zadarma' ||
+    (meta.zadarmaLookup && typeof meta.zadarmaLookup === 'object') ||
+    String(ev.providerEventType ?? '').startsWith('NOTIFY_');
+
+  if (!isLikelyZadarma) {
+    return { row: null, matchMethod: 'none' };
+  }
+
+  const rawFlat = (meta.raw as Record<string, string> | undefined) ?? {};
+  const candidates: string[] = [];
+  const push = (x: string) => {
+    const t = String(x ?? '').trim();
+    if (t && !candidates.includes(t)) candidates.push(t);
+  };
+  push(ev.providerCallId);
+  const alt = meta.zadarmaAlternateProviderCallIds;
+  if (Array.isArray(alt)) {
+    for (const x of alt) push(String(x ?? ''));
+  }
+  for (const k of ['pbx_call_id', 'call_id', 'id']) {
+    const v = rawFlat[k];
+    if (v) push(String(v));
+  }
+
+  const byCand = await adminFindVoiceSessionByProviderCallIdCandidates(candidates);
+  if (byCand?.id) return { row: byCand, matchMethod: 'zadarma_id_candidate' };
+
+  if (meta.zadarmaLookup && typeof meta.zadarmaLookup === 'object') {
+    const z = meta.zadarmaLookup as { companyId?: string; toE164?: string };
+    const cid = String(z.companyId ?? '').trim();
+    const to = String(z.toE164 ?? '').trim();
+    if (cid && to) {
+      const { row: found, ambiguousOpenCount } = await adminFindRecentZadarmaOutboundSession(cid, to);
+      if (ambiguousOpenCount > 1 && found?.id) {
+        console.log(
+          JSON.stringify({
+            tag: 'voice.webhook.zadarma.ambiguous_fallback',
+            companyId: cid,
+            toE164: to,
+            ambiguousOpenCount,
+            pickedSessionId: found.id,
+            webhookPbxCallId: ev.providerCallId
+          })
+        );
+      }
+      if (found?.id) return { row: found, matchMethod: 'zadarma_fallback_toE164' };
+    }
+  }
+
+  return { row: null, matchMethod: 'none' };
+}
+
 export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent): Promise<IngestOneResult> {
-  const sessionRow = await adminFindVoiceSessionByProviderCallId(ev.providerCallId);
+  const match = await resolveVoiceSessionRowForIngest(ev);
+  let sessionRow = match.row;
+
+  if (sessionRow?.id && match.matchMethod !== 'providerCallId') {
+    const cid = String(sessionRow.companyId ?? '');
+    const prevPcid = String(sessionRow.providerCallId ?? '').trim();
+    const nextPcid = String(ev.providerCallId ?? '').trim();
+    if (cid && nextPcid && prevPcid !== nextPcid) {
+      await adminUpdateVoiceCallSession(cid, sessionRow.id, {
+        providerCallId: nextPcid,
+        'metadata.zadarmaLinkedPbxCallId': nextPcid,
+        'metadata.zadarmaLinkAt': new Date().toISOString(),
+        'metadata.zadarmaWebhookMatchMethod': match.matchMethod
+      });
+      sessionRow = { ...sessionRow, providerCallId: nextPcid };
+    }
+  }
+
   if (!sessionRow?.id) {
     return { ok: false, reason: 'unknown_provider_call_id', providerCallId: ev.providerCallId };
   }
@@ -155,7 +236,7 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
 
   const meta = (ev.providerMeta ?? {}) as Record<string, unknown>;
   const twilioFinalStatus = s(meta.callStatus, 64);
-  const twilioSipResponseCode = n(meta.sipResponseCode);
+  const twilioSipResponseCode = n(meta.sipResponseCode) ?? n(meta.statusCode);
   const twilioErrorCode = n(meta.twilioErrorCode);
   const twilioWarningCode = n(meta.twilioWarningCode);
   const twilioErrorMessage = s(meta.twilioErrorMessage, 280);
@@ -164,7 +245,10 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
   const fromE164 = s(meta.from, 64);
   const toE164 = s(meta.to, 64);
   const providerReason = classifyProviderReason(twilioFinalStatus, twilioSipResponseCode, twilioErrorMessage);
-  const twilioConsoleSearchText = `Call SID: ${ev.providerCallId}`;
+  const twilioConsoleSearchText =
+    String(sessionRow.provider ?? '') === 'zadarma'
+      ? `Zadarma pbx_call_id: ${ev.providerCallId}`
+      : `Call SID: ${ev.providerCallId}`;
   const providerMetaRaw = (meta.raw as Record<string, unknown> | undefined) ?? null;
 
   const prevMeta = ((sessionRow.metadata as Record<string, unknown> | undefined) ?? {}) as Record<string, unknown>;
@@ -214,7 +298,10 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
       endedAt: asIso(sessionRow.endedAt) ?? (terminalStatuses.has(applied.toStatus) ? new Date().toISOString() : null)
     },
     ...(answeredByMeta ? { lastAnsweredBy: answeredByMeta } : {}),
-    ...(s(meta.direction, 32) ? { lastDirection: s(meta.direction, 32) } : {})
+    ...(s(meta.direction, 32) ? { lastDirection: s(meta.direction, 32) } : {}),
+    ...(s(meta.disposition, 96) && String(sessionRow.provider ?? '') === 'zadarma'
+      ? { lastZadarmaDisposition: s(meta.disposition, 96) }
+      : {})
   };
 
   const mergedMetadata: Record<string, unknown> = {
@@ -222,6 +309,18 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
     voiceProviderDebug,
     ...(providerMetaRaw ? { twilioLastCallbackRaw: providerMetaRaw } : {})
   };
+
+  const isZadarmaRecord =
+    ev.type === 'provider.unknown' &&
+    ev.cause === 'record_ready' &&
+    String(ev.providerEventType ?? '') === 'NOTIFY_RECORD';
+  if (isZadarmaRecord && inserted) {
+    const recUrl = s(meta.zadarmaRecordingUrl as string, 2048);
+    if (recUrl) {
+      mergedMetadata.zadarmaLastRecordingUrl = recUrl;
+      mergedMetadata.zadarmaRecordingAt = new Date().toISOString();
+    }
+  }
 
   const durationTail = (ev.durationSec ?? 0) > 0 || (n(meta.callDuration) ?? 0) > 0;
   const failure = deriveVoiceFailureReason({
@@ -262,11 +361,25 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
       sessionUpdate.voiceFailureReasonMessage = null;
       sessionUpdate.providerFailureCode = null;
       sessionUpdate.providerFailureReason = null;
-    } else if (failure) {
-      sessionUpdate.voiceFailureReasonCode = failure.code;
-      sessionUpdate.voiceFailureReasonMessage = failure.messageRu;
-      sessionUpdate.providerFailureCode = failure.code;
-      sessionUpdate.providerFailureReason = failure.messageRu;
+    } else if (applied.toStatus === 'failed' || applied.toStatus === 'busy' || applied.toStatus === 'no_answer') {
+      const zfc = s(meta.zadarmaFriendlyFailureCode as string, 80);
+      const isZad = String(sessionRow.provider ?? '') === 'zadarma';
+      if (isZad && zfc) {
+        sessionUpdate.voiceFailureReasonCode = zfc;
+        sessionUpdate.voiceFailureReasonMessage = voiceFriendlyMessageRu(zfc);
+        sessionUpdate.providerFailureCode = zfc;
+        sessionUpdate.providerFailureReason = voiceFriendlyMessageRu(zfc);
+      } else if (failure) {
+        sessionUpdate.voiceFailureReasonCode = failure.code;
+        sessionUpdate.voiceFailureReasonMessage = failure.messageRu;
+        sessionUpdate.providerFailureCode = failure.code;
+        sessionUpdate.providerFailureReason = failure.messageRu;
+      } else {
+        sessionUpdate.voiceFailureReasonCode = 'unknown_provider_failure';
+        sessionUpdate.voiceFailureReasonMessage = `Исход звонка: ${applied.toStatus}`;
+        sessionUpdate.providerFailureCode = 'unknown_provider_failure';
+        sessionUpdate.providerFailureReason = sessionUpdate.voiceFailureReasonMessage as string;
+      }
     } else if (applied.toStatus === 'completed') {
       sessionUpdate.voiceFailureReasonCode = null;
       sessionUpdate.voiceFailureReasonMessage = null;
@@ -277,13 +390,11 @@ export async function ingestNormalizedVoiceEvent(ev: VoiceNormalizedWebhookEvent
       sessionUpdate.voiceFailureReasonMessage = 'Звонок отменён.';
       sessionUpdate.providerFailureCode = 'canceled';
       sessionUpdate.providerFailureReason = 'Звонок отменён.';
-    } else if (applied.toStatus === 'failed' || applied.toStatus === 'busy' || applied.toStatus === 'no_answer') {
-      if (!failure) {
-        sessionUpdate.voiceFailureReasonCode = 'unknown_provider_failure';
-        sessionUpdate.voiceFailureReasonMessage = `Исход звонка: ${applied.toStatus}`;
-        sessionUpdate.providerFailureCode = 'unknown_provider_failure';
-        sessionUpdate.providerFailureReason = sessionUpdate.voiceFailureReasonMessage as string;
-      }
+    } else if (failure) {
+      sessionUpdate.voiceFailureReasonCode = failure.code;
+      sessionUpdate.voiceFailureReasonMessage = failure.messageRu;
+      sessionUpdate.providerFailureCode = failure.code;
+      sessionUpdate.providerFailureReason = failure.messageRu;
     }
   }
 

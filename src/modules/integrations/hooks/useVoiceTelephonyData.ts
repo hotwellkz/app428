@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { getAuthToken } from '../../../lib/firebase/auth';
 import { API_VOICE_INTEGRATION, API_VOICE_NUMBERS } from '../apiEndpoints';
 
-export type OutboundVoiceProviderPref = 'twilio' | 'telnyx';
+export type OutboundVoiceProviderPref = 'twilio' | 'telnyx' | 'zadarma';
 
 export interface VoiceIntegrationState {
   configured: boolean;
@@ -38,6 +38,40 @@ export interface TelnyxVoiceState {
   outboundWebhookBaseUrl: string | null;
 }
 
+export interface ZadarmaVoiceState {
+  configured: boolean;
+  enabled: boolean;
+  keyMasked: string | null;
+  secretMasked: string | null;
+  callbackExtension: string | null;
+  predicted: boolean;
+  connectionStatus: 'connected' | 'not_connected' | 'invalid_config';
+  connectionError: string | null;
+  voiceReady: boolean;
+  hasDefaultOutbound: boolean;
+  hasAnyNumbers: boolean;
+  readinessMessages: string[];
+  blockingReason: string | null;
+  lastCheckedAt: string | null;
+  lastSyncedAt: string | null;
+  providerWebhookLastErrorCode: string | null;
+  providerWebhookLastErrorAt: string | null;
+  webhookSignatureOk: boolean;
+  outboundWebhookUrlHint: string | null;
+  zdEchoNote: string | null;
+  apiKeySet: boolean;
+  apiSecretSet: boolean;
+  extensionSet: boolean;
+  webhookUrlHintReady: boolean;
+  defaultOutboundSelected: boolean;
+  lastWebhookReceivedAt: string | null;
+  lastWebhookEventType: string | null;
+  lastWebhookSignatureOk: boolean | null;
+  lastOutboundAttemptAt: string | null;
+  lastOutboundOk: boolean | null;
+  lastOutboundFriendlyCode: string | null;
+}
+
 export interface VoiceNumberRow {
   id: string;
   e164: string;
@@ -58,6 +92,40 @@ const defaultVoice: VoiceIntegrationState = {
   voiceReady: false,
   hasDefaultOutbound: false,
   outboundVoiceProvider: 'twilio'
+};
+
+const defaultZadarma: ZadarmaVoiceState = {
+  configured: false,
+  enabled: false,
+  keyMasked: null,
+  secretMasked: null,
+  callbackExtension: null,
+  predicted: false,
+  connectionStatus: 'not_connected',
+  connectionError: null,
+  voiceReady: false,
+  hasDefaultOutbound: false,
+  hasAnyNumbers: false,
+  readinessMessages: [],
+  blockingReason: null,
+  lastCheckedAt: null,
+  lastSyncedAt: null,
+  providerWebhookLastErrorCode: null,
+  providerWebhookLastErrorAt: null,
+  webhookSignatureOk: true,
+  outboundWebhookUrlHint: null,
+  zdEchoNote: null,
+  apiKeySet: false,
+  apiSecretSet: false,
+  extensionSet: false,
+  webhookUrlHintReady: false,
+  defaultOutboundSelected: false,
+  lastWebhookReceivedAt: null,
+  lastWebhookEventType: null,
+  lastWebhookSignatureOk: null,
+  lastOutboundAttemptAt: null,
+  lastOutboundOk: null,
+  lastOutboundFriendlyCode: null
 };
 
 const defaultTelnyx: TelnyxVoiceState = {
@@ -84,8 +152,10 @@ const defaultTelnyx: TelnyxVoiceState = {
 export function useVoiceTelephonyData(userUid: string | undefined) {
   const [voiceState, setVoiceState] = useState<VoiceIntegrationState>(defaultVoice);
   const [telnyxState, setTelnyxState] = useState<TelnyxVoiceState>(defaultTelnyx);
+  const [zadarmaState, setZadarmaState] = useState<ZadarmaVoiceState>(defaultZadarma);
   const [voiceNumbers, setVoiceNumbers] = useState<VoiceNumberRow[]>([]);
   const [telnyxNumbers, setTelnyxNumbers] = useState<VoiceNumberRow[]>([]);
+  const [zadarmaNumbers, setZadarmaNumbers] = useState<VoiceNumberRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
@@ -108,21 +178,30 @@ export function useVoiceTelephonyData(userUid: string | undefined) {
           setLoading(false);
           return;
         }
-        const [integrationRes, numbersRes, telnyxIntRes, telnyxNumRes] = await Promise.all([
-          fetch(API_VOICE_INTEGRATION, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_VOICE_NUMBERS}?provider=twilio`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_VOICE_INTEGRATION}?provider=telnyx`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${API_VOICE_NUMBERS}?provider=telnyx`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } })
-        ]);
+        const [integrationRes, numbersRes, telnyxIntRes, telnyxNumRes, zadarmaIntRes, zadarmaNumRes] =
+          await Promise.all([
+            fetch(API_VOICE_INTEGRATION, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+            fetch(`${API_VOICE_NUMBERS}?provider=twilio`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+            fetch(`${API_VOICE_INTEGRATION}?provider=telnyx`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+            fetch(`${API_VOICE_NUMBERS}?provider=telnyx`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+            fetch(`${API_VOICE_INTEGRATION}?provider=zadarma`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } }),
+            fetch(`${API_VOICE_NUMBERS}?provider=zadarma`, { method: 'GET', headers: { Authorization: `Bearer ${token}` } })
+          ]);
         const integrationData = (await integrationRes.json().catch(() => ({}))) as Record<string, unknown>;
         const numbersData = (await numbersRes.json().catch(() => ({}))) as { items?: Array<Record<string, unknown>> };
         const telnyxData = (await telnyxIntRes.json().catch(() => ({}))) as Record<string, unknown>;
         const telnyxNums = (await telnyxNumRes.json().catch(() => ({}))) as { items?: Array<Record<string, unknown>> };
+        const zadarmaData = (await zadarmaIntRes.json().catch(() => ({}))) as Record<string, unknown>;
+        const zadarmaNums = (await zadarmaNumRes.json().catch(() => ({}))) as { items?: Array<Record<string, unknown>> };
 
         if (cancelled) return;
 
-        const outbound =
-          integrationData.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
+        const outbound: OutboundVoiceProviderPref =
+          integrationData.outboundVoiceProvider === 'telnyx'
+            ? 'telnyx'
+            : integrationData.outboundVoiceProvider === 'zadarma'
+              ? 'zadarma'
+              : 'twilio';
         setVoiceState({
           configured: integrationData.configured === true,
           enabled: integrationData.enabled === true,
@@ -183,6 +262,59 @@ export function useVoiceTelephonyData(userUid: string | undefined) {
             provider: String(x.provider ?? 'telnyx')
           }))
         );
+        setZadarmaState({
+          configured: zadarmaData.configured === true,
+          enabled: zadarmaData.enabled === true,
+          keyMasked: (zadarmaData.keyMasked as string) ?? null,
+          secretMasked: (zadarmaData.secretMasked as string) ?? null,
+          callbackExtension: (zadarmaData.callbackExtension as string) ?? null,
+          predicted: zadarmaData.predicted === true,
+          connectionStatus:
+            (zadarmaData.connectionStatus as ZadarmaVoiceState['connectionStatus']) ?? 'not_connected',
+          connectionError: (zadarmaData.connectionError as string) ?? null,
+          voiceReady: zadarmaData.voiceReady === true,
+          hasDefaultOutbound: zadarmaData.hasDefaultOutbound === true,
+          hasAnyNumbers: zadarmaData.hasAnyNumbers === true,
+          readinessMessages: Array.isArray(zadarmaData.readinessMessages)
+            ? (zadarmaData.readinessMessages as string[])
+            : [],
+          blockingReason: (zadarmaData.blockingReason as string) ?? null,
+          lastCheckedAt: (zadarmaData.lastCheckedAt as string) ?? null,
+          lastSyncedAt: (zadarmaData.lastSyncedAt as string) ?? null,
+          providerWebhookLastErrorCode: (zadarmaData.providerWebhookLastErrorCode as string) ?? null,
+          providerWebhookLastErrorAt: (zadarmaData.providerWebhookLastErrorAt as string) ?? null,
+          webhookSignatureOk: zadarmaData.webhookSignatureOk !== false,
+          outboundWebhookUrlHint:
+            typeof zadarmaData.outboundWebhookUrlHint === 'string' ? zadarmaData.outboundWebhookUrlHint : null,
+          zdEchoNote: typeof zadarmaData.zdEchoNote === 'string' ? zadarmaData.zdEchoNote : null,
+          apiKeySet: zadarmaData.apiKeySet === true,
+          apiSecretSet: zadarmaData.apiSecretSet === true,
+          extensionSet: zadarmaData.extensionSet === true,
+          webhookUrlHintReady: zadarmaData.webhookUrlHintReady === true,
+          defaultOutboundSelected: zadarmaData.defaultOutboundSelected === true,
+          lastWebhookReceivedAt: (zadarmaData.lastWebhookReceivedAt as string) ?? null,
+          lastWebhookEventType: (zadarmaData.lastWebhookEventType as string) ?? null,
+          lastWebhookSignatureOk:
+            zadarmaData.lastWebhookSignatureOk === true || zadarmaData.lastWebhookSignatureOk === false
+              ? zadarmaData.lastWebhookSignatureOk
+              : null,
+          lastOutboundAttemptAt: (zadarmaData.lastOutboundAttemptAt as string) ?? null,
+          lastOutboundOk:
+            zadarmaData.lastOutboundOk === true || zadarmaData.lastOutboundOk === false
+              ? zadarmaData.lastOutboundOk
+              : null,
+          lastOutboundFriendlyCode: (zadarmaData.lastOutboundFriendlyCode as string) ?? null
+        });
+        setZadarmaNumbers(
+          (zadarmaNums.items ?? []).map((x) => ({
+            id: String(x.id ?? ''),
+            e164: String(x.e164 ?? ''),
+            label: (x.label as string) ?? null,
+            isDefault: x.isDefault === true,
+            isActive: x.isActive !== false,
+            provider: String(x.provider ?? 'zadarma')
+          }))
+        );
       } catch {
         if (!cancelled) setLoadError('Не удалось загрузить Voice настройки');
       } finally {
@@ -198,8 +330,10 @@ export function useVoiceTelephonyData(userUid: string | undefined) {
   return {
     voiceState,
     telnyxState,
+    zadarmaState,
     voiceNumbers,
     telnyxNumbers,
+    zadarmaNumbers,
     loading,
     loadError,
     refetch

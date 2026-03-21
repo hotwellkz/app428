@@ -1,7 +1,15 @@
 import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
-import { getCompanyIdForUser, verifyIdToken, getDb, getVoiceIntegration, mergeVoiceIntegrationTelnyx } from './lib/firebaseAdmin';
+import {
+  getCompanyIdForUser,
+  verifyIdToken,
+  getDb,
+  getVoiceIntegration,
+  mergeVoiceIntegrationTelnyx,
+  mergeVoiceIntegrationZadarma
+} from './lib/firebaseAdmin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { fetchTelnyxPhoneNumbers } from './lib/voice/providers/telnyxVoiceProvider';
+import { fetchZadarmaPhoneNumbers } from './lib/voice/providers/zadarmaVoiceProvider';
 
 const CORS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -62,14 +70,14 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         capabilities: (x.capabilities as Record<string, unknown>) ?? null
       };
     });
-    if (providerFilter === 'twilio' || providerFilter === 'telnyx') {
+    if (providerFilter === 'twilio' || providerFilter === 'telnyx' || providerFilter === 'zadarma') {
       items = items.filter((it) => String(it.provider ?? 'twilio') === providerFilter);
     }
     return json(200, { items });
   }
 
   let body: {
-    action?: 'upsert' | 'set_default' | 'toggle_active' | 'sync_telnyx';
+    action?: 'upsert' | 'set_default' | 'toggle_active' | 'sync_telnyx' | 'sync_zadarma';
     numberId?: string;
     e164?: string;
     label?: string | null;
@@ -85,6 +93,76 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   }
 
   const action = body.action ?? 'upsert';
+
+  if (action === 'sync_zadarma') {
+    const row = await getVoiceIntegration(companyId);
+    const key = row?.zadarmaKey?.trim() ?? '';
+    const secret = row?.zadarmaSecret?.trim() ?? '';
+    if (!key || !secret) {
+      return json(400, {
+        ok: false,
+        error: 'Сохраните Zadarma Key и Secret в разделе Интеграций',
+        code: 'provider_auth_error'
+      });
+    }
+    const sync = await fetchZadarmaPhoneNumbers(key, secret);
+    if (!sync.ok) {
+      return json(400, {
+        ok: false,
+        error: sync.error,
+        code: 'provider_api_error',
+        imported: 0,
+        updated: 0
+      });
+    }
+    if (sync.numbers.length === 0) {
+      await mergeVoiceIntegrationZadarma(companyId, { zadarmaLastSyncedAt: Timestamp.now() });
+      return json(200, {
+        ok: true,
+        imported: 0,
+        updated: 0,
+        total: 0,
+        empty: true,
+        message: 'В Zadarma не найдено подключённых виртуальных номеров (direct_numbers)'
+      });
+    }
+    let imported = 0;
+    let updated = 0;
+    for (const n of sync.numbers) {
+      const safeExt = n.externalNumberId.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const numberId = `zadarma_${safeExt}`;
+      const ref = col.doc(numberId);
+      const prev = await ref.get();
+      const exists = prev.exists;
+      await ref.set(
+        {
+          companyId,
+          e164: n.e164,
+          label: n.label,
+          provider: 'zadarma',
+          externalNumberId: n.externalNumberId,
+          countryCode: n.countryCode,
+          isActive: n.active,
+          readinessStatus: n.readinessStatus,
+          capabilities: n.capabilities,
+          updatedAt: FieldValue.serverTimestamp(),
+          ...(exists ? {} : { isDefault: false, createdAt: FieldValue.serverTimestamp() })
+        },
+        { merge: true }
+      );
+      if (exists) updated += 1;
+      else imported += 1;
+    }
+    await mergeVoiceIntegrationZadarma(companyId, { zadarmaLastSyncedAt: Timestamp.now() });
+    return json(200, {
+      ok: true,
+      imported,
+      updated,
+      total: sync.numbers.length,
+      empty: false,
+      message: `Синхронизировано номеров Zadarma: ${sync.numbers.length}`
+    });
+  }
 
   if (action === 'sync_telnyx') {
     const row = await getVoiceIntegration(companyId);

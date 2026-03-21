@@ -15,6 +15,7 @@ import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
 import { getAuthToken } from '../../lib/firebase/auth';
 import { useAIConfigured } from '../../hooks/useAIConfigured';
 import { transcribeVoiceBatch, getVoiceMessagesToTranscribe, type TranscribeVoiceBatchResult } from '../../utils/transcribeVoiceBatch';
+import { getMessageTextContentForAi } from '../../utils/whatsappAiMessageContent';
 import { capMessagesForTransport } from '../../utils/buildAiReplyContext';
 import { detectRuKzLang, getTargetLangForTranslate, translateRuKz } from '../../utils/translateRuKz';
 import toast from 'react-hot-toast';
@@ -1056,15 +1057,15 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
   /** Оптимистичные расшифровки (пока Firestore не обновился) */
   const [transcriptionUpdates, setTranscriptionUpdates] = useState<Record<string, string>>({});
 
-  /** Голосовые (аудио) без расшифровки для текущего чата. Во время batch не исключаем по transcribingId. */
+  /** Голосовые (audio/voice) без transcript для текущего чата. Плейсхолдер в text не считается расшифровкой. */
   const voiceToTranscribe = React.useMemo(() => {
     const list: { message: WhatsAppMessage; att: MessageAttachment }[] = [];
     for (const m of messages) {
       if (m.deleted) continue;
-      const audioAtt = m.attachments?.find((a) => a.type === 'audio');
+      const audioAtt = m.attachments?.find((a) => a.type === 'audio' || a.type === 'voice');
       if (!audioAtt?.url) continue;
-      const hasText = (transcriptionUpdates[m.id] ?? m.transcription ?? '').trim().length > 0;
-      if (hasText) continue;
+      const hasTranscript = (transcriptionUpdates[m.id] ?? m.transcription ?? '').trim().length > 0;
+      if (hasTranscript) continue;
       list.push({ message: m, att: audioAtt });
     }
     return list;
@@ -1078,7 +1079,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
   }, [voiceToTranscribe, transcribingId, batchTranscribeProgress]);
 
   const hasAnyVoiceInChat = React.useMemo(
-    () => messages.some((m) => !m.deleted && m.attachments?.some((a) => a.type === 'audio')),
+    () => messages.some((m) => !m.deleted && m.attachments?.some((a) => a.type === 'audio' || a.type === 'voice')),
     [messages]
   );
 
@@ -1122,7 +1123,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
       const chronological = messages
         .map((m) => ({
           ...m,
-          _content: (mergedUpdates[m.id] ?? m.transcription ?? m.text ?? '').trim()
+          _content: getMessageTextContentForAi(m, mergedUpdates)
         }))
         .filter((m) => m._content.length > 0 && !m.deleted);
 
@@ -1312,7 +1313,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
       : voiceToTranscribe;
     if (batchTranscribeRunningRef.current || toProcess.length === 0) return;
     const totalVoiceInChat = messages.filter(
-      (m) => !m.deleted && m.attachments?.some((a) => a.type === 'audio')
+      (m) => !m.deleted && m.attachments?.some((a) => a.type === 'audio' || a.type === 'voice')
     ).length;
     const alreadyHadTranscription = totalVoiceInChat - toProcess.length;
     batchTranscribeRunningRef.current = true;

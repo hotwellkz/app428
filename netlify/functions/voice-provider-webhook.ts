@@ -1,6 +1,6 @@
 import type { Handler, HandlerEvent, HandlerResponse } from '@netlify/functions';
 import { Timestamp } from 'firebase-admin/firestore';
-import { mergeVoiceIntegrationTelnyx } from './lib/firebaseAdmin';
+import { mergeVoiceIntegrationTelnyx, mergeVoiceIntegrationZadarma } from './lib/firebaseAdmin';
 import { loadVoiceProviderRuntimeConfig } from './lib/voice/providerConfig';
 import { getVoiceProviderAdapter } from './lib/voice/voiceProviderAdapter';
 import { ingestNormalizedVoiceEvents } from './lib/voice/voiceWebhookIngest';
@@ -8,6 +8,7 @@ import { voiceFriendlyMessageRu } from './lib/voice/voiceProviderFriendlyCodes';
 import { adminUpdateVoiceCallSession } from './lib/voice/voiceFirestoreAdmin';
 import { TwilioVoiceProvider } from './lib/voice/providers/twilioVoiceProvider';
 import { TelnyxVoiceProvider, TelnyxWebhookSignatureError } from './lib/voice/providers/telnyxVoiceProvider';
+import { ZadarmaVoiceProvider, ZadarmaWebhookSignatureError } from './lib/voice/providers/zadarmaVoiceProvider';
 
 function truthyEnv(key: string): boolean {
   const v = process.env[key];
@@ -81,8 +82,111 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: { ...jsonHeaders, 'Access-Control-Allow-Origin': '*' }, body: '' };
   }
+
+  /** Проверка URL в кабинете Zadarma (GET ?zd_echo=…) — см. документацию Zadarma API / webhook. */
+  if (event.httpMethod === 'GET') {
+    const zd = event.queryStringParameters?.zd_echo;
+    if (zd != null && zd !== '') {
+      return {
+        statusCode: 200,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Access-Control-Allow-Origin': '*' },
+        body: zd
+      };
+    }
+    return { statusCode: 405, headers: jsonHeaders, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+  }
+
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, headers: jsonHeaders, body: JSON.stringify({ error: 'Method Not Allowed' }) };
+  }
+
+  const sigZ = rawHeaders['signature'] ?? rawHeaders['Signature'];
+  const isZadarmaWebhook = !!(
+    sigZ?.trim() &&
+    (bodyRaw.includes('NOTIFY_') || bodyRaw.includes('event=NOTIFY'))
+  );
+
+  // --- Zadarma PBX notifications: POST + заголовок Signature + NOTIFY_* ---
+  if (isZadarmaWebhook && !isTwilioWebhook) {
+    const zOk = (): HandlerResponse => ({
+      statusCode: 200,
+      headers: { ...jsonHeaders, 'Access-Control-Allow-Origin': '*' },
+      body: JSON.stringify({ status: 'ok' })
+    });
+    try {
+      const config = loadVoiceProviderRuntimeConfig();
+      const adapter = new ZadarmaVoiceProvider(config);
+      const events = await adapter.handleWebhook({
+        rawBody: event.body ?? '',
+        headers: rawHeaders,
+        queryParams: (event.queryStringParameters ?? {}) as Record<string, string | undefined>,
+        requestUrl: event.rawUrl,
+        config
+      });
+      const cid = String(event.queryStringParameters?.companyId ?? '').trim();
+      const { results, unknownOrUnmatched } = await ingestNormalizedVoiceEvents(events);
+      const lastEv = events.length > 0 ? events[events.length - 1] : null;
+      const allEventsUnmatched =
+        events.length > 0 && results.length > 0 && results.every((r) => !r.ok);
+      if (cid) {
+        if (allEventsUnmatched) {
+          await mergeVoiceIntegrationZadarma(cid, {
+            zadarmaWebhookLastErrorCode: 'webhook_match_failed',
+            zadarmaWebhookLastErrorAt: Timestamp.now(),
+            zadarmaWebhookLastErrorDetail: 'Нет сессии CRM для события Zadarma (проверьте URL с companyId и время звонка).',
+            zadarmaLastWebhookAt: Timestamp.now(),
+            zadarmaLastWebhookEventType: lastEv?.providerEventType ?? null,
+            zadarmaLastWebhookSignatureOk: true
+          });
+        } else {
+          await mergeVoiceIntegrationZadarma(cid, {
+            zadarmaWebhookLastErrorCode: null,
+            zadarmaWebhookLastErrorAt: null,
+            zadarmaWebhookLastErrorDetail: null,
+            zadarmaLastWebhookAt: Timestamp.now(),
+            zadarmaLastWebhookEventType: lastEv?.providerEventType ?? null,
+            zadarmaLastWebhookSignatureOk: true
+          });
+        }
+      }
+      console.log(
+        JSON.stringify({
+          tag: 'voice.webhook.zadarma.processed',
+          received: events.length,
+          processed: results.length,
+          unknownOrUnmatched,
+          allEventsUnmatched
+        })
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      try {
+        if (e instanceof ZadarmaWebhookSignatureError) {
+          const companyId = String(event.queryStringParameters?.companyId ?? '').trim();
+          if (companyId) {
+            await mergeVoiceIntegrationZadarma(companyId, {
+              zadarmaWebhookLastErrorCode: 'webhook_signature_invalid',
+              zadarmaWebhookLastErrorAt: Timestamp.now(),
+              zadarmaWebhookLastErrorDetail: e.verifyReason,
+              zadarmaLastWebhookSignatureOk: false
+            });
+          }
+        } else if (msg.includes('Zadarma:')) {
+          const companyId = String(event.queryStringParameters?.companyId ?? '').trim();
+          if (companyId) {
+            await mergeVoiceIntegrationZadarma(companyId, {
+              zadarmaWebhookLastErrorCode: 'provider_webhook_error',
+              zadarmaWebhookLastErrorAt: Timestamp.now(),
+              zadarmaWebhookLastErrorDetail: msg.slice(0, 200)
+            });
+          }
+        }
+      } catch (mergeErr) {
+        console.log(JSON.stringify({ tag: 'voice.webhook.zadarma.merge_error', error: String(mergeErr) }));
+      }
+      console.log(JSON.stringify({ tag: 'voice.webhook.zadarma.error', error: msg }));
+    }
+    return zOk();
   }
 
   // --- Telnyx: всегда HTTP 200 + { status: "ok" }; ошибки только в логах / Firestore (readiness) ---

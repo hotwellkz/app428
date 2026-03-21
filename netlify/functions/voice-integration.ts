@@ -6,6 +6,7 @@ import {
   setVoiceIntegration,
   getDb,
   mergeVoiceIntegrationTelnyx,
+  mergeVoiceIntegrationZadarma,
   setOutboundVoiceProviderPreference,
   verifyIdToken,
   type VoiceOutboundProviderPreference,
@@ -18,6 +19,10 @@ import {
   validateTelnyxCallControlWebhookForCrm,
   normalizeTelnyxCallControlApplicationId
 } from './lib/voice/providers/telnyxVoiceProvider';
+import {
+  fetchZadarmaPhoneNumbers,
+  probeZadarmaCredentials
+} from './lib/voice/providers/zadarmaVoiceProvider';
 import { voiceFriendlyMessageRu } from './lib/voice/voiceProviderFriendlyCodes';
 import { buildVoiceProviderWebhookUrl, loadVoiceProviderRuntimeConfig } from './lib/voice/providerConfig';
 
@@ -54,7 +59,7 @@ async function validateTelnyxCallControlId(
 
 async function getDefaultNumberStatus(
   companyId: string,
-  provider: 'twilio' | 'telnyx'
+  provider: 'twilio' | 'telnyx' | 'zadarma'
 ): Promise<{ hasDefaultOutbound: boolean; defaultNumberId: string | null }> {
   const db = getDb();
   const snap = await db.collection('voiceNumbers').where('companyId', '==', companyId).where('isDefault', '==', true).get();
@@ -165,6 +170,124 @@ async function buildTelnyxReadinessSnapshot(
   };
 }
 
+async function buildZadarmaReadinessSnapshot(
+  companyId: string,
+  row: VoiceIntegrationRow | null
+): Promise<Record<string, unknown>> {
+  const db = getDb();
+  const allNums = await db.collection('voiceNumbers').where('companyId', '==', companyId).get();
+  const hasAnyNumbers = allNums.docs.some(
+    (d) => String(d.data()?.provider ?? 'twilio').trim() === 'zadarma'
+  );
+  const num = await getDefaultNumberStatus(companyId, 'zadarma');
+  const hasKey = !!(row?.zadarmaKey?.trim());
+  const hasSecret = !!(row?.zadarmaSecret?.trim());
+  const hasExt = !!(row?.zadarmaCallbackExtension?.trim());
+  const connected = row?.zadarmaConnectionStatus === 'connected';
+  const enabled = row?.zadarmaEnabled === true;
+  const configured = !!(row && (hasKey || hasSecret || hasExt));
+
+  const readinessMessages: string[] = [];
+  if (!hasKey) readinessMessages.push('Сохраните Zadarma API Key (user key).');
+  if (!hasSecret) readinessMessages.push('Сохраните Zadarma Secret Key.');
+  if (!enabled) readinessMessages.push('Включите интеграцию Zadarma.');
+  if (row?.zadarmaConnectionStatus === 'invalid_config') {
+    readinessMessages.push(row?.zadarmaConnectionError || 'Проверка не пройдена — нажмите «Проверить подключение».');
+  }
+  if (hasKey && hasSecret && enabled && row?.zadarmaConnectionStatus === 'not_connected') {
+    readinessMessages.push('Нажмите «Проверить подключение» после ввода ключей.');
+  }
+  if (!hasExt) {
+    readinessMessages.push(
+      'Укажите внутренний номер АТС (extension) для CallBack — первый вызов request/callback (параметр from).'
+    );
+  }
+  if (!hasAnyNumbers) {
+    readinessMessages.push('Нет номеров Zadarma в CRM — нажмите «Синхронизировать номера».');
+  }
+  if (!num.hasDefaultOutbound) {
+    readinessMessages.push('Не выбран исходящий номер Zadarma по умолчанию.');
+  }
+
+  const webhookErr = row?.zadarmaWebhookLastErrorCode ?? null;
+  const webhookBlocksReady =
+    webhookErr === 'provider_webhook_signature_invalid' ||
+    webhookErr === 'webhook_signature_invalid' ||
+    webhookErr === 'provider_webhook_error' ||
+    webhookErr === 'webhook_match_failed';
+  if (webhookErr && webhookBlocksReady) {
+    readinessMessages.unshift(voiceFriendlyMessageRu(webhookErr));
+  }
+
+  const cfg = loadVoiceProviderRuntimeConfig();
+  const whBuilt = buildVoiceProviderWebhookUrl(cfg);
+  const outboundWebhookBaseUrl = whBuilt.startsWith('http') ? whBuilt : null;
+  const webhookHint = outboundWebhookBaseUrl
+    ? `${outboundWebhookBaseUrl}?companyId=${encodeURIComponent(companyId)}`
+    : null;
+
+  readinessMessages.push(
+    'В личном кабинете Zadarma → Настройки → Уведомления АТС укажите URL webhook с параметром companyId (см. подсказку ниже) и включите NOTIFY_OUT_START / NOTIFY_OUT_END.'
+  );
+
+  const voiceReady =
+    hasKey &&
+    hasSecret &&
+    enabled &&
+    connected &&
+    hasExt &&
+    num.hasDefaultOutbound &&
+    !webhookBlocksReady;
+
+  const blockingReason: string | null = voiceReady
+    ? null
+    : webhookBlocksReady && webhookErr
+      ? voiceFriendlyMessageRu(webhookErr)
+      : readinessMessages[0] ?? 'Интеграция Zadarma не готова к исходящим звонкам.';
+
+  return {
+    provider: 'zadarma',
+    providerId: 'zadarma',
+    configured,
+    enabled,
+    connectionStatus: row?.zadarmaConnectionStatus ?? 'not_connected',
+    connectionError: row?.zadarmaConnectionError ?? null,
+    keyMasked: row?.zadarmaKeyMasked ?? null,
+    secretMasked: row?.zadarmaSecretMasked ?? null,
+    callbackExtension: row?.zadarmaCallbackExtension ?? null,
+    predicted: row?.zadarmaPredicted === true,
+    hasAnyNumbers,
+    hasDefaultOutbound: num.hasDefaultOutbound,
+    defaultNumberId: num.defaultNumberId,
+    voiceReady,
+    readinessMessages,
+    blockingReason,
+    lastCheckedAt: row?.zadarmaLastCheckedAt?.toDate?.()?.toISOString?.() ?? null,
+    lastSyncedAt: row?.zadarmaLastSyncedAt?.toDate?.()?.toISOString?.() ?? null,
+    providerWebhookLastErrorCode: webhookErr,
+    providerWebhookLastErrorAt: row?.zadarmaWebhookLastErrorAt?.toDate?.()?.toISOString?.() ?? null,
+    webhookSignatureOk: !webhookBlocksReady,
+    outboundWebhookUrlHint: webhookHint,
+    zdEchoNote:
+      'Для проверки URL в Zadarma поддерживается GET ?zd_echo=… — endpoint voice-provider-webhook отвечает эхом.',
+    apiKeySet: hasKey,
+    apiSecretSet: hasSecret,
+    extensionSet: hasExt,
+    webhookUrlHintReady: !!webhookHint,
+    defaultOutboundSelected: row?.outboundVoiceProvider === 'zadarma',
+    lastWebhookReceivedAt: row?.zadarmaLastWebhookAt?.toDate?.()?.toISOString?.() ?? null,
+    lastWebhookEventType: row?.zadarmaLastWebhookEventType ?? null,
+    lastWebhookSignatureOk:
+      row?.zadarmaLastWebhookSignatureOk === true || row?.zadarmaLastWebhookSignatureOk === false
+        ? row.zadarmaLastWebhookSignatureOk
+        : null,
+    lastOutboundAttemptAt: row?.zadarmaLastOutboundAttemptAt?.toDate?.()?.toISOString?.() ?? null,
+    lastOutboundOk:
+      row?.zadarmaLastOutboundOk === true || row?.zadarmaLastOutboundOk === false ? row.zadarmaLastOutboundOk : null,
+    lastOutboundFriendlyCode: row?.zadarmaLastOutboundFriendlyCode ?? null
+  };
+}
+
 export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResponse> => {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers: CORS, body: '' };
   if (event.httpMethod !== 'GET' && event.httpMethod !== 'POST') return json(405, { error: 'Method Not Allowed' });
@@ -191,15 +314,31 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     return json(200, snapshot);
   }
 
+  if (event.httpMethod === 'GET' && providerQ === 'zadarma') {
+    const row = await getVoiceIntegration(companyId);
+    const snapshot = await buildZadarmaReadinessSnapshot(companyId, row);
+    return json(200, snapshot);
+  }
+
   if (event.httpMethod === 'GET') {
     const row = await getVoiceIntegration(companyId);
     const num = await getDefaultNumberStatus(companyId, 'twilio');
     const telnyxSnap = await buildTelnyxReadinessSnapshot(companyId, row);
-    const outbound: VoiceOutboundProviderPreference = row?.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
+    const zadarmaSnap = await buildZadarmaReadinessSnapshot(companyId, row);
+    const outbound: VoiceOutboundProviderPreference =
+      row?.outboundVoiceProvider === 'telnyx'
+        ? 'telnyx'
+        : row?.outboundVoiceProvider === 'zadarma'
+          ? 'zadarma'
+          : 'twilio';
     const connected = !!(row?.enabled && row.accountSid && row.authToken);
     const twilioReady = connected && num.hasDefaultOutbound;
     const activeOutboundVoiceReady =
-      outbound === 'telnyx' ? telnyxSnap.voiceReady === true : twilioReady;
+      outbound === 'telnyx'
+        ? telnyxSnap.voiceReady === true
+        : outbound === 'zadarma'
+          ? zadarmaSnap.voiceReady === true
+          : twilioReady;
     return json(200, {
       provider: 'twilio',
       providerId: 'twilio',
@@ -217,6 +356,7 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       voiceReady: twilioReady,
       outboundVoiceProvider: outbound,
       telnyx: telnyxSnap,
+      zadarma: zadarmaSnap,
       /** Активный outbound-провайдер: можно ли запускать исходящий звонок сейчас. */
       activeOutboundVoiceReady: activeOutboundVoiceReady
     });
@@ -243,11 +383,110 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
 
   if (body.action === 'set_outbound_provider') {
     const pref = body.outboundVoiceProvider;
-    if (pref !== 'twilio' && pref !== 'telnyx') {
-      return json(400, { error: 'outboundVoiceProvider must be twilio or telnyx' });
+    if (pref !== 'twilio' && pref !== 'telnyx' && pref !== 'zadarma') {
+      return json(400, { error: 'outboundVoiceProvider must be twilio, telnyx or zadarma' });
     }
     await setOutboundVoiceProviderPreference(companyId, pref);
     return json(200, { ok: true, outboundVoiceProvider: pref });
+  }
+
+  if (String(body.provider ?? '').toLowerCase() === 'zadarma') {
+    const existingRow = await getVoiceIntegration(companyId);
+    const keyFromBody = (body as { zadarmaKey?: string }).zadarmaKey ?? '';
+    const secretFromBody = (body as { zadarmaSecret?: string }).zadarmaSecret ?? '';
+    const extFromBody = (body as { zadarmaCallbackExtension?: string | null }).zadarmaCallbackExtension;
+    const predictedFromBody = (body as { zadarmaPredicted?: boolean }).zadarmaPredicted;
+
+    const key = String(keyFromBody).trim() || existingRow?.zadarmaKey?.trim() || '';
+    const secret = String(secretFromBody).trim() || existingRow?.zadarmaSecret?.trim() || '';
+    const testOnly = body.testOnly === true;
+    const enabled = body.enabled !== false;
+    const callbackExtension =
+      extFromBody !== undefined
+        ? String(extFromBody ?? '')
+            .trim()
+            ? String(extFromBody).trim()
+            : null
+        : undefined;
+
+    if (testOnly) {
+      if (!key || !secret) {
+        return json(400, {
+          ok: false,
+          error: 'Для проверки Zadarma укажите Key и Secret в полях или сохраните их ранее',
+          code: 'zadarma_credentials_missing'
+        });
+      }
+      const probe = await probeZadarmaCredentials(key, secret);
+      if (!probe.ok) {
+        await mergeVoiceIntegrationZadarma(companyId, {
+          zadarmaConnectionStatus: 'invalid_config',
+          zadarmaConnectionError: probe.error,
+          zadarmaLastCheckedAt: Timestamp.now()
+        });
+        return json(400, { ok: false, error: probe.error, code: 'zadarma_auth_failed' });
+      }
+      const nums = await fetchZadarmaPhoneNumbers(key, secret);
+      const numCount = nums.ok ? nums.numbers.length : 0;
+      await mergeVoiceIntegrationZadarma(companyId, {
+        zadarmaConnectionStatus: 'connected',
+        zadarmaConnectionError: null,
+        zadarmaLastCheckedAt: Timestamp.now(),
+        zadarmaWebhookLastErrorCode: null,
+        zadarmaWebhookLastErrorAt: null,
+        zadarmaWebhookLastErrorDetail: null
+      });
+      return json(200, {
+        ok: true,
+        message:
+          numCount > 0
+            ? `Zadarma: ключи OK, в аккаунте найдено виртуальных номеров: ${numCount}`
+            : 'Zadarma: ключи OK (виртуальные номера не найдены — проверьте раздел Numbers в Zadarma)',
+        directNumbersCount: numCount
+      });
+    }
+
+    if (!key || !secret) {
+      return json(400, {
+        error: 'Укажите Zadarma Key и Secret (при первом подключении) или выполните проверку после сохранения.',
+        code: 'zadarma_credentials_missing'
+      });
+    }
+
+    const probe = await probeZadarmaCredentials(key, secret);
+    if (!probe.ok) {
+      await mergeVoiceIntegrationZadarma(companyId, {
+        zadarmaEnabled: false,
+        zadarmaKey: key,
+        zadarmaSecret: secret,
+        zadarmaConnectionStatus: 'invalid_config',
+        zadarmaConnectionError: probe.error,
+        zadarmaLastCheckedAt: Timestamp.now(),
+        ...(callbackExtension !== undefined ? { zadarmaCallbackExtension: callbackExtension } : {}),
+        ...(predictedFromBody !== undefined ? { zadarmaPredicted: predictedFromBody === true } : {})
+      });
+      return json(400, { ok: false, error: probe.error, code: 'zadarma_auth_failed' });
+    }
+
+    await mergeVoiceIntegrationZadarma(companyId, {
+      zadarmaEnabled: enabled,
+      zadarmaKey: key,
+      zadarmaSecret: secret,
+      zadarmaConnectionStatus: 'connected',
+      zadarmaConnectionError: null,
+      zadarmaLastCheckedAt: Timestamp.now(),
+      zadarmaWebhookLastErrorCode: null,
+      zadarmaWebhookLastErrorAt: null,
+      zadarmaWebhookLastErrorDetail: null,
+      ...(callbackExtension !== undefined ? { zadarmaCallbackExtension: callbackExtension } : {}),
+      ...(predictedFromBody !== undefined ? { zadarmaPredicted: predictedFromBody === true } : {}),
+      ...(body.outboundVoiceProvider === 'twilio' ||
+      body.outboundVoiceProvider === 'telnyx' ||
+      body.outboundVoiceProvider === 'zadarma'
+        ? { outboundVoiceProvider: body.outboundVoiceProvider }
+        : {})
+    });
+    return json(200, { ok: true, message: 'Zadarma интеграция сохранена' });
   }
 
   if (String(body.provider ?? '').toLowerCase() === 'telnyx') {
@@ -352,7 +591,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       telnyxWebhookLastErrorAt: null,
       telnyxWebhookLastErrorDetail: null,
       ...(connectionId !== undefined ? { telnyxConnectionId: connectionId } : {}),
-      ...(body.outboundVoiceProvider === 'twilio' || body.outboundVoiceProvider === 'telnyx'
+      ...(body.outboundVoiceProvider === 'twilio' ||
+      body.outboundVoiceProvider === 'telnyx' ||
+      body.outboundVoiceProvider === 'zadarma'
         ? { outboundVoiceProvider: body.outboundVoiceProvider }
         : {})
     });
@@ -425,7 +666,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         lastCheckedAt: Timestamp.now(),
         twilioAccountType: probe.accountType,
         twilioAccountStatus: probe.accountStatus,
-        ...(body.outboundVoiceProvider === 'twilio' || body.outboundVoiceProvider === 'telnyx'
+        ...(body.outboundVoiceProvider === 'twilio' ||
+        body.outboundVoiceProvider === 'telnyx' ||
+        body.outboundVoiceProvider === 'zadarma'
           ? { outboundVoiceProvider: body.outboundVoiceProvider }
           : {})
       });

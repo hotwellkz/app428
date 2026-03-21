@@ -33,6 +33,7 @@ import {
   type PrepareForAnalysisResult,
   type PrepareForAnalysisStatus,
 } from '../../utils/transcribeVoiceBatch';
+import { getMessageTextContentForAi } from '../../utils/whatsappAiMessageContent';
 import type { WhatsAppAiRuntime, WhatsAppAiRuntimeMode } from '../../types/whatsappAiRuntime';
 import { defaultWhatsAppAiRuntime } from '../../types/whatsappAiRuntime';
 import type { CrmAiBot } from '../../types/crmAiBot';
@@ -693,7 +694,7 @@ const ClientInfoPanel: React.FC<ClientInfoPanelProps> = ({
     const recent = messages
       .map((m) => ({
         ...m,
-        _content: (m.transcription ?? m.text ?? '').trim()
+        _content: getMessageTextContentForAi(m)
       }))
       .filter((m) => m._content.length > 0 && !m.deleted)
       .slice(-30);

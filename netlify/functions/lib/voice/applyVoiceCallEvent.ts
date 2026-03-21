@@ -112,7 +112,7 @@ export function applyNormalizedVoiceEvent(
     }
 
     case 'provider.busy': {
-      if (currentStatus !== 'ringing' && currentStatus !== 'dialing') return noop();
+      if (currentStatus !== 'ringing' && currentStatus !== 'dialing' && currentStatus !== 'queued') return noop();
       return {
         fromStatus,
         toStatus: 'busy',
@@ -126,7 +126,7 @@ export function applyNormalizedVoiceEvent(
     }
 
     case 'provider.no_answer': {
-      if (currentStatus !== 'ringing' && currentStatus !== 'dialing') return noop();
+      if (currentStatus !== 'ringing' && currentStatus !== 'dialing' && currentStatus !== 'queued') return noop();
       return {
         fromStatus,
         toStatus: 'no_answer',

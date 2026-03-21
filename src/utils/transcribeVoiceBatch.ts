@@ -95,8 +95,11 @@ export async function transcribeVoiceBatch(
 }
 
 /**
- * По списку сообщений собрать элементы, требующие расшифровки (голосовые без текста).
- * Учитывает type === 'audio' и type === 'voice' (голосовые/аудио).
+ * По списку сообщений собрать элементы, требующие расшифровки (голосовые без готового transcript).
+ * Учитывает type === 'audio' и type === 'voice'.
+ *
+ * Важно: для голосовых поле `text` в БД часто пустое или плейсхолдер — его НЕ считаем заменой расшифровки,
+ * иначе пакетная расшифровка не вызывается и AI не получает смысл сообщения.
  */
 export function getVoiceMessagesToTranscribe(
   messages: Array<{ id: string; transcription?: string | null; text?: string; deleted?: boolean; attachments?: Array<{ type: string; url?: string }> }>
@@ -106,8 +109,8 @@ export function getVoiceMessagesToTranscribe(
     if (m.deleted) continue;
     const audioAtt = m.attachments?.find((a) => a.type === 'audio' || a.type === 'voice');
     if (!audioAtt?.url) continue;
-    const hasText = (m.transcription ?? m.text ?? '').trim().length > 0;
-    if (hasText) continue;
+    const hasTranscript = (m.transcription ?? '').trim().length > 0;
+    if (hasTranscript) continue;
     list.push({ messageId: m.id, audioUrl: audioAtt.url });
   }
   return list;

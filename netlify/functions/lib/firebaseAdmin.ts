@@ -19,9 +19,11 @@ const COLLECTIONS = {
   KASPI_SYNC: 'kaspiSync'
 } as const;
 
-export type VoiceOutboundProviderPreference = 'twilio' | 'telnyx';
+export type VoiceOutboundProviderPreference = 'twilio' | 'telnyx' | 'zadarma';
 
 export type VoiceTelnyxConnectionStatus = 'connected' | 'not_connected' | 'invalid_config';
+
+export type VoiceZadarmaConnectionStatus = 'connected' | 'not_connected' | 'invalid_config';
 
 export interface VoiceIntegrationRow {
   companyId: string;
@@ -58,6 +60,32 @@ export interface VoiceIntegrationRow {
   telnyxWebhookLastErrorAt?: Timestamp | null;
   /** Внутренняя причина (verify reason), не для показа пользователю как есть. */
   telnyxWebhookLastErrorDetail?: string | null;
+  /** Zadarma: ключ API (user key) и секрет из личного кабинета my.zadarma.com/api/ */
+  zadarmaEnabled?: boolean;
+  zadarmaKey?: string;
+  zadarmaKeyMasked?: string | null;
+  zadarmaSecret?: string;
+  zadarmaSecretMasked?: string | null;
+  /** Внутренний номер АТС / SIP, на который сначала приходит CallBack (параметр from в request/callback). */
+  zadarmaCallbackExtension?: string | null;
+  /** Если true — режим predicted (сначала вызывается абонент to). */
+  zadarmaPredicted?: boolean;
+  zadarmaConnectionStatus?: VoiceZadarmaConnectionStatus;
+  zadarmaConnectionError?: string | null;
+  zadarmaLastCheckedAt?: Timestamp | null;
+  zadarmaLastSyncedAt?: Timestamp | null;
+  zadarmaWebhookLastErrorCode?: string | null;
+  zadarmaWebhookLastErrorAt?: Timestamp | null;
+  zadarmaWebhookLastErrorDetail?: string | null;
+  /** Последний успешно принятый webhook Zadarma (после проверки подписи). */
+  zadarmaLastWebhookAt?: Timestamp | null;
+  zadarmaLastWebhookEventType?: string | null;
+  /** Результат последней проверки подписи (true = ок). */
+  zadarmaLastWebhookSignatureOk?: boolean | null;
+  /** Исходящий звонок: попытка и результат (без секретов). */
+  zadarmaLastOutboundAttemptAt?: Timestamp | null;
+  zadarmaLastOutboundOk?: boolean | null;
+  zadarmaLastOutboundFriendlyCode?: string | null;
 }
 
 function maskRight4(value: string): string {
@@ -74,9 +102,11 @@ export async function getVoiceIntegration(companyId: string): Promise<VoiceInteg
   const accountSid = ((d.accountSid as string) ?? '').trim();
   const authToken = ((d.authToken as string) ?? '').trim();
   const telnyxApiKey = ((d.telnyxApiKey as string) ?? '').trim();
+  const zadarmaKey = ((d.zadarmaKey as string) ?? '').trim();
+  const zadarmaSecret = ((d.zadarmaSecret as string) ?? '').trim();
   const outboundRaw = (d.outboundVoiceProvider as string) ?? 'twilio';
   const outboundVoiceProvider: VoiceOutboundProviderPreference =
-    outboundRaw === 'telnyx' ? 'telnyx' : 'twilio';
+    outboundRaw === 'telnyx' ? 'telnyx' : outboundRaw === 'zadarma' ? 'zadarma' : 'twilio';
   return {
     companyId,
     provider: 'twilio',
@@ -104,7 +134,31 @@ export async function getVoiceIntegration(companyId: string): Promise<VoiceInteg
     telnyxLastSyncedAt: (d.telnyxLastSyncedAt as Timestamp) ?? null,
     telnyxWebhookLastErrorCode: (d.telnyxWebhookLastErrorCode as string) ?? null,
     telnyxWebhookLastErrorAt: (d.telnyxWebhookLastErrorAt as Timestamp) ?? null,
-    telnyxWebhookLastErrorDetail: (d.telnyxWebhookLastErrorDetail as string) ?? null
+    telnyxWebhookLastErrorDetail: (d.telnyxWebhookLastErrorDetail as string) ?? null,
+    zadarmaEnabled: d.zadarmaEnabled === true,
+    zadarmaKey,
+    zadarmaKeyMasked: (d.zadarmaKeyMasked as string) ?? (zadarmaKey ? maskRight4(zadarmaKey) : null),
+    zadarmaSecret,
+    zadarmaSecretMasked: (d.zadarmaSecretMasked as string) ?? (zadarmaSecret ? maskRight4(zadarmaSecret) : null),
+    zadarmaCallbackExtension: (d.zadarmaCallbackExtension as string)?.trim() || null,
+    zadarmaPredicted: d.zadarmaPredicted === true,
+    zadarmaConnectionStatus: (d.zadarmaConnectionStatus as VoiceZadarmaConnectionStatus) ?? 'not_connected',
+    zadarmaConnectionError: (d.zadarmaConnectionError as string) ?? null,
+    zadarmaLastCheckedAt: (d.zadarmaLastCheckedAt as Timestamp) ?? null,
+    zadarmaLastSyncedAt: (d.zadarmaLastSyncedAt as Timestamp) ?? null,
+    zadarmaWebhookLastErrorCode: (d.zadarmaWebhookLastErrorCode as string) ?? null,
+    zadarmaWebhookLastErrorAt: (d.zadarmaWebhookLastErrorAt as Timestamp) ?? null,
+    zadarmaWebhookLastErrorDetail: (d.zadarmaWebhookLastErrorDetail as string) ?? null,
+    zadarmaLastWebhookAt: (d.zadarmaLastWebhookAt as Timestamp) ?? null,
+    zadarmaLastWebhookEventType: (d.zadarmaLastWebhookEventType as string) ?? null,
+    zadarmaLastWebhookSignatureOk:
+      d.zadarmaLastWebhookSignatureOk === true || d.zadarmaLastWebhookSignatureOk === false
+        ? d.zadarmaLastWebhookSignatureOk
+        : null,
+    zadarmaLastOutboundAttemptAt: (d.zadarmaLastOutboundAttemptAt as Timestamp) ?? null,
+    zadarmaLastOutboundOk:
+      d.zadarmaLastOutboundOk === true || d.zadarmaLastOutboundOk === false ? d.zadarmaLastOutboundOk : null,
+    zadarmaLastOutboundFriendlyCode: (d.zadarmaLastOutboundFriendlyCode as string) ?? null
   };
 }
 
@@ -229,7 +283,84 @@ export async function setOutboundVoiceProviderPreference(
   companyId: string,
   pref: VoiceOutboundProviderPreference
 ): Promise<void> {
-  await mergeVoiceIntegrationTelnyx(companyId, { outboundVoiceProvider: pref });
+  await mergeVoiceIntegrationZadarma(companyId, { outboundVoiceProvider: pref });
+}
+
+/**
+ * Частичное обновление полей Zadarma и/или предпочтения исходящего провайдера (merge).
+ */
+export async function mergeVoiceIntegrationZadarma(
+  companyId: string,
+  data: {
+    zadarmaEnabled?: boolean;
+    zadarmaKey?: string;
+    zadarmaSecret?: string;
+    zadarmaCallbackExtension?: string | null;
+    zadarmaPredicted?: boolean;
+    zadarmaConnectionStatus?: VoiceZadarmaConnectionStatus;
+    zadarmaConnectionError?: string | null;
+    zadarmaLastCheckedAt?: Timestamp | null;
+    zadarmaLastSyncedAt?: Timestamp | null;
+    zadarmaWebhookLastErrorCode?: string | null;
+    zadarmaWebhookLastErrorAt?: Timestamp | null;
+    zadarmaWebhookLastErrorDetail?: string | null;
+    zadarmaLastWebhookAt?: Timestamp | null;
+    zadarmaLastWebhookEventType?: string | null;
+    zadarmaLastWebhookSignatureOk?: boolean | null;
+    zadarmaLastOutboundAttemptAt?: Timestamp | null;
+    zadarmaLastOutboundOk?: boolean | null;
+    zadarmaLastOutboundFriendlyCode?: string | null;
+    outboundVoiceProvider?: VoiceOutboundProviderPreference;
+  }
+): Promise<void> {
+  const db = getDb();
+  const ref = db.collection(COLLECTIONS.VOICE_INTEGRATIONS).doc(companyId);
+  const snap = await ref.get();
+  const now = Timestamp.now();
+  const payload: Record<string, unknown> = { companyId, updatedAt: now };
+  if (data.zadarmaEnabled !== undefined) payload.zadarmaEnabled = data.zadarmaEnabled;
+  if (data.zadarmaConnectionStatus !== undefined) payload.zadarmaConnectionStatus = data.zadarmaConnectionStatus;
+  if (data.zadarmaConnectionError !== undefined) payload.zadarmaConnectionError = data.zadarmaConnectionError;
+  if (data.zadarmaLastCheckedAt !== undefined) payload.zadarmaLastCheckedAt = data.zadarmaLastCheckedAt;
+  if (data.zadarmaLastSyncedAt !== undefined) payload.zadarmaLastSyncedAt = data.zadarmaLastSyncedAt;
+  if (data.zadarmaWebhookLastErrorCode !== undefined) payload.zadarmaWebhookLastErrorCode = data.zadarmaWebhookLastErrorCode;
+  if (data.zadarmaWebhookLastErrorAt !== undefined) payload.zadarmaWebhookLastErrorAt = data.zadarmaWebhookLastErrorAt;
+  if (data.zadarmaWebhookLastErrorDetail !== undefined) payload.zadarmaWebhookLastErrorDetail = data.zadarmaWebhookLastErrorDetail;
+  if (data.zadarmaLastWebhookAt !== undefined) payload.zadarmaLastWebhookAt = data.zadarmaLastWebhookAt;
+  if (data.zadarmaLastWebhookEventType !== undefined) payload.zadarmaLastWebhookEventType = data.zadarmaLastWebhookEventType;
+  if (data.zadarmaLastWebhookSignatureOk !== undefined) payload.zadarmaLastWebhookSignatureOk = data.zadarmaLastWebhookSignatureOk;
+  if (data.zadarmaLastOutboundAttemptAt !== undefined) payload.zadarmaLastOutboundAttemptAt = data.zadarmaLastOutboundAttemptAt;
+  if (data.zadarmaLastOutboundOk !== undefined) payload.zadarmaLastOutboundOk = data.zadarmaLastOutboundOk;
+  if (data.zadarmaLastOutboundFriendlyCode !== undefined)
+    payload.zadarmaLastOutboundFriendlyCode = data.zadarmaLastOutboundFriendlyCode;
+  if (data.zadarmaCallbackExtension !== undefined) payload.zadarmaCallbackExtension = data.zadarmaCallbackExtension;
+  if (data.zadarmaPredicted !== undefined) payload.zadarmaPredicted = data.zadarmaPredicted;
+  if (data.outboundVoiceProvider !== undefined) payload.outboundVoiceProvider = data.outboundVoiceProvider;
+  if (data.zadarmaKey !== undefined) {
+    const k = data.zadarmaKey.trim();
+    payload.zadarmaKey = k;
+    payload.zadarmaKeyMasked = k ? maskRight4(k) : null;
+  }
+  if (data.zadarmaSecret !== undefined) {
+    const s = data.zadarmaSecret.trim();
+    payload.zadarmaSecret = s;
+    payload.zadarmaSecretMasked = s ? maskRight4(s) : null;
+  }
+  if (!snap.exists) {
+    payload.provider = 'twilio';
+    payload.enabled = false;
+    payload.connectionStatus = 'not_connected';
+    payload.connectionError = null;
+    payload.lastCheckedAt = null;
+    payload.accountSid = '';
+    payload.accountSidMasked = null;
+    payload.authToken = '';
+    payload.authTokenMasked = null;
+    payload.createdAt = now;
+    await ref.set(payload);
+    return;
+  }
+  await ref.update(payload);
 }
 
 /** Режим синхронизации заказов Kaspi */

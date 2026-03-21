@@ -1,5 +1,5 @@
-import { FieldValue } from 'firebase-admin/firestore';
-import { getVoiceIntegration } from '../firebaseAdmin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
+import { getVoiceIntegration, mergeVoiceIntegrationZadarma } from '../firebaseAdmin';
 import {
   adminAppendVoiceCallEvent,
   adminCreateVoiceCallSession,
@@ -23,9 +23,9 @@ export type VoiceOutboundRequestBody = {
   crmClientId?: string | null;
   fromNumberId?: string | null;
   /** Явный исходящий провайдер (multi-provider UI). */
-  outboundVoiceProvider?: 'twilio' | 'telnyx' | null;
+  outboundVoiceProvider?: 'twilio' | 'telnyx' | 'zadarma' | null;
   /** Алиас для outboundVoiceProvider */
-  providerId?: 'twilio' | 'telnyx' | string | null;
+  providerId?: 'twilio' | 'telnyx' | 'zadarma' | string | null;
   metadata?: Record<string, unknown>;
 };
 
@@ -81,8 +81,8 @@ export async function orchestrateVoiceOutbound(
 
   const config = loadVoiceProviderRuntimeConfig();
   const rawProv = body.outboundVoiceProvider ?? body.providerId;
-  const requestedProvider: 'twilio' | 'telnyx' | null =
-    rawProv === 'telnyx' || rawProv === 'twilio' ? rawProv : null;
+  const requestedProvider: 'twilio' | 'telnyx' | 'zadarma' | null =
+    rawProv === 'telnyx' || rawProv === 'twilio' || rawProv === 'zadarma' ? rawProv : null;
 
   let adapter;
   try {
@@ -95,7 +95,7 @@ export async function orchestrateVoiceOutbound(
       message: msg,
       httpStatus: 400,
       friendlyCode: 'provider_connection_missing',
-      hint: 'Включите Telnyx (API Key + Public Key) или выберите Twilio как исходящий провайдер в Интеграциях.'
+      hint: 'Включите нужного провайдера (Twilio / Telnyx / Zadarma) в Интеграциях или смените исходящий канал.'
     };
   }
 
@@ -123,6 +123,31 @@ export async function orchestrateVoiceOutbound(
         httpStatus: 400,
         friendlyCode: 'provider_auth_error',
         hint: integrationRow.telnyxConnectionError ?? undefined
+      };
+    }
+  }
+
+  if (expectedProvider === 'zadarma' && integrationRow) {
+    if (!integrationRow.zadarmaCallbackExtension?.trim()) {
+      return {
+        ok: false,
+        code: 'zadarma_callback_extension_required',
+        message:
+          'Для Zadarma укажите внутренний номер АТС (extension) для первого вызова CallBack — см. поле в Интеграциях.',
+        httpStatus: 400,
+        friendlyCode: 'provider_connection_missing',
+        hint: 'По документации Zadarma это параметр from в request/callback.'
+      };
+    }
+    if (integrationRow.zadarmaConnectionStatus !== 'connected') {
+      return {
+        ok: false,
+        code: 'zadarma_not_ready',
+        message:
+          'Zadarma не готова: нажмите «Проверить подключение» или сохраните корректные Key / Secret.',
+        httpStatus: 400,
+        friendlyCode: 'provider_auth_error',
+        hint: integrationRow.zadarmaConnectionError ?? undefined
       };
     }
   }
@@ -160,7 +185,9 @@ export async function orchestrateVoiceOutbound(
         message:
           expectedProvider === 'telnyx'
             ? 'Нет исходящего номера Telnyx по умолчанию: синхронизируйте номера в Интеграциях и назначьте default.'
-            : 'Нет исходящего номера Twilio по умолчанию: добавьте номер в Интеграциях и назначьте default.',
+            : expectedProvider === 'zadarma'
+              ? 'Нет номера Zadarma по умолчанию: синхронизируйте номера в Интеграциях и назначьте default.'
+              : 'Нет исходящего номера Twilio по умолчанию: добавьте номер в Интеграциях и назначьте default.',
         httpStatus: 400,
         friendlyCode: 'provider_default_number_missing',
         hint: 'Либо передайте fromNumberId явно при запуске звонка.'
@@ -266,6 +293,18 @@ export async function orchestrateVoiceOutbound(
       })
     );
 
+    if (expectedProvider === 'zadarma') {
+      try {
+        await mergeVoiceIntegrationZadarma(companyId, {
+          zadarmaLastOutboundAttemptAt: Timestamp.now(),
+          zadarmaLastOutboundOk: false,
+          zadarmaLastOutboundFriendlyCode: friendly ?? adapterResult.providerFailureCode ?? failCode
+        });
+      } catch {
+        /* ignore merge telemetry */
+      }
+    }
+
     await adminUpdateVoiceCallSession(companyId, callId, {
       status: 'failed',
       endReason: friendly ?? failCode,
@@ -324,7 +363,9 @@ export async function orchestrateVoiceOutbound(
                 ? 401
                 : 400
               : 502
-            : 502;
+            : failCode === 'zadarma_api_error' || failCode.startsWith('zadarma_')
+              ? 400
+              : 502;
     return {
       ok: false,
       code: failCode,
@@ -355,10 +396,27 @@ export async function orchestrateVoiceOutbound(
   const prevMeta = ((sessAfterCreate?.metadata as Record<string, unknown>) ?? {}) as Record<string, unknown>;
   const prevDebug = (prevMeta.voiceProviderDebug as Record<string, unknown> | undefined) ?? {};
   const createDbg = adapterResult.providerDebug ?? {};
+  if (expectedProvider === 'zadarma') {
+    try {
+      await mergeVoiceIntegrationZadarma(companyId, {
+        zadarmaLastOutboundAttemptAt: Timestamp.now(),
+        zadarmaLastOutboundOk: true,
+        zadarmaLastOutboundFriendlyCode: null
+      });
+    } catch {
+      /* ignore merge telemetry */
+    }
+  }
   await adminUpdateVoiceCallSession(companyId, callId, {
     providerCallId: adapterResult.providerCallId,
     metadata: {
       ...prevMeta,
+      ...(expectedProvider === 'zadarma'
+        ? {
+            zadarmaCrmPendingProviderCallId: adapterResult.providerCallId,
+            zadarmaCallbackExtensionUsed: integrationRow?.zadarmaCallbackExtension ?? null
+          }
+        : {}),
       voiceProviderDebug: {
         ...prevDebug,
         ...createDbg,
@@ -368,7 +426,13 @@ export async function orchestrateVoiceOutbound(
         createFrom: fromE164,
         createTo: toE164,
         createTwilioStatus: adapterResult.raw?.status ?? null,
-        createResponse: adapterResult.raw ?? null
+        createResponse:
+          expectedProvider === 'zadarma' && adapterResult.raw && typeof adapterResult.raw === 'object'
+            ? {
+                status: adapterResult.raw.status ?? null,
+                keys: Object.keys(adapterResult.raw).slice(0, 40)
+              }
+            : adapterResult.raw ?? null
       }
     }
   });

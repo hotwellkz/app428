@@ -33,7 +33,7 @@ type Body = {
   force?: boolean;
   callbackAt?: string;
   /** Предпочтение провайдера для будущего callback (multi-provider UI). */
-  outboundVoiceProvider?: 'twilio' | 'telnyx';
+  outboundVoiceProvider?: 'twilio' | 'telnyx' | 'zadarma';
   fromNumberId?: string | null;
   callbackNote?: string | null;
   reviewNote?: string | null;
@@ -313,13 +313,17 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         ? (schedMeta.voiceLaunchSelection as Record<string, unknown>)
         : {};
     const selProv =
-      body.outboundVoiceProvider === 'telnyx' || body.outboundVoiceProvider === 'twilio'
+      body.outboundVoiceProvider === 'telnyx' ||
+      body.outboundVoiceProvider === 'twilio' ||
+      body.outboundVoiceProvider === 'zadarma'
         ? body.outboundVoiceProvider
         : schedSession.provider === 'telnyx'
           ? 'telnyx'
-          : schedSession.provider
-            ? 'twilio'
-            : null;
+          : schedSession.provider === 'zadarma'
+            ? 'zadarma'
+            : schedSession.provider
+              ? 'twilio'
+              : null;
     const selFrom =
       body.fromNumberId != null && String(body.fromNumberId).trim()
         ? String(body.fromNumberId).trim()

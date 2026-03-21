@@ -46,7 +46,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
       }
       const db = getDb();
       const integration = await getVoiceIntegration(companyId);
-      const outbound = integration?.outboundVoiceProvider === 'telnyx' ? 'telnyx' : 'twilio';
+      const outboundPref = integration?.outboundVoiceProvider;
+      const outbound =
+        outboundPref === 'telnyx' ? 'telnyx' : outboundPref === 'zadarma' ? 'zadarma' : 'twilio';
       const twilioOk =
         integration &&
         integration.enabled === true &&
@@ -57,7 +59,14 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
         integration.telnyxEnabled === true &&
         integration.telnyxConnectionStatus === 'connected' &&
         !!(integration.telnyxApiKey?.trim() && integration.telnyxPublicKey?.trim());
-      const voiceOk = outbound === 'telnyx' ? telnyxOk : twilioOk;
+      const zadarmaOk =
+        integration &&
+        integration.zadarmaEnabled === true &&
+        integration.zadarmaConnectionStatus === 'connected' &&
+        !!(integration.zadarmaKey?.trim() && integration.zadarmaSecret?.trim()) &&
+        !!(integration.zadarmaCallbackExtension?.trim());
+      const voiceOk =
+        outbound === 'telnyx' ? telnyxOk : outbound === 'zadarma' ? zadarmaOk : twilioOk;
       if (!voiceOk) {
         return {
           statusCode: 400,
@@ -66,7 +75,9 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
             error:
               outbound === 'telnyx'
                 ? 'Telnyx не подключён для компании (проверьте API Key, Public Key и статус в Интеграциях)'
-                : 'Twilio не подключен для компании'
+                : outbound === 'zadarma'
+                  ? 'Zadarma не подключена для компании (Key, Secret, extension и проверка в Интеграциях)'
+                  : 'Twilio не подключен для компании'
           })
         };
       }
