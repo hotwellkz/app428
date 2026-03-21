@@ -3,12 +3,7 @@
  */
 
 import type { WhatsAppMessage } from '../types/whatsappDb';
-import {
-  getMessageTextContentForAi,
-  messageHasVoiceOrAudioAttachment,
-  formatAttachmentAnalysisForAiMessage,
-  rowIsVisualAnalyzableForAiWait
-} from './whatsappAiMessageContent';
+import { getMessageTextContentForAi, messageHasVoiceOrAudioAttachment } from './whatsappAiMessageContent';
 
 export function getWhatsAppMessageTime(m: WhatsAppMessage): number {
   const t = m.createdAt;
@@ -74,36 +69,15 @@ export function incomingBatchNeedsTranscriptWait(
 }
 
 /**
- * Debounce: 6 с для текста, 10 с если в необработанном хвосте есть voice/audio,
- * 12 с если есть вложения в статусе pending/processing (даём время Netlify-анализу).
+ * Debounce: 6 с для текста, 10 с если в необработанном хвосте есть voice/audio.
  */
 export function chooseWhatsAppAiDebounceMs(unprocessedIncoming: WhatsAppMessage[]): number {
   const hasVoice = unprocessedIncoming.some((m) => messageHasVoiceOrAudioAttachment(m));
-  const hasPendingAttachment = unprocessedIncoming.some((m) =>
-    (m.attachments ?? []).some(
-      (a) =>
-        rowIsVisualAnalyzableForAiWait(a) &&
-        (a.analysisStatus === 'pending' || a.analysisStatus === 'processing')
-    )
-  );
-  if (hasVoice) return 10_000;
-  if (hasPendingAttachment) return 12_000;
-  return 6_000;
+  return hasVoice ? 10_000 : 6_000;
 }
 
 function stripHtml(s: string): string {
   return s.replace(/<[^>]*>/g, '').trim();
-}
-
-/** Если анализ ещё не успел, но логика ожидания уже отпустила flush — даём модели явный hint. */
-function attachmentPendingHint(m: WhatsAppMessage): string {
-  const hasPending = (m.attachments ?? []).some(
-    (a) =>
-      rowIsVisualAnalyzableForAiWait(a) &&
-      (a.analysisStatus === 'pending' || a.analysisStatus === 'processing')
-  );
-  if (!hasPending) return '';
-  return 'Клиент прислал вложение (фото/PDF); автоанализ в CRM ещё не готов — ответь аккуратно, при необходимости попроси размеры/план текстом или более чёткое фото.';
 }
 
 function buildBatchedTimeline<T extends { role: string; text?: string; content?: string }>(
@@ -137,25 +111,18 @@ function buildBatchedTimeline<T extends { role: string; text?: string; content?:
         block.push(sorted[i]);
         i++;
       }
-      const parts = block.flatMap((msg, idx) => {
+      const parts = block.map((msg, idx) => {
         const raw = stripHtml(getMessageTextContentForAi(msg, mergedUpdates));
-        const att = formatAttachmentAnalysisForAiMessage(msg);
-        const hint = attachmentPendingHint(msg);
-        const body = [raw, att, hint].filter(Boolean).join('\n\n').trim();
-        if (!body) return [];
         const label = messageHasVoiceOrAudioAttachment(msg)
           ? 'Голосовое (расшифровка)'
           : `Сообщение ${idx + 1}`;
-        return [`${label}: ${body}`];
+        return `${label}: ${raw}`;
       });
       const combined = parts.join('\n\n').trim();
       if (combined) out.push(mapBatchedClient(combined));
       continue;
     }
-    const raw = stripHtml(getMessageTextContentForAi(m, mergedUpdates));
-    const att = formatAttachmentAnalysisForAiMessage(m);
-    const hint = attachmentPendingHint(m);
-    const content = [raw, att, hint].filter(Boolean).join('\n\n').trim();
+    const content = stripHtml(getMessageTextContentForAi(m, mergedUpdates));
     if (!content) {
       i++;
       continue;

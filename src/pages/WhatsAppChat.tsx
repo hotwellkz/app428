@@ -50,8 +50,7 @@ import { collection, query, where, onSnapshot, doc, getDoc, serverTimestamp } fr
 import { transcribeVoiceBatch, getVoiceMessagesToTranscribe } from '../utils/transcribeVoiceBatch';
 import {
   getMessageTextContentForAi,
-  messageHasVoiceOrAudioAttachment,
-  incomingBatchNeedsAttachmentAnalysisWait
+  messageHasVoiceOrAudioAttachment
 } from '../utils/whatsappAiMessageContent';
 import {
   buildCrmOpenAiMessagesFromBatch,
@@ -2020,13 +2019,6 @@ const WhatsAppChat: React.FC = () => {
       if (incomingBatchNeedsTranscriptWait(unprocessed, mergedUpdates)) {
         if (import.meta.env.DEV) {
           console.log('[WhatsApp][crm-ai-bot-whatsapp-runtime] flush: ждём расшифровку голосов в батче');
-        }
-        return;
-      }
-
-      if (incomingBatchNeedsAttachmentAnalysisWait(unprocessed, mergedUpdates, Date.now())) {
-        if (import.meta.env.DEV) {
-          console.log('[WhatsApp][crm-ai-bot-whatsapp-runtime] flush: ждём анализ вложений в батче');
         }
         return;
       }

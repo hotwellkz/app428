@@ -26,8 +26,6 @@ import {
   findSingleCompanyWithEmptyWazzupChannel,
   setWazzupIntegration,
   DEFAULT_COMPANY_ID,
-  enrichAttachmentsForAutoAnalysis,
-  fireWhatsappAttachmentAnalysisJob,
   type MessageAttachmentRow
 } from './lib/firebaseAdmin';
 
@@ -67,22 +65,6 @@ interface WazzupWebhookBody {
   event?: string;
 }
 
-function guessMimeFromWazzup(type: string | undefined, uri: string): string | undefined {
-  const u = uri.split('?')[0].toLowerCase();
-  const t = (type ?? '').toLowerCase();
-  if (t === 'image') return 'image/jpeg';
-  if (u.endsWith('.pdf')) return 'application/pdf';
-  if (u.endsWith('.png')) return 'image/png';
-  if (u.endsWith('.gif')) return 'image/gif';
-  if (u.endsWith('.webp')) return 'image/webp';
-  if (/\.(jpe?g|jpeg)$/i.test(u)) return 'image/jpeg';
-  if (t === 'document' || t === 'file') {
-    if (u.endsWith('.pdf')) return 'application/pdf';
-    return 'application/octet-stream';
-  }
-  return undefined;
-}
-
 function buildAttachmentsFromWazzup(type: string | undefined, contentUri: string | undefined): MessageAttachmentRow[] {
   if (!contentUri?.trim()) return [];
   const t = (type ?? 'file').toLowerCase();
@@ -91,19 +73,7 @@ function buildAttachmentsFromWazzup(type: string | undefined, contentUri: string
   else if (t === 'video') attachmentType = 'video';
   else if (t === 'audio' || t === 'ptt' || t === 'voice') attachmentType = 'audio';
   else if (t === 'document') attachmentType = 'file';
-  const url = contentUri.trim();
-  return [{ type: attachmentType, url, mimeType: guessMimeFromWazzup(type, url) }];
-}
-
-function maybeEnqueueAttachmentAnalysis(
-  direction: 'incoming' | 'outgoing',
-  savedId: string,
-  companyId: string,
-  attachments: MessageAttachmentRow[]
-): void {
-  if (direction !== 'incoming') return;
-  if (!attachments.some((a) => a.analysisStatus === 'pending')) return;
-  fireWhatsappAttachmentAnalysisJob(savedId, companyId);
+  return [{ type: attachmentType, url: contentUri.trim() }];
 }
 
 const LOG = '[wazzup-webhook]';
@@ -138,8 +108,7 @@ async function handleInstagramMessage(msg: WazzupMessage, companyId: string, deb
   const direction: 'incoming' | 'outgoing' = isEcho ? 'outgoing' : 'incoming';
   const username = (msg.contact?.name ?? '').trim() || `IG ${chatId.slice(0, 8)}`;
   const avatarUri = msg.contact?.avatarUri ?? undefined;
-  const rawIgAtt = buildAttachmentsFromWazzup(msg.type, msg.contentUri);
-  const attachments = rawIgAtt.length ? enrichAttachmentsForAutoAnalysis(rawIgAtt) : [];
+  const attachments = buildAttachmentsFromWazzup(msg.type, msg.contentUri);
   const textContent = (msg.text ?? '').trim();
   const text = textContent || (attachments.length ? '' : '[no text]');
   const extKey = instagramClientKey(chatId);
@@ -214,7 +183,6 @@ async function handleInstagramMessage(msg: WazzupMessage, companyId: string, deb
       channel: 'instagram',
       companyId
     });
-    maybeEnqueueAttachmentAnalysis(direction, savedId, companyId, attachments);
     if (direction === 'incoming' && created) {
       await incrementUnreadCount(conversation.id);
     }
@@ -232,8 +200,7 @@ async function handleWhatsAppMessage(msg: WazzupMessage, companyId: string, debu
   const normalizedPhone = normalizePhone(phone);
   const isEcho = msg.isEcho === true;
   const direction: 'incoming' | 'outgoing' = isEcho ? 'outgoing' : 'incoming';
-  const rawAtt = buildAttachmentsFromWazzup(msg.type, msg.contentUri);
-  const attachments = rawAtt.length ? enrichAttachmentsForAutoAnalysis(rawAtt) : [];
+  const attachments = buildAttachmentsFromWazzup(msg.type, msg.contentUri);
   const textContent = (msg.text ?? '').trim();
   const text = textContent || (attachments.length ? '' : '[no text]');
   const authorName = msg.contact?.name ?? '';
@@ -287,13 +254,12 @@ async function handleWhatsAppMessage(msg: WazzupMessage, companyId: string, debu
         /* ignore */
       }
     }
-    const { id: savedId, created } = await upsertMessageFromWebhook(conversation.id, text, direction, {
+    const { created } = await upsertMessageFromWebhook(conversation.id, text, direction, {
       providerMessageId: msg.messageId ?? undefined,
       attachments: attachments.length ? attachments : undefined,
       channel: 'whatsapp',
       companyId
     });
-    maybeEnqueueAttachmentAnalysis(direction, savedId, companyId, attachments);
     if (direction === 'incoming' && created) await incrementUnreadCount(conversation.id);
     return 'ok';
   } catch {

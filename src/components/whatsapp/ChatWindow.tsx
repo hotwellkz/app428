@@ -682,46 +682,6 @@ function VideoMessageBubble({ att }: { att: MessageAttachment }) {
   );
 }
 
-/** Статус серверного AI-анализа вложения (vision/PDF) */
-function AttachmentAiAnalysisStrip({ att }: { att: MessageAttachment }) {
-  const st = att.analysisStatus;
-  const [open, setOpen] = useState(false);
-  if (!st) return null;
-  const label =
-    st === 'pending'
-      ? 'Анализ вложения: в очереди'
-      : st === 'processing'
-        ? 'Анализ вложения…'
-        : st === 'ready'
-          ? 'Вложение проанализировано (AI)'
-          : st === 'failed'
-            ? 'Ошибка анализа вложения'
-            : 'Автоанализ не применяется';
-  const canShow = st === 'ready' && !!(att.analysisSummaryFull || att.analysisSummaryShort);
-  return (
-    <div className="mt-1 space-y-0.5">
-      <p className="text-[11px] text-gray-600">{label}</p>
-      {canShow && (
-        <button
-          type="button"
-          className="text-[11px] text-green-700 underline"
-          onClick={() => setOpen((v) => !v)}
-        >
-          {open ? 'Скрыть анализ' : 'Показать анализ'}
-        </button>
-      )}
-      {open && (att.analysisSummaryFull || att.analysisSummaryShort) && (
-        <p className="text-[11px] text-gray-700 whitespace-pre-wrap border border-gray-100 rounded p-1.5 bg-white max-h-40 overflow-y-auto">
-          {String(att.analysisSummaryFull || att.analysisSummaryShort)}
-        </p>
-      )}
-      {st === 'failed' && att.analysisError && (
-        <p className="text-[10px] text-red-600 break-words">{att.analysisError}</p>
-      )}
-    </div>
-  );
-}
-
 function AttachmentBlock({
   att,
   onPreview
@@ -783,7 +743,6 @@ function AttachmentBlock({
             onError={() => setImgError(true)}
           />
         </button>
-        <AttachmentAiAnalysisStrip att={att} />
       </div>
     );
   }
@@ -792,25 +751,14 @@ function AttachmentBlock({
       <div className="mt-1 p-2 rounded bg-gray-100 border border-gray-200">
         {link}
         <span className="text-xs text-gray-500 ml-1">(превью недоступно)</span>
-        <AttachmentAiAnalysisStrip att={att} />
       </div>
     );
   }
   if (isVideo) {
-    return (
-      <div className="mt-1">
-        <VideoMessageBubble att={att} />
-        <AttachmentAiAnalysisStrip att={att} />
-      </div>
-    );
+    return <VideoMessageBubble att={att} />;
   }
   if (isAudio) {
-    return (
-      <div className="mt-1">
-        <AudioMessageBubble att={att} />
-        <AttachmentAiAnalysisStrip att={att} />
-      </div>
-    );
+    return <AudioMessageBubble att={att} />;
   }
   // PDF: карточка с превью первой страницы, открытие в модалке (не скачивание)
   if (getAttachmentCategory(att) === 'pdf') {
@@ -868,9 +816,6 @@ function AttachmentBlock({
           >
             Скачать
           </button>
-        </div>
-        <div className="px-2 pb-2">
-          <AttachmentAiAnalysisStrip att={att} />
         </div>
       </div>
     );
@@ -936,9 +881,6 @@ function AttachmentBlock({
             Скачать
           </button>
         </div>
-        <div className="px-2 pb-2">
-          <AttachmentAiAnalysisStrip att={att} />
-        </div>
       </div>
     );
   }
@@ -978,7 +920,6 @@ function AttachmentBlock({
       ) : (
         link
       )}
-      <AttachmentAiAnalysisStrip att={att} />
     </div>
   );
 }
