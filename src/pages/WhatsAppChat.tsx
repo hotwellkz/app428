@@ -168,6 +168,19 @@ function getLastMessagePreview(msg: WhatsAppMessage | null): string {
   return text ? (text.length > 50 ? text.slice(0, 50) + '…' : text) : '';
 }
 
+/** Единый зелёный badge счётчика: мобильная панель (сделки / менеджеры / города). */
+function MobileFilterEmeraldCountBadge({ value }: { value: number }) {
+  const len = String(value).length;
+  const sizeClass = len > 3 ? 'text-[8px]' : len > 2 ? 'text-[9px]' : 'text-[10px]';
+  return (
+    <span
+      className={`pointer-events-none absolute right-0.5 top-0.5 z-[4] inline-flex min-h-[17px] max-w-[min(100%-0.25rem,4.25rem)] min-w-0 items-center justify-center rounded-md bg-emerald-600 px-1 py-0.5 font-semibold leading-none text-white shadow-sm tabular-nums ${sizeClass}`}
+    >
+      {value}
+    </span>
+  );
+}
+
 function getAttachmentType(file: File): 'image' | 'file' | 'audio' | 'voice' | 'video' {
   const name = file.name.toLowerCase();
   if (name.startsWith('voice.') || file.type === 'audio/webm' || file.type === 'audio/ogg') return 'voice';
@@ -3577,6 +3590,26 @@ const WhatsAppChat: React.FC = () => {
     [companyId]
   );
 
+  /** Счётчики для badge в мобильной панели при не-дефолтном select (чаты в текущем списке). */
+  const mobileDealFilterBadgeCount =
+    dealStatusFilter === 'all'
+      ? null
+      : dealStatusFilter === 'none'
+        ? dealStatusCounts.none
+        : dealStatusCounts.byId[dealStatusFilter] ?? 0;
+  const mobileManagerFilterBadgeCount =
+    managerFilter === 'all'
+      ? null
+      : managerFilter === 'none'
+        ? managerCounts.none
+        : managerCounts.byId[managerFilter] ?? 0;
+  const mobileCityFilterBadgeCount =
+    cityFilter === 'all'
+      ? null
+      : cityFilter === 'none'
+        ? cityCounts.none
+        : cityCounts.byCity[cityFilter] ?? 0;
+
   return (
     <div
       className={`flex flex-col h-full min-w-0 bg-gray-50 overflow-x-hidden ${isMobileChatView ? 'overflow-hidden' : ''}`}
@@ -3803,7 +3836,11 @@ const WhatsAppChat: React.FC = () => {
                   className={`relative z-0 flex h-11 min-h-[44px] w-full min-w-0 items-center justify-center rounded-xl transition-colors ${
                     dealStatusFilter !== 'all' ? 'bg-emerald-500/[0.14]' : ''
                   }`}
-                  title="Фильтр по сделке и статусу"
+                  title={
+                    dealStatusFilter === 'all'
+                      ? 'Фильтр по сделке и статусу'
+                      : `Фильтр по сделке, выбрано чатов: ${mobileDealFilterBadgeCount ?? 0}`
+                  }
                 >
                   <select
                     value={dealStatusFilter}
@@ -3827,28 +3864,15 @@ const WhatsAppChat: React.FC = () => {
                     aria-hidden
                   />
                   {dealStatusFilter === 'all' && dealStatusCounts.all > 0 && (
-                    <span
-                      className={`pointer-events-none absolute right-0.5 top-0.5 z-[3] inline-flex max-w-[min(100%-0.25rem,4.25rem)] items-center justify-center rounded-md bg-emerald-600 px-1 py-0.5 font-semibold leading-none text-white shadow-sm tabular-nums ${
-                        String(dealStatusCounts.all).length > 3
-                          ? 'text-[8px]'
-                          : String(dealStatusCounts.all).length > 2
-                            ? 'text-[9px]'
-                            : 'text-[10px]'
-                      }`}
-                    >
-                      {dealStatusCounts.all}
-                    </span>
+                    <MobileFilterEmeraldCountBadge value={dealStatusCounts.all} />
                   )}
-                  {dealStatusFilter !== 'all' && (
+                  {dealStatusFilter !== 'all' && mobileDealFilterBadgeCount !== null && (
                     <>
                       <span
                         className="pointer-events-none absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-emerald-500/90"
                         aria-hidden
                       />
-                      <span
-                        className="pointer-events-none absolute right-1 top-1 z-[3] h-2 w-2 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white/90"
-                        aria-hidden
-                      />
+                      <MobileFilterEmeraldCountBadge value={mobileDealFilterBadgeCount} />
                     </>
                   )}
                 </div>
@@ -3857,7 +3881,11 @@ const WhatsAppChat: React.FC = () => {
                 className={`relative z-0 flex h-11 min-h-[44px] w-full min-w-0 items-center justify-center rounded-xl transition-colors ${
                   managerFilter !== 'all' ? 'bg-emerald-500/[0.14]' : ''
                 }`}
-                title="Фильтр по менеджеру"
+                title={
+                  managerFilter === 'all'
+                    ? 'Фильтр по менеджеру'
+                    : `Фильтр по менеджеру, чатов: ${mobileManagerFilterBadgeCount ?? 0}`
+                }
               >
                 <select
                   value={managerFilter}
@@ -3877,16 +3905,13 @@ const WhatsAppChat: React.FC = () => {
                   ))}
                 </select>
                 <Users className="pointer-events-none h-5 w-5 shrink-0 text-gray-600" strokeWidth={1.75} aria-hidden />
-                {managerFilter !== 'all' && (
+                {managerFilter !== 'all' && mobileManagerFilterBadgeCount !== null && (
                   <>
                     <span
                       className="pointer-events-none absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-emerald-500/90"
                       aria-hidden
                     />
-                    <span
-                      className="pointer-events-none absolute right-1 top-1 z-[3] h-2 w-2 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white/90"
-                      aria-hidden
-                    />
+                    <MobileFilterEmeraldCountBadge value={mobileManagerFilterBadgeCount} />
                   </>
                 )}
               </div>
@@ -3894,7 +3919,11 @@ const WhatsAppChat: React.FC = () => {
                 className={`relative z-0 flex h-11 min-h-[44px] w-full min-w-0 items-center justify-center rounded-xl transition-colors ${
                   cityFilter !== 'all' ? 'bg-emerald-500/[0.14]' : ''
                 }`}
-                title="Фильтр по городу"
+                title={
+                  cityFilter === 'all'
+                    ? 'Фильтр по городу'
+                    : `Фильтр по городу, чатов: ${mobileCityFilterBadgeCount ?? 0}`
+                }
               >
                 <select
                   value={cityFilter}
@@ -3914,16 +3943,13 @@ const WhatsAppChat: React.FC = () => {
                   ))}
                 </select>
                 <MapPin className="pointer-events-none h-5 w-5 shrink-0 text-sky-600" strokeWidth={1.75} aria-hidden />
-                {cityFilter !== 'all' && (
+                {cityFilter !== 'all' && mobileCityFilterBadgeCount !== null && (
                   <>
                     <span
                       className="pointer-events-none absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-emerald-500/90"
                       aria-hidden
                     />
-                    <span
-                      className="pointer-events-none absolute right-1 top-1 z-[3] h-2 w-2 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white/90"
-                      aria-hidden
-                    />
+                    <MobileFilterEmeraldCountBadge value={mobileCityFilterBadgeCount} />
                   </>
                 )}
               </div>
