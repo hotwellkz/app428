@@ -577,8 +577,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
         )}
 
         {/* Контейнер ввода: мобильный и десктоп — две строки: (1) только textarea на всю ширину (2) панель кнопок */}
-        <div className="flex items-stretch gap-1.5 md:gap-2 max-w-full min-w-0">
-          <div className="flex-1 min-w-0 relative flex flex-col">
+        <div className="flex max-w-full min-w-0 items-stretch gap-1.5 md:gap-2">
+          <div className="relative flex min-w-0 max-w-full flex-1 flex-col overflow-x-hidden">
             {mediaQuickRepliesOpen && (
               <MediaQuickRepliesPopup
                 items={filteredMediaQuickReplies}
@@ -593,8 +593,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 onSelect={insertQuickReply}
               />
             )}
-            <div className="chat-composer chat-input flex flex-col gap-1.5 md:gap-2 p-1.5 px-2 md:py-2 md:px-3 rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 min-h-0">
-              <div className="chat-composer__input-row chat-input-text order-1 w-full min-w-0 flex flex-col">
+            <div className="chat-composer chat-input flex min-h-0 min-w-0 max-w-full flex-col gap-1.5 overflow-x-hidden md:gap-2 p-1.5 px-2 md:py-2 md:px-3 rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500">
+              <div className="chat-composer__input-row chat-input-text order-1 flex w-full min-w-0 max-w-full flex-col">
                 <textarea
                   ref={textareaRef}
                   value={value}
@@ -603,11 +603,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   onFocus={() => setShowEmojiPicker(false)}
                   placeholder={hasAttachment ? 'Подпись к файлу (необязательно)' : 'Сообщение...'}
                   rows={TEXTAREA_MIN_ROWS}
-                  className="message-input chat-textarea w-full min-h-[40px] max-h-[140px] md:min-h-[42px] md:max-h-[160px] resize-none bg-transparent border-0 outline-none rounded-2xl md:rounded-lg py-2 px-2.5 md:py-2 md:px-3 leading-[1.4] text-base md:text-sm overflow-y-auto"
+                  cols={1}
+                  className="message-input chat-textarea box-border w-full min-h-[40px] max-h-[140px] min-w-0 max-w-full resize-none bg-transparent border-0 outline-none rounded-2xl md:min-h-[42px] md:max-h-[160px] md:rounded-lg py-2 px-2.5 md:py-2 md:px-3 leading-[1.4] text-base md:text-sm overflow-y-auto [overflow-wrap:anywhere]"
                 />
               </div>
-              <div className="chat-composer__actions-row chat-actions chat-input-actions order-2 flex w-full min-w-0 max-md:flex-nowrap flex-wrap items-center justify-between gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-1.5 md:pt-0.5">
-                <div className="left-icons flex flex-shrink-0 items-center gap-1.5">
+              {/*
+                Ряд действий: слева и справа shrink-0 (отправка всегда в правой колонке).
+                Центр (AI) — flex-1 min-w-0, чтобы длинный текст в textarea не раздвигал панель по ширине
+                и не выталкивал кнопку отправки за экран.
+              */}
+              <div className="chat-composer__actions-row chat-actions chat-input-actions order-2 flex w-full min-w-0 max-w-full flex-nowrap items-center gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-1.5 md:pt-0.5">
+                <div className="left-icons flex shrink-0 items-center gap-1.5">
                   <button
                     type="button"
                     data-emoji-picker-trigger
@@ -653,58 +659,63 @@ const ChatInput: React.FC<ChatInputProps> = ({
                     </button>
                   )}
                 </div>
-                {onAiReply &&
-                  (isMobile ? (
-                    <MobileWhatsappAiComposer
-                      onAiReply={onAiReply}
-                      aiModeLoading={aiModeLoading}
-                      disabled={disabled}
-                      crmAi={mobileCrmAi ?? null}
-                    />
-                  ) : (
-                    <div className="ai-tools ai-buttons flex min-w-0 flex-1 justify-center gap-1 md:gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => onAiReply('normal')}
-                        disabled={disabled || !!aiModeLoading}
-                        className="ai-generate rounded-[14px] px-2 py-1 text-sm border border-dashed border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
-                        title="AI сгенерировать ответ"
-                      >
-                        {aiModeLoading === 'normal' ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Sparkles className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onAiReply('short')}
-                        disabled={disabled || !!aiModeLoading}
-                        className="ai-fast rounded-[14px] px-2 py-1 text-sm border border-dashed border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
-                        title="AI: очень коротко"
-                      >
-                        {aiModeLoading === 'short' ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Zap className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onAiReply('close')}
-                        disabled={disabled || !!aiModeLoading}
-                        className="ai-target rounded-[14px] px-2 py-1 text-sm border border-dashed border-amber-300 bg-white text-amber-700 hover:bg-amber-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
-                        title="AI: продвинуть сделку"
-                      >
-                        {aiModeLoading === 'close' ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Target className="w-3.5 h-3.5" />
-                        )}
-                      </button>
-                    </div>
-                  ))}
-                <div className="right-icons flex flex-shrink-0 items-center gap-1.5 md:gap-1">
+                {onAiReply ? (
+                  <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-x-auto overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                    {isMobile ? (
+                      <MobileWhatsappAiComposer
+                        onAiReply={onAiReply}
+                        aiModeLoading={aiModeLoading}
+                        disabled={disabled}
+                        crmAi={mobileCrmAi ?? null}
+                      />
+                    ) : (
+                      <div className="ai-tools ai-buttons flex shrink-0 items-center justify-center gap-1 md:gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onAiReply('normal')}
+                          disabled={disabled || !!aiModeLoading}
+                          className="ai-generate inline-flex min-w-[32px] items-center justify-center rounded-[14px] border border-dashed border-emerald-300 bg-white px-2 py-1 text-sm text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                          title="AI сгенерировать ответ"
+                        >
+                          {aiModeLoading === 'normal' ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onAiReply('short')}
+                          disabled={disabled || !!aiModeLoading}
+                          className="ai-fast inline-flex min-w-[32px] items-center justify-center rounded-[14px] border border-dashed border-indigo-300 bg-white px-2 py-1 text-sm text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+                          title="AI: очень коротко"
+                        >
+                          {aiModeLoading === 'short' ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Zap className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => onAiReply('close')}
+                          disabled={disabled || !!aiModeLoading}
+                          className="ai-target inline-flex min-w-[32px] items-center justify-center rounded-[14px] border border-dashed border-amber-300 bg-white px-2 py-1 text-sm text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                          title="AI: продвинуть сделку"
+                        >
+                          {aiModeLoading === 'close' ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Target className="h-3.5 w-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="min-h-0 min-w-0 flex-1" aria-hidden={true} />
+                )}
+                <div className="right-icons flex shrink-0 items-center gap-1.5 md:gap-1">
                   {onFileSelect && (
                     <button
                       type="button"
