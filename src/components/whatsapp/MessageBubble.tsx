@@ -72,9 +72,11 @@ function ReplyBlock({ message }: { message: WhatsAppMessage }) {
           ? 'Фото'
           : message.attachments[0].type === 'video'
             ? 'Видео'
-            : message.attachments[0].type === 'audio'
-              ? 'Аудио'
-              : 'Документ')
+            : message.attachments[0].type === 'voice'
+              ? 'Голосовое сообщение'
+              : message.attachments[0].type === 'audio'
+                ? 'Аудио'
+                : 'Документ')
       : (message.text || '').slice(0, 80) + (message.text && message.text.length > 80 ? '…' : '');
   return (
     <div className="mb-1 pl-2 border-l-4 border-green-600 text-left">

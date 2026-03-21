@@ -38,6 +38,8 @@ interface WazzupMessage {
   chatId?: string;
   dateTime?: string;
   type?: string;
+  /** Длительность медиа в секундах (если провайдер передаёт) */
+  duration?: number;
   status?: string;
   text?: string;
   contentUri?: string;
@@ -65,15 +67,24 @@ interface WazzupWebhookBody {
   event?: string;
 }
 
-function buildAttachmentsFromWazzup(type: string | undefined, contentUri: string | undefined): MessageAttachmentRow[] {
+function buildAttachmentsFromWazzup(
+  type: string | undefined,
+  contentUri: string | undefined,
+  durationSec?: number
+): MessageAttachmentRow[] {
   if (!contentUri?.trim()) return [];
   const t = (type ?? 'file').toLowerCase();
   let attachmentType: MessageAttachmentRow['type'] = 'file';
   if (t === 'image') attachmentType = 'image';
   else if (t === 'video') attachmentType = 'video';
-  else if (t === 'audio' || t === 'ptt' || t === 'voice') attachmentType = 'audio';
+  else if (t === 'ptt' || t === 'voice') attachmentType = 'voice';
+  else if (t === 'audio') attachmentType = 'audio';
   else if (t === 'document') attachmentType = 'file';
-  return [{ type: attachmentType, url: contentUri.trim() }];
+  const row: MessageAttachmentRow = { type: attachmentType, url: contentUri.trim() };
+  if (typeof durationSec === 'number' && Number.isFinite(durationSec) && durationSec >= 0) {
+    row.durationSeconds = durationSec;
+  }
+  return [row];
 }
 
 const LOG = '[wazzup-webhook]';
@@ -108,7 +119,7 @@ async function handleInstagramMessage(msg: WazzupMessage, companyId: string, deb
   const direction: 'incoming' | 'outgoing' = isEcho ? 'outgoing' : 'incoming';
   const username = (msg.contact?.name ?? '').trim() || `IG ${chatId.slice(0, 8)}`;
   const avatarUri = msg.contact?.avatarUri ?? undefined;
-  const attachments = buildAttachmentsFromWazzup(msg.type, msg.contentUri);
+  const attachments = buildAttachmentsFromWazzup(msg.type, msg.contentUri, msg.duration);
   const textContent = (msg.text ?? '').trim();
   const text = textContent || (attachments.length ? '' : '[no text]');
   const extKey = instagramClientKey(chatId);
@@ -200,7 +211,7 @@ async function handleWhatsAppMessage(msg: WazzupMessage, companyId: string, debu
   const normalizedPhone = normalizePhone(phone);
   const isEcho = msg.isEcho === true;
   const direction: 'incoming' | 'outgoing' = isEcho ? 'outgoing' : 'incoming';
-  const attachments = buildAttachmentsFromWazzup(msg.type, msg.contentUri);
+  const attachments = buildAttachmentsFromWazzup(msg.type, msg.contentUri, msg.duration);
   const textContent = (msg.text ?? '').trim();
   const text = textContent || (attachments.length ? '' : '[no text]');
   const authorName = msg.contact?.name ?? '';

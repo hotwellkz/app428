@@ -91,8 +91,32 @@ import { supabase, CLIENTS_BUCKET } from '../lib/supabase/config';
 import { MAX_ATTACHMENT_MB } from '../components/whatsapp/ChatInput';
 import { compressImage, validateVideoForChat, isLargeVideo } from '../utils/mediaUtils';
 import { acquireVoiceStream, createVoiceRecorder } from '../utils/voiceRecording';
+import { formatVoiceListDuration, isVoiceNoteAttachment } from '../components/whatsapp/whatsappUtils';
 
 const NEW_MESSAGE_SOUND_PATH = '/sounds/new-message.mp3';
+
+/** Длительность локального аудио-блоба для превью в списке после отправки голосового. */
+function probeBlobAudioDurationSec(blob: Blob): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    try {
+      const url = URL.createObjectURL(blob);
+      const audio = document.createElement('audio');
+      const finish = (v: number | undefined) => {
+        URL.revokeObjectURL(url);
+        resolve(v);
+      };
+      audio.preload = 'metadata';
+      audio.onloadedmetadata = () => {
+        const d = audio.duration;
+        finish(Number.isFinite(d) && d >= 0 ? d : undefined);
+      };
+      audio.onerror = () => finish(undefined);
+      audio.src = url;
+    } catch {
+      resolve(undefined);
+    }
+  });
+}
 
 const WHATSAPP_MEDIA_PREFIX = 'whatsapp/media';
 const MAX_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024;
@@ -129,6 +153,14 @@ function getLastMessagePreview(msg: WhatsAppMessage | null): string {
   if (att) {
     if (att.type === 'image') return 'Фото';
     if (att.type === 'video') return 'Видео';
+    if (att.type === 'voice') {
+      const d = formatVoiceListDuration(att.durationSeconds);
+      return d ? `Голосовое сообщение · ${d}` : 'Голосовое сообщение';
+    }
+    if (isVoiceNoteAttachment(att)) {
+      const d = formatVoiceListDuration(att.durationSeconds);
+      return d ? `Голосовое сообщение · ${d}` : 'Голосовое сообщение';
+    }
     if (att.type === 'audio') return 'Аудио';
     return 'Файл';
   }
@@ -500,9 +532,16 @@ const WhatsAppChat: React.FC = () => {
     const q = qRaw.trim().toLowerCase();
     if (!q) return [];
     return list.filter((item) => {
-      const preview = item.lastMessage?.attachments?.length
-        ? '[медиа]'
-        : (item.lastMessage?.text ?? '').slice(0, 200);
+      const att0 = item.lastMessage?.attachments?.[0];
+      const preview =
+        item.lastMessage?.attachments?.length && att0
+          ? att0.type === 'voice' || isVoiceNoteAttachment(att0)
+            ? (() => {
+                const d = formatVoiceListDuration(att0.durationSeconds);
+                return d ? `Голосовое сообщение · ${d}` : 'Голосовое сообщение';
+              })()
+            : '[медиа]'
+          : (item.lastMessage?.text ?? '').slice(0, 200);
       const name = (item.client?.name ?? '').toLowerCase();
       const phone = (item.phone ?? item.client?.phone ?? '').toLowerCase();
       const searchable = [name, phone, preview].join(' ').toLowerCase();
@@ -2865,6 +2904,7 @@ const WhatsAppChat: React.FC = () => {
       const isOgg = blob.type.includes('ogg');
       const fileName = isOgg ? 'voice.ogg' : 'voice.webm';
       const file = new File([blob], fileName, { type: blob.type });
+      const durationSeconds = await probeBlobAudioDurationSec(blob);
       setUploadState('uploading');
       try {
         const path = `${companyId}/${WHATSAPP_MEDIA_PREFIX}/${selectedId}/${Date.now()}_${fileName}`;
@@ -2885,6 +2925,7 @@ const WhatsAppChat: React.FC = () => {
               contentUri: urlData.publicUrl,
               attachmentType: 'voice',
               fileName,
+              ...(durationSeconds != null ? { durationSeconds } : {}),
               repliedToMessageId: replyToMessage?.id ?? undefined,
               companyId
             })

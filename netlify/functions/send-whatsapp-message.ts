@@ -46,6 +46,8 @@ interface SendMessageBody {
   contentUri?: string;
   attachmentType?: 'image' | 'video' | 'file' | 'audio' | 'voice';
   fileName?: string;
+  /** Длительность записи в секундах (голосовое) */
+  durationSeconds?: number;
   repliedToMessageId?: string | null;
   forwarded?: boolean;
   companyId?: string;
@@ -73,8 +75,18 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     });
   }
 
-  const { chatId, chatType, text, contentUri, attachmentType, fileName, repliedToMessageId, forwarded, companyId } =
-    body;
+  const {
+    chatId,
+    chatType,
+    text,
+    contentUri,
+    attachmentType,
+    fileName,
+    durationSeconds,
+    repliedToMessageId,
+    forwarded,
+    companyId
+  } = body;
   const isInstagram = chatType === 'instagram';
   const hasMedia = typeof contentUri === 'string' && contentUri.trim().length > 0;
   const hasText = typeof text === 'string' && text.trim().length > 0;
@@ -203,12 +215,32 @@ export const handler: Handler = async (event: HandlerEvent): Promise<HandlerResp
     const msgText = hasText ? caption : '';
     const attachments = hasMedia
       ? [
-          {
-            type:
-              (attachmentType === 'voice' ? 'audio' : attachmentType) || ('file' as 'image' | 'video' | 'audio' | 'file'),
-            url: (contentUri as string).trim(),
-            fileName: typeof fileName === 'string' ? fileName : undefined
-          }
+          (() => {
+            let type: 'image' | 'video' | 'audio' | 'voice' | 'file' = 'file';
+            if (attachmentType === 'voice') type = 'voice';
+            else if (attachmentType === 'image') type = 'image';
+            else if (attachmentType === 'video') type = 'video';
+            else if (attachmentType === 'audio') type = 'audio';
+            const row: {
+              type: typeof type;
+              url: string;
+              fileName?: string;
+              durationSeconds?: number;
+            } = {
+              type,
+              url: (contentUri as string).trim(),
+              fileName: typeof fileName === 'string' ? fileName : undefined
+            };
+            if (
+              typeof durationSeconds === 'number' &&
+              Number.isFinite(durationSeconds) &&
+              durationSeconds >= 0 &&
+              (type === 'voice' || type === 'audio' || type === 'video')
+            ) {
+              row.durationSeconds = durationSeconds;
+            }
+            return row;
+          })()
         ]
       : undefined;
     await saveMessage(conversationId, msgText, 'outgoing', {

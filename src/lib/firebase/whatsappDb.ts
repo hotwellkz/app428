@@ -160,6 +160,13 @@ function docToConversation(docId: string, data: Record<string, unknown>): WhatsA
     channel: (data.channel as WhatsAppConversation['channel']) ?? undefined,
     lastMessagePreview: (data.lastMessagePreview as string) ?? undefined,
     lastMessageMedia: data.lastMessageMedia === true,
+    lastMessageMediaKind: (data.lastMessageMediaKind as WhatsAppConversation['lastMessageMediaKind']) ?? undefined,
+    lastMessageAttachmentDurationSec:
+      typeof data.lastMessageAttachmentDurationSec === 'number'
+        ? data.lastMessageAttachmentDurationSec
+        : data.lastMessageAttachmentDurationSec === null
+          ? null
+          : undefined,
     awaitingReplyDismissedAt:
       (data.awaitingReplyDismissedAt as WhatsAppConversation['awaitingReplyDismissedAt']) ?? null,
     aiRuntime: parseWhatsAppAiRuntime(data as Record<string, unknown>),
@@ -192,10 +199,11 @@ function inferAttachmentType(
   url: string,
   fileName: string | undefined
 ): MessageAttachment['type'] {
-  const t = ['image', 'video', 'audio', 'file'].includes(stored) ? stored : 'file';
+  const t = ['image', 'video', 'audio', 'voice', 'file'].includes(stored) ? stored : 'file';
   const mimeL = (mime ?? '').toLowerCase();
   const path = url.split('?')[0].toLowerCase();
   const name = (fileName ?? '').toLowerCase();
+  if (t === 'voice') return 'voice';
   if (t === 'video') return 'video';
   if (t === 'file' || t === 'image' || t === 'audio') {
     if (mimeL.startsWith('video/')) return 'video';
@@ -217,13 +225,17 @@ function dataToAttachments(arr: unknown): MessageAttachment[] {
     const mimeType = o.mimeType as string | undefined;
     const fileName = o.fileName as string | undefined;
     const type = inferAttachmentType(typeRaw, mimeType, url, fileName);
+    const durRaw = o.durationSeconds;
+    const durationSeconds =
+      typeof durRaw === 'number' && Number.isFinite(durRaw) && durRaw >= 0 ? durRaw : undefined;
     return {
       type,
       url,
       mimeType,
       fileName,
       size: o.size as number | undefined,
-      thumbnailUrl: (o.thumbnailUrl as string | null) ?? undefined
+      thumbnailUrl: (o.thumbnailUrl as string | null) ?? undefined,
+      ...(durationSeconds !== undefined ? { durationSeconds } : {})
     };
   });
 }
@@ -616,6 +628,25 @@ function conversationToListItem(
   const createdAt = c.lastMessageAt ?? c.createdAt;
   const preview = (c.lastMessagePreview ?? '').trim();
   const hasMedia = c.lastMessageMedia === true;
+  const mediaKind = c.lastMessageMediaKind ?? null;
+  const mediaDur =
+    typeof c.lastMessageAttachmentDurationSec === 'number' ? c.lastMessageAttachmentDurationSec : undefined;
+
+  const previewAttachment = (): MessageAttachment | undefined => {
+    if (!hasMedia) return undefined;
+    if (mediaKind === 'voice') {
+      return { type: 'voice' as const, url: '', ...(mediaDur !== undefined ? { durationSeconds: mediaDur } : {}) };
+    }
+    if (mediaKind === 'image') return { type: 'image' as const, url: '' };
+    if (mediaKind === 'video') {
+      return { type: 'video' as const, url: '', ...(mediaDur !== undefined ? { durationSeconds: mediaDur } : {}) };
+    }
+    if (mediaKind === 'audio') {
+      return { type: 'audio' as const, url: '', ...(mediaDur !== undefined ? { durationSeconds: mediaDur } : {}) };
+    }
+    return { type: 'file' as const, url: '' };
+  };
+
   const lastMessage: WhatsAppMessage | null =
     preview || hasMedia || c.lastMessageAt
       ? {
@@ -626,7 +657,7 @@ function conversationToListItem(
             c.lastMessageSender === 'manager' ? 'outgoing' : 'incoming',
           createdAt,
           channel: channel === 'instagram' ? 'instagram' : 'whatsapp',
-          attachments: hasMedia ? [{ type: 'file' as const, url: '' }] : undefined
+          attachments: hasMedia ? [previewAttachment()!] : undefined
         }
       : null;
   return {

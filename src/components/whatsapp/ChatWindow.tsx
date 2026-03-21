@@ -221,7 +221,7 @@ function getAttachmentCategory(att: MessageAttachment): AttachmentCategory {
 
   if (att.type === 'image' || mime.startsWith('image/')) return 'image';
   if (att.type === 'video' || mime.startsWith('video/')) return 'video';
-  if (att.type === 'audio' || mime.startsWith('audio/')) return 'audio';
+  if (att.type === 'voice' || att.type === 'audio' || mime.startsWith('audio/')) return 'audio';
 
   if (mime === 'application/pdf' || name.endsWith('.pdf') || urlPath.endsWith('.pdf')) return 'pdf';
 
@@ -695,15 +695,19 @@ function AttachmentBlock({
   const isVideo =
     att.type === 'video' || (att.type === 'file' && getAttachmentCategory(att) === 'video');
   const isAudio =
-    att.type === 'audio' || (att.type === 'file' && getAttachmentCategory(att) === 'audio');
+    att.type === 'audio' ||
+    att.type === 'voice' ||
+    (att.type === 'file' && getAttachmentCategory(att) === 'audio');
   const label =
     att.type === 'image'
       ? 'Изображение'
       : att.type === 'video'
         ? 'Видео'
-        : att.type === 'audio'
-          ? 'Аудио'
-          : att.fileName || 'Файл';
+        : att.type === 'voice'
+          ? 'Голосовое сообщение'
+          : att.type === 'audio'
+            ? 'Аудио'
+            : att.fileName || 'Файл';
 
   const link = (
     <a
@@ -1555,7 +1559,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
               isTranslating={translatingMessageId === msg.id}
               renderAttachments={(m) =>
                 m.attachments?.map((att, i) => {
-                  const isAudio = att.type === 'audio';
+                  const isAudio = att.type === 'audio' || att.type === 'voice';
                   const key = `${m.id}-${i}`;
                   if (!isAudio) {
                     return <AttachmentBlock key={key} att={att} onPreview={setPreviewAtt} />;

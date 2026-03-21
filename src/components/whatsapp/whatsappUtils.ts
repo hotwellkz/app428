@@ -1,4 +1,29 @@
-import type { WhatsAppMessage, MessageStatus } from '../../types/whatsappDb';
+import type { WhatsAppMessage, MessageStatus, MessageAttachment } from '../../types/whatsappDb';
+
+/** Длительность для превью в списке чатов (mm:ss, часы при необходимости). */
+export function formatVoiceListDuration(totalSec: number | null | undefined): string | null {
+  if (totalSec == null || !Number.isFinite(totalSec) || totalSec < 0) return null;
+  const s = Math.floor(totalSec);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${r.toString().padStart(2, '0')}`;
+  }
+  return `${m}:${r.toString().padStart(2, '0')}`;
+}
+
+/** Голосовое (PTT) vs обычный аудиофайл: по типу и эвристике имени/mime. */
+export function isVoiceNoteAttachment(att: MessageAttachment | undefined): boolean {
+  if (!att) return false;
+  if (att.type === 'voice') return true;
+  if (att.type !== 'audio') return false;
+  const name = (att.fileName ?? '').toLowerCase();
+  if (name.startsWith('voice.')) return true;
+  const mime = (att.mimeType ?? '').toLowerCase();
+  if (mime.includes('opus') && mime.includes('ogg')) return true;
+  return false;
+}
 
 /** Маппинг статуса от Wazzup (sent|delivered|read|error) в UI. */
 export function mapProviderStatusToUiStatus(

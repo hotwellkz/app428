@@ -966,12 +966,75 @@ export async function markConversationAsRead(
 }
 
 export interface MessageAttachmentRow {
-  type: 'image' | 'video' | 'audio' | 'file';
+  type: 'image' | 'video' | 'audio' | 'voice' | 'file';
   url: string;
   mimeType?: string;
   fileName?: string;
   size?: number;
   thumbnailUrl?: string | null;
+  /** Длительность в секундах (голосовое, аудио, видео), если известна */
+  durationSeconds?: number;
+}
+
+type LastMessageMediaKind = 'image' | 'video' | 'audio' | 'voice' | 'file';
+
+function formatDurationMmSsForPreview(totalSec: number): string {
+  const s = Math.floor(totalSec);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const r = s % 60;
+  if (h > 0) {
+    return `${h}:${m.toString().padStart(2, '0')}:${r.toString().padStart(2, '0')}`;
+  }
+  return `${m}:${r.toString().padStart(2, '0')}`;
+}
+
+/** Поля lastMessage* на диалоге: превью + тип медиа для списка чатов. */
+function buildConversationLastMessageMediaFields(
+  text: string,
+  attachments?: MessageAttachmentRow[]
+): {
+  lastMessagePreview: string;
+  lastMessageMedia: boolean;
+  lastMessageMediaKind: LastMessageMediaKind | null;
+  lastMessageAttachmentDurationSec: number | null;
+} {
+  const textPreview = (text || '').replace(/\s+/g, ' ').slice(0, 280);
+  if (!attachments?.length) {
+    return {
+      lastMessagePreview: textPreview || '[медиа]',
+      lastMessageMedia: false,
+      lastMessageMediaKind: null,
+      lastMessageAttachmentDurationSec: null
+    };
+  }
+  const a = attachments[0];
+  const durRaw =
+    typeof a.durationSeconds === 'number' && Number.isFinite(a.durationSeconds) && a.durationSeconds >= 0
+      ? Math.round(a.durationSeconds)
+      : null;
+  const durLabel = durRaw != null ? formatDurationMmSsForPreview(durRaw) : '';
+
+  const kindRaw = a.type;
+  const kind: LastMessageMediaKind = (
+    ['image', 'video', 'audio', 'voice', 'file'].includes(kindRaw) ? kindRaw : 'file'
+  ) as LastMessageMediaKind;
+
+  if (a.type === 'voice') {
+    return {
+      lastMessagePreview: durLabel ? `Голосовое сообщение · ${durLabel}` : 'Голосовое сообщение',
+      lastMessageMedia: true,
+      lastMessageMediaKind: 'voice',
+      lastMessageAttachmentDurationSec: durRaw
+    };
+  }
+
+  return {
+    lastMessagePreview: '[медиа]',
+    lastMessageMedia: true,
+    lastMessageMediaKind: kind,
+    lastMessageAttachmentDurationSec: kind === 'audio' || kind === 'video' ? durRaw : null
+  };
 }
 
 export interface SaveMessageOptions {
@@ -1012,14 +1075,13 @@ export async function saveMessage(
   if (options.forwarded === true) data.forwarded = true;
   const ref = await db.collection(COLLECTIONS.MESSAGES).add(data);
   const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
-  const preview =
-    options.attachments && options.attachments.length > 0
-      ? '[медиа]'
-      : (text || '').replace(/\s+/g, ' ').slice(0, 280) || '[медиа]';
+  const mediaFields = buildConversationLastMessageMediaFields(text, options.attachments);
   const convUpdate: Record<string, unknown> = {
     lastMessageAt: now,
-    lastMessagePreview: preview,
-    lastMessageMedia: !!(options.attachments && options.attachments.length > 0)
+    lastMessagePreview: mediaFields.lastMessagePreview,
+    lastMessageMedia: mediaFields.lastMessageMedia,
+    lastMessageMediaKind: mediaFields.lastMessageMediaKind,
+    lastMessageAttachmentDurationSec: mediaFields.lastMessageAttachmentDurationSec
   };
   if (direction === 'incoming') {
     convUpdate.lastIncomingAt = now;
@@ -1077,14 +1139,13 @@ export async function upsertMessageFromWebhook(
         await docRef.update(update);
       }
       const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
-      const preview =
-        options.attachments && options.attachments.length > 0
-          ? '[медиа]'
-          : (text || '').replace(/\s+/g, ' ').slice(0, 280) || '[медиа]';
+      const mediaFields = buildConversationLastMessageMediaFields(text, options.attachments);
       const convUpdate: Record<string, unknown> = {
         lastMessageAt: now,
-        lastMessagePreview: preview,
-        lastMessageMedia: !!(options.attachments && options.attachments.length > 0)
+        lastMessagePreview: mediaFields.lastMessagePreview,
+        lastMessageMedia: mediaFields.lastMessageMedia,
+        lastMessageMediaKind: mediaFields.lastMessageMediaKind,
+        lastMessageAttachmentDurationSec: mediaFields.lastMessageAttachmentDurationSec
       };
       if (direction === 'incoming') {
         convUpdate.lastIncomingAt = now;

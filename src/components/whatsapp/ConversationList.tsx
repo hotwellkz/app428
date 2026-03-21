@@ -1,6 +1,7 @@
 import React, { useRef, useCallback, memo, useEffect } from 'react';
+import { Mic } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { formatLastMessageTime } from './whatsappUtils';
+import { formatLastMessageTime, formatVoiceListDuration, isVoiceNoteAttachment } from './whatsappUtils';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
 import { getConversationAttentionState } from '../../lib/firebase/whatsappDb';
 import Avatar from './Avatar';
@@ -207,22 +208,67 @@ const ConversationRow = memo(function ConversationRow({
           </div>
         </div>
         {item.lastMessage && (
-          <div className="flex items-center gap-2">
-            <span
-              className={`truncate text-xs md:text-sm ${
-                hasUnread ? 'text-gray-700 font-medium' : 'text-gray-500'
-              }`}
-            >
-              {isKaspiOrder
-                ? `Заказ №${item.kaspiOrderNumber}${
-                    item.phone ? ` • ${item.phone}` : item.client?.phone ? ` • ${item.client?.phone}` : ''
-                  }`
-                : item.lastMessage.attachments?.length
-                  ? '[медиа]'
-                  : item.lastMessage.text.startsWith('[media') || item.lastMessage.text === '[no text]'
-                    ? '[медиа]'
-                    : item.lastMessage.text || '[медиа]'}
-            </span>
+          <div className="flex items-center gap-2 min-w-0">
+            {isKaspiOrder ? (
+              <span
+                className={`truncate text-xs md:text-sm ${
+                  hasUnread ? 'text-gray-700 font-medium' : 'text-gray-500'
+                }`}
+              >
+                {`Заказ №${item.kaspiOrderNumber}${
+                  item.phone ? ` • ${item.phone}` : item.client?.phone ? ` • ${item.client?.phone}` : ''
+                }`}
+              </span>
+            ) : (() => {
+                const lm = item.lastMessage;
+                const att0 = lm.attachments?.[0];
+                const isVoice =
+                  !!att0 && !lm.deleted && (att0.type === 'voice' || isVoiceNoteAttachment(att0));
+                if (isVoice && att0) {
+                  const dur = formatVoiceListDuration(att0.durationSeconds);
+                  const a11y = dur ? `Голосовое сообщение, длительность ${dur}` : 'Голосовое сообщение';
+                  return (
+                    <span
+                      className={`flex min-w-0 flex-1 items-center gap-1.5 text-xs md:text-sm ${
+                        hasUnread ? 'text-gray-700 font-medium' : 'text-gray-500'
+                      }`}
+                      title={a11y}
+                    >
+                      <Mic
+                        className={`h-3.5 w-3.5 flex-shrink-0 ${
+                          hasUnread ? 'text-emerald-700' : 'text-emerald-600'
+                        }`}
+                        strokeWidth={2}
+                        aria-hidden
+                      />
+                      <span className="min-w-0 truncate">
+                        <span className={hasUnread ? 'text-gray-800' : 'text-gray-600'}>
+                          Голосовое сообщение
+                        </span>
+                        {dur ? (
+                          <span className={hasUnread ? 'text-gray-500' : 'text-gray-400'}>
+                            {' · '}
+                            <span className="tabular-nums">{dur}</span>
+                          </span>
+                        ) : null}
+                      </span>
+                    </span>
+                  );
+                }
+                return (
+                  <span
+                    className={`truncate text-xs md:text-sm ${
+                      hasUnread ? 'text-gray-700 font-medium' : 'text-gray-500'
+                    }`}
+                  >
+                    {lm.attachments?.length
+                      ? '[медиа]'
+                      : lm.text.startsWith('[media') || lm.text === '[no text]'
+                        ? '[медиа]'
+                        : lm.text || '[медиа]'}
+                  </span>
+                );
+              })()}
           </div>
         )}
         {!hasUnread && isNeedReply && (

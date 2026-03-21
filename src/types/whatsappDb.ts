@@ -58,6 +58,10 @@ export interface WhatsAppConversation {
   /** Превью последнего сообщения (денормализация для списка без загрузки всех сообщений) */
   lastMessagePreview?: string | null;
   lastMessageMedia?: boolean;
+  /** Тип первого вложения последнего сообщения (для превью в списке чатов) */
+  lastMessageMediaKind?: 'image' | 'video' | 'audio' | 'voice' | 'file' | null;
+  /** Длительность первого вложения (сек), если есть (голосовое, аудио, видео) */
+  lastMessageAttachmentDurationSec?: number | null;
   awaitingReplyDismissedAt?: Date | Timestamp | null;
   /** Runtime AI из модуля «Автоворонки» (WhatsApp) */
   aiRuntime?: WhatsAppAiRuntime;
@@ -98,12 +102,15 @@ export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
 
 /** Вложение: медиа или файл */
 export interface MessageAttachment {
-  type: 'image' | 'video' | 'audio' | 'file';
+  /** `voice` — голосовое сообщение (PTT / voice note), не обычный аудиофайл */
+  type: 'image' | 'video' | 'audio' | 'voice' | 'file';
   url: string;
   mimeType?: string;
   fileName?: string;
   size?: number;
   thumbnailUrl?: string | null;
+  /** Длительность аудио/голосового в секундах (если известна) */
+  durationSeconds?: number;
 }
 
 /** Реакция на сообщение (только в CRM) */
