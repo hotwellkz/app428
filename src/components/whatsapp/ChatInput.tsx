@@ -24,6 +24,7 @@ import { processDictationText } from '../../utils/speechPunctuation';
 import { QuickRepliesPopup, type QuickReplyItem } from './QuickRepliesPopup';
 import { MediaQuickRepliesPopup } from './MediaQuickRepliesPopup';
 import type { MediaQuickReply } from '../../types/mediaQuickReplies';
+import MobileWhatsappAiComposer, { type MobileWhatsappAiCrmConfig } from './MobileWhatsappAiComposer';
 
 const MAX_ATTACHMENT_MB = 10;
 
@@ -95,6 +96,10 @@ interface ChatInputProps {
   onTranslateInput?: () => void;
   /** Идёт перевод текста в поле */
   translateInputLoading?: boolean;
+  /** Мобильный layout: AI — две компактные кнопки вместо трёх отдельных */
+  isMobile?: boolean;
+  /** Настройки CRM AI для моб. кнопки «настройки» (те же патчи, что в карточке клиента) */
+  mobileCrmAi?: MobileWhatsappAiCrmConfig | null;
 }
 
 const QUICK_REPLIES_MAX = 5;
@@ -126,6 +131,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onMediaQuickReplySelect,
   onTranslateInput,
   translateInputLoading = false,
+  isMobile = false,
+  mobileCrmAi = null,
 }) => {
   /** Android/iOS: только фото + capture → камера, не галерея */
   const cameraPhotoRef = useRef<HTMLInputElement>(null);
@@ -646,49 +653,57 @@ const ChatInput: React.FC<ChatInputProps> = ({
                     </button>
                   )}
                 </div>
-                {onAiReply && (
-                  <div className="ai-tools ai-buttons flex min-w-0 flex-1 justify-center gap-1 md:gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onAiReply('normal')}
-                      disabled={disabled || !!aiModeLoading}
-                      className="ai-generate rounded-[14px] px-2 py-1 text-sm border border-dashed border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
-                      title="AI сгенерировать ответ"
-                    >
-                      {aiModeLoading === 'normal' ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onAiReply('short')}
-                      disabled={disabled || !!aiModeLoading}
-                      className="ai-fast rounded-[14px] px-2 py-1 text-sm border border-dashed border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
-                      title="AI: очень коротко"
-                    >
-                      {aiModeLoading === 'short' ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Zap className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onAiReply('close')}
-                      disabled={disabled || !!aiModeLoading}
-                      className="ai-target rounded-[14px] px-2 py-1 text-sm border border-dashed border-amber-300 bg-white text-amber-700 hover:bg-amber-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
-                      title="AI: продвинуть сделку"
-                    >
-                      {aiModeLoading === 'close' ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Target className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-                  </div>
-                )}
+                {onAiReply &&
+                  (isMobile ? (
+                    <MobileWhatsappAiComposer
+                      onAiReply={onAiReply}
+                      aiModeLoading={aiModeLoading}
+                      disabled={disabled}
+                      crmAi={mobileCrmAi ?? null}
+                    />
+                  ) : (
+                    <div className="ai-tools ai-buttons flex min-w-0 flex-1 justify-center gap-1 md:gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onAiReply('normal')}
+                        disabled={disabled || !!aiModeLoading}
+                        className="ai-generate rounded-[14px] px-2 py-1 text-sm border border-dashed border-emerald-300 bg-white text-emerald-700 hover:bg-emerald-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
+                        title="AI сгенерировать ответ"
+                      >
+                        {aiModeLoading === 'normal' ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onAiReply('short')}
+                        disabled={disabled || !!aiModeLoading}
+                        className="ai-fast rounded-[14px] px-2 py-1 text-sm border border-dashed border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
+                        title="AI: очень коротко"
+                      >
+                        {aiModeLoading === 'short' ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Zap className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onAiReply('close')}
+                        disabled={disabled || !!aiModeLoading}
+                        className="ai-target rounded-[14px] px-2 py-1 text-sm border border-dashed border-amber-300 bg-white text-amber-700 hover:bg-amber-50 disabled:opacity-50 inline-flex items-center justify-center min-w-[32px]"
+                        title="AI: продвинуть сделку"
+                      >
+                        {aiModeLoading === 'close' ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Target className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  ))}
                 <div className="right-icons flex flex-shrink-0 items-center gap-1.5 md:gap-1">
                   {onFileSelect && (
                     <button

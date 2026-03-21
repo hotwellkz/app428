@@ -3505,6 +3505,17 @@ const WhatsAppChat: React.FC = () => {
         } as ConversationListItem)
       : null);
 
+  /** Моб. composer: те же патчи CRM AI, что в карточке клиента */
+  const mobileCrmAiComposer = useMemo(() => {
+    if (!isMobile || !selectedId) return null;
+    return {
+      aiRuntime: selectedItem?.aiRuntime ?? defaultWhatsAppAiRuntime(),
+      crmAiBots,
+      onAiRuntimePatch: handleAiRuntimePatch,
+      aiRuntimeSaving
+    };
+  }, [isMobile, selectedId, selectedItem?.aiRuntime, crmAiBots, handleAiRuntimePatch, aiRuntimeSaving]);
+
   const isMobileChatView = isMobile && !!selectedId;
 
   useEffect(() => {
@@ -4182,6 +4193,7 @@ const WhatsAppChat: React.FC = () => {
               sending={sending}
               onBack={isMobile ? () => setSelectedId(null) : undefined}
               isMobile={isMobile}
+              mobileCrmAiComposer={mobileCrmAiComposer}
               pendingAttachment={pendingAttachment}
               onFileSelect={handleFileSelect}
               onClearAttachment={handleClearAttachment}

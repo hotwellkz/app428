@@ -12,6 +12,7 @@ import MessageActionsSheet from './MessageActionsSheet';
 import ReplyComposerPreview from './ReplyComposerPreview';
 import type { WhatsAppMessage, MessageAttachment } from '../../types/whatsappDb';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
+import type { MobileWhatsappAiCrmConfig } from './MobileWhatsappAiComposer';
 import { getAuthToken } from '../../lib/firebase/auth';
 import { useAIConfigured } from '../../hooks/useAIConfigured';
 import { transcribeVoiceBatch, getVoiceMessagesToTranscribe, type TranscribeVoiceBatchResult } from '../../utils/transcribeVoiceBatch';
@@ -117,6 +118,8 @@ interface ChatWindowProps {
   onMediaQuickReplySelect?: (reply: { id: string; title: string; keywords: string; files: Array<{ url: string; order: number; fileName?: string }> }) => void;
   /** Отправить сгенерированное КП (изображение) в чат */
   onSendProposalImage?: (blob: Blob, caption: string) => Promise<void>;
+  /** Мобильный чат: CRM AI для компактных кнопок в поле ввода (режим/бот) */
+  mobileCrmAiComposer?: MobileWhatsappAiCrmConfig | null;
   /** Показывать блок отладки AI-ответа (найденные шаблоны и база знаний) — для админов */
   showAiDebug?: boolean;
   /** При перетаскивании файлов в чат (только desktop) — отправить файлы */
@@ -983,6 +986,7 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
     onFilesDrop,
     disableTranscribeAllButton = false,
     onBatchTranscribeRunningChange,
+    mobileCrmAiComposer = null,
   } = props;
   const onQuickReplySelect = props.onQuickReplySelect;
   const mediaQuickReplies = props.mediaQuickReplies ?? [];
@@ -1845,6 +1849,8 @@ const ChatWindow: React.FC<ChatWindowProps> = (props) => {
           onMediaQuickReplySelect={incognitoMode ? undefined : onMediaQuickReplySelect}
           onTranslateInput={!incognitoMode && aiConfigured ? handleTranslateInput : undefined}
           translateInputLoading={translateInputLoading}
+          isMobile={isMobile}
+          mobileCrmAi={isMobile ? mobileCrmAiComposer : null}
         />
         {onSendProposalImage && (
           <WhatsAppCalculatorDrawer
