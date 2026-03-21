@@ -72,23 +72,31 @@ const MobileWhatsappAiComposer: React.FC<MobileWhatsappAiComposerProps> = ({
     setSettingsOpen(true);
   };
 
+  /** Единый mobile touch target (≥44px) и стиль в духе остальных иконок composer: rounded-xl, спокойные заливки */
+  const hitBtn =
+    'flex h-11 w-11 min-h-[44px] min-w-[44px] flex-shrink-0 touch-manipulation items-center justify-center rounded-xl transition-colors active:scale-[0.97] disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1';
+
   return (
     <>
-      <div className="flex flex-shrink-0 items-center gap-1">
+      <div
+        className="flex flex-shrink-0 items-center gap-3 max-md:px-0.5"
+        role="group"
+        aria-label="AI в чате"
+      >
         <button
           type="button"
           onClick={openActions}
           disabled={disabled || busy}
-          title="AI: действия"
-          aria-label="AI: действия"
+          title="AI: сгенерировать ответ"
+          aria-label="AI: действия — открыть меню"
           aria-haspopup="dialog"
           aria-expanded={actionsOpen}
-          className="relative flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 transition-colors hover:bg-emerald-100 disabled:opacity-50"
+          className={`${hitBtn} border border-emerald-200/90 bg-emerald-50 text-emerald-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.65)] hover:bg-emerald-100/90 focus-visible:ring-emerald-400/45`}
         >
           {busy ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 className="h-5 w-5 shrink-0 animate-spin" strokeWidth={2} />
           ) : (
-            <Sparkles className="h-4 w-4" />
+            <Sparkles className="h-5 w-5 shrink-0" strokeWidth={2} />
           )}
         </button>
 
@@ -97,21 +105,24 @@ const MobileWhatsappAiComposer: React.FC<MobileWhatsappAiComposerProps> = ({
             type="button"
             onClick={openSettings}
             disabled={disabled}
-            title="AI: режим и бот"
+            title="AI: режим, бот и автоворонка"
             aria-label="Настройки AI в чате"
             aria-haspopup="dialog"
             aria-expanded={settingsOpen}
-            className="relative flex h-[34px] w-[34px] flex-shrink-0 items-center justify-center rounded-xl border border-violet-200 bg-violet-50 text-violet-700 transition-colors hover:bg-violet-100 disabled:opacity-50"
+            className={`${hitBtn} relative border border-gray-200 bg-gray-50 text-gray-600 hover:bg-gray-100 hover:text-gray-800 focus-visible:ring-gray-400/40`}
           >
-            <Settings2 className="h-4 w-4" />
+            <Settings2 className="h-5 w-5 shrink-0" strokeWidth={2} />
             <span
-              className={`absolute right-0.5 top-0.5 h-2 w-2 rounded-full ring-2 ring-violet-50 ${
+              className={`pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full ring-2 ring-gray-50 ${
                 aiRuntime?.enabled ? 'bg-emerald-500' : 'bg-gray-300'
               }`}
               aria-hidden
             />
             {aiRuntime?.enabled && aiRuntime.mode !== 'off' && (
-              <span className="absolute bottom-0.5 left-1/2 min-w-[14px] -translate-x-1/2 rounded px-0.5 text-center text-[8px] font-bold leading-tight text-white bg-violet-600">
+              <span
+                className="pointer-events-none absolute bottom-1 right-1 min-w-[16px] rounded-md bg-gray-700/90 px-0.5 text-center text-[9px] font-semibold leading-4 text-white shadow-sm"
+                aria-hidden
+              >
                 {aiRuntime.mode === 'draft' ? 'Ч' : 'А'}
               </span>
             )}
