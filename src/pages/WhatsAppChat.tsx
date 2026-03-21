@@ -3562,7 +3562,7 @@ const WhatsAppChat: React.FC = () => {
             </div>
           </div>
           {incognitoMode && (
-            <p className="mt-2 text-[11px] text-amber-800 md:text-xs">
+            <p className="mt-2 hidden text-[11px] text-amber-800 md:block md:text-xs">
               <span className="inline-flex rounded border border-amber-100 bg-amber-50 px-2 py-1">
                 Просмотр без отметки о прочтении и без отправки сообщений.
               </span>
@@ -3685,14 +3685,14 @@ const WhatsAppChat: React.FC = () => {
                 </select>
               </div>
             )}
-            <div className="px-3 pb-2">
+            <div className="grid max-[340px]:grid-cols-1 grid-cols-2 gap-2 px-3 pb-2 md:grid-cols-1">
               <select
                 value={managerFilter}
                 onChange={(e) => {
                   const v = e.target.value;
                   setManagerFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
                 }}
-                className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
+                className="min-h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
               >
                 <option value="all">Все менеджеры</option>
                 <option value="none">Без менеджера</option>
@@ -3702,15 +3702,13 @@ const WhatsAppChat: React.FC = () => {
                   </option>
                 ))}
               </select>
-            </div>
-            <div className="px-3 pb-2">
               <select
                 value={cityFilter}
                 onChange={(e) => {
                   const v = e.target.value;
                   setCityFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
                 }}
-                className="w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
+                className="min-h-10 w-full min-w-0 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-[11px] md:text-xs"
               >
                 <option value="all">Все города</option>
                 <option value="none">Без города ({cityCounts.none})</option>
