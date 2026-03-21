@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import { MessageSquare, Menu, Search } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
@@ -3912,104 +3913,115 @@ const WhatsAppChat: React.FC = () => {
         loading={forwardLoading}
         isMobile={isMobile}
       />
-      {/* Mobile: draggable bottom sheet с карточкой клиента */}
-      {isMobile && mobileClientSheetOpen && selectedItem && (
-        <div
-          className="fixed inset-0 z-[1100] flex flex-col justify-end"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Карточка клиента"
-        >
-          <button
-            type="button"
-            className="absolute inset-0 bg-black/40 transition-opacity"
-            onClick={() => setMobileClientSheetOpen(false)}
-            aria-label="Закрыть карточку клиента"
-          />
+      {/* Mobile: bottom sheet в document.body — вне overflow-hidden/layout; без transform на корне (ломает inner scroll на iOS). */}
+      {typeof document !== 'undefined' &&
+        isMobile &&
+        mobileClientSheetOpen &&
+        selectedItem &&
+        createPortal(
           <div
-            id="clientSheet"
-            className="bottom-sheet relative flex h-[90vh] flex-col rounded-t-2xl bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.1)] transition-[transform] duration-250 ease-out touch-pan-y"
-            style={{
-              transform: clientSheetPosition === 'open' ? 'translateY(0)' : 'translateY(40%)'
-            }}
+            className="fixed inset-0 z-[1100] flex flex-col justify-end"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Карточка клиента"
           >
-            <div className="sheet-header flex shrink-0 flex-col">
-              <button
-                type="button"
-                className="sheet-handle h-1.5 w-10 shrink-0 rounded-full bg-gray-300 mx-auto mt-2.5 mb-1 cursor-grab touch-none border-0 p-0"
-                aria-label={clientSheetPosition === 'open' ? 'Свернуть' : 'Развернуть'}
-                onClick={() => setClientSheetPosition((p) => (p === 'open' ? 'peek' : 'open'))}
-                onTouchStart={(e) => {
-                  clientSheetTouchStartY.current = e.touches[0].clientY;
-                  clientSheetDragStartPosition.current = clientSheetPosition;
-                }}
-                onTouchMove={(e) => {
-                  const currentY = e.touches[0].clientY;
-                  const deltaY = currentY - clientSheetTouchStartY.current;
-                  if (deltaY > 120) setMobileClientSheetOpen(false);
-                  else if (deltaY < -80 && clientSheetDragStartPosition.current === 'peek') setClientSheetPosition('open');
-                  else if (deltaY > 80 && clientSheetDragStartPosition.current === 'open') setClientSheetPosition('peek');
-                }}
-              />
-            </div>
+            <button
+              type="button"
+              className="absolute inset-0 bg-black/40 transition-opacity"
+              onClick={() => setMobileClientSheetOpen(false)}
+              aria-label="Закрыть карточку клиента"
+            />
             <div
-              className="sheet-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden touch-auto px-4"
-              style={{
-                paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))'
-              }}
+              id="clientSheet"
+              className={[
+                'bottom-sheet relative flex min-h-0 w-full max-w-[100vw] flex-col rounded-t-2xl bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.1)]',
+                'transition-[height] duration-300 ease-out',
+                clientSheetPosition === 'open'
+                  ? 'h-[min(90dvh,calc(100dvh-env(safe-area-inset-bottom,0px)))] max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-bottom,0px)))]'
+                  : 'h-[min(54dvh,calc(100dvh-env(safe-area-inset-bottom,0px)-48px))] max-h-[min(90dvh,calc(100dvh-env(safe-area-inset-bottom,0px)))]'
+              ].join(' ')}
             >
-              <ClientInfoPanel
-                phone={
-                  selectedItem.phone && selectedItem.phone !== '…'
-                    ? selectedItem.phone
-                    : selectedItem.client?.phone ?? null
-                }
-                conversationId={selectedId}
-                conversationDealId={selectedItem.dealId ?? null}
-                messages={messages}
-                dealStatuses={dealStatuses}
-                managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
-                dealStatusCounts={dealStatusCounts}
-                managerCounts={managerCounts}
-                cities={citiesForFilter}
-                cityCounts={cityCounts}
-                onAddCity={handleAddCity}
-                embeddedInSheet
-                getCurrentInputValue={() => inputText}
-                onInsertNextMessage={(text, mode) => {
-                  if (mode === 'replace') setInputText(text);
-                  else setInputText((prev) => (prev ? prev + '\n' + text : text));
+              <div className="sheet-header flex shrink-0 flex-col">
+                <button
+                  type="button"
+                  className="sheet-handle h-1.5 w-10 shrink-0 rounded-full bg-gray-300 mx-auto mt-2.5 mb-1 cursor-grab touch-none border-0 p-0"
+                  aria-label={clientSheetPosition === 'open' ? 'Свернуть' : 'Развернуть'}
+                  onClick={() => setClientSheetPosition((p) => (p === 'open' ? 'peek' : 'open'))}
+                  onTouchStart={(e) => {
+                    clientSheetTouchStartY.current = e.touches[0].clientY;
+                    clientSheetDragStartPosition.current = clientSheetPosition;
+                  }}
+                  onTouchMove={(e) => {
+                    const currentY = e.touches[0].clientY;
+                    const deltaY = currentY - clientSheetTouchStartY.current;
+                    if (deltaY > 120) setMobileClientSheetOpen(false);
+                    else if (deltaY < -80 && clientSheetDragStartPosition.current === 'peek')
+                      setClientSheetPosition('open');
+                    else if (deltaY > 80 && clientSheetDragStartPosition.current === 'open')
+                      setClientSheetPosition('peek');
+                  }}
+                />
+              </div>
+              <div
+                className="sheet-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-y-contain px-4 [touch-action:pan-y]"
+                style={{
+                  paddingBottom: 'calc(80px + env(safe-area-inset-bottom, 0px))',
+                  WebkitOverflowScrolling: 'touch'
                 }}
-                aiBotEnabled={selectedItem?.aiBotEnabled ?? false}
-                aiBotAutoProposalEnabled={selectedItem?.aiBotAutoProposalEnabled ?? false}
-                onAiBotFlagsChange={selectedId ? handleAiBotFlagsChange : undefined}
-                aiBotFlagsSaving={aiBotFlagsSaving}
-                isTranscribeBatchRunning={batchTranscribeRunning}
-                onPrepareForAnalysisStart={() => setPrepareForAnalysisRunning(true)}
-                onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}
-                registerAiBotApplyFacts={(fn) => {
-                  aiBotApplyFactsRef.current = fn ?? null;
-                }}
-                conversationChannel={selectedItem.channel ?? 'whatsapp'}
-                aiRuntime={selectedItem.aiRuntime ?? defaultWhatsAppAiRuntime()}
-                crmAiBots={crmAiBots}
-                onAiRuntimePatch={selectedId ? handleAiRuntimePatch : undefined}
-                aiRuntimeSaving={aiRuntimeSaving}
-                onCreateDealFromAiRecommendation={selectedId ? handleCreateDealFromAiRecommendation : undefined}
-                creatingAiDealFromRec={creatingAiDealFromRec}
-                onCreateTaskFromAiRecommendation={selectedId ? handleCreateTaskFromAiRecommendation : undefined}
-                creatingAiTaskFromRec={creatingAiTaskFromRec}
-                kaspiOrderNumber={selectedItem.kaspiOrderNumber ?? null}
-                kaspiOrderAmount={selectedItem.kaspiOrderAmount ?? null}
-                kaspiOrderStatus={selectedItem.kaspiOrderStatus ?? null}
-                kaspiOrderCustomerName={selectedItem.kaspiOrderCustomerName ?? null}
-                kaspiOrderAddress={selectedItem.kaspiOrderAddress ?? null}
-                kaspiOrderUrl={selectedItem.kaspiOrderUrl ?? null}
-              />
+              >
+                <ClientInfoPanel
+                  phone={
+                    selectedItem.phone && selectedItem.phone !== '…'
+                      ? selectedItem.phone
+                      : selectedItem.client?.phone ?? null
+                  }
+                  conversationId={selectedId}
+                  conversationDealId={selectedItem.dealId ?? null}
+                  messages={messages}
+                  dealStatuses={dealStatuses}
+                  managers={managers.map((m) => ({ id: m.id, name: m.name, color: m.color }))}
+                  dealStatusCounts={dealStatusCounts}
+                  managerCounts={managerCounts}
+                  cities={citiesForFilter}
+                  cityCounts={cityCounts}
+                  onAddCity={handleAddCity}
+                  embeddedInSheet
+                  getCurrentInputValue={() => inputText}
+                  onInsertNextMessage={(text, mode) => {
+                    if (mode === 'replace') setInputText(text);
+                    else setInputText((prev) => (prev ? prev + '\n' + text : text));
+                  }}
+                  aiBotEnabled={selectedItem?.aiBotEnabled ?? false}
+                  aiBotAutoProposalEnabled={selectedItem?.aiBotAutoProposalEnabled ?? false}
+                  onAiBotFlagsChange={selectedId ? handleAiBotFlagsChange : undefined}
+                  aiBotFlagsSaving={aiBotFlagsSaving}
+                  isTranscribeBatchRunning={batchTranscribeRunning}
+                  onPrepareForAnalysisStart={() => setPrepareForAnalysisRunning(true)}
+                  onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}
+                  registerAiBotApplyFacts={(fn) => {
+                    aiBotApplyFactsRef.current = fn ?? null;
+                  }}
+                  conversationChannel={selectedItem.channel ?? 'whatsapp'}
+                  aiRuntime={selectedItem.aiRuntime ?? defaultWhatsAppAiRuntime()}
+                  crmAiBots={crmAiBots}
+                  onAiRuntimePatch={selectedId ? handleAiRuntimePatch : undefined}
+                  aiRuntimeSaving={aiRuntimeSaving}
+                  onCreateDealFromAiRecommendation={selectedId ? handleCreateDealFromAiRecommendation : undefined}
+                  creatingAiDealFromRec={creatingAiDealFromRec}
+                  onCreateTaskFromAiRecommendation={selectedId ? handleCreateTaskFromAiRecommendation : undefined}
+                  creatingAiTaskFromRec={creatingAiTaskFromRec}
+                  kaspiOrderNumber={selectedItem.kaspiOrderNumber ?? null}
+                  kaspiOrderAmount={selectedItem.kaspiOrderAmount ?? null}
+                  kaspiOrderStatus={selectedItem.kaspiOrderStatus ?? null}
+                  kaspiOrderCustomerName={selectedItem.kaspiOrderCustomerName ?? null}
+                  kaspiOrderAddress={selectedItem.kaspiOrderAddress ?? null}
+                  kaspiOrderUrl={selectedItem.kaspiOrderUrl ?? null}
+                />
+              </div>
             </div>
-          </div>
-        </div>
-      )}
+          </div>,
+          document.body
+        )}
       {conversationMenu && (() => {
         const conv = listWithDisplayTitle.find((c) => c.id === conversationMenu.id) ?? null;
         const attention = conv ? getConversationAttentionState(conv) : 'normal';
