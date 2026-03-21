@@ -461,6 +461,13 @@ const WhatsAppChat: React.FC = () => {
   const legacyAiStaleGenerationRef = useRef(0);
   const crmAiDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const crmAiStaleGenerationRef = useRef(0);
+  const inputTextRef = useRef('');
+  inputTextRef.current = inputText;
+  /**
+   * Последний текст поля ввода, подставленный как «чистый» CRM AI draft (replace).
+   * Если trim(value) !== baseline — считаем, что менеджер правил вручную, автозамена новым ответом не делается.
+   */
+  const lastAiDraftBaselineRef = useRef<string | null>(null);
 
   /** Имена CRM-клиентов по нормализованному телефону (для отображения в списке и в шапке чата). */
   const [crmNamesByPhone, setCrmNamesByPhone] = useState<Map<string, string>>(() => new Map());
@@ -1276,6 +1283,7 @@ const WhatsAppChat: React.FC = () => {
       const bridgedDraft = consumeChatDraft(chatIdFromUrl);
       const nextDraft = bridgedDraft ?? draftFromUrl;
       if (nextDraft && nextDraft.trim()) {
+        lastAiDraftBaselineRef.current = null;
         setInputText(nextDraft);
         toast.success('Черновик подставлен в поле ответа');
       }
@@ -2011,6 +2019,47 @@ const WhatsAppChat: React.FC = () => {
     }
   }, [messages, selectedId, crmAiRuntimeActive]);
 
+  const handleComposerInputChange = useCallback((value: string) => {
+    setInputText(value);
+    const b = lastAiDraftBaselineRef.current;
+    if (b !== null && value.trim() !== b) {
+      lastAiDraftBaselineRef.current = null;
+    }
+  }, []);
+
+  /** Та же логика, что кнопка «Подставить в поле ответа» в карточке клиента. */
+  const insertAiReplyIntoComposer = useCallback((text: string, mode: 'replace' | 'append') => {
+    if (mode === 'append') {
+      setInputText((prev) => (prev ? `${prev}\n${text}` : text));
+      lastAiDraftBaselineRef.current = null;
+      return;
+    }
+    setInputText(text);
+    lastAiDraftBaselineRef.current = text.trim();
+  }, []);
+
+  /**
+   * Автоподстановка черновика CRM AI в поле ввода (только режим draft).
+   * Пустое поле или поле ровно с предыдущим AI-черновиком — обновляем; иначе не трогаем.
+   */
+  const trySafeAutofillCrmAiDraft = useCallback((replyCombined: string): boolean => {
+    const trimmed = replyCombined.trim();
+    if (!trimmed) return false;
+    const cur = inputTextRef.current.trim();
+    const baseline = lastAiDraftBaselineRef.current;
+    if (cur === '') {
+      setInputText(replyCombined);
+      lastAiDraftBaselineRef.current = trimmed;
+      return true;
+    }
+    if (baseline !== null && cur === baseline) {
+      setInputText(replyCombined);
+      lastAiDraftBaselineRef.current = trimmed;
+      return true;
+    }
+    return false;
+  }, []);
+
   const executeCrmAiFlush = useCallback(async () => {
     if (!crmAiRuntimeActive) return;
     if (!selectedId || !selectedItem?.phone || selectedItem.phone === '…' || !companyId || incognitoMode) return;
@@ -2030,6 +2079,7 @@ const WhatsAppChat: React.FC = () => {
 
     const botId = rt.botId;
     const mode = rt.mode as 'draft' | 'auto';
+    const flushConversationId = selectedId;
     const messageIdToProcess = unprocessed[unprocessed.length - 1].id;
     const anchorLastId = messageIdToProcess;
     const anchorCount = unprocessed.length;
@@ -2364,7 +2414,13 @@ const WhatsAppChat: React.FC = () => {
             ...runLogDeal,
             ...runLogTask
           });
-          toast.success('Черновик ответа готов (автоворонка)');
+          const stillThisChat = selectedIdRef.current === flushConversationId;
+          const autofillDone = stillThisChat && trySafeAutofillCrmAiDraft(replyCombined);
+          toast.success(
+            autofillDone
+              ? 'Черновик ответа подставлен в поле ввода'
+              : 'Черновик ответа готов (карточка клиента)'
+          );
           return;
         }
 
@@ -2548,7 +2604,8 @@ const WhatsAppChat: React.FC = () => {
     crmAiRuntimeActive,
     incognitoMode,
     selectedId,
-    selectedItem
+    selectedItem,
+    trySafeAutofillCrmAiDraft
   ]);
 
   /** CRM AI: агрегация серии входящих (настройка бота, 2–4 с по умолчанию) / 10 с при voice. */
@@ -2822,6 +2879,7 @@ const WhatsAppChat: React.FC = () => {
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
+          lastAiDraftBaselineRef.current = null;
           setInputText('');
           setSendError(null);
           setReplyToMessage(null);
@@ -2971,6 +3029,10 @@ const WhatsAppChat: React.FC = () => {
     setPendingQuickReplyFiles(null);
   }, [selectedId]);
 
+  useEffect(() => {
+    lastAiDraftBaselineRef.current = null;
+  }, [selectedId]);
+
   const handleSend = async () => {
     if (incognitoMode) {
       // В режиме инкогнито отправка отключена (просмотр-only).
@@ -3026,6 +3088,7 @@ const WhatsAppChat: React.FC = () => {
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
+          lastAiDraftBaselineRef.current = null;
           setInputText('');
           setSendError(null);
           setReplyToMessage(null);
@@ -3070,6 +3133,7 @@ const WhatsAppChat: React.FC = () => {
     const replyId = replyToMessage?.id;
     const filesToSend = pendingQuickReplyFiles ?? [];
     setSending(true);
+    lastAiDraftBaselineRef.current = null;
     setInputText('');
     setPendingQuickReplyFiles(null);
     try {
@@ -4113,7 +4177,7 @@ const WhatsAppChat: React.FC = () => {
               displayTitle={displayItem ? (crmNamesByPhone.get(normalizePhone(displayItem.phone))?.trim() || displayItem.phone || null) : null}
               messages={messages}
               inputText={inputText}
-              onInputChange={setInputText}
+              onInputChange={handleComposerInputChange}
               onSend={handleSend}
               sending={sending}
               onBack={isMobile ? () => setSelectedId(null) : undefined}
@@ -4204,10 +4268,7 @@ const WhatsAppChat: React.FC = () => {
                   onAddCity={handleAddCity}
                   fillWidth
                   getCurrentInputValue={() => inputText}
-                  onInsertNextMessage={(text, mode) => {
-                    if (mode === 'replace') setInputText(text);
-                    else setInputText((prev) => (prev ? prev + '\n' + text : text));
-                  }}
+                  onInsertNextMessage={insertAiReplyIntoComposer}
                   isTranscribeBatchRunning={batchTranscribeRunning}
                   onPrepareForAnalysisStart={() => setPrepareForAnalysisRunning(true)}
                   onPrepareForAnalysisEnd={() => setPrepareForAnalysisRunning(false)}
@@ -4332,10 +4393,7 @@ const WhatsAppChat: React.FC = () => {
                   onAddCity={handleAddCity}
                   embeddedInSheet
                   getCurrentInputValue={() => inputText}
-                  onInsertNextMessage={(text, mode) => {
-                    if (mode === 'replace') setInputText(text);
-                    else setInputText((prev) => (prev ? prev + '\n' + text : text));
-                  }}
+                  onInsertNextMessage={insertAiReplyIntoComposer}
                   aiBotEnabled={selectedItem?.aiBotEnabled ?? false}
                   aiBotAutoProposalEnabled={selectedItem?.aiBotAutoProposalEnabled ?? false}
                   onAiBotFlagsChange={selectedId ? handleAiBotFlagsChange : undefined}
