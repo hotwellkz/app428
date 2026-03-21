@@ -52,6 +52,16 @@ import {
   getMessageTextContentForAi,
   messageHasVoiceOrAudioAttachment
 } from '../utils/whatsappAiMessageContent';
+import {
+  buildCrmOpenAiMessagesFromBatch,
+  buildLegacyAiPayloadMessages,
+  chooseWhatsAppAiDebounceMs,
+  getUnprocessedIncomingMessages,
+  getWhatsAppMessageTime,
+  incomingBatchNeedsTranscriptWait,
+  isInboundBatchStale,
+  mergeLastProcessedInboundWatermarks
+} from '../utils/whatsappAiInboundBatch';
 import { db, auth } from '../lib/firebase/config';
 import { getAuthToken } from '../lib/firebase/auth';
 import type { WhatsAppMessage } from '../types/whatsappDb';
@@ -386,6 +396,12 @@ const WhatsAppChat: React.FC = () => {
   /** Автоворонки → WhatsApp runtime */
   const crmAiRuntimeProcessingRef = useRef(false);
   const crmAiRuntimeLastProcessedRef = useRef<string | null>(null);
+  /** Актуальные сообщения для AI flush (батчинг / stale после await). */
+  const whatsappMessagesForAiRef = useRef<WhatsAppMessage[]>([]);
+  const legacyAiDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const legacyAiStaleGenerationRef = useRef(0);
+  const crmAiDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const crmAiStaleGenerationRef = useRef(0);
 
   /** Чаты, открытые в этой сессии: в списке для них всегда показываем unreadCount=0 (защита от stale snapshot). */
   const [locallyReadChatIds, setLocallyReadChatIds] = useState<Set<string>>(() => new Set());
@@ -1665,6 +1681,8 @@ const WhatsAppChat: React.FC = () => {
     return true;
   }, [selectedItem?.aiRuntime, selectedItem?.channel]);
 
+  whatsappMessagesForAiRef.current = messages;
+
   /** CRM runtime: синхронизация lastProcessed из Firestore при смене чата */
   useEffect(() => {
     const rt = selectedItem?.aiRuntime;
@@ -1706,7 +1724,165 @@ const WhatsAppChat: React.FC = () => {
     };
   }, [selectedId, legacyAiBotActive]);
 
-  /** AI-бот (legacy): при новом входящем сообщении — расшифровка (если голос), генерация ответа, отправка. */
+  /** Пока идёт legacy AI flush, любое обновление сообщений инвалидирует текущую генерацию (stale). */
+  useEffect(() => {
+    if (!selectedId || !legacyAiBotActive) return;
+    if (aiBotProcessingRef.current) {
+      legacyAiStaleGenerationRef.current += 1;
+    }
+  }, [messages, selectedId, legacyAiBotActive]);
+
+  const executeLegacyAiFlush = useCallback(async () => {
+    if (!legacyAiBotActive) return;
+    if (!selectedId || !selectedItem?.phone || selectedItem.phone === '…' || !companyId || incognitoMode) return;
+    if (aiBotProcessingRef.current) return;
+
+    const msgs = whatsappMessagesForAiRef.current;
+    const lastProc = aiBotLastProcessedMessageIdRef.current;
+    const unprocessed = getUnprocessedIncomingMessages(msgs, lastProc, getWhatsAppMessageTime);
+    if (unprocessed.length === 0) return;
+
+    const anchorLastId = unprocessed[unprocessed.length - 1].id;
+    const anchorCount = unprocessed.length;
+    const startGen = legacyAiStaleGenerationRef.current;
+
+    aiBotProcessingRef.current = true;
+    try {
+      const phone = selectedItem.phone;
+      const voiceItems = getVoiceMessagesToTranscribe(msgs);
+      let mergedUpdates: Record<string, string> = {};
+      if (voiceItems.length > 0) {
+        const result = await transcribeVoiceBatch(voiceItems, getAuthToken);
+        mergedUpdates = result.updates ?? {};
+      }
+      if (incomingBatchNeedsTranscriptWait(unprocessed, mergedUpdates)) {
+        if (import.meta.env.DEV) {
+          console.log('[WhatsApp][ai-chat-bot-reply] flush: ждём расшифровку голосов в батче');
+        }
+        return;
+      }
+
+      const payloadMessages = buildLegacyAiPayloadMessages(
+        msgs,
+        lastProc,
+        mergedUpdates,
+        getWhatsAppMessageTime,
+        20
+      );
+      if (payloadMessages.length === 0) return;
+
+      const token = await getAuthToken();
+      if (!token) return;
+
+      if (legacyAiStaleGenerationRef.current !== startGen) return;
+      if (
+        isInboundBatchStale(
+          whatsappMessagesForAiRef.current,
+          aiBotLastProcessedMessageIdRef.current,
+          anchorLastId,
+          anchorCount,
+          getWhatsAppMessageTime
+        )
+      ) {
+        if (import.meta.env.DEV) console.log('[WhatsApp][ai-chat-bot-reply] stale после transcribe, пропуск');
+        return;
+      }
+
+      const leadCtx = aiBotLeadContextRef.current;
+      const clientContext = {
+        city: selectedItem?.client?.city ?? leadCtx?.city ?? null,
+        area_m2: leadCtx?.area_m2 ?? null,
+        floors: leadCtx?.floors ?? null,
+        roofType: leadCtx?.roofType ?? null,
+        stage: leadCtx?.stage ?? null
+      };
+      if (import.meta.env.DEV) {
+        const lastClient = payloadMessages.filter((m) => m.role === 'client').pop();
+        console.log('[WhatsApp] AI bot batched request', {
+          clientContext,
+          lastClientTextPreview: lastClient?.text?.slice(0, 120),
+          batchedIncomingCount: anchorCount
+        });
+      }
+      const res = await fetch('/.netlify/functions/ai-chat-bot-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          messages: payloadMessages,
+          clientContext,
+          knowledgeBase:
+            knowledgeBase.length > 0
+              ? knowledgeBase.map((k) => ({ title: k.title, content: k.content, category: k.category ?? null }))
+              : undefined,
+          quickReplies:
+            quickReplies.length > 0
+              ? quickReplies.map((q) => ({ title: q.title, text: q.text, keywords: q.keywords, category: q.category }))
+              : undefined
+        })
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        reply?: string;
+        error?: string;
+        extractedFacts?: AiBotLeadContext | null;
+      };
+      if (!res.ok || data.error) {
+        if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot reply failed', res.status, data);
+        return;
+      }
+      const reply = typeof data.reply === 'string' ? data.reply.trim() : '';
+      if (!reply) return;
+
+      if (legacyAiStaleGenerationRef.current !== startGen) return;
+      if (
+        isInboundBatchStale(
+          whatsappMessagesForAiRef.current,
+          aiBotLastProcessedMessageIdRef.current,
+          anchorLastId,
+          anchorCount,
+          getWhatsAppMessageTime
+        )
+      ) {
+        if (import.meta.env.DEV) console.log('[WhatsApp][ai-chat-bot-reply] stale перед отправкой, ответ отброшен');
+        return;
+      }
+
+      if (data.extractedFacts && typeof data.extractedFacts === 'object') {
+        aiBotLeadContextRef.current = data.extractedFacts;
+        setConversationAiBotLeadContext(selectedId, data.extractedFacts).catch(() => {});
+        aiBotApplyFactsRef.current?.(data.extractedFacts);
+        if (import.meta.env.DEV) {
+          console.log('[WhatsApp] AI bot extractedFacts applied', data.extractedFacts);
+        }
+      }
+
+      const sendRes = await fetch(SEND_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(wazzupSendBody(phone, { text: formatMessageForWhatsApp(reply), companyId }))
+      });
+      if (!sendRes.ok) {
+        if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot send failed', sendRes.status);
+        return;
+      }
+      aiBotLastProcessedMessageIdRef.current = anchorLastId;
+      await setConversationAiBotLastProcessedMessageId(selectedId, anchorLastId);
+    } catch (e) {
+      if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot pipeline error', e);
+    } finally {
+      aiBotProcessingRef.current = false;
+      const lp = aiBotLastProcessedMessageIdRef.current;
+      const pending = getUnprocessedIncomingMessages(
+        whatsappMessagesForAiRef.current,
+        lp,
+        getWhatsAppMessageTime
+      );
+      if (pending.length > 0 && legacyAiStaleGenerationRef.current !== startGen) {
+        window.setTimeout(() => void executeLegacyAiFlush(), 200);
+      }
+    }
+  }, [companyId, incognitoMode, knowledgeBase, legacyAiBotActive, quickReplies, selectedId, selectedItem]);
+
+  /** Legacy AI: debounce + батч входящих в одном чате (6 с текст / 10 с при voice). */
   useEffect(() => {
     if (
       !selectedId ||
@@ -1714,169 +1890,81 @@ const WhatsAppChat: React.FC = () => {
       !selectedItem?.phone ||
       selectedItem.phone === '…' ||
       !companyId ||
-      incognitoMode ||
-      messages.length === 0 ||
-      aiBotProcessingRef.current
+      incognitoMode
     ) {
-      return;
-    }
-    const getMessageTime = (m: WhatsAppMessage): number => {
-      const t = m.createdAt;
-      if (!t) return 0;
-      if (typeof (t as { toMillis?: () => number }).toMillis === 'function') return (t as { toMillis: () => number }).toMillis();
-      if (typeof t === 'object' && t !== null && 'seconds' in (t as object)) return ((t as { seconds: number }).seconds ?? 0) * 1000;
-      return new Date(t as string).getTime();
-    };
-    const sorted = [...messages].filter((m) => !m.deleted).sort((a, b) => getMessageTime(b) - getMessageTime(a));
-    const latest = sorted[0];
-    if (!latest || latest.direction !== 'incoming') return;
-    if (latest.id === aiBotLastProcessedMessageIdRef.current) return;
-
-    aiBotProcessingRef.current = true;
-    const messageIdToProcess = latest.id;
-    (async () => {
-      try {
-        const phone = selectedItem!.phone!;
-        const voiceItems = getVoiceMessagesToTranscribe(messages);
-        let mergedUpdates: Record<string, string> = {};
-        if (voiceItems.length > 0) {
-          const result = await transcribeVoiceBatch(voiceItems, getAuthToken);
-          mergedUpdates = result.updates ?? {};
-        }
-        if (messageHasVoiceOrAudioAttachment(latest)) {
-          const voiceText = getMessageTextContentForAi(latest, mergedUpdates);
-          if (!voiceText) {
-            if (import.meta.env.DEV) {
-              console.log('[WhatsApp][ai-chat-bot-reply] пропуск: голос без расшифровки, ждём', {
-                messageId: latest.id,
-                transcriptIncludedInAi: false,
-                transcriptChars: 0,
-                skipReason: 'incoming_voice_no_transcript_yet'
-              });
-            }
-            return;
-          }
-        }
-        const recent = messages
-          .map((m) => ({
-            ...m,
-            _content: getMessageTextContentForAi(m, mergedUpdates)
-          }))
-          .filter((m) => m._content.length > 0 && !m.deleted)
-          .slice(-20)
-          .sort((a, b) => getMessageTime(a) - getMessageTime(b));
-        const payloadMessages = recent.map((m) => ({
-          role: m.direction === 'incoming' ? ('client' as const) : ('manager' as const),
-          text: m._content.replace(/<[^>]*>/g, '').trim()
-        }));
-        if (payloadMessages.length === 0) return;
-
-        const token = await getAuthToken();
-        if (!token) return;
-
-        const leadCtx = aiBotLeadContextRef.current;
-        const clientContext = {
-          city: selectedItem?.client?.city ?? leadCtx?.city ?? null,
-          area_m2: leadCtx?.area_m2 ?? null,
-          floors: leadCtx?.floors ?? null,
-          roofType: leadCtx?.roofType ?? null,
-          stage: leadCtx?.stage ?? null
-        };
-        if (import.meta.env.DEV) {
-          const lastClient = payloadMessages.filter((m) => m.role === 'client').pop();
-          const lastClientLen = lastClient?.text?.length ?? 0;
-          console.log('[WhatsApp] AI bot request clientContext', clientContext, 'lastClientText', lastClient?.text?.slice(0, 80), {
-            lastClientTextChars: lastClientLen,
-            latestIsVoice: messageHasVoiceOrAudioAttachment(latest),
-            latestTranscriptChars: getMessageTextContentForAi(latest, mergedUpdates).length
-          });
-        }
-        const res = await fetch('/.netlify/functions/ai-chat-bot-reply', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({
-            messages: payloadMessages,
-            clientContext,
-            knowledgeBase: knowledgeBase.length > 0 ? knowledgeBase.map((k) => ({ title: k.title, content: k.content, category: k.category ?? null })) : undefined,
-            quickReplies: quickReplies.length > 0 ? quickReplies.map((q) => ({ title: q.title, text: q.text, keywords: q.keywords, category: q.category })) : undefined
-          })
-        });
-        const data = (await res.json().catch(() => ({}))) as {
-          reply?: string;
-          error?: string;
-          extractedFacts?: AiBotLeadContext | null;
-        };
-        if (!res.ok || data.error) {
-          if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot reply failed', res.status, data);
-          return;
-        }
-        const reply = typeof data.reply === 'string' ? data.reply.trim() : '';
-        if (!reply) return;
-
-        if (data.extractedFacts && typeof data.extractedFacts === 'object') {
-          aiBotLeadContextRef.current = data.extractedFacts;
-          setConversationAiBotLeadContext(selectedId, data.extractedFacts).catch(() => {});
-          aiBotApplyFactsRef.current?.(data.extractedFacts);
-          if (import.meta.env.DEV) {
-            console.log('[WhatsApp] AI bot extractedFacts applied', data.extractedFacts);
-          }
-        }
-
-        const sendRes = await fetch(SEND_API, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(wazzupSendBody(phone, { text: formatMessageForWhatsApp(reply), companyId }))
-        });
-        if (!sendRes.ok) {
-          if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot send failed', sendRes.status);
-          return;
-        }
-        aiBotLastProcessedMessageIdRef.current = messageIdToProcess;
-        await setConversationAiBotLastProcessedMessageId(selectedId, messageIdToProcess);
-      } catch (e) {
-        if (import.meta.env.DEV) console.warn('[WhatsApp] AI bot pipeline error', e);
-      } finally {
-        aiBotProcessingRef.current = false;
+      if (legacyAiDebounceTimerRef.current) {
+        clearTimeout(legacyAiDebounceTimerRef.current);
+        legacyAiDebounceTimerRef.current = null;
       }
-    })();
-  }, [messages, selectedId, legacyAiBotActive, selectedItem?.phone, companyId, incognitoMode, knowledgeBase, quickReplies]);
-
-  /** Автоворонки → WhatsApp: runtime по выбранному боту (draft / auto). */
-  useEffect(() => {
-    if (
-      !selectedId ||
-      !crmAiRuntimeActive ||
-      !selectedItem?.phone ||
-      selectedItem.phone === '…' ||
-      !companyId ||
-      incognitoMode ||
-      messages.length === 0 ||
-      crmAiRuntimeProcessingRef.current
-    ) {
       return;
     }
-    const getMessageTime = (m: WhatsAppMessage): number => {
-      const t = m.createdAt;
-      if (!t) return 0;
-      if (typeof (t as { toMillis?: () => number }).toMillis === 'function')
-        return (t as { toMillis: () => number }).toMillis();
-      if (typeof t === 'object' && t !== null && 'seconds' in (t as object))
-        return ((t as { seconds: number }).seconds ?? 0) * 1000;
-      return new Date(t as string).getTime();
+    const lastProc = aiBotLastProcessedMessageIdRef.current;
+    const unprocessed = getUnprocessedIncomingMessages(messages, lastProc, getWhatsAppMessageTime);
+    if (unprocessed.length === 0) {
+      if (legacyAiDebounceTimerRef.current) {
+        clearTimeout(legacyAiDebounceTimerRef.current);
+        legacyAiDebounceTimerRef.current = null;
+      }
+      return;
+    }
+    if (legacyAiDebounceTimerRef.current) {
+      clearTimeout(legacyAiDebounceTimerRef.current);
+    }
+    const delay = chooseWhatsAppAiDebounceMs(unprocessed);
+    legacyAiDebounceTimerRef.current = setTimeout(() => {
+      legacyAiDebounceTimerRef.current = null;
+      void executeLegacyAiFlush();
+    }, delay);
+    return () => {
+      if (legacyAiDebounceTimerRef.current) {
+        clearTimeout(legacyAiDebounceTimerRef.current);
+        legacyAiDebounceTimerRef.current = null;
+      }
     };
-    const sorted = [...messages].filter((m) => !m.deleted).sort((a, b) => getMessageTime(b) - getMessageTime(a));
-    const latest = sorted[0];
-    if (!latest || latest.direction !== 'incoming') return;
-    if (latest.id === crmAiRuntimeLastProcessedRef.current) return;
-    if (latest.id === (selectedItem.aiRuntime?.lastProcessedIncomingMessageId ?? null)) return;
+  }, [
+    messages,
+    selectedId,
+    legacyAiBotActive,
+    selectedItem?.phone,
+    companyId,
+    incognitoMode,
+    executeLegacyAiFlush
+  ]);
 
-    const botId = selectedItem.aiRuntime!.botId!;
-    const mode = selectedItem.aiRuntime!.mode as 'draft' | 'auto';
+  /** Пока идёт CRM AI flush, обновление сообщений инвалидирует текущую генерацию. */
+  useEffect(() => {
+    if (!selectedId || !crmAiRuntimeActive) return;
+    if (crmAiRuntimeProcessingRef.current) {
+      crmAiStaleGenerationRef.current += 1;
+    }
+  }, [messages, selectedId, crmAiRuntimeActive]);
+
+  const executeCrmAiFlush = useCallback(async () => {
+    if (!crmAiRuntimeActive) return;
+    if (!selectedId || !selectedItem?.phone || selectedItem.phone === '…' || !companyId || incognitoMode) return;
+    const rt = selectedItem.aiRuntime;
+    if (!rt?.botId || rt.mode === 'off') return;
+    if (crmAiRuntimeProcessingRef.current) return;
+
+    const msgs = whatsappMessagesForAiRef.current;
+    const watermarkAtStart = mergeLastProcessedInboundWatermarks(
+      msgs,
+      crmAiRuntimeLastProcessedRef.current,
+      rt.lastProcessedIncomingMessageId ?? null,
+      getWhatsAppMessageTime
+    );
+    const unprocessed = getUnprocessedIncomingMessages(msgs, watermarkAtStart, getWhatsAppMessageTime);
+    if (unprocessed.length === 0) return;
+
+    const botId = rt.botId;
+    const mode = rt.mode as 'draft' | 'auto';
+    const messageIdToProcess = unprocessed[unprocessed.length - 1].id;
+    const anchorLastId = messageIdToProcess;
+    const anchorCount = unprocessed.length;
+    const startGen = crmAiStaleGenerationRef.current;
 
     crmAiRuntimeProcessingRef.current = true;
-    const messageIdToProcess = latest.id;
     const startedAt = new Date();
-
     const rtCompany = { ensureCompanyId: companyId };
 
     const finishSkip = async (reason: string) => {
@@ -1910,9 +1998,8 @@ const WhatsAppChat: React.FC = () => {
       });
     };
 
-    (async () => {
-      try {
-        const botMeta = crmAiBots.find((b) => b.id === botId);
+    try {
+      const botMeta = crmAiBots.find((b) => b.id === botId);
         if (!botMeta || botMeta.status === 'archived') {
           await finishSkip(!botMeta ? 'Бот не найден или нет доступа' : 'Бот в архиве');
           return;
@@ -1922,61 +2009,59 @@ const WhatsAppChat: React.FC = () => {
           return;
         }
 
-        const phone = selectedItem.phone!;
-        const voiceItems = getVoiceMessagesToTranscribe(messages);
-        let mergedUpdates: Record<string, string> = {};
-        if (voiceItems.length > 0) {
-          const result = await transcribeVoiceBatch(voiceItems, getAuthToken);
-          mergedUpdates = result.updates ?? {};
+      const phone = selectedItem.phone!;
+      const voiceItems = getVoiceMessagesToTranscribe(msgs);
+      let mergedUpdates: Record<string, string> = {};
+      if (voiceItems.length > 0) {
+        const result = await transcribeVoiceBatch(voiceItems, getAuthToken);
+        mergedUpdates = result.updates ?? {};
+      }
+      if (incomingBatchNeedsTranscriptWait(unprocessed, mergedUpdates)) {
+        if (import.meta.env.DEV) {
+          console.log('[WhatsApp][crm-ai-bot-whatsapp-runtime] flush: ждём расшифровку голосов в батче');
         }
-        if (messageHasVoiceOrAudioAttachment(latest)) {
-          const voiceText = getMessageTextContentForAi(latest, mergedUpdates);
-          if (!voiceText) {
-            if (import.meta.env.DEV) {
-              console.log('[WhatsApp][crm-ai-bot-whatsapp-runtime] пропуск: голос без расшифровки, ждём', {
-                messageId: latest.id,
-                transcriptIncludedInAi: false,
-                transcriptChars: 0,
-                skipReason: 'incoming_voice_no_transcript_yet'
-              });
-            }
-            return;
-          }
-        }
-        const recent = messages
-          .map((m) => ({
-            ...m,
-            _content: getMessageTextContentForAi(m, mergedUpdates)
-          }))
-          .filter((m) => m._content.length > 0 && !m.deleted)
-          .slice(-40)
-          .sort((a, b) => getMessageTime(a) - getMessageTime(b));
-        const openaiMessages = recent
-          .map((m) => ({
-            role: m.direction === 'incoming' ? ('user' as const) : ('assistant' as const),
-            content: m._content.replace(/<[^>]*>/g, '').trim()
-          }))
-          .filter((m) => m.content.length > 0);
-        if (openaiMessages.length === 0) {
-          await finishSkip('Нет текста для модели');
-          return;
-        }
-        if (import.meta.env.DEV && messageHasVoiceOrAudioAttachment(latest)) {
-          const t = getMessageTextContentForAi(latest, mergedUpdates);
-          console.log('[WhatsApp][crm-ai-bot-whatsapp-runtime] voice transcript в контексте', {
-            messageId: latest.id,
-            transcriptIncludedInAi: t.length > 0,
-            transcriptChars: t.length
-          });
-        }
+        return;
+      }
 
-        const token = await getAuthToken();
-        if (!token) {
-          await finishSkip('Нет авторизации');
-          return;
-        }
+      const openaiMessages = buildCrmOpenAiMessagesFromBatch(
+        msgs,
+        watermarkAtStart,
+        mergedUpdates,
+        getWhatsAppMessageTime,
+        40
+      );
+      if (openaiMessages.length === 0) {
+        await finishSkip('Нет текста для модели');
+        return;
+      }
+      if (import.meta.env.DEV) {
+        console.log('[WhatsApp][crm-ai-bot-whatsapp-runtime] batched flush', {
+          triggerMessageId: messageIdToProcess,
+          batchedIncomingCount: anchorCount
+        });
+      }
 
-        const res = await fetch(CRM_WHATSAPP_RUNTIME_API, {
+      const token = await getAuthToken();
+      if (!token) {
+        await finishSkip('Нет авторизации');
+        return;
+      }
+
+      if (crmAiStaleGenerationRef.current !== startGen) return;
+      if (
+        isInboundBatchStale(
+          whatsappMessagesForAiRef.current,
+          watermarkAtStart,
+          anchorLastId,
+          anchorCount,
+          getWhatsAppMessageTime
+        )
+      ) {
+        if (import.meta.env.DEV) console.log('[WhatsApp][crm-ai-bot-whatsapp-runtime] stale перед API, пропуск');
+        return;
+      }
+
+      const res = await fetch(CRM_WHATSAPP_RUNTIME_API, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({
@@ -2027,6 +2112,22 @@ const WhatsAppChat: React.FC = () => {
         const reply = typeof data.answer === 'string' ? data.answer.trim() : '';
         if (!reply) {
           await finishSkip('Пустой ответ модели');
+          return;
+        }
+
+        if (crmAiStaleGenerationRef.current !== startGen) return;
+        if (
+          isInboundBatchStale(
+            whatsappMessagesForAiRef.current,
+            watermarkAtStart,
+            anchorLastId,
+            anchorCount,
+            getWhatsAppMessageTime
+          )
+        ) {
+          if (import.meta.env.DEV) {
+            console.log('[WhatsApp][crm-ai-bot-whatsapp-runtime] stale после ответа модели, ответ не публикуем');
+          }
           return;
         }
 
@@ -2293,10 +2394,84 @@ const WhatsAppChat: React.FC = () => {
         });
         toast.error(`AI (автоворонка): ${msg}`);
         crmAiRuntimeLastProcessedRef.current = messageIdToProcess;
-      } finally {
-        crmAiRuntimeProcessingRef.current = false;
+    } finally {
+      crmAiRuntimeProcessingRef.current = false;
+      const item = selectedItem;
+      const rtFin = item?.aiRuntime;
+      if (item && rtFin?.botId && rtFin.mode !== 'off') {
+        const wm = mergeLastProcessedInboundWatermarks(
+          whatsappMessagesForAiRef.current,
+          crmAiRuntimeLastProcessedRef.current,
+          rtFin.lastProcessedIncomingMessageId ?? null,
+          getWhatsAppMessageTime
+        );
+        const pending = getUnprocessedIncomingMessages(
+          whatsappMessagesForAiRef.current,
+          wm,
+          getWhatsAppMessageTime
+        );
+        if (pending.length > 0 && crmAiStaleGenerationRef.current !== startGen) {
+          window.setTimeout(() => void executeCrmAiFlush(), 200);
+        }
       }
-    })();
+    }
+  }, [
+    companyId,
+    crmAiBots,
+    crmAiRuntimeActive,
+    incognitoMode,
+    selectedId,
+    selectedItem
+  ]);
+
+  /** CRM AI: debounce + батч входящих (6 с / 10 с при voice). */
+  useEffect(() => {
+    if (
+      !selectedId ||
+      !crmAiRuntimeActive ||
+      !selectedItem?.phone ||
+      selectedItem.phone === '…' ||
+      !companyId ||
+      incognitoMode
+    ) {
+      if (crmAiDebounceTimerRef.current) {
+        clearTimeout(crmAiDebounceTimerRef.current);
+        crmAiDebounceTimerRef.current = null;
+      }
+      return;
+    }
+    const rt = selectedItem.aiRuntime;
+    if (!rt?.botId || rt.mode === 'off') return;
+
+    const msgs = messages;
+    const watermark = mergeLastProcessedInboundWatermarks(
+      msgs,
+      crmAiRuntimeLastProcessedRef.current,
+      rt.lastProcessedIncomingMessageId ?? null,
+      getWhatsAppMessageTime
+    );
+    const unprocessed = getUnprocessedIncomingMessages(msgs, watermark, getWhatsAppMessageTime);
+    if (unprocessed.length === 0) {
+      if (crmAiDebounceTimerRef.current) {
+        clearTimeout(crmAiDebounceTimerRef.current);
+        crmAiDebounceTimerRef.current = null;
+      }
+      return;
+    }
+    if (crmAiDebounceTimerRef.current) {
+      clearTimeout(crmAiDebounceTimerRef.current);
+    }
+    const delay = chooseWhatsAppAiDebounceMs(unprocessed);
+    crmAiDebounceTimerRef.current = setTimeout(() => {
+      crmAiDebounceTimerRef.current = null;
+      void executeCrmAiFlush();
+    }, delay);
+    return () => {
+      if (crmAiDebounceTimerRef.current) {
+        clearTimeout(crmAiDebounceTimerRef.current);
+        crmAiDebounceTimerRef.current = null;
+      }
+    };
   }, [
     messages,
     selectedId,
@@ -2307,7 +2482,8 @@ const WhatsAppChat: React.FC = () => {
     selectedItem?.phone,
     selectedItem?.aiRuntime?.botId,
     selectedItem?.aiRuntime?.mode,
-    selectedItem?.aiRuntime?.lastProcessedIncomingMessageId
+    selectedItem?.aiRuntime?.lastProcessedIncomingMessageId,
+    executeCrmAiFlush
   ]);
 
   const handleFileSelect = useCallback(async (file: File) => {
