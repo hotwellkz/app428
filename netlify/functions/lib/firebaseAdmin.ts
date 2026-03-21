@@ -1029,7 +1029,16 @@ function buildConversationLastMessageMediaFields(
       mimeL.includes('codecs=opus') ||
       /^audio\/ogg\b/i.test(mimeL));
 
-  if (a.type === 'voice' || isVoiceLikeAudio) {
+  const urlL = (a.url ?? '').toLowerCase();
+  /** Wazzup: голосовые приходят как audio; в строке часто .ogg/opus, без fileName/mime. */
+  const isWazzupStyleAudioAsVoice =
+    a.type === 'audio' &&
+    (urlL.includes('.ogg') ||
+      urlL.includes('opus') ||
+      (durRaw != null && !fileNameL.trim()) ||
+      (!fileNameL.trim() && !mimeL.trim() && urlL.length > 0));
+
+  if (a.type === 'voice' || isVoiceLikeAudio || isWazzupStyleAudioAsVoice) {
     return {
       lastMessagePreview: durLabel ? `Голосовое сообщение · ${durLabel}` : 'Голосовое сообщение',
       lastMessageMedia: true,

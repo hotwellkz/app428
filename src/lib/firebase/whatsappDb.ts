@@ -653,6 +653,15 @@ function conversationToListItem(
       return { type: 'video' as const, url: '', ...(mediaDur !== undefined ? { durationSeconds: mediaDur } : {}) };
     }
     if (mediaKind === 'audio') {
+      /**
+       * Старые документы: Wazzup присылал голосовые как `audio` → в summary оставались preview "[медиа]" / пусто.
+       * Не маппим все `audio` в voice (редкий шаринг трека), только типичный след голосового из webhook.
+       */
+      const p = preview.trim().toLowerCase();
+      const treatAudioAsVoice = p === '[медиа]' || p === '[media]' || p === '[no text]';
+      if (treatAudioAsVoice) {
+        return { type: 'voice' as const, url: '', ...(mediaDur !== undefined ? { durationSeconds: mediaDur } : {}) };
+      }
       return { type: 'audio' as const, url: '', ...(mediaDur !== undefined ? { durationSeconds: mediaDur } : {}) };
     }
     return { type: 'file' as const, url: '' };

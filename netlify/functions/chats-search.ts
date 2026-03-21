@@ -78,6 +78,34 @@ function buildChatJson(
   const createdAt = lastMessageAt || (data.createdAt as Timestamp);
   const preview = String(data.lastMessagePreview ?? '').trim();
   const hasMedia = data.lastMessageMedia === true;
+  const mediaKind = (data.lastMessageMediaKind as string | undefined) ?? null;
+  const mediaDur =
+    typeof data.lastMessageAttachmentDurationSec === 'number' ? data.lastMessageAttachmentDurationSec : undefined;
+
+  const previewAttachment = (): { type: string; url: string; durationSeconds?: number } => {
+    if (mediaKind === 'voice') {
+      return {
+        type: 'voice',
+        url: '',
+        ...(mediaDur !== undefined ? { durationSeconds: mediaDur } : {})
+      };
+    }
+    if (mediaKind === 'audio') {
+      const p = preview.trim().toLowerCase();
+      const legacyVoice = p === '[медиа]' || p === '[media]' || p === '[no text]';
+      return {
+        type: legacyVoice ? 'voice' : 'audio',
+        url: '',
+        ...(mediaDur !== undefined ? { durationSeconds: mediaDur } : {})
+      };
+    }
+    if (mediaKind === 'image') return { type: 'image', url: '' };
+    if (mediaKind === 'video') {
+      return { type: 'video', url: '', ...(mediaDur !== undefined ? { durationSeconds: mediaDur } : {}) };
+    }
+    return { type: 'file', url: '' };
+  };
+
   const lastMessage =
     preview || hasMedia || lastMessageAt
       ? {
@@ -87,7 +115,7 @@ function buildChatJson(
           direction: data.lastMessageSender === 'manager' ? 'outgoing' : 'incoming',
           createdAt: tsToIso(createdAt as Timestamp) || new Date().toISOString(),
           channel: channel === 'instagram' ? 'instagram' : 'whatsapp',
-          attachments: hasMedia ? [{ type: 'file', url: '' }] : undefined
+          attachments: hasMedia ? [previewAttachment()] : undefined
         }
       : null;
 

@@ -23,6 +23,17 @@ export function isVoiceNoteAttachment(att: MessageAttachment | undefined): boole
   const mime = (att.mimeType ?? '').toLowerCase();
   if (mime.includes('opus') && mime.includes('ogg')) return true;
   if (mime.includes('opus')) return true;
+  const url = (att.url ?? '').toLowerCase();
+  if (url.includes('.ogg') || url.includes('opus')) return true;
+  /** Синтетическое превью списка / Wazzup: только длительность, без имени файла. */
+  if (
+    typeof att.durationSeconds === 'number' &&
+    att.durationSeconds >= 0 &&
+    att.durationSeconds <= 3600 &&
+    !name.trim()
+  ) {
+    return true;
+  }
   return false;
 }
 

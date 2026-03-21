@@ -78,7 +78,13 @@ function buildAttachmentsFromWazzup(
   if (t === 'image') attachmentType = 'image';
   else if (t === 'video') attachmentType = 'video';
   else if (t === 'ptt' || t === 'voice') attachmentType = 'voice';
-  else if (t === 'audio') attachmentType = 'audio';
+  /**
+   * Wazzup webhook ENUM: для WhatsApp отдельного типа «голосовое» нет — PTT приходит как `audio`
+   * (см. документацию Wazzup: Message type — 'audio' — audio). Раньше мы сохраняли как `audio`
+   * без mime/fileName → summary чата получал lastMessagePreview "[медиа]".
+   * Голосовые в чате выглядели нормально (плеер для audio|voice), а список — нет.
+   */
+  else if (t === 'audio') attachmentType = 'voice';
   else if (t === 'document') attachmentType = 'file';
   const row: MessageAttachmentRow = { type: attachmentType, url: contentUri.trim() };
   if (typeof durationSec === 'number' && Number.isFinite(durationSec) && durationSec >= 0) {
