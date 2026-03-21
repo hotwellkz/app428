@@ -22,7 +22,36 @@ export function isVoiceNoteAttachment(att: MessageAttachment | undefined): boole
   if (name.startsWith('voice.')) return true;
   const mime = (att.mimeType ?? '').toLowerCase();
   if (mime.includes('opus') && mime.includes('ogg')) return true;
+  if (mime.includes('opus')) return true;
   return false;
+}
+
+/**
+ * Парсит строку вида «0:09» или «1:02:03» в секунды.
+ */
+function parseCompactDurationLabelToSeconds(label: string): number | undefined {
+  const parts = label.split(':').map((p) => p.trim()).filter(Boolean);
+  if (parts.length < 2 || parts.length > 3) return undefined;
+  const nums = parts.map((p) => parseInt(p, 10));
+  if (nums.some((n) => Number.isNaN(n))) return undefined;
+  if (nums.length === 2) return nums[0] * 60 + nums[1];
+  return nums[0] * 3600 + nums[1] * 60 + nums[2];
+}
+
+/**
+ * Денормализованный текст превью диалога: «Голосовое сообщение» / «Голосовое сообщение · 0:09».
+ * Используется, когда в summary нет lastMessageMediaKind, но текст превью уже голосовой.
+ */
+export function parseVoiceListPreviewFromText(text: string | null | undefined): { durationSeconds?: number } | null {
+  const t = (text ?? '').trim();
+  if (!t.startsWith('Голосовое сообщение')) return null;
+  const dot = t.indexOf('·');
+  if (dot === -1) return {};
+  const label = t.slice(dot + 1).trim();
+  if (!label) return {};
+  const sec = parseCompactDurationLabelToSeconds(label);
+  if (sec === undefined || !Number.isFinite(sec) || sec < 0) return {};
+  return { durationSeconds: sec };
 }
 
 /** Маппинг статуса от Wazzup (sent|delivered|read|error) в UI. */

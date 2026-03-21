@@ -34,6 +34,7 @@ import type {
   AiTaskRecommendationSnapshot
 } from '../../types/aiTaskRecommendation';
 import { parseWhatsAppAiRuntime } from '../../types/whatsappAiRuntime';
+import { parseVoiceListPreviewFromText } from '../../components/whatsapp/whatsappUtils';
 
 export const COLLECTIONS = {
   CLIENTS: 'whatsappClients',
@@ -636,6 +637,16 @@ function conversationToListItem(
     if (!hasMedia) return undefined;
     if (mediaKind === 'voice') {
       return { type: 'voice' as const, url: '', ...(mediaDur !== undefined ? { durationSeconds: mediaDur } : {}) };
+    }
+    /** Текст превью уже «Голосовое сообщение…», но kind не записан (старые документы / частичные апдейты). */
+    const voiceFromPreviewText = parseVoiceListPreviewFromText(preview);
+    if (voiceFromPreviewText !== null) {
+      const ds = mediaDur ?? voiceFromPreviewText.durationSeconds;
+      return {
+        type: 'voice' as const,
+        url: '',
+        ...(ds !== undefined ? { durationSeconds: ds } : {})
+      };
     }
     if (mediaKind === 'image') return { type: 'image' as const, url: '' };
     if (mediaKind === 'video') {

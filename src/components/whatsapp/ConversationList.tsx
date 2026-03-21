@@ -1,7 +1,12 @@
 import React, { useRef, useCallback, memo, useEffect } from 'react';
 import { Mic } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { formatLastMessageTime, formatVoiceListDuration, isVoiceNoteAttachment } from './whatsappUtils';
+import {
+  formatLastMessageTime,
+  formatVoiceListDuration,
+  isVoiceNoteAttachment,
+  parseVoiceListPreviewFromText
+} from './whatsappUtils';
 import type { ConversationListItem } from '../../lib/firebase/whatsappDb';
 import { getConversationAttentionState } from '../../lib/firebase/whatsappDb';
 import Avatar from './Avatar';
@@ -222,10 +227,17 @@ const ConversationRow = memo(function ConversationRow({
             ) : (() => {
                 const lm = item.lastMessage;
                 const att0 = lm.attachments?.[0];
+                const voiceMetaFromText = !lm.deleted ? parseVoiceListPreviewFromText(lm.text) : null;
                 const isVoice =
                   !!att0 && !lm.deleted && (att0.type === 'voice' || isVoiceNoteAttachment(att0));
-                if (isVoice && att0) {
-                  const dur = formatVoiceListDuration(att0.durationSeconds);
+                const showVoiceRow =
+                  !lm.deleted && (isVoice || voiceMetaFromText !== null);
+                if (showVoiceRow) {
+                  const durSec =
+                    att0?.durationSeconds != null
+                      ? att0.durationSeconds
+                      : voiceMetaFromText?.durationSeconds;
+                  const dur = formatVoiceListDuration(durSec);
                   const a11y = dur ? `Голосовое сообщение, длительность ${dur}` : 'Голосовое сообщение';
                   return (
                     <span

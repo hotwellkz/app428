@@ -1020,7 +1020,16 @@ function buildConversationLastMessageMediaFields(
     ['image', 'video', 'audio', 'voice', 'file'].includes(kindRaw) ? kindRaw : 'file'
   ) as LastMessageMediaKind;
 
-  if (a.type === 'voice') {
+  const fileNameL = (a.fileName ?? '').toLowerCase();
+  const mimeL = (a.mimeType ?? '').toLowerCase();
+  const isVoiceLikeAudio =
+    a.type === 'audio' &&
+    (fileNameL.startsWith('voice.') ||
+      (mimeL.includes('ogg') && mimeL.includes('opus')) ||
+      mimeL.includes('codecs=opus') ||
+      /^audio\/ogg\b/i.test(mimeL));
+
+  if (a.type === 'voice' || isVoiceLikeAudio) {
     return {
       lastMessagePreview: durLabel ? `Голосовое сообщение · ${durLabel}` : 'Голосовое сообщение',
       lastMessageMedia: true,
@@ -1100,6 +1109,27 @@ export async function saveMessage(
   return ref.id;
 }
 
+/** Вложения из документа сообщения Firestore → строка для preview builder. */
+function attachmentsFromFirestoreForPreview(arr: unknown[] | undefined): MessageAttachmentRow[] | undefined {
+  if (!Array.isArray(arr) || arr.length === 0) return undefined;
+  return arr.map((raw) => {
+    const o = raw as Record<string, unknown>;
+    const type = (o.type as MessageAttachmentRow['type']) || 'file';
+    return {
+      type: ['image', 'video', 'audio', 'voice', 'file'].includes(type) ? type : 'file',
+      url: String(o.url ?? ''),
+      mimeType: o.mimeType as string | undefined,
+      fileName: o.fileName as string | undefined,
+      size: typeof o.size === 'number' ? o.size : undefined,
+      thumbnailUrl: (o.thumbnailUrl as string | null) ?? undefined,
+      durationSeconds:
+        typeof o.durationSeconds === 'number' && Number.isFinite(o.durationSeconds) && o.durationSeconds >= 0
+          ? o.durationSeconds
+          : undefined
+    };
+  });
+}
+
 /**
  * Upsert-сохранение сообщения по providerMessageId (используется в webhook Wazzup).
  * Если сообщение с таким providerMessageId уже есть — обновляем его (text/attachments) и conversation.last*,
@@ -1139,7 +1169,13 @@ export async function upsertMessageFromWebhook(
         await docRef.update(update);
       }
       const convRef = db.collection(COLLECTIONS.CONVERSATIONS).doc(conversationId);
-      const mediaFields = buildConversationLastMessageMediaFields(text, options.attachments);
+      /** Повторные webhook без attachments не должны затирать превью: берём вложения из запроса или из уже сохранённого сообщения. */
+      const attachmentsForPreview =
+        options.attachments && options.attachments.length > 0
+          ? options.attachments
+          : attachmentsFromFirestoreForPreview(existingData.attachments);
+      const mergedText = (text || (existingData.text as string) || '').trim();
+      const mediaFields = buildConversationLastMessageMediaFields(mergedText, attachmentsForPreview);
       const convUpdate: Record<string, unknown> = {
         lastMessageAt: now,
         lastMessagePreview: mediaFields.lastMessagePreview,
