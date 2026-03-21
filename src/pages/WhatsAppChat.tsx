@@ -405,8 +405,6 @@ const WhatsAppChat: React.FC = () => {
   const crmAiDebounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const crmAiStaleGenerationRef = useRef(0);
 
-  /** Чаты, открытые в этой сессии: в списке для них всегда показываем unreadCount=0 (защита от stale snapshot). */
-  const [locallyReadChatIds, setLocallyReadChatIds] = useState<Set<string>>(() => new Set());
   /** Имена CRM-клиентов по нормализованному телефону (для отображения в списке и в шапке чата). */
   const [crmNamesByPhone, setCrmNamesByPhone] = useState<Map<string, string>>(() => new Map());
   /** Города клиентов по нормализованному телефону (для фильтра и отображения). */
@@ -1479,7 +1477,6 @@ const WhatsAppChat: React.FC = () => {
     }
     setIndexBuilding(false);
     if (!incognitoMode) {
-      setLocallyReadChatIds((prev) => new Set(prev).add(conversationId));
       if (import.meta.env.DEV) {
         console.log('[WhatsApp] markAsRead start:', {
           conversationId,
@@ -1610,7 +1607,13 @@ const WhatsAppChat: React.FC = () => {
 
   const listWithDisplayTitle = useMemo(() => {
     return chatsListForSidebar.map((c) => {
-      const effectiveUnread = locallyReadChatIds.has(c.id) ? 0 : (c.unreadCount ?? 0);
+      /**
+       * Бейдж непрочитанного: только для строки **сейчас открытого** чата принудительно 0 (и скрываем stale snapshot),
+       * пока не инкогнито. Раньше держали Set «открытых в сессии» — после «Назад» на mobile он маскировал
+       * реальный unread до refresh (Firestore уже обновлён, UI нет).
+       */
+      const effectiveUnread =
+        selectedId === c.id && !incognitoMode ? 0 : (c.unreadCount ?? 0);
       const normPhone = normalizePhone(c.phone ?? c.client?.phone ?? '');
       const statusId = normPhone ? dealStatusByPhone.get(normPhone) ?? null : null;
       const managerId = normPhone ? managerByPhone.get(normPhone) ?? null : null;
@@ -1641,7 +1644,8 @@ const WhatsAppChat: React.FC = () => {
     });
   }, [
     chatsListForSidebar,
-    locallyReadChatIds,
+    selectedId,
+    incognitoMode,
     crmNamesByPhone,
     cityByPhone,
     dealStatusByPhone,
