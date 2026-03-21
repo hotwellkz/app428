@@ -7,7 +7,7 @@ import {
   Search,
   LayoutGrid,
   Clock,
-  CircleDot,
+  Bell,
   GitBranch,
   Users,
   MapPin,
@@ -3674,72 +3674,76 @@ const WhatsAppChat: React.FC = () => {
             {searchActive && searchLoading && (
               <p className="px-3 pb-1.5 text-[11px] text-gray-500 md:pt-0 pt-1">Поиск по базе…</p>
             )}
-            {/* Мобильная панель: одна горизонтальная строка + scroll (вариант C: чипы с подписью, селекты — компактные с иконкой) */}
-            <div className="md:hidden flex flex-nowrap items-center gap-2 px-3 pb-2 overflow-x-auto overflow-y-hidden overscroll-x-contain whatsapp-filters-bar-scroll touch-pan-x">
+            {/* Мобильная панель: icon-only + badge (B), горизонтальный scroll; a11y: title + aria-label */}
+            <div className="md:hidden flex flex-nowrap items-center gap-1.5 px-3 pb-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain whatsapp-filters-bar-scroll touch-pan-x">
               <button
                 type="button"
                 onClick={() => setActiveFilter('all')}
-                className={`filter-label shrink-0 inline-flex h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
-                  activeFilter === 'all'
-                    ? 'border-green-300 bg-green-100 text-green-900'
-                    : 'border-gray-200 bg-white text-gray-600 active:bg-gray-50'
-                }`}
+                title="Все чаты"
+                aria-label="Показать все чаты"
                 aria-pressed={activeFilter === 'all'}
+                className={`filter-label relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-colors active:scale-[0.98] ${
+                  activeFilter === 'all'
+                    ? 'border-green-400 bg-green-100 text-green-800'
+                    : 'border-gray-200/90 bg-white text-gray-600'
+                }`}
               >
-                <LayoutGrid className="h-3.5 w-3.5 shrink-0 opacity-80" aria-hidden />
-                Все
+                <LayoutGrid className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
               </button>
               <button
                 type="button"
                 onClick={() => setActiveFilter('waiting')}
-                className={`filter-label shrink-0 inline-flex h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
-                  activeFilter === 'waiting'
-                    ? 'border-green-300 bg-green-100 text-green-900'
-                    : 'border-gray-200 bg-white text-gray-600 active:bg-gray-50'
-                }`}
+                title={waitingCount > 0 ? `Ждут ответа: ${waitingCount}` : 'Ждут ответа'}
+                aria-label={`Фильтр «Ждут ответа»${waitingCount > 0 ? `, ${waitingCount} чатов` : ''}`}
                 aria-pressed={activeFilter === 'waiting'}
+                className={`filter-label relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-colors active:scale-[0.98] ${
+                  activeFilter === 'waiting'
+                    ? 'border-green-400 bg-green-100 text-amber-700'
+                    : 'border-gray-200/90 bg-white text-amber-600'
+                }`}
               >
-                <Clock className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
-                <span>Ждут</span>
+                <Clock className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
                 {waitingCount > 0 && (
-                  <span className="inline-flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-gray-200 px-1 text-[10px] font-semibold text-gray-800">
-                    {waitingCount}
+                  <span className="pointer-events-none absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-amber-500 px-0.5 text-[9px] font-bold leading-none text-white shadow-sm ring-2 ring-white">
+                    {waitingCount > 99 ? '99+' : waitingCount}
                   </span>
                 )}
               </button>
               <button
                 type="button"
                 onClick={() => setActiveFilter('unread')}
-                className={`filter-label shrink-0 inline-flex h-9 items-center gap-1 rounded-full border px-2.5 text-[11px] font-medium transition-colors ${
-                  activeFilter === 'unread'
-                    ? 'border-green-300 bg-green-100 text-green-900'
-                    : 'border-gray-200 bg-white text-gray-600 active:bg-gray-50'
-                }`}
+                title={unreadCount > 0 ? `Непрочитанные: ${unreadCount}` : 'Непрочитанные'}
+                aria-label={`Фильтр непрочитанных${unreadCount > 0 ? `, ${unreadCount} чатов` : ''}`}
                 aria-pressed={activeFilter === 'unread'}
+                className={`filter-label relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-colors active:scale-[0.98] ${
+                  activeFilter === 'unread'
+                    ? 'border-green-400 bg-green-100 text-red-600'
+                    : 'border-gray-200/90 bg-white text-red-500'
+                }`}
               >
-                <CircleDot className="h-3.5 w-3.5 shrink-0 text-red-500" aria-hidden />
-                <span>Непр.</span>
+                <Bell className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
                 {unreadCount > 0 && (
-                  <span className="inline-flex min-h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-gray-200 px-1 text-[10px] font-semibold text-gray-800">
-                    {unreadCount}
+                  <span className="pointer-events-none absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-bold leading-none text-white shadow-sm ring-2 ring-white">
+                    {unreadCount > 99 ? '99+' : unreadCount}
                   </span>
                 )}
               </button>
               {dealStatuses.length > 0 && (
                 <div
-                  className={`relative shrink-0 ${
+                  className={`relative h-10 w-10 shrink-0 rounded-xl border bg-white shadow-sm transition-shadow ${
                     dealStatusFilter !== 'all'
-                      ? 'ring-2 ring-green-400/60 ring-offset-1 ring-offset-gray-50/80 rounded-full'
-                      : ''
+                      ? 'border-green-400 ring-2 ring-green-400/45'
+                      : 'border-gray-200/90'
                   }`}
+                  title="Фильтр по сделке и статусу"
                 >
                   <select
                     value={dealStatusFilter}
                     onChange={(e) =>
                       setDealStatusFilter(e.target.value === 'all' ? 'all' : e.target.value)
                     }
-                    aria-label="Фильтр по сделке / статусу"
-                    className="relative z-0 h-9 max-w-[7.25rem] min-w-[6.5rem] cursor-pointer appearance-none rounded-full border border-gray-200 bg-white py-0 pl-7 pr-6 text-[10px] font-medium text-gray-800"
+                    aria-label="Фильтр по сделке и статусу воронки"
+                    className="absolute inset-0 z-[2] h-full w-full cursor-pointer opacity-0 text-base"
                   >
                     <option value="all">Все сделки ({dealStatusCounts.all})</option>
                     <option value="none">Без статуса ({dealStatusCounts.none})</option>
@@ -3749,22 +3753,28 @@ const WhatsAppChat: React.FC = () => {
                       </option>
                     ))}
                   </select>
-                  <GitBranch
-                    className="pointer-events-none absolute left-2 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-emerald-600"
-                    aria-hidden
-                  />
-                  <ChevronDown
-                    className="pointer-events-none absolute right-1.5 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
-                    aria-hidden
-                  />
+                  <span className="pointer-events-none flex h-full w-full flex-col items-center justify-center pb-1 pt-0.5">
+                    <GitBranch className="h-[17px] w-[17px] text-emerald-600" strokeWidth={2} aria-hidden />
+                    <ChevronDown className="mt-0.5 h-2.5 w-2.5 text-gray-400" strokeWidth={2.5} aria-hidden />
+                  </span>
+                  {dealStatusFilter === 'all' && dealStatusCounts.all > 0 && (
+                    <span className="pointer-events-none absolute -right-1 -top-1 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-emerald-600 px-0.5 text-[8px] font-bold leading-none text-white shadow-sm ring-2 ring-white">
+                      {dealStatusCounts.all > 99 ? '99+' : dealStatusCounts.all}
+                    </span>
+                  )}
+                  {dealStatusFilter !== 'all' && (
+                    <span
+                      className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-green-500 ring-2 ring-white"
+                      aria-hidden
+                    />
+                  )}
                 </div>
               )}
               <div
-                className={`relative shrink-0 ${
-                  managerFilter !== 'all'
-                    ? 'ring-2 ring-green-400/60 ring-offset-1 ring-offset-gray-50/80 rounded-full'
-                    : ''
+                className={`relative h-10 w-10 shrink-0 rounded-xl border bg-white shadow-sm transition-shadow ${
+                  managerFilter !== 'all' ? 'border-green-400 ring-2 ring-green-400/45' : 'border-gray-200/90'
                 }`}
+                title="Фильтр по менеджеру"
               >
                 <select
                   value={managerFilter}
@@ -3772,8 +3782,8 @@ const WhatsAppChat: React.FC = () => {
                     const v = e.target.value;
                     setManagerFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
                   }}
-                  aria-label="Фильтр по менеджеру"
-                  className="relative z-0 h-9 max-w-[6.75rem] min-w-[5.75rem] cursor-pointer appearance-none rounded-full border border-gray-200 bg-white py-0 pl-7 pr-6 text-[10px] font-medium text-gray-800"
+                  aria-label="Фильтр по ответственному менеджеру"
+                  className="absolute inset-0 z-[2] h-full w-full cursor-pointer opacity-0 text-base"
                 >
                   <option value="all">Все менеджеры</option>
                   <option value="none">Без менеджера</option>
@@ -3783,21 +3793,22 @@ const WhatsAppChat: React.FC = () => {
                     </option>
                   ))}
                 </select>
-                <Users
-                  className="pointer-events-none absolute left-2 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-gray-500"
-                  aria-hidden
-                />
-                <ChevronDown
-                  className="pointer-events-none absolute right-1.5 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
-                  aria-hidden
-                />
+                <span className="pointer-events-none flex h-full w-full flex-col items-center justify-center pb-1 pt-0.5">
+                  <Users className="h-[17px] w-[17px] text-gray-600" strokeWidth={2} aria-hidden />
+                  <ChevronDown className="mt-0.5 h-2.5 w-2.5 text-gray-400" strokeWidth={2.5} aria-hidden />
+                </span>
+                {managerFilter !== 'all' && (
+                  <span
+                    className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-green-500 ring-2 ring-white"
+                    aria-hidden
+                  />
+                )}
               </div>
               <div
-                className={`relative shrink-0 ${
-                  cityFilter !== 'all'
-                    ? 'ring-2 ring-green-400/60 ring-offset-1 ring-offset-gray-50/80 rounded-full'
-                    : ''
+                className={`relative h-10 w-10 shrink-0 rounded-xl border bg-white shadow-sm transition-shadow ${
+                  cityFilter !== 'all' ? 'border-green-400 ring-2 ring-green-400/45' : 'border-gray-200/90'
                 }`}
+                title="Фильтр по городу"
               >
                 <select
                   value={cityFilter}
@@ -3805,8 +3816,8 @@ const WhatsAppChat: React.FC = () => {
                     const v = e.target.value;
                     setCityFilter(v === 'all' ? 'all' : v === 'none' ? 'none' : v);
                   }}
-                  aria-label="Фильтр по городу"
-                  className="relative z-0 h-9 max-w-[6.75rem] min-w-[5.75rem] cursor-pointer appearance-none rounded-full border border-gray-200 bg-white py-0 pl-7 pr-6 text-[10px] font-medium text-gray-800"
+                  aria-label="Фильтр по городу клиента"
+                  className="absolute inset-0 z-[2] h-full w-full cursor-pointer opacity-0 text-base"
                 >
                   <option value="all">Все города</option>
                   <option value="none">Без города ({cityCounts.none})</option>
@@ -3816,14 +3827,16 @@ const WhatsAppChat: React.FC = () => {
                     </option>
                   ))}
                 </select>
-                <MapPin
-                  className="pointer-events-none absolute left-2 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-gray-500"
-                  aria-hidden
-                />
-                <ChevronDown
-                  className="pointer-events-none absolute right-1.5 top-1/2 z-[2] h-3.5 w-3.5 -translate-y-1/2 text-gray-400"
-                  aria-hidden
-                />
+                <span className="pointer-events-none flex h-full w-full flex-col items-center justify-center pb-1 pt-0.5">
+                  <MapPin className="h-[17px] w-[17px] text-sky-600" strokeWidth={2} aria-hidden />
+                  <ChevronDown className="mt-0.5 h-2.5 w-2.5 text-gray-400" strokeWidth={2.5} aria-hidden />
+                </span>
+                {cityFilter !== 'all' && (
+                  <span
+                    className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-green-500 ring-2 ring-white"
+                    aria-hidden
+                  />
+                )}
               </div>
             </div>
 
