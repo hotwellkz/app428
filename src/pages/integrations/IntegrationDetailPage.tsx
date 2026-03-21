@@ -42,7 +42,7 @@ const PanelFallback = () => (
 
 export const IntegrationDetailPage: React.FC = () => {
   const { integrationId } = useParams<{ integrationId: string }>();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
 
   const def = integrationId ? getIntegrationById(integrationId) : undefined;
   const Panel = integrationId ? PANELS[integrationId] : undefined;
@@ -51,6 +51,20 @@ export const IntegrationDetailPage: React.FC = () => {
 
   if (!integrationId || !def || !Panel) {
     return <Navigate to="/settings/integrations" replace />;
+  }
+
+  /**
+   * useAuth() хранит состояние на экземпляр компонента (без Context).
+   * При первом маунте детальной страницы user ещё null до onAuthStateChanged —
+   * без ожидания loading редирект «назад» срабатывал сразу и ломал переход с карточки.
+   */
+  if (authLoading) {
+    return (
+      <>
+        <PageMetadata title={`${title} — интеграции`} description={def.shortDescription} />
+        <PanelFallback />
+      </>
+    );
   }
 
   if (!user) {
