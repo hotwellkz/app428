@@ -82,6 +82,7 @@ import type { WhatsAppMessage } from '../types/whatsappDb';
 import type { MediaQuickReply } from '../types/mediaQuickReplies';
 import ConversationList from '../components/whatsapp/ConversationList';
 import ChatWindow from '../components/whatsapp/ChatWindow';
+import { HeaderSearchBar } from '../components/HeaderSearchBar';
 import ClientInfoPanel from '../components/whatsapp/ClientInfoPanel';
 import { ResizeHandle } from '../components/whatsapp/ResizeHandle';
 import ForwardDialog from '../components/whatsapp/ForwardDialog';
@@ -425,6 +426,8 @@ const WhatsAppChat: React.FC = () => {
   const [companyCitiesList, setCompanyCitiesList] = useState<string[]>([]);
   /** Поиск по имени клиента, номеру и превью сообщения */
   const [searchQuery, setSearchQuery] = useState('');
+  /** Моб.: раскрытая панель поиска в шапке (как Feed), без отдельной строки в списке */
+  const [mobileChatSearchOpen, setMobileChatSearchOpen] = useState(false);
   const [searchQueryDebounced, setSearchQueryDebounced] = useState('');
   useEffect(() => {
     const t = window.setTimeout(() => setSearchQueryDebounced(searchQuery), 300);
@@ -3387,6 +3390,19 @@ const WhatsAppChat: React.FC = () => {
 
   const isMobileChatView = isMobile && !!selectedId;
 
+  useEffect(() => {
+    if (isMobile && selectedId) setMobileChatSearchOpen(false);
+  }, [isMobile, selectedId]);
+
+  useEffect(() => {
+    if (!isMobile || !mobileChatSearchOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileChatSearchOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isMobile, mobileChatSearchOpen]);
+
   const { waitingCount, unreadCount } = useMemo(() => {
     let waiting = 0;
     let unread = 0;
@@ -3527,8 +3543,19 @@ const WhatsAppChat: React.FC = () => {
     >
       {/* Заголовок: на мобильном в чате не показываем (есть свой header в ChatWindow). Бургер в шапке на мобильном. */}
       {(!isMobile || !selectedId) && (
-        <div className="whatsapp-header sticky top-0 z-50 flex-none border-b border-gray-200 bg-white px-3 py-2.5 md:px-4 md:py-3">
-          <div className="flex flex-1 items-center justify-between gap-2">
+        <div className="whatsapp-header sticky top-0 z-50 flex-none border-b border-gray-200 bg-white">
+          {isMobile && (
+            <HeaderSearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Имя, телефон, текст сообщения…"
+              onClose={() => setMobileChatSearchOpen(false)}
+              isOpen={mobileChatSearchOpen}
+              leadingClose
+              showValueClear
+            />
+          )}
+          <div className="flex flex-1 items-center justify-between gap-2 px-3 py-2.5 md:px-4 md:py-3">
             {isMobile && (
               <button
                 type="button"
@@ -3543,7 +3570,24 @@ const WhatsAppChat: React.FC = () => {
               <MessageSquare className="h-5 w-5 shrink-0 text-green-600" />
               <h1 className="truncate text-lg font-semibold text-gray-800">Чаты</h1>
             </div>
-            <div className="header-right flex shrink-0 items-center gap-2 md:gap-2.5">
+            <div className="header-right flex shrink-0 items-center gap-1.5 md:gap-2.5">
+              {isMobile && (
+                <button
+                  type="button"
+                  onClick={() => setMobileChatSearchOpen((o) => !o)}
+                  className="relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent text-gray-700 hover:bg-gray-100"
+                  aria-label="Поиск по чатам"
+                  aria-expanded={mobileChatSearchOpen}
+                >
+                  <Search className="h-5 w-5" />
+                  {searchQuery.trim().length > 0 && !mobileChatSearchOpen && (
+                    <span
+                      className="absolute right-1 top-1 h-2 w-2 rounded-full bg-green-500 ring-2 ring-white"
+                      aria-hidden
+                    />
+                  )}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setIncognitoMode((v) => !v)}
@@ -3573,7 +3617,7 @@ const WhatsAppChat: React.FC = () => {
             </div>
           </div>
           {incognitoMode && (
-            <p className="mt-2 hidden text-[11px] text-amber-800 md:block md:text-xs">
+            <p className="mt-2 hidden px-3 pb-2 text-[11px] text-amber-800 md:block md:px-4 md:pb-3 md:text-xs">
               <span className="inline-flex rounded border border-amber-100 bg-amber-50 px-2 py-1">
                 Просмотр без отметки о прочтении и без отправки сообщений.
               </span>
@@ -3616,7 +3660,7 @@ const WhatsAppChat: React.FC = () => {
           }
         >
           <div className="flex-none border-b border-gray-100 bg-gray-50/80">
-            <div className="flex items-center gap-2 px-3 py-2">
+            <div className="hidden md:flex items-center gap-2 px-3 py-2">
               <Search className="w-4 h-4 text-gray-400 flex-shrink-0" />
               <input
                 type="search"
@@ -3628,7 +3672,7 @@ const WhatsAppChat: React.FC = () => {
               />
             </div>
             {searchActive && searchLoading && (
-              <p className="px-3 pb-1.5 text-[11px] text-gray-500">Поиск по базе…</p>
+              <p className="px-3 pb-1.5 text-[11px] text-gray-500 md:pt-0 pt-1">Поиск по базе…</p>
             )}
             {/* Мобильная панель: одна горизонтальная строка + scroll (вариант C: чипы с подписью, селекты — компактные с иконкой) */}
             <div className="md:hidden flex flex-nowrap items-center gap-2 px-3 pb-2 overflow-x-auto overflow-y-hidden overscroll-x-contain whatsapp-filters-bar-scroll touch-pan-x">
