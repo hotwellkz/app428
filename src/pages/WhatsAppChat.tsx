@@ -10,8 +10,7 @@ import {
   Bell,
   GitBranch,
   Users,
-  MapPin,
-  ChevronDown
+  MapPin
 } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { useAuth } from '../hooks/useAuth';
@@ -3674,21 +3673,31 @@ const WhatsAppChat: React.FC = () => {
             {searchActive && searchLoading && (
               <p className="px-3 pb-1.5 text-[11px] text-gray-500 md:pt-0 pt-1">Поиск по базе…</p>
             )}
-            {/* Мобильная панель: icon-only + badge (B), горизонтальный scroll; a11y: title + aria-label */}
-            <div className="md:hidden flex flex-nowrap items-center gap-1.5 px-3 pb-1.5 overflow-x-auto overflow-y-hidden overscroll-x-contain whatsapp-filters-bar-scroll touch-pan-x">
+            {/* Мобильная панель: сетка на всю ширину, без рамок/стрелок; select поверх иконки; бейджи внутри ячейки */}
+            <div
+              className={`md:hidden grid w-full min-w-0 gap-x-0.5 px-2 pb-2 pt-1.5 ${
+                dealStatuses.length > 0 ? 'grid-cols-6' : 'grid-cols-5'
+              }`}
+            >
               <button
                 type="button"
                 onClick={() => setActiveFilter('all')}
                 title="Все чаты"
                 aria-label="Показать все чаты"
                 aria-pressed={activeFilter === 'all'}
-                className={`filter-label relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-colors active:scale-[0.98] ${
+                className={`filter-label relative z-0 flex h-11 min-h-[44px] w-full min-w-0 items-center justify-center rounded-xl transition-colors active:scale-[0.98] ${
                   activeFilter === 'all'
-                    ? 'border-green-400 bg-green-100 text-green-800'
-                    : 'border-gray-200/90 bg-white text-gray-600'
+                    ? 'bg-emerald-500/[0.14] text-emerald-700'
+                    : 'text-gray-500 active:bg-gray-100/90'
                 }`}
               >
-                <LayoutGrid className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                <LayoutGrid className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden />
+                {activeFilter === 'all' && (
+                  <span
+                    className="pointer-events-none absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-emerald-500/80"
+                    aria-hidden
+                  />
+                )}
               </button>
               <button
                 type="button"
@@ -3696,17 +3705,27 @@ const WhatsAppChat: React.FC = () => {
                 title={waitingCount > 0 ? `Ждут ответа: ${waitingCount}` : 'Ждут ответа'}
                 aria-label={`Фильтр «Ждут ответа»${waitingCount > 0 ? `, ${waitingCount} чатов` : ''}`}
                 aria-pressed={activeFilter === 'waiting'}
-                className={`filter-label relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-colors active:scale-[0.98] ${
+                className={`filter-label relative z-0 flex h-11 min-h-[44px] w-full min-w-0 items-center justify-center rounded-xl transition-colors active:scale-[0.98] ${
                   activeFilter === 'waiting'
-                    ? 'border-green-400 bg-green-100 text-amber-700'
-                    : 'border-gray-200/90 bg-white text-amber-600'
+                    ? 'bg-emerald-500/[0.14] text-amber-600'
+                    : 'text-amber-600/90 active:bg-gray-100/90'
                 }`}
               >
-                <Clock className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                <Clock className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden />
                 {waitingCount > 0 && (
-                  <span className="pointer-events-none absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-amber-500 px-0.5 text-[9px] font-bold leading-none text-white shadow-sm ring-2 ring-white">
-                    {waitingCount > 99 ? '99+' : waitingCount}
+                  <span
+                    className={`pointer-events-none absolute right-1 top-1 z-[3] inline-flex max-w-[calc(100%-0.35rem)] items-center justify-center rounded-md bg-amber-500 px-1 py-0.5 font-semibold leading-none text-white shadow-sm tabular-nums ${
+                      String(waitingCount).length > 3 ? 'text-[8px]' : String(waitingCount).length > 2 ? 'text-[9px]' : 'text-[10px]'
+                    }`}
+                  >
+                    {waitingCount}
                   </span>
+                )}
+                {activeFilter === 'waiting' && (
+                  <span
+                    className="pointer-events-none absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-emerald-500/80"
+                    aria-hidden
+                  />
                 )}
               </button>
               <button
@@ -3715,25 +3734,33 @@ const WhatsAppChat: React.FC = () => {
                 title={unreadCount > 0 ? `Непрочитанные: ${unreadCount}` : 'Непрочитанные'}
                 aria-label={`Фильтр непрочитанных${unreadCount > 0 ? `, ${unreadCount} чатов` : ''}`}
                 aria-pressed={activeFilter === 'unread'}
-                className={`filter-label relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border shadow-sm transition-colors active:scale-[0.98] ${
+                className={`filter-label relative z-0 flex h-11 min-h-[44px] w-full min-w-0 items-center justify-center rounded-xl transition-colors active:scale-[0.98] ${
                   activeFilter === 'unread'
-                    ? 'border-green-400 bg-green-100 text-red-600'
-                    : 'border-gray-200/90 bg-white text-red-500'
+                    ? 'bg-emerald-500/[0.14] text-red-600'
+                    : 'text-red-500 active:bg-gray-100/90'
                 }`}
               >
-                <Bell className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
+                <Bell className="h-5 w-5 shrink-0" strokeWidth={1.75} aria-hidden />
                 {unreadCount > 0 && (
-                  <span className="pointer-events-none absolute -right-1 -top-1 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red-500 px-0.5 text-[9px] font-bold leading-none text-white shadow-sm ring-2 ring-white">
-                    {unreadCount > 99 ? '99+' : unreadCount}
+                  <span
+                    className={`pointer-events-none absolute right-1 top-1 z-[3] inline-flex max-w-[calc(100%-0.35rem)] items-center justify-center rounded-md bg-red-500 px-1 py-0.5 font-semibold leading-none text-white shadow-sm tabular-nums ${
+                      String(unreadCount).length > 3 ? 'text-[8px]' : String(unreadCount).length > 2 ? 'text-[9px]' : 'text-[10px]'
+                    }`}
+                  >
+                    {unreadCount}
                   </span>
+                )}
+                {activeFilter === 'unread' && (
+                  <span
+                    className="pointer-events-none absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-emerald-500/80"
+                    aria-hidden
+                  />
                 )}
               </button>
               {dealStatuses.length > 0 && (
                 <div
-                  className={`relative h-10 w-10 shrink-0 rounded-xl border bg-white shadow-sm transition-shadow ${
-                    dealStatusFilter !== 'all'
-                      ? 'border-green-400 ring-2 ring-green-400/45'
-                      : 'border-gray-200/90'
+                  className={`relative z-0 flex h-11 min-h-[44px] w-full min-w-0 items-center justify-center rounded-xl transition-colors ${
+                    dealStatusFilter !== 'all' ? 'bg-emerald-500/[0.14]' : ''
                   }`}
                   title="Фильтр по сделке и статусу"
                 >
@@ -3753,26 +3780,41 @@ const WhatsAppChat: React.FC = () => {
                       </option>
                     ))}
                   </select>
-                  <span className="pointer-events-none flex h-full w-full flex-col items-center justify-center pb-1 pt-0.5">
-                    <GitBranch className="h-[17px] w-[17px] text-emerald-600" strokeWidth={2} aria-hidden />
-                    <ChevronDown className="mt-0.5 h-2.5 w-2.5 text-gray-400" strokeWidth={2.5} aria-hidden />
-                  </span>
+                  <GitBranch
+                    className="pointer-events-none h-5 w-5 shrink-0 text-emerald-600"
+                    strokeWidth={1.75}
+                    aria-hidden
+                  />
                   {dealStatusFilter === 'all' && dealStatusCounts.all > 0 && (
-                    <span className="pointer-events-none absolute -right-1 -top-1 flex h-[17px] min-w-[17px] items-center justify-center rounded-full bg-emerald-600 px-0.5 text-[8px] font-bold leading-none text-white shadow-sm ring-2 ring-white">
-                      {dealStatusCounts.all > 99 ? '99+' : dealStatusCounts.all}
+                    <span
+                      className={`pointer-events-none absolute right-0.5 top-0.5 z-[3] inline-flex max-w-[min(100%-0.25rem,4.25rem)] items-center justify-center rounded-md bg-emerald-600 px-1 py-0.5 font-semibold leading-none text-white shadow-sm tabular-nums ${
+                        String(dealStatusCounts.all).length > 3
+                          ? 'text-[8px]'
+                          : String(dealStatusCounts.all).length > 2
+                            ? 'text-[9px]'
+                            : 'text-[10px]'
+                      }`}
+                    >
+                      {dealStatusCounts.all}
                     </span>
                   )}
                   {dealStatusFilter !== 'all' && (
-                    <span
-                      className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-green-500 ring-2 ring-white"
-                      aria-hidden
-                    />
+                    <>
+                      <span
+                        className="pointer-events-none absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-emerald-500/90"
+                        aria-hidden
+                      />
+                      <span
+                        className="pointer-events-none absolute right-1 top-1 z-[3] h-2 w-2 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white/90"
+                        aria-hidden
+                      />
+                    </>
                   )}
                 </div>
               )}
               <div
-                className={`relative h-10 w-10 shrink-0 rounded-xl border bg-white shadow-sm transition-shadow ${
-                  managerFilter !== 'all' ? 'border-green-400 ring-2 ring-green-400/45' : 'border-gray-200/90'
+                className={`relative z-0 flex h-11 min-h-[44px] w-full min-w-0 items-center justify-center rounded-xl transition-colors ${
+                  managerFilter !== 'all' ? 'bg-emerald-500/[0.14]' : ''
                 }`}
                 title="Фильтр по менеджеру"
               >
@@ -3793,20 +3835,23 @@ const WhatsAppChat: React.FC = () => {
                     </option>
                   ))}
                 </select>
-                <span className="pointer-events-none flex h-full w-full flex-col items-center justify-center pb-1 pt-0.5">
-                  <Users className="h-[17px] w-[17px] text-gray-600" strokeWidth={2} aria-hidden />
-                  <ChevronDown className="mt-0.5 h-2.5 w-2.5 text-gray-400" strokeWidth={2.5} aria-hidden />
-                </span>
+                <Users className="pointer-events-none h-5 w-5 shrink-0 text-gray-600" strokeWidth={1.75} aria-hidden />
                 {managerFilter !== 'all' && (
-                  <span
-                    className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-green-500 ring-2 ring-white"
-                    aria-hidden
-                  />
+                  <>
+                    <span
+                      className="pointer-events-none absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-emerald-500/90"
+                      aria-hidden
+                    />
+                    <span
+                      className="pointer-events-none absolute right-1 top-1 z-[3] h-2 w-2 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white/90"
+                      aria-hidden
+                    />
+                  </>
                 )}
               </div>
               <div
-                className={`relative h-10 w-10 shrink-0 rounded-xl border bg-white shadow-sm transition-shadow ${
-                  cityFilter !== 'all' ? 'border-green-400 ring-2 ring-green-400/45' : 'border-gray-200/90'
+                className={`relative z-0 flex h-11 min-h-[44px] w-full min-w-0 items-center justify-center rounded-xl transition-colors ${
+                  cityFilter !== 'all' ? 'bg-emerald-500/[0.14]' : ''
                 }`}
                 title="Фильтр по городу"
               >
@@ -3827,15 +3872,18 @@ const WhatsAppChat: React.FC = () => {
                     </option>
                   ))}
                 </select>
-                <span className="pointer-events-none flex h-full w-full flex-col items-center justify-center pb-1 pt-0.5">
-                  <MapPin className="h-[17px] w-[17px] text-sky-600" strokeWidth={2} aria-hidden />
-                  <ChevronDown className="mt-0.5 h-2.5 w-2.5 text-gray-400" strokeWidth={2.5} aria-hidden />
-                </span>
+                <MapPin className="pointer-events-none h-5 w-5 shrink-0 text-sky-600" strokeWidth={1.75} aria-hidden />
                 {cityFilter !== 'all' && (
-                  <span
-                    className="pointer-events-none absolute right-1 top-1 h-2 w-2 rounded-full bg-green-500 ring-2 ring-white"
-                    aria-hidden
-                  />
+                  <>
+                    <span
+                      className="pointer-events-none absolute bottom-1 left-1/2 h-0.5 w-5 -translate-x-1/2 rounded-full bg-emerald-500/90"
+                      aria-hidden
+                    />
+                    <span
+                      className="pointer-events-none absolute right-1 top-1 z-[3] h-2 w-2 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white/90"
+                      aria-hidden
+                    />
+                  </>
                 )}
               </div>
             </div>
