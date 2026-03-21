@@ -578,7 +578,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
         {/* Контейнер ввода: мобильный и десктоп — две строки: (1) только textarea на всю ширину (2) панель кнопок */}
         <div className="flex max-w-full min-w-0 items-stretch gap-1.5 md:gap-2">
-          <div className="relative flex min-w-0 max-w-full flex-1 flex-col overflow-x-hidden">
+          {/* Без overflow-x-hidden: иначе overflow-y становится auto и вместе с flex/min-h-0 может резать нижний ряд по высоте */}
+          <div className="relative flex min-w-0 max-w-full flex-1 flex-col">
             {mediaQuickRepliesOpen && (
               <MediaQuickRepliesPopup
                 items={filteredMediaQuickReplies}
@@ -593,8 +594,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 onSelect={insertQuickReply}
               />
             )}
-            <div className="chat-composer chat-input flex min-h-0 min-w-0 max-w-full flex-col gap-1.5 overflow-x-hidden md:gap-2 p-1.5 px-2 md:py-2 md:px-3 rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500">
-              <div className="chat-composer__input-row chat-input-text order-1 flex w-full min-w-0 max-w-full flex-col">
+            <div className="chat-composer chat-input flex min-h-0 min-w-0 max-w-full flex-col gap-1.5 md:gap-2 p-1.5 px-2 md:py-2 md:px-3 rounded-2xl border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-green-500 focus-within:border-green-500 [overflow-x:clip]">
+              <div className="chat-composer__input-row chat-input-text order-1 flex w-full min-w-0 max-w-full flex-col [overflow-x:clip]">
                 <textarea
                   ref={textareaRef}
                   value={value}
@@ -612,7 +613,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 Центр (AI) — flex-1 min-w-0, чтобы длинный текст в textarea не раздвигал панель по ширине
                 и не выталкивал кнопку отправки за экран.
               */}
-              <div className="chat-composer__actions-row chat-actions chat-input-actions order-2 flex w-full min-w-0 max-w-full flex-nowrap items-center gap-x-1.5 gap-y-1 md:gap-x-2 md:gap-y-1.5 md:pt-0.5">
+              <div className="chat-composer__actions-row chat-actions chat-input-actions order-2 flex w-full min-w-0 max-w-full min-h-[44px] flex-nowrap items-center gap-x-1.5 gap-y-1 max-md:py-0.5 md:min-h-0 md:gap-x-2 md:gap-y-1.5 md:pt-0.5">
                 <div className="left-icons flex shrink-0 items-center gap-1.5">
                   <button
                     type="button"
@@ -660,7 +661,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   )}
                 </div>
                 {onAiReply ? (
-                  <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-x-auto overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  /* Внешний блок без overflow: у flex-item с overflow-x-auto min-size по поперечной оси может стать 0 → клип 44px AI-кнопок. Скролл — во внутреннем wrapper. */
+                  <div className="flex min-h-[44px] min-w-0 flex-1 items-center justify-center self-stretch">
+                    <div className="max-w-full min-w-0 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                     {isMobile ? (
                       <MobileWhatsappAiComposer
                         onAiReply={onAiReply}
@@ -711,9 +714,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
                         </button>
                       </div>
                     )}
+                    </div>
                   </div>
                 ) : (
-                  <div className="min-h-0 min-w-0 flex-1" aria-hidden={true} />
+                  <div className="min-w-0 flex-1" aria-hidden={true} />
                 )}
                 <div className="right-icons flex shrink-0 items-center gap-1.5 md:gap-1">
                   {onFileSelect && (
