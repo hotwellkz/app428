@@ -23,6 +23,13 @@ class AppPreferences(private val context: Context) {
     val LAST_REG_URL = stringPreferencesKey("last_reg_url")
     val LAST_HTTP_CODE = stringPreferencesKey("last_http_code")
     val LAST_PUSH_AT = stringPreferencesKey("last_push_at")
+    val LAST_CHAT_SYNC_AT = stringPreferencesKey("last_chat_sync_at")
+    val LAST_CHAT_SYNC_SOURCE = stringPreferencesKey("last_chat_sync_source")
+    val LAST_PUSH_CACHE_APPLY = stringPreferencesKey("last_push_cache_apply")
+    val LAST_THREAD_SYNC_AT = stringPreferencesKey("last_thread_sync_at")
+    val LAST_SEND_ERROR = stringPreferencesKey("last_send_error")
+    val LAST_DEDUPE_REASON = stringPreferencesKey("last_dedupe_reason")
+    val ACTIVE_CHAT_ID = stringPreferencesKey("active_chat_id")
   }
 
   val notificationsEnabled: Flow<Boolean> =
@@ -54,6 +61,27 @@ class AppPreferences(private val context: Context) {
 
   val lastPushAt: Flow<String> =
     context.dataStore.data.map { prefs -> prefs[Keys.LAST_PUSH_AT].orEmpty() }
+
+  val lastChatSyncAt: Flow<String> =
+    context.dataStore.data.map { prefs -> prefs[Keys.LAST_CHAT_SYNC_AT].orEmpty() }
+
+  val lastChatSyncSource: Flow<String> =
+    context.dataStore.data.map { prefs -> prefs[Keys.LAST_CHAT_SYNC_SOURCE].orEmpty() }
+
+  val lastPushCacheApply: Flow<String> =
+    context.dataStore.data.map { prefs -> prefs[Keys.LAST_PUSH_CACHE_APPLY].orEmpty() }
+
+  val lastThreadSyncAt: Flow<String> =
+    context.dataStore.data.map { prefs -> prefs[Keys.LAST_THREAD_SYNC_AT].orEmpty() }
+
+  val lastSendError: Flow<String> =
+    context.dataStore.data.map { prefs -> prefs[Keys.LAST_SEND_ERROR].orEmpty() }
+
+  val lastDedupeReason: Flow<String> =
+    context.dataStore.data.map { prefs -> prefs[Keys.LAST_DEDUPE_REASON].orEmpty() }
+
+  val activeChatId: Flow<String> =
+    context.dataStore.data.map { prefs -> prefs[Keys.ACTIVE_CHAT_ID].orEmpty() }
 
   suspend fun setNotificationsEnabled(value: Boolean) {
     context.dataStore.edit { it[Keys.NOTIFICATIONS_ENABLED] = value }
@@ -91,6 +119,33 @@ class AppPreferences(private val context: Context) {
 
   suspend fun setLastPushAt(isoDateTime: String) {
     context.dataStore.edit { it[Keys.LAST_PUSH_AT] = isoDateTime.trim() }
+  }
+
+  suspend fun setLastChatSync(isoDateTime: String, source: String) {
+    context.dataStore.edit {
+      it[Keys.LAST_CHAT_SYNC_AT] = isoDateTime.trim()
+      it[Keys.LAST_CHAT_SYNC_SOURCE] = source.trim()
+    }
+  }
+
+  suspend fun setLastPushCacheApply(value: String) {
+    context.dataStore.edit { it[Keys.LAST_PUSH_CACHE_APPLY] = value.trim().take(400) }
+  }
+
+  suspend fun setLastThreadSyncAt(isoDateTime: String) {
+    context.dataStore.edit { it[Keys.LAST_THREAD_SYNC_AT] = isoDateTime.trim() }
+  }
+
+  suspend fun setLastSendError(value: String) {
+    context.dataStore.edit { it[Keys.LAST_SEND_ERROR] = value.trim().take(500) }
+  }
+
+  suspend fun setLastDedupeReason(value: String) {
+    context.dataStore.edit { it[Keys.LAST_DEDUPE_REASON] = value.trim().take(500) }
+  }
+
+  suspend fun setActiveChatId(chatId: String) {
+    context.dataStore.edit { it[Keys.ACTIVE_CHAT_ID] = chatId.trim() }
   }
 }
 

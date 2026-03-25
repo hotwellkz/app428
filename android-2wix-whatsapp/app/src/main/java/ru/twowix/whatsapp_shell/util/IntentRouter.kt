@@ -45,6 +45,15 @@ object IntentRouter {
     return "$base?chatId=$encoded"
   }
 
+  fun extractChatIdFromUrl(url: String): String? {
+    val trimmed = url.trim()
+    if (trimmed.isBlank()) return null
+    return runCatching {
+      val uri = Uri.parse(trimmed)
+      uri.getQueryParameter("chatId")?.trim()?.takeIf { it.isNotEmpty() }
+    }.getOrNull()
+  }
+
   private fun normalizeUrl(url: String): String {
     // Разрешаем только https:// и относительные пути от 2wix
     val trimmed = url.trim()

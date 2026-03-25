@@ -5,12 +5,14 @@ import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.time.Instant
 import ru.twowix.whatsapp_shell.data.DeviceRegistrationClient
 import ru.twowix.whatsapp_shell.data.AppPreferences
+import ru.twowix.whatsapp_shell.data.chat.ChatRepository
 import ru.twowix.whatsapp_shell.notifications.NotificationHelper
+import ru.twowix.whatsapp_shell.sync.ChatSyncScheduler
 import ru.twowix.whatsapp_shell.util.IntentRouter
 
 /**
@@ -68,20 +70,28 @@ class TwowixFirebaseMessagingService : FirebaseMessagingService() {
     val targetUrl = payload.bestTargetUrl { chatId -> IntentRouter.buildChatUrl(chatId) }
 
     val prefs = AppPreferences(applicationContext)
+    val chatRepo = ChatRepository.get(applicationContext)
     CoroutineScope(Dispatchers.IO).launch {
+      val pushResult = runCatching { chatRepo.applyPushToCache(payload) }.getOrNull()
+
       // Уважим настройку: если пользователь отключил уведомления — не показываем.
       val enabled = prefs.notificationsEnabled.first()
-      if (!enabled) return@launch
+      if (enabled) {
+        NotificationHelper.showMessage(
+          context = applicationContext,
+          title = title,
+          text = text,
+          unreadCount = payload.unreadCount,
+          chatId = payload.chatId,
+          targetUrl = targetUrl
+        )
+      }
 
-      NotificationHelper.showMessage(
-        context = applicationContext,
-        title = title,
-        text = text,
-        unreadCount = payload.unreadCount,
-        chatId = payload.chatId,
-        targetUrl = targetUrl
-      )
       prefs.setLastPushAt(Instant.now().toString())
+      // Фоновый добор недостающих полей/актуализация списка после push.
+      if (pushResult == null || pushResult.needsReconcile) {
+        ChatSyncScheduler.enqueueImmediate(applicationContext, reason = "push_reconcile")
+      }
     }
   }
 }
