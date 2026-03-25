@@ -467,6 +467,22 @@ function normalizePhone(phone: string): string {
 
 /** Собрать JSON из одной переменной или из частей FIREBASE_SA_1, FIREBASE_SA_2, ... (для обхода лимита 4KB в Lambda) */
 function getFirebaseServiceAccountJson(): string {
+  // Вариант A: классические env vars (удобно для Netlify UI)
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKeyRaw = process.env.FIREBASE_PRIVATE_KEY;
+  if (projectId && clientEmail && privateKeyRaw) {
+    // Netlify обычно хранит многострочный ключ как строку с \n
+    const privateKey = privateKeyRaw.replace(/\\n/g, '\n');
+    return JSON.stringify({
+      type: 'service_account',
+      project_id: projectId,
+      client_email: clientEmail,
+      private_key: privateKey
+    });
+  }
+
+  // Вариант B: готовый JSON (одной строкой)
   const single = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (single) return single;
   const parts: string[] = [];

@@ -14,6 +14,7 @@ import org.json.JSONObject
  * Ожидаемый контракт (backend):
  * POST /api/mobile/register-device
  * {
+ *   "managerId": "<manager/company id>",
  *   "platform": "android",
  *   "token": "<fcm token>",
  *   "deviceModel": "...",
@@ -25,9 +26,10 @@ class DeviceRegistrationClient(
 ) {
   private val json = "application/json; charset=utf-8".toMediaType()
 
-  fun registerDevice(baseUrl: String, token: String) {
+  fun registerDevice(baseUrl: String, managerId: String, token: String) {
     val url = baseUrl.trimEnd('/') + "/api/mobile/register-device"
     val bodyJson = JSONObject()
+      .put("managerId", managerId)
       .put("platform", "android")
       .put("token", token)
       .put("deviceModel", android.os.Build.MODEL ?: "")
@@ -49,6 +51,26 @@ class DeviceRegistrationClient(
       }
     }.onFailure {
       Log.w("DeviceReg", "register error: ${it.javaClass.simpleName}: ${it.message}")
+    }
+  }
+
+  fun unregisterDevice(baseUrl: String, managerId: String, token: String) {
+    val url = baseUrl.trimEnd('/') + "/api/mobile/unregister-device"
+    val bodyJson = JSONObject()
+      .put("managerId", managerId)
+      .put("token", token)
+      .toString()
+    val req = Request.Builder().url(url).post(bodyJson.toRequestBody(json)).build()
+    runCatching {
+      http.newCall(req).execute().use { resp ->
+        if (!resp.isSuccessful) {
+          Log.w("DeviceReg", "unregister failed: ${resp.code} ${resp.message}")
+        } else {
+          Log.i("DeviceReg", "unregister ok")
+        }
+      }
+    }.onFailure {
+      Log.w("DeviceReg", "unregister error: ${it.javaClass.simpleName}: ${it.message}")
     }
   }
 }

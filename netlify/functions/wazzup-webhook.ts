@@ -28,6 +28,7 @@ import {
   DEFAULT_COMPANY_ID,
   type MessageAttachmentRow
 } from './lib/firebaseAdmin';
+import { sendChatPushToManager } from './lib/mobilePushSender';
 
 interface WazzupMessage {
   messageId?: string;
@@ -277,7 +278,29 @@ async function handleWhatsAppMessage(msg: WazzupMessage, companyId: string, debu
       channel: 'whatsapp',
       companyId
     });
-    if (direction === 'incoming' && created) await incrementUnreadCount(conversation.id);
+    if (direction === 'incoming' && created) {
+      await incrementUnreadCount(conversation.id);
+      // Push: минимальная интеграция "новое входящее сообщение" → уведомление на мобильные устройства менеджера (companyId).
+      // Dedupe делается по messageId на уровне mobilePushSender.
+      try {
+        const targetUrl = `https://2wix.ru/whatsapp?chatId=${encodeURIComponent(conversation.id)}`;
+        await sendChatPushToManager({
+          managerId: companyId,
+          chatId: conversation.id,
+          phone: normalizedPhone,
+          clientName: (client.name || '').trim() || undefined,
+          preview: (textContent || '').trim() || (attachments.length ? '[медиа]' : undefined),
+          // unreadCount вычисляем приблизительно: для точности нужен дополнительный read; оставляем undefined, Android корректно отработает.
+          unreadCount: undefined,
+          targetUrl,
+          messageId: msg.messageId ?? undefined,
+          type: 'message'
+        });
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.warn('[wazzup-webhook] push_send_fail', e);
+      }
+    }
     return 'ok';
   } catch {
     return 'err';

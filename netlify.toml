@@ -157,6 +157,24 @@
   force = true
 
 [[redirects]]
+  from = "/api/mobile/register-device"
+  to = "/.netlify/functions/mobile-register-device"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/mobile/unregister-device"
+  to = "/.netlify/functions/mobile-unregister-device"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/api/send-chat-push"
+  to = "/.netlify/functions/send-chat-push"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/api/voice/outbound-call"
   to = "/.netlify/functions/voice-outbound-call"
   status = 200

@@ -26,7 +26,12 @@ class TwowixFirebaseMessagingService : FirebaseMessagingService() {
     CoroutineScope(Dispatchers.IO).launch {
       runCatching { prefs.setFcmToken(token) }
       val baseUrl = runCatching { prefs.apiBaseUrl.first() }.getOrElse { ru.twowix.whatsapp_shell.BuildConfig.API_BASE_URL_DEFAULT }
-      deviceReg.registerDevice(baseUrl, token)
+      val managerId = runCatching { prefs.managerId.first() }.getOrElse { "" }.trim()
+      if (managerId.isNotBlank()) {
+        deviceReg.registerDevice(baseUrl, managerId, token)
+      } else {
+        Log.w("DeviceReg", "managerId is empty; skip register-device (set it in Settings)")
+      }
     }
   }
 

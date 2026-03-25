@@ -16,6 +16,7 @@ class AppPreferences(private val context: Context) {
     val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
     val FCM_TOKEN = stringPreferencesKey("fcm_token")
     val API_BASE_URL = stringPreferencesKey("api_base_url")
+    val MANAGER_ID = stringPreferencesKey("manager_id")
   }
 
   val notificationsEnabled: Flow<Boolean> =
@@ -27,6 +28,9 @@ class AppPreferences(private val context: Context) {
   val apiBaseUrl: Flow<String> =
     context.dataStore.data.map { prefs -> prefs[Keys.API_BASE_URL] ?: ru.twowix.whatsapp_shell.BuildConfig.API_BASE_URL_DEFAULT }
 
+  val managerId: Flow<String> =
+    context.dataStore.data.map { prefs -> prefs[Keys.MANAGER_ID].orEmpty() }
+
   suspend fun setNotificationsEnabled(value: Boolean) {
     context.dataStore.edit { it[Keys.NOTIFICATIONS_ENABLED] = value }
   }
@@ -37,6 +41,10 @@ class AppPreferences(private val context: Context) {
 
   suspend fun setApiBaseUrl(value: String) {
     context.dataStore.edit { it[Keys.API_BASE_URL] = value.trim().trimEnd('/') }
+  }
+
+  suspend fun setManagerId(value: String) {
+    context.dataStore.edit { it[Keys.MANAGER_ID] = value.trim() }
   }
 }
 

@@ -48,6 +48,10 @@ adb shell am start -n ru.twowix.whatsapp_shell/.MainActivity --es chatId "123"
 
 1. Запусти приложение на устройстве, открой **Настройки** (иконка шестерёнки) и посмотри **FCM token**.  
    Если токен пустой — нажми **«Обновить token»**.
+2. В тех же настройках:
+   - укажи **API base URL** (обычно `https://2wix.ru`)
+   - укажи **managerId** (в текущей реализации это `companyId`, например `hotwell`)
+   - после получения нового токена приложение вызовет `POST /api/mobile/register-device`
 2. Firebase Console → Cloud Messaging → отправь сообщение:
    - **важно**: используем **data payload** (основной сценарий)
 3. Пример data payload:
@@ -68,6 +72,44 @@ adb shell am start -n ru.twowix.whatsapp_shell/.MainActivity --es chatId "123"
 Поведение:
 - уведомление показывается **всегда** (foreground/background), если **включены уведомления** и есть permission
 - tap по уведомлению открывает `MainActivity` с `targetUrl` (если есть) или `chatId`
+
+## Netlify Functions (backend слой для push)
+
+Эндпоинты (через redirects в `netlify.toml`):
+
+- `POST /api/mobile/register-device` → `/.netlify/functions/mobile-register-device`
+- `POST /api/mobile/unregister-device` → `/.netlify/functions/mobile-unregister-device`
+- `POST /api/send-chat-push` → `/.netlify/functions/send-chat-push`
+
+### Env vars (Netlify)
+
+Firebase Admin поддерживает 2 варианта (любой один):
+
+- **Вариант A (рекомендуется в Netlify UI)**:
+  - `FIREBASE_PROJECT_ID`
+  - `FIREBASE_CLIENT_EMAIL`
+  - `FIREBASE_PRIVATE_KEY` (строка с `\n`, будет преобразована)
+
+- **Вариант B (одной строкой)**:
+  - `FIREBASE_SERVICE_ACCOUNT_JSON`
+  - или кусками `FIREBASE_SA_1..5` (если упираетесь в лимит 4KB)
+
+### Быстрый ручной тест send-chat-push
+
+```bash
+curl -X POST "https://2wix.ru/api/send-chat-push" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "managerId":"hotwell",
+    "chatId":"<conversationId>",
+    "clientName":"Иван",
+    "phone":"+77001234567",
+    "preview":"Тест push",
+    "unreadCount": 1,
+    "messageId":"m_test_1",
+    "type":"message"
+  }'
+```
 
 ## Структура (основные файлы)
 

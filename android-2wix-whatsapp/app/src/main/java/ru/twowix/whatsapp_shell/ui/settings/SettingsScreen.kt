@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import ru.twowix.whatsapp_shell.BuildConfig
 import ru.twowix.whatsapp_shell.data.AppPreferences
+import ru.twowix.whatsapp_shell.data.DeviceRegistrationClient
 import ru.twowix.whatsapp_shell.notifications.NotificationHelper
 import com.google.firebase.messaging.FirebaseMessaging
 
@@ -53,7 +54,10 @@ fun SettingsScreen(
   val notificationsEnabled by prefs.notificationsEnabled.collectAsState(initial = true)
   val fcmToken by prefs.fcmToken.collectAsState(initial = "")
   val apiBaseUrl by prefs.apiBaseUrl.collectAsState(initial = BuildConfig.API_BASE_URL_DEFAULT)
+  val managerId by prefs.managerId.collectAsState(initial = "")
   var apiDraft by remember(apiBaseUrl) { mutableStateOf(apiBaseUrl) }
+  var managerDraft by remember(managerId) { mutableStateOf(managerId) }
+  val deviceReg = remember { DeviceRegistrationClient() }
 
   val notifPermGranted = NotificationHelper.canPostNotifications(context)
 
@@ -148,6 +152,27 @@ fun SettingsScreen(
         }
       }
 
+      Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Button(
+          onClick = {
+            if (managerId.isBlank() || fcmToken.isBlank()) return@Button
+            deviceReg.registerDevice(apiBaseUrl, managerId, fcmToken)
+          },
+          enabled = managerId.isNotBlank() && fcmToken.isNotBlank()
+        ) {
+          Text(text = "Зарегистрировать устройство")
+        }
+        Button(
+          onClick = {
+            if (managerId.isBlank() || fcmToken.isBlank()) return@Button
+            deviceReg.unregisterDevice(apiBaseUrl, managerId, fcmToken)
+          },
+          enabled = managerId.isNotBlank() && fcmToken.isNotBlank()
+        ) {
+          Text(text = "Unregister")
+        }
+      }
+
       OutlinedTextField(
         value = apiDraft,
         onValueChange = { apiDraft = it },
@@ -160,6 +185,20 @@ fun SettingsScreen(
         modifier = Modifier.fillMaxWidth()
       ) {
         Text(text = "Сохранить API base URL")
+      }
+
+      OutlinedTextField(
+        value = managerDraft,
+        onValueChange = { managerDraft = it },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        label = { Text("managerId (для push регистрации)") }
+      )
+      Button(
+        onClick = { scope.launch { prefs.setManagerId(managerDraft) } },
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Text(text = "Сохранить managerId")
       }
 
       Button(
