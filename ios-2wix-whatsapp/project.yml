@@ -1,0 +1,33 @@
+name: TwowixWhatsApp
+options:
+  bundleIdPrefix: ru.twowix
+  deploymentTarget:
+    iOS: "16.0"
+  developmentLanguage: ru
+packages:
+  Firebase:
+    url: https://github.com/firebase/firebase-ios-sdk
+    from: 11.0.0
+targets:
+  TwowixWhatsApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: TwowixWhatsApp
+        excludes:
+          - "**/.DS_Store"
+          - "**/*.example"
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: ru.twowix.whatsapp_shell
+      INFOPLIST_FILE: TwowixWhatsApp/Info.plist
+      CODE_SIGN_ENTITLEMENTS: TwowixWhatsApp/TwowixWhatsApp.entitlements
+      SWIFT_VERSION: "5.0"
+      TARGETED_DEVICE_FAMILY: "1,2"
+      ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+      CURRENT_PROJECT_VERSION: "1"
+      MARKETING_VERSION: "1.0"
+    dependencies:
+      - package: Firebase
+        product: FirebaseCore
+      - package: Firebase
+        product: FirebaseMessaging

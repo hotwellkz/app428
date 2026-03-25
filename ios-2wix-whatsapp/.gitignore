@@ -1,0 +1,9 @@
+# Firebase (секреты)
+GoogleService-Info.plist
+**/GoogleService-Info.plist
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/

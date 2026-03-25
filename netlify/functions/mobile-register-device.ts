@@ -34,8 +34,8 @@ export const handler: Handler = async (event) => {
   if (!token) {
     return { statusCode: 400, body: JSON.stringify({ ok: false, error: 'token is required' }) };
   }
-  if (platform !== 'android') {
-    return { statusCode: 400, body: JSON.stringify({ ok: false, error: 'platform must be android' }) };
+  if (platform !== 'android' && platform !== 'ios') {
+    return { statusCode: 400, body: JSON.stringify({ ok: false, error: 'platform must be android or ios' }) };
   }
 
   const deviceModel = (body.deviceModel ?? '').trim() || null;
@@ -50,7 +50,7 @@ export const handler: Handler = async (event) => {
     await ref.set({
       managerId,
       token,
-      platform: 'android',
+      platform,
       deviceModel,
       appVersion,
       deviceId,
@@ -67,7 +67,7 @@ export const handler: Handler = async (event) => {
     deviceModel,
     appVersion,
     deviceId,
-    platform: 'android',
+    platform,
     isActive: true,
     updatedAt: now,
     lastSeenAt: now

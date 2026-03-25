@@ -74,13 +74,20 @@ export async function sendChatPushToManager(input: SendChatPushInput): Promise<{
     await ref.set({ managerId, messageId, createdAt: now, updatedAt: now }, { merge: true });
   }
 
-  const devicesSnap = await devicesCollection()
-    .where('managerId', '==', managerId)
-    .where('platform', '==', 'android')
-    .where('isActive', '==', true)
-    .get();
+  const [androidSnap, iosSnap] = await Promise.all([
+    devicesCollection()
+      .where('managerId', '==', managerId)
+      .where('platform', '==', 'android')
+      .where('isActive', '==', true)
+      .get(),
+    devicesCollection()
+      .where('managerId', '==', managerId)
+      .where('platform', '==', 'ios')
+      .where('isActive', '==', true)
+      .get()
+  ]);
 
-  const tokens = devicesSnap.docs
+  const tokens = [...androidSnap.docs, ...iosSnap.docs]
     .map((d) => (d.data() as { token?: string } | undefined)?.token)
     .filter((t): t is string => !!t && typeof t === 'string' && t.trim().length > 0);
 
@@ -89,6 +96,12 @@ export async function sendChatPushToManager(input: SendChatPushInput): Promise<{
   }
 
   const data = buildDataPayload(input);
+
+  const alertTitle =
+    String(input.clientName ?? '').trim() ||
+    String(input.phone ?? '').trim() ||
+    'Новое сообщение';
+  const alertBody = String(input.preview ?? '').trim() || 'Новое сообщение';
 
   let sent = 0;
   let failed = 0;
@@ -102,7 +115,21 @@ export async function sendChatPushToManager(input: SendChatPushInput): Promise<{
     const resp = await messaging.sendEachForMulticast({
       tokens: chunk,
       data,
-      android: { priority: 'high' }
+      android: { priority: 'high' },
+      apns: {
+        headers: {
+          'apns-priority': '10'
+        },
+        payload: {
+          aps: {
+            alert: {
+              title: alertTitle,
+              body: alertBody
+            },
+            sound: 'default'
+          }
+        }
+      }
     });
     sent += resp.successCount;
     failed += resp.failureCount;

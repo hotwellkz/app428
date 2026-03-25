@@ -1,0 +1,395 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		090E4C57FF30805AD09DC7DA /* TwowixWhatsAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E507CFFC0A1E0E8AE78129D /* TwowixWhatsAppApp.swift */; };
+		19D9835F066E9491843424AE /* DeviceRegistrationClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2185EE91E24A28849F36C9F6 /* DeviceRegistrationClient.swift */; };
+		29BED4B5812AC66BE5C03C99 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11966861B685005986BA3C41 /* AppConfig.swift */; };
+		7587B07DB6E1806E8F66A378 /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41271093C04E77950A6A1BBB /* Preferences.swift */; };
+		8B7071FAD9FB1BDBE19E16C2 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = B5AFCDF9DB00D51F50FB74C2 /* FirebaseCore */; };
+		93336B0822B9DF77359D8936 /* PushPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = F34CA2384E9AD79CDC0E86C0 /* PushPayload.swift */; };
+		96107D5163991C6CCC789DEE /* IntentRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FDEB67F59FFA715A18F2E2BC /* IntentRouter.swift */; };
+		9EA096EFA3D9BDF5587014C5 /* WebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 721AF0E9B35CBA984E5D9413 /* WebView.swift */; };
+		B61294F6ABDF89BAAFCA7921 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 898F12636EABD63989BC217F /* FirebaseMessaging */; };
+		BC1DF6C69F59EC404DF07FCD /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E6B61EE8D2DD25467A495E /* ContentView.swift */; };
+		CB41270123BA93493B5021A0 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF45FDBD114E42DCBE1B93A0 /* AppDelegate.swift */; };
+		CF502A41B943CE66DD0BFCBF /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B25B956727BCAF386BFACF60 /* SettingsView.swift */; };
+		CF6CAD022EE553315B6AFE6F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C23CACEC2C1E89F0CB3803A6 /* Assets.xcassets */; };
+		ED2122B55E2534880A67FB75 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 4D3E62FB0686E607738ADBB0 /* GoogleService-Info.plist */; };
+		F31BC1E44B0D7E0C547807CD /* AppRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 213BD274068AB117D8B82AB9 /* AppRouter.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		07A88C622366BF57B7C1B9CF /* TwowixWhatsApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = TwowixWhatsApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		11966861B685005986BA3C41 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
+		213BD274068AB117D8B82AB9 /* AppRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRouter.swift; sourceTree = "<group>"; };
+		2185EE91E24A28849F36C9F6 /* DeviceRegistrationClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceRegistrationClient.swift; sourceTree = "<group>"; };
+		41271093C04E77950A6A1BBB /* Preferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
+		4D3E62FB0686E607738ADBB0 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		721AF0E9B35CBA984E5D9413 /* WebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebView.swift; sourceTree = "<group>"; };
+		81E6B61EE8D2DD25467A495E /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		8BC065AEA28A2B23CF6BA0DA /* TwowixWhatsApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TwowixWhatsApp.entitlements; sourceTree = "<group>"; };
+		8E507CFFC0A1E0E8AE78129D /* TwowixWhatsAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TwowixWhatsAppApp.swift; sourceTree = "<group>"; };
+		B25B956727BCAF386BFACF60 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		C23CACEC2C1E89F0CB3803A6 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		EF45FDBD114E42DCBE1B93A0 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		F34CA2384E9AD79CDC0E86C0 /* PushPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushPayload.swift; sourceTree = "<group>"; };
+		FC10E44E846A4A6C44FFA07B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		FDEB67F59FFA715A18F2E2BC /* IntentRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IntentRouter.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		FC2ADC8A614B7B059DB150D1 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8B7071FAD9FB1BDBE19E16C2 /* FirebaseCore in Frameworks */,
+				B61294F6ABDF89BAAFCA7921 /* FirebaseMessaging in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		25F35BF5E23BCF3D90E06E65 /* TwowixWhatsApp */ = {
+			isa = PBXGroup;
+			children = (
+				11966861B685005986BA3C41 /* AppConfig.swift */,
+				EF45FDBD114E42DCBE1B93A0 /* AppDelegate.swift */,
+				213BD274068AB117D8B82AB9 /* AppRouter.swift */,
+				C23CACEC2C1E89F0CB3803A6 /* Assets.xcassets */,
+				81E6B61EE8D2DD25467A495E /* ContentView.swift */,
+				2185EE91E24A28849F36C9F6 /* DeviceRegistrationClient.swift */,
+				4D3E62FB0686E607738ADBB0 /* GoogleService-Info.plist */,
+				FC10E44E846A4A6C44FFA07B /* Info.plist */,
+				FDEB67F59FFA715A18F2E2BC /* IntentRouter.swift */,
+				41271093C04E77950A6A1BBB /* Preferences.swift */,
+				F34CA2384E9AD79CDC0E86C0 /* PushPayload.swift */,
+				B25B956727BCAF386BFACF60 /* SettingsView.swift */,
+				8BC065AEA28A2B23CF6BA0DA /* TwowixWhatsApp.entitlements */,
+				8E507CFFC0A1E0E8AE78129D /* TwowixWhatsAppApp.swift */,
+				721AF0E9B35CBA984E5D9413 /* WebView.swift */,
+			);
+			path = TwowixWhatsApp;
+			sourceTree = "<group>";
+		};
+		960CE09484AF613D7627DE9D /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				07A88C622366BF57B7C1B9CF /* TwowixWhatsApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		E4477E7766C4F28CA79377A4 = {
+			isa = PBXGroup;
+			children = (
+				25F35BF5E23BCF3D90E06E65 /* TwowixWhatsApp */,
+				960CE09484AF613D7627DE9D /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		987B2711B125FE34DFEDA875 /* TwowixWhatsApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7F2FE4D717D93006F2B6821E /* Build configuration list for PBXNativeTarget "TwowixWhatsApp" */;
+			buildPhases = (
+				596CF11669489B2124A5862F /* Sources */,
+				5DCCD0E161F4B2BA8A79020F /* Resources */,
+				FC2ADC8A614B7B059DB150D1 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TwowixWhatsApp;
+			packageProductDependencies = (
+				B5AFCDF9DB00D51F50FB74C2 /* FirebaseCore */,
+				898F12636EABD63989BC217F /* FirebaseMessaging */,
+			);
+			productName = TwowixWhatsApp;
+			productReference = 07A88C622366BF57B7C1B9CF /* TwowixWhatsApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		2C5B4F90A15FAE4280B922A8 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+				};
+			};
+			buildConfigurationList = 509A7D5CD13F2DFC1106C0E7 /* Build configuration list for PBXProject "TwowixWhatsApp" */;
+			developmentRegion = ru;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				ru,
+			);
+			mainGroup = E4477E7766C4F28CA79377A4;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				288166FF208C136618C4A206 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 960CE09484AF613D7627DE9D /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				987B2711B125FE34DFEDA875 /* TwowixWhatsApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		5DCCD0E161F4B2BA8A79020F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CF6CAD022EE553315B6AFE6F /* Assets.xcassets in Resources */,
+				ED2122B55E2534880A67FB75 /* GoogleService-Info.plist in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		596CF11669489B2124A5862F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29BED4B5812AC66BE5C03C99 /* AppConfig.swift in Sources */,
+				CB41270123BA93493B5021A0 /* AppDelegate.swift in Sources */,
+				F31BC1E44B0D7E0C547807CD /* AppRouter.swift in Sources */,
+				BC1DF6C69F59EC404DF07FCD /* ContentView.swift in Sources */,
+				19D9835F066E9491843424AE /* DeviceRegistrationClient.swift in Sources */,
+				96107D5163991C6CCC789DEE /* IntentRouter.swift in Sources */,
+				7587B07DB6E1806E8F66A378 /* Preferences.swift in Sources */,
+				93336B0822B9DF77359D8936 /* PushPayload.swift in Sources */,
+				CF502A41B943CE66DD0BFCBF /* SettingsView.swift in Sources */,
+				090E4C57FF30805AD09DC7DA /* TwowixWhatsAppApp.swift in Sources */,
+				9EA096EFA3D9BDF5587014C5 /* WebView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0E6E4EC58597AEB4F74545F9 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = TwowixWhatsApp/TwowixWhatsApp.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = TwowixWhatsApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ru.twowix.whatsapp_shell;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		94AC7AFC91D894106C76AE20 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		B8CD48A9B0824CBDA69B8649 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = TwowixWhatsApp/TwowixWhatsApp.entitlements;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CURRENT_PROJECT_VERSION = 1;
+				INFOPLIST_FILE = TwowixWhatsApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = ru.twowix.whatsapp_shell;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		C5D00476BCA652D863AD89B1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		509A7D5CD13F2DFC1106C0E7 /* Build configuration list for PBXProject "TwowixWhatsApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				94AC7AFC91D894106C76AE20 /* Debug */,
+				C5D00476BCA652D863AD89B1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7F2FE4D717D93006F2B6821E /* Build configuration list for PBXNativeTarget "TwowixWhatsApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B8CD48A9B0824CBDA69B8649 /* Debug */,
+				0E6E4EC58597AEB4F74545F9 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		288166FF208C136618C4A206 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 11.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		898F12636EABD63989BC217F /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 288166FF208C136618C4A206 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
+		B5AFCDF9DB00D51F50FB74C2 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 288166FF208C136618C4A206 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 2C5B4F90A15FAE4280B922A8 /* Project object */;
+}
