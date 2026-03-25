@@ -1,0 +1,10 @@
+.gradle/
+.idea/
+*.iml
+local.properties
+build/
+.DS_Store
+
+# Firebase (не коммитим реальные ключи)
+app/google-services.json
+

@@ -1,0 +1,10 @@
+<resources>
+  <string name="app_name">2wix WhatsApp</string>
+  <string name="notification_channel_messages">Сообщения</string>
+  <string name="notification_channel_messages_desc">Уведомления о новых сообщениях</string>
+  <string name="action_retry">Повторить</string>
+  <string name="no_connection_title">Нет соединения</string>
+  <string name="no_connection_subtitle">Проверьте интернет и попробуйте снова.</string>
+  <string name="settings_title">Настройки</string>
+</resources>
+
