@@ -3,18 +3,63 @@ package ru.twowix.whatsapp_shell.push
 import android.util.Log
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import ru.twowix.whatsapp_shell.data.DeviceRegistrationClient
+import ru.twowix.whatsapp_shell.data.AppPreferences
+import ru.twowix.whatsapp_shell.notifications.NotificationHelper
+import ru.twowix.whatsapp_shell.util.IntentRouter
 
 /**
- * Заготовка под FCM (полный end-to-end позже).
- * Сейчас: логируем токен/сообщения, чтобы проект уже был готов к подключению push.
+ * Production-friendly FCM client side:
+ * - onNewToken: сохраняем токен в prefs (и позже регистрируем на backend)
+ * - onMessageReceived: парсим data payload и показываем уведомление
  */
 class TwowixFirebaseMessagingService : FirebaseMessagingService() {
+  private val deviceReg = DeviceRegistrationClient()
+
   override fun onNewToken(token: String) {
-    Log.i("TwowixFCM", "New token: $token")
+    Log.i("TwowixFCM", "New token: ${token.take(12)}… (${token.length})")
+    val prefs = AppPreferences(applicationContext)
+    CoroutineScope(Dispatchers.IO).launch {
+      runCatching { prefs.setFcmToken(token) }
+      val baseUrl = runCatching { prefs.apiBaseUrl.first() }.getOrElse { ru.twowix.whatsapp_shell.BuildConfig.API_BASE_URL_DEFAULT }
+      deviceReg.registerDevice(baseUrl, token)
+    }
   }
 
   override fun onMessageReceived(message: RemoteMessage) {
-    Log.i("TwowixFCM", "Message received: data=${message.data} notification=${message.notification}")
+    val data = message.data.orEmpty()
+    Log.i("TwowixFCM", "Message received: keys=${data.keys.sorted()} from=${message.from}")
+    if (data.isEmpty()) {
+      // На проде ожидаем data payload. Если прилетело без data — не падаем.
+      return
+    }
+
+    val payload = PushPayload.fromDataMap(data)
+    val title = payload.title
+    val text = payload.preview ?: data["body"] ?: data["text"]
+
+    // Если targetUrl нет — используем chatId → формула в IntentRouter.
+    val targetUrl = payload.bestTargetUrl { chatId -> IntentRouter.buildChatUrl(chatId) }
+
+    val prefs = AppPreferences(applicationContext)
+    CoroutineScope(Dispatchers.IO).launch {
+      // Уважим настройку: если пользователь отключил уведомления — не показываем.
+      val enabled = prefs.notificationsEnabled.first()
+      if (!enabled) return@launch
+
+      NotificationHelper.showMessage(
+        context = applicationContext,
+        title = title,
+        text = text,
+        unreadCount = payload.unreadCount,
+        chatId = payload.chatId,
+        targetUrl = targetUrl
+      )
+    }
   }
 }
 

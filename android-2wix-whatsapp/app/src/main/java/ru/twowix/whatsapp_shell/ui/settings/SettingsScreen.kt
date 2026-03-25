@@ -1,5 +1,7 @@
 package ru.twowix.whatsapp_shell.ui.settings
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.webkit.CookieManager
 import android.webkit.WebStorage
 import android.webkit.WebView
@@ -16,6 +18,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -25,6 +28,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -33,6 +38,7 @@ import kotlinx.coroutines.launch
 import ru.twowix.whatsapp_shell.BuildConfig
 import ru.twowix.whatsapp_shell.data.AppPreferences
 import ru.twowix.whatsapp_shell.notifications.NotificationHelper
+import com.google.firebase.messaging.FirebaseMessaging
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,6 +51,11 @@ fun SettingsScreen(
   val scope = rememberCoroutineScope()
 
   val notificationsEnabled by prefs.notificationsEnabled.collectAsState(initial = true)
+  val fcmToken by prefs.fcmToken.collectAsState(initial = "")
+  val apiBaseUrl by prefs.apiBaseUrl.collectAsState(initial = BuildConfig.API_BASE_URL_DEFAULT)
+  var apiDraft by remember(apiBaseUrl) { mutableStateOf(apiBaseUrl) }
+
+  val notifPermGranted = NotificationHelper.canPostNotifications(context)
 
   Scaffold(
     topBar = {
@@ -76,7 +87,7 @@ fun SettingsScreen(
         Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
           Text(text = "Уведомления", style = MaterialTheme.typography.titleMedium)
           Text(
-            text = "Локальный флаг (FCM будет подключён позже).",
+            text = "Показывать уведомления о сообщениях (FCM).",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
           )
@@ -91,6 +102,12 @@ fun SettingsScreen(
         )
       }
 
+      Text(
+        text = "Разрешение уведомлений: " + if (notifPermGranted) "включено" else "выключено",
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+
       Button(
         onClick = {
           NotificationHelper.showTestMessage(
@@ -102,6 +119,47 @@ fun SettingsScreen(
         modifier = Modifier.fillMaxWidth()
       ) {
         Text(text = "Тестовое уведомление")
+      }
+
+      // FCM token
+      Text(text = "FCM token", style = MaterialTheme.typography.titleMedium)
+      Text(
+        text = if (fcmToken.isBlank()) "— (ещё не получен)" else (fcmToken.take(32) + "…"),
+        style = MaterialTheme.typography.bodyMedium
+      )
+      Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Button(
+          onClick = {
+            val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as ClipboardManager
+            cm.setPrimaryClip(ClipData.newPlainText("FCM token", fcmToken))
+          },
+          enabled = fcmToken.isNotBlank()
+        ) {
+          Text(text = "Copy")
+        }
+        Button(
+          onClick = {
+            FirebaseMessaging.getInstance().token.addOnSuccessListener { token ->
+              scope.launch { prefs.setFcmToken(token) }
+            }
+          }
+        ) {
+          Text(text = "Обновить token")
+        }
+      }
+
+      OutlinedTextField(
+        value = apiDraft,
+        onValueChange = { apiDraft = it },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        label = { Text("API base URL (device register)") }
+      )
+      Button(
+        onClick = { scope.launch { prefs.setApiBaseUrl(apiDraft) } },
+        modifier = Modifier.fillMaxWidth()
+      ) {
+        Text(text = "Сохранить API base URL")
       }
 
       Button(
