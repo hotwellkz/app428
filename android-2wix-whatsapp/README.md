@@ -8,11 +8,21 @@
 - **Settings** (локальный флаг уведомлений, тестовое уведомление, очистка cookies/cache)
 - **Deep-link prep** через `Intent` extras: `targetUrl` / `chatId`
 
+## Firebase / FCM (обязательно для токена и push)
+
+- **applicationId / package name приложения**: `ru.twowix.whatsapp_shell` (совпадает с `namespace` в `app/build.gradle.kts`).
+- **Куда положить конфиг**: скачанный из Firebase Console файл **`google-services.json`** →  
+  **`android-2wix-whatsapp/app/google-services.json`** (рядом с `app/build.gradle.kts`).
+- В репозитории **нет** placeholder-файла: без реального `google-services.json` Gradle **не соберёт** проект (явная ошибка с путём).
+- Файл в **`.gitignore`** — не коммитьте ключи в публичный репозиторий.
+
+Шаги в Firebase Console: Project settings → Your apps → Add app → Android → укажите package name `ru.twowix.whatsapp_shell` → Download `google-services.json`.
+
 ## Открыть в Android Studio
 
 1. Android Studio → **Open** → выбрать папку `android-2wix-whatsapp/`
-2. Дождаться sync Gradle (Android Studio использует свой JDK)
-3. **Firebase / FCM**: положить `google-services.json` в `android-2wix-whatsapp/app/` (файл не коммитим)
+2. Положите **`app/google-services.json`** (см. раздел выше), иначе sync Gradle завершится ошибкой
+3. Дождаться sync Gradle (Android Studio использует свой JDK)
 
 ## Сборка debug APK
 

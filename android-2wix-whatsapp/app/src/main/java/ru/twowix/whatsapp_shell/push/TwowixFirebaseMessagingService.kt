@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import java.time.Instant
 import ru.twowix.whatsapp_shell.data.DeviceRegistrationClient
 import ru.twowix.whatsapp_shell.data.AppPreferences
 import ru.twowix.whatsapp_shell.notifications.NotificationHelper
@@ -28,9 +29,25 @@ class TwowixFirebaseMessagingService : FirebaseMessagingService() {
       val baseUrl = runCatching { prefs.apiBaseUrl.first() }.getOrElse { ru.twowix.whatsapp_shell.BuildConfig.API_BASE_URL_DEFAULT }
       val managerId = runCatching { prefs.managerId.first() }.getOrElse { "" }.trim()
       if (managerId.isNotBlank()) {
-        deviceReg.registerDevice(baseUrl, managerId, token)
+        val reg = deviceReg.registerDevice(baseUrl, managerId, token)
+        val detail = buildString {
+          append(reg.message)
+          if (reg.responseBody.isNotBlank()) append(" | ").append(reg.responseBody.take(200))
+        }
+        prefs.setLastRegistration(
+          status = if (reg.ok) "success" else "error",
+          response = detail,
+          url = reg.finalUrl,
+          httpCode = reg.code?.toString().orEmpty()
+        )
       } else {
         Log.w("DeviceReg", "managerId is empty; skip register-device (set it in Settings)")
+        prefs.setLastRegistration(
+          status = "warning",
+          response = "managerId is empty; registration skipped",
+          url = "",
+          httpCode = ""
+        )
       }
     }
   }
@@ -64,6 +81,7 @@ class TwowixFirebaseMessagingService : FirebaseMessagingService() {
         chatId = payload.chatId,
         targetUrl = targetUrl
       )
+      prefs.setLastPushAt(Instant.now().toString())
     }
   }
 }

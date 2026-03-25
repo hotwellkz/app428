@@ -33,6 +33,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -48,6 +50,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.launch
@@ -67,6 +72,7 @@ fun WebViewScreen(
   launchFileChooser: (Intent) -> Unit,
 ) {
   val context = LocalContext.current
+  val lifecycleOwner = LocalLifecycleOwner.current
   val scope = rememberCoroutineScope()
   val networkMonitor = remember { NetworkMonitor(context.applicationContext) }
 
@@ -105,6 +111,19 @@ fun WebViewScreen(
       job.cancel()
       networkMonitor.stop()
     }
+  }
+
+  DisposableEffect(lifecycleOwner) {
+    val observer = LifecycleEventObserver { _, event ->
+      if (event == Lifecycle.Event.ON_RESUME) {
+        webViewRef?.evaluateJavascript(
+          "(function(){try{window.dispatchEvent(new Event('focus'));document.dispatchEvent(new Event('visibilitychange'));}catch(e){}})();",
+          null
+        )
+      }
+    }
+    lifecycleOwner.lifecycle.addObserver(observer)
+    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
   }
 
   // Deep-link/open-chat: любой новый initialTarget → загрузка в WebView.
@@ -153,6 +172,10 @@ fun WebViewScreen(
                 override fun onPageFinished(view: WebView?, url: String?) {
                   isLoading = false
                   CookieManager.getInstance().flush()
+                  view?.evaluateJavascript(
+                    "(function(){try{document.documentElement.style.setProperty('--android-safe-top','env(safe-area-inset-top,0px)');document.documentElement.style.setProperty('--android-safe-bottom','env(safe-area-inset-bottom,0px)');}catch(e){}})();",
+                    null
+                  )
                 }
 
                 override fun onReceivedError(
@@ -225,9 +248,10 @@ fun WebViewScreen(
         .align(Alignment.TopEnd)
         .padding(8.dp)
         .size(44.dp)
+        .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.88f), shape = MaterialTheme.shapes.small)
     ) {
       Icon(
-        imageVector = androidx.compose.material.icons.Icons.Default.Settings,
+        imageVector = Icons.Filled.Settings,
         contentDescription = "Настройки",
       )
     }

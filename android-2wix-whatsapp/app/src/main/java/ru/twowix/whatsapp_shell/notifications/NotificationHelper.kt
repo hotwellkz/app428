@@ -80,9 +80,10 @@ object NotificationHelper {
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setCategory(NotificationCompat.CATEGORY_MESSAGE)
       .setGroup(GROUP_MESSAGES)
+      .setNumber((unreadCount ?: 1).coerceAtLeast(1))
 
     if (unreadCount != null && unreadCount > 0) {
-      builder.setNumber(unreadCount)
+      builder.setSubText("Непрочитанных: $unreadCount")
     }
 
     val notificationId = stableNotificationId(chatId, targetUrl)

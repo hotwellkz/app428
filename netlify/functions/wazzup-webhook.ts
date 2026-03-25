@@ -290,8 +290,8 @@ async function handleWhatsAppMessage(msg: WazzupMessage, companyId: string, debu
           phone: normalizedPhone,
           clientName: (client.name || '').trim() || undefined,
           preview: (textContent || '').trim() || (attachments.length ? '[медиа]' : undefined),
-          // unreadCount вычисляем приблизительно: для точности нужен дополнительный read; оставляем undefined, Android корректно отработает.
-          unreadCount: undefined,
+          // Для Android badge/dot лучше передавать хотя бы 1.
+          unreadCount: 1,
           targetUrl,
           messageId: msg.messageId ?? undefined,
           type: 'message'

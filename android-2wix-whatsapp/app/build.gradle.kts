@@ -4,6 +4,23 @@ plugins {
   id("com.google.gms.google-services")
 }
 
+// Реальный FCM требует файл из Firebase Console. Placeholder в репозитории не храним.
+val googleServicesJson = file("google-services.json")
+if (!googleServicesJson.exists()) {
+  throw GradleException(
+    """
+    Отсутствует Firebase Android-конфиг (FCM не заработает без него).
+
+    1) Firebase Console → Project settings → Your apps → добавьте Android-приложение
+       с package name: ru.twowix.whatsapp_shell
+    2) Скачайте google-services.json и положите сюда:
+       ${googleServicesJson.absolutePath}
+
+    Файл в .gitignore — не коммитьте секреты в публичный репозиторий.
+    """.trimIndent()
+  )
+}
+
 android {
   namespace = "ru.twowix.whatsapp_shell"
   compileSdk = 35
@@ -52,6 +69,7 @@ dependencies {
   androidTestImplementation(composeBom)
 
   implementation("androidx.core:core-ktx:1.13.1")
+  implementation("androidx.appcompat:appcompat:1.7.0")
   implementation("androidx.activity:activity-compose:1.9.2")
   implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
   implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")

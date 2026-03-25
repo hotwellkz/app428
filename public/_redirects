@@ -14,4 +14,8 @@
 /api/crm-ai-bot-whatsapp-runtime /.netlify/functions/crm-ai-bot-whatsapp-runtime 200
 /api/crm-ai-create-deal-from-recommendation /.netlify/functions/crm-ai-create-deal-from-recommendation 200
 /api/crm-ai-create-task-from-recommendation /.netlify/functions/crm-ai-create-task-from-recommendation 200
+# Mobile shell: FCM register / push (выше catch-all, иначе SPA глотает /api/*)
+/api/mobile/register-device /.netlify/functions/mobile-register-device 200
+/api/mobile/unregister-device /.netlify/functions/mobile-unregister-device 200
+/api/send-chat-push /.netlify/functions/send-chat-push 200
 /* /index.html 200
