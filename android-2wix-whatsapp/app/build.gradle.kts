@@ -1,7 +1,6 @@
 plugins {
   id("com.android.application")
   id("org.jetbrains.kotlin.android")
-  id("com.google.devtools.ksp")
   id("com.google.gms.google-services")
 }
 
@@ -87,10 +86,6 @@ dependencies {
 
   // Preferences (Settings)
   implementation("androidx.datastore:datastore-preferences:1.1.1")
-  implementation("androidx.work:work-runtime-ktx:2.9.1")
-  implementation("androidx.room:room-runtime:2.6.1")
-  implementation("androidx.room:room-ktx:2.6.1")
-  ksp("androidx.room:room-compiler:2.6.1")
 
   implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 

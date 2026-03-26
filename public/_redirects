@@ -17,11 +17,5 @@
 # Mobile shell: FCM register / push (выше catch-all, иначе SPA глотает /api/*)
 /api/mobile/register-device /.netlify/functions/mobile-register-device 200
 /api/mobile/unregister-device /.netlify/functions/mobile-unregister-device 200
-/api/mobile/chat-list /.netlify/functions/mobile-chat-list 200
-/api/mobile/chat-thread /.netlify/functions/mobile-chat-thread 200
-/api/mobile/send-message /.netlify/functions/mobile-send-message 200
-/api/mobile/mark-read /.netlify/functions/mobile-mark-read 200
-/api/mobile/chat-meta /.netlify/functions/mobile-chat-meta 200
-/api/mobile/upload /.netlify/functions/mobile-upload 200
 /api/send-chat-push /.netlify/functions/send-chat-push 200
 /* /index.html 200

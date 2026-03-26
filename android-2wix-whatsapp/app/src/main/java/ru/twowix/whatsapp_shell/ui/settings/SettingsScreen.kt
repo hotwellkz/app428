@@ -28,7 +28,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -49,8 +48,6 @@ import kotlinx.coroutines.withContext
 import ru.twowix.whatsapp_shell.BuildConfig
 import ru.twowix.whatsapp_shell.data.AppPreferences
 import ru.twowix.whatsapp_shell.data.DeviceRegistrationClient
-import ru.twowix.whatsapp_shell.data.chat.ChatRepository
-import ru.twowix.whatsapp_shell.sync.ChatSyncScheduler
 import ru.twowix.whatsapp_shell.notifications.NotificationHelper
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,27 +69,13 @@ fun SettingsScreen(
   val lastRegUrl by prefs.lastRegistrationUrl.collectAsState(initial = "")
   val lastHttpCode by prefs.lastHttpCode.collectAsState(initial = "")
   val lastPushAt by prefs.lastPushAt.collectAsState(initial = "")
-  val lastChatSyncAt by prefs.lastChatSyncAt.collectAsState(initial = "")
-  val lastChatSyncSource by prefs.lastChatSyncSource.collectAsState(initial = "")
-  val lastPushCacheApply by prefs.lastPushCacheApply.collectAsState(initial = "")
-  val lastThreadSyncAt by prefs.lastThreadSyncAt.collectAsState(initial = "")
-  val lastSendError by prefs.lastSendError.collectAsState(initial = "")
-  val lastDedupeReason by prefs.lastDedupeReason.collectAsState(initial = "")
   var apiDraft by remember(apiBaseUrl) { mutableStateOf(apiBaseUrl) }
   var managerDraft by remember(managerId) { mutableStateOf(managerId) }
   val deviceReg = remember { DeviceRegistrationClient() }
-  val chatRepo = remember { ChatRepository.get(context.applicationContext) }
   var actionStatus by remember { mutableStateOf("") }
-  var cachedChatsCount by remember { mutableStateOf(0) }
-  var pendingOutgoingCount by remember { mutableStateOf(0) }
 
   val notifPermGranted = NotificationHelper.canPostNotifications(context)
   val firebaseDiag = remember { firebaseConfigDiagnostics(context) }
-
-  LaunchedEffect(Unit) {
-    cachedChatsCount = withContext(Dispatchers.IO) { chatRepo.chatCount() }
-    pendingOutgoingCount = withContext(Dispatchers.IO) { chatRepo.pendingCount() }
-  }
 
   Scaffold(
     topBar = {
@@ -378,20 +361,6 @@ fun SettingsScreen(
 
       Button(
         onClick = {
-          scope.launch {
-            withContext(Dispatchers.IO) { chatRepo.clearCache() }
-            cachedChatsCount = 0
-            pendingOutgoingCount = 0
-            actionStatus = "Локальный кэш чатов очищен"
-          }
-        },
-        modifier = Modifier.fillMaxWidth()
-      ) {
-        Text(text = "Очистить локальный кеш чатов")
-      }
-
-      Button(
-        onClick = {
           resetWebSession(context)
         },
         modifier = Modifier.fillMaxWidth()
@@ -414,11 +383,6 @@ fun SettingsScreen(
       Text(text = "token: ${if (fcmToken.isBlank()) "missing" else "ok"}", style = MaterialTheme.typography.bodyMedium)
       Text(text = "managerId (saved): ${if (managerId.isBlank()) "missing" else managerId}", style = MaterialTheme.typography.bodyMedium)
       Text(text = "register-device: ${if (lastRegStatus.isBlank()) "n/a" else lastRegStatus}", style = MaterialTheme.typography.bodyMedium)
-      Text(text = "cached chats: $cachedChatsCount", style = MaterialTheme.typography.bodyMedium)
-      Text(text = "pending outgoing: $pendingOutgoingCount", style = MaterialTheme.typography.bodyMedium)
-      Text(text = "data source: ${if (lastChatSyncSource.isBlank()) "local cache" else lastChatSyncSource}", style = MaterialTheme.typography.bodyMedium)
-      Text(text = "last sync: ${if (lastChatSyncAt.isBlank()) "n/a" else lastChatSyncAt}", style = MaterialTheme.typography.bodyMedium)
-      Text(text = "last thread sync: ${if (lastThreadSyncAt.isBlank()) "n/a" else lastThreadSyncAt}", style = MaterialTheme.typography.bodyMedium)
       if (lastHttpCode.isNotBlank()) {
         Text(text = "last HTTP: $lastHttpCode", style = MaterialTheme.typography.bodySmall)
       }
@@ -429,19 +393,6 @@ fun SettingsScreen(
         Text(text = "register response: $lastRegResponse", style = MaterialTheme.typography.bodySmall)
       }
       Text(text = "last push received: ${if (lastPushAt.isBlank()) "n/a" else lastPushAt}", style = MaterialTheme.typography.bodyMedium)
-      Text(text = "last push applied to cache: ${if (lastPushCacheApply.isBlank()) "n/a" else lastPushCacheApply}", style = MaterialTheme.typography.bodySmall)
-      Text(text = "last dedupe/drop reason: ${if (lastDedupeReason.isBlank()) "n/a" else lastDedupeReason}", style = MaterialTheme.typography.bodySmall)
-      if (lastSendError.isNotBlank()) {
-        Text(text = "last send error: $lastSendError", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-      }
-      Button(
-        onClick = {
-          ChatSyncScheduler.enqueueImmediate(context.applicationContext, "settings_manual")
-          actionStatus = "Background refresh запущен"
-        }
-      ) {
-        Text(text = "Запустить background refresh")
-      }
       if (actionStatus.isNotBlank()) {
         Text(text = "last action: $actionStatus", style = MaterialTheme.typography.bodyMedium)
       }

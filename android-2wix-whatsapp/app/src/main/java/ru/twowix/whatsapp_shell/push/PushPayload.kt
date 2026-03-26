@@ -21,8 +21,6 @@ data class PushPayload(
   val unreadCount: Int? = null,
   val targetUrl: String? = null,
   val messageId: String? = null,
-  val eventId: String? = null,
-  val timestamp: Long? = null,
   val type: String? = null,
 ) {
   val title: String
@@ -32,7 +30,6 @@ data class PushPayload(
     fun fromDataMap(data: Map<String, String>): PushPayload {
       fun get(key: String): String? = data[key]?.trim()?.takeIf { it.isNotEmpty() }
       fun getInt(key: String): Int? = get(key)?.toIntOrNull()
-      fun getLong(key: String): Long? = get(key)?.toLongOrNull()
 
       return PushPayload(
         chatId = get("chatId"),
@@ -42,8 +39,6 @@ data class PushPayload(
         unreadCount = getInt("unreadCount"),
         targetUrl = get("targetUrl"),
         messageId = get("messageId"),
-        eventId = get("eventId"),
-        timestamp = getLong("timestamp") ?: getLong("createdAt") ?: getLong("ts"),
         type = get("type"),
       )
     }
